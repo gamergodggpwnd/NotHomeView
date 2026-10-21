@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.1 – 2026-10-21
+
+HACS validation workflow and repository metadata; no card changes.
+
 ## 1.0.0 – 2026-10-20
 
 First public release of **NotHomeView** (card bundle `homeview-cards.js`, internal build 1.12.0).
