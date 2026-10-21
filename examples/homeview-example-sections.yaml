@@ -1,0 +1,634 @@
+# HomeView example dashboard - SECTIONS version (native drag & drop + the Layout tab in the card editor).
+# Same tiles as homeview-example.yaml, but each view is a native `type: sections` view with one full-width grid section.
+# Sizes: a 1x1 tile is grid_options {columns: 3, rows: 2} (12 sub-columns = 4 tiles across), the thermostat is 6x4 (2x2 tiles).
+# The `homeview_styles` helper card in each view makes the rows fill the screen height outside edit mode (see README).
+# The clock uses clock_size: small + card_mod so its 2x2 minimum allows a 1-tile-wide clock (large would force 6x4).
+# Paste into the raw configuration editor, then replace the example entities and <your-dashboard-url>.
+title: NotHomeView
+button_card_templates:
+  homeview_tile:
+    show_icon: true
+    show_name: true
+    show_label: true
+    show_state: false
+    variables:
+      theme: dark
+      'on': '[[[ return entity ? ["on","open","opening","closing","playing","unlocked"].includes(entity.state) : false ]]]'
+    hold_action:
+      action: more-info
+    double_tap_action:
+      action: none
+    extra_styles: :host{display:block !important;height:100% !important;width:100% !important;max-width:none !important;container-type:size;--frosted-glass-card-layer-content:none;--hp-rad:min(5.6vh, 3vw)}ha-card::before{content:none !important;display:none !important;backdrop-filter:none !important}
+    styles:
+      card:
+      - height: 100%
+      - width: 100%
+      - border-radius: var(--hp-rad)
+      - padding: 7cqh 5cqw 8cqh
+      - box-sizing: border-box
+      - font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", Roboto, sans-serif
+      - overflow: hidden
+      - -webkit-tap-highlight-color: transparent
+      - user-select: none
+      - -webkit-user-select: none
+      - -webkit-touch-callout: none
+      - transition: background .25s ease, box-shadow .25s ease
+      - background: '[[[ const on=variables.on; if(variables.theme=="light") return on? "#cbc4ee" : "#ffffff"; return on? "linear-gradient(150deg, rgba(196,182,255,.46) 0%, rgba(160,140,250,.34) 100%)" : "linear-gradient(150deg, rgba(255,255,255,.15) 0%, rgba(255,255,255,.07) 100%)"; ]]]'
+      - border: '[[[ if(variables.theme=="light") return "1px solid rgba(0,0,0,.035)"; return variables.on? "1px solid rgba(225,215,255,.42)" : "1px solid rgba(255,255,255,.25)"; ]]]'
+      - box-shadow: '[[[ if(variables.theme=="light") return "0 .4vh 1.4vh rgba(30,30,60,.06)"; return variables.on? "inset 0 1px 0 rgba(255,255,255,.35), inset 0 0 0 .5px rgba(255,255,255,.12), 0 1.2vh 3.6vh rgba(50,30,160,.30)" : "inset 0 1px 0 rgba(255,255,255,.25), inset 0 0 0 .5px rgba(255,255,255,.06), 0 1.2vh 3.6vh rgba(6,8,60,.26)"; ]]]'
+      - backdrop-filter: '[[[ return variables.theme=="light" ? "none" : "blur(26px) saturate(180%)"; ]]]'
+      - -webkit-backdrop-filter: '[[[ return variables.theme=="light" ? "none" : "blur(26px) saturate(180%)"; ]]]'
+      grid:
+      - grid-template-areas: '"i" "n" "l"'
+      - grid-template-rows: 1fr min-content min-content
+      - grid-template-columns: 100%
+      - height: 100%
+      img_cell:
+      - align-self: center
+      - justify-self: center
+      - width: 100%
+      - height: 100%
+      - display: flex
+      - align-items: center
+      - justify-content: center
+      icon:
+      - width: min(30cqh, 20cqw)
+      - height: min(30cqh, 20cqw)
+      - color: '[[[ if(variables.theme=="light") return variables.on? "#5a4bc4" : "#3c3c43"; return variables.on? "#f3efff" : "#ffffff"; ]]]'
+      - filter: '[[[ return (variables.theme=="light") ? "none" : "drop-shadow(0 .3vh .8vh rgba(0,0,40,.25))"; ]]]'
+      name:
+      - font-size: min(11.5cqh,7cqw)
+      - font-weight: '650'
+      - margin-top: 1cqh
+      - letter-spacing: -.01em
+      - white-space: nowrap
+      - overflow: hidden
+      - text-overflow: ellipsis
+      - max-width: 100%
+      - color: '[[[ if(variables.theme=="light") return variables.on? "#3f3399" : "#3c3c43"; return "#ffffff"; ]]]'
+      - text-shadow: '[[[ return (variables.theme=="light") ? "none" : "0 1px 6px rgba(0,0,40,.25)"; ]]]'
+      label:
+      - font-size: min(9.6cqh,5.9cqw)
+      - font-weight: '500'
+      - margin-top: .5cqh
+      - white-space: nowrap
+      - overflow: hidden
+      - text-overflow: ellipsis
+      - max-width: 100%
+      - color: '[[[ if(variables.theme=="light") return variables.on? "rgba(63,51,153,.65)" : "rgba(60,60,67,.55)"; return variables.on? "rgba(255,255,255,.80)" : "rgba(255,255,255,.66)"; ]]]'
+  homeview_light:
+    variables:
+      theme: light
+  homeview_thermostat:
+    template: homeview_tile
+    show_icon: false
+    name: Thermostat
+    variables:
+      'on': false
+      compact: false
+    show_label: '[[[ return !variables.compact ]]]'
+    hold_action:
+      action: more-info
+    custom_fields:
+      temp: '[[[ const a=entity.attributes; const t=parseFloat(a.temperature); let i="--",f=""; if(!isNaN(t)){i=Math.trunc(t); f=(Math.round((t-i)*10)? "."+Math.round((t-i)*10) : "");} const cur=a.current_temperature!=null? (Math.round(a.current_temperature*10)/10)+"°" : ""; const mode = entity.state=="off" ? "Off" : (a.hvac_action=="heating"? "Heating" : (entity.state=="heat"? "Heat" : entity.state)); return `<div class="big">${i}<span class="dec">${f}</span><span class="deg">°</span></div>` + (variables.compact? "" : `<div class="sub">${mode} · Now ${cur}</div>`); ]]]'
+      down:
+        card:
+          type: custom:button-card
+          icon: mdi:chevron-down
+          show_name: false
+          show_state: false
+          extra_styles: ha-card{background:transparent !important;border:none !important;box-shadow:none !important;backdrop-filter:none !important;-webkit-backdrop-filter:none !important}ha-card::before{content:none !important;display:none !important;backdrop-filter:none !important}
+          tap_action:
+            action: perform-action
+            perform_action: climate.set_temperature
+            data:
+              entity_id: '[[[ return entity.entity_id ]]]'
+              temperature: '[[[ const a=entity.attributes; let t=(parseFloat(a.temperature)||20)-0.5; t=Math.max(a.min_temp||5, Math.min(a.max_temp||30, t)); return Math.round(t*2)/2; ]]]'
+          hold_action:
+            action: none
+          double_tap_action:
+            action: none
+          styles:
+            card:
+            - padding: '0'
+            - height: 100%
+            - width: 100%
+            - border-radius: var(--hp-rad)
+            - -webkit-tap-highlight-color: transparent
+            grid:
+            - grid-template-areas: '"i"'
+            - height: 100%
+            img_cell:
+            - height: 100%
+            - width: 100%
+            - display: flex
+            - align-items: center
+            - justify-content: center
+            icon:
+            - width: '[[[ return variables.compact ? "min(30cqh,18cqw)" : "min(17cqh,11cqw)"; ]]]'
+            - height: '[[[ return variables.compact ? "min(30cqh,18cqw)" : "min(17cqh,11cqw)"; ]]]'
+            - color: '[[[ return variables.theme=="light" ? "#3c3c43" : "#ffffff"; ]]]'
+      up:
+        card:
+          type: custom:button-card
+          icon: mdi:chevron-up
+          show_name: false
+          show_state: false
+          extra_styles: ha-card{background:transparent !important;border:none !important;box-shadow:none !important;backdrop-filter:none !important;-webkit-backdrop-filter:none !important}ha-card::before{content:none !important;display:none !important;backdrop-filter:none !important}
+          tap_action:
+            action: perform-action
+            perform_action: climate.set_temperature
+            data:
+              entity_id: '[[[ return entity.entity_id ]]]'
+              temperature: '[[[ const a=entity.attributes; let t=(parseFloat(a.temperature)||20)+0.5; t=Math.max(a.min_temp||5, Math.min(a.max_temp||30, t)); return Math.round(t*2)/2; ]]]'
+          hold_action:
+            action: none
+          double_tap_action:
+            action: none
+          styles:
+            card:
+            - padding: '0'
+            - height: 100%
+            - width: 100%
+            - border-radius: var(--hp-rad)
+            - -webkit-tap-highlight-color: transparent
+            grid:
+            - grid-template-areas: '"i"'
+            - height: 100%
+            img_cell:
+            - height: 100%
+            - width: 100%
+            - display: flex
+            - align-items: center
+            - justify-content: center
+            icon:
+            - width: '[[[ return variables.compact ? "min(30cqh,18cqw)" : "min(17cqh,11cqw)"; ]]]'
+            - height: '[[[ return variables.compact ? "min(30cqh,18cqw)" : "min(17cqh,11cqw)"; ]]]'
+            - color: '[[[ return variables.theme=="light" ? "#3c3c43" : "#ffffff"; ]]]'
+    styles:
+      card:
+      - padding: '0'
+      grid:
+      - grid-template-areas: '[[[ return variables.compact ? ''"temp temp temp" "down n up"'' : ''"temp temp temp" "down n up" "down l up"''; ]]]'
+      - grid-template-rows: '[[[ return variables.compact ? "1fr min-content" : "1fr min-content min-content"; ]]]'
+      - grid-template-columns: '[[[ return variables.compact ? "26% 1fr 26%" : "24% 1fr 24%"; ]]]'
+      custom_fields:
+        temp:
+        - align-self: center
+        - justify-self: center
+        - text-align: center
+        - padding-top: 4cqh
+        - overflow: visible
+        - color: '[[[ return variables.theme=="light" ? "#1c1c1e" : "#ffffff"; ]]]'
+        down:
+        - height: 100%
+        - align-self: stretch
+        - overflow: visible
+        up:
+        - height: 100%
+        - align-self: stretch
+        - overflow: visible
+      name:
+      - font-size: '[[[ return variables.compact ? "min(10.5cqh,6.6cqw)" : "min(6.2cqh,3.6cqw)"; ]]]'
+      - padding-bottom: '[[[ return variables.compact ? "7cqh" : "0"; ]]]'
+      label:
+      - font-size: min(5.2cqh,3cqw)
+      - padding-bottom: 6cqh
+    extra_styles: ':host{display:block !important;height:100% !important;width:100% !important;max-width:none !important;container-type:size;--frosted-glass-card-layer-content:none;--hp-rad:min(5.6vh, 3vw)}ha-card::before{content:none !important;display:none !important;backdrop-filter:none !important}#down > *, #up > *{display:block !important;height:100% !important;width:100% !important;max-width:none !important}.big{font-family:ui-rounded, "SF Pro Rounded", "Nunito", -apple-system, BlinkMacSystemFont, sans-serif; font-weight:300; font-size:min(50cqh,30cqw); line-height:1.05; letter-spacing:-.04em; font-variant-numeric:tabular-nums}.dec{font-size:.42em; letter-spacing:0} .deg{font-size:.42em; vertical-align:top; position:relative; top:.08em; margin-left:.04em; opacity:.85}.sub{font-size:min(4.8cqh,2.9cqw); font-weight:550; opacity:.62; margin-top:1.4cqh; letter-spacing:.02em}'
+  homeview_popup_climate:
+    tap_action:
+      action: fire-dom-event
+      browser_mod:
+        service: browser_mod.popup
+        data:
+          title: Climate
+          dismissable: true
+          content:
+            type: custom:auto-entities
+            show_empty: false
+            card_param: cards
+            sort:
+              method: friendly_name
+            card:
+              type: grid
+              columns: 2
+              square: false
+            filter:
+              include:
+              - domain: climate
+                options:
+                  type: tile
+                  features:
+                  - type: target-temperature
+                  features_position: bottom
+              exclude:
+              - state: unavailable
+  homeview_styles:
+    show_icon: false
+    show_name: true
+    show_state: false
+    show_label: false
+    name: HomeView styles (keep this card)
+    tap_action:
+      action: none
+    hold_action:
+      action: none
+    variables:
+      theme: glass
+      styles:
+        .: :host(:not(button-card)){display:block;height:100%;width:100%;container-type:size;--frosted-glass-card-layer-content:none}:host(:not(button-card)) ha-card{height:100%;box-sizing:border-box;overflow:hidden;font-family:-apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", Roboto, sans-serif; background:var(--hv-bg) !important;border:1px solid var(--hv-border) !important;border-radius:var(--hv-radius) !important; box-shadow:var(--hv-shadow) !important;backdrop-filter:var(--hv-blur) !important;-webkit-backdrop-filter:var(--hv-blur) !important; --ha-card-border-radius:var(--hv-radius);--primary-text-color:var(--hv-text);--secondary-text-color:var(--hv-text2); transition:background .25s ease, box-shadow .25s ease;-webkit-tap-highlight-color:transparent}ha-card::before{content:none !important;display:none !important;backdrop-filter:none !important}:host(:not(button-card)) ha-card.active{background:var(--hv-bg-on) !important;border-color:var(--hv-border-on) !important;box-shadow:var(--hv-shadow-on) !important; --primary-text-color:var(--hv-text-on);--secondary-text-color:var(--hv-text2-on)}:host(hui-tile-card) ha-tile-icon{--tile-icon-size:min(34cqh,22cqw);--mdc-icon-size:min(30cqh,20cqw);--tile-icon-opacity:0;--tile-icon-hover-opacity:.08; --tile-icon-color:var(--hv-icon) !important;filter:var(--hv-icon-shade)}:host(hui-tile-card) ha-card.active ha-tile-icon{--tile-icon-color:var(--hv-icon-on) !important}:host(hui-tile-card) ha-tile-info{--ha-tile-info-primary-font-size:min(11.5cqh,7cqw);--ha-tile-info-primary-font-weight:650;--ha-tile-info-primary-line-height:1.2; --ha-tile-info-secondary-font-size:min(9.6cqh,5.9cqw);--ha-tile-info-secondary-font-weight:500;--ha-tile-info-secondary-line-height:1.2; --ha-tile-info-primary-color:var(--hv-text);--ha-tile-info-secondary-color:var(--hv-text2);text-shadow:var(--hv-shade)}:host(hui-tile-card) ha-card.active ha-tile-info{--ha-tile-info-primary-color:var(--hv-text-on);--ha-tile-info-secondary-color:var(--hv-text2-on)}:host(hui-button-card) ha-card{display:flex;flex-direction:column;justify-content:center;align-items:center;padding:7cqh 5cqw 8cqh !important}:host(hui-button-card) ha-state-icon{--mdc-icon-size:min(30cqh,20cqw);width:min(30cqh,20cqw) !important;height:min(30cqh,20cqw) !important;color:var(--hv-icon);filter:var(--hv-icon-shade);flex:1;display:flex;align-items:center}:host(hui-button-card) span{font-size:min(11.5cqh,7cqw);font-weight:650;color:var(--hv-text);text-shadow:var(--hv-shade)}:host(hui-clock-card) ha-card{display:flex;align-items:center;justify-content:center;padding:0 !important}:host(hui-clock-card) hui-clock-card-analog{--ha-clock-card-analog-face-background:#fff;--ha-clock-card-analog-face-border-radius:50%; --primary-text-color:#1c1c1e;--ha-color-border-danger-normal:#ff9500;--divider-color:transparent;border-radius:50%; box-shadow:0 .6vh 2vh rgba(0,0,40,.18);zoom:.45}@container (min-width:120px) and (min-height:120px){:host(hui-clock-card) hui-clock-card-analog{zoom:0.458}}@container (min-width:140px) and (min-height:140px){:host(hui-clock-card) hui-clock-card-analog{zoom:0.535}}@container (min-width:160px) and (min-height:160px){:host(hui-clock-card) hui-clock-card-analog{zoom:0.611}}@container (min-width:180px) and (min-height:180px){:host(hui-clock-card) hui-clock-card-analog{zoom:0.687}}@container (min-width:200px) and (min-height:200px){:host(hui-clock-card) hui-clock-card-analog{zoom:0.764}}@container (min-width:220px) and (min-height:220px){:host(hui-clock-card) hui-clock-card-analog{zoom:0.840}}@container (min-width:240px) and (min-height:240px){:host(hui-clock-card) hui-clock-card-analog{zoom:0.916}}@container (min-width:260px) and (min-height:260px){:host(hui-clock-card) hui-clock-card-analog{zoom:0.993}}@container (min-width:280px) and (min-height:280px){:host(hui-clock-card) hui-clock-card-analog{zoom:1.069}}@container (min-width:300px) and (min-height:300px){:host(hui-clock-card) hui-clock-card-analog{zoom:1.145}}@container (min-width:320px) and (min-height:320px){:host(hui-clock-card) hui-clock-card-analog{zoom:1.222}}@container (min-width:340px) and (min-height:340px){:host(hui-clock-card) hui-clock-card-analog{zoom:1.298}}@container (min-width:360px) and (min-height:360px){:host(hui-clock-card) hui-clock-card-analog{zoom:1.375}}@container (min-width:380px) and (min-height:380px){:host(hui-clock-card) hui-clock-card-analog{zoom:1.451}}@container (min-width:400px) and (min-height:400px){:host(hui-clock-card) hui-clock-card-analog{zoom:1.527}}@container (min-width:420px) and (min-height:420px){:host(hui-clock-card) hui-clock-card-analog{zoom:1.604}}@container (min-width:440px) and (min-height:440px){:host(hui-clock-card) hui-clock-card-analog{zoom:1.680}}@container (min-width:460px) and (min-height:460px){:host(hui-clock-card) hui-clock-card-analog{zoom:1.756}}@container (min-width:480px) and (min-height:480px){:host(hui-clock-card) hui-clock-card-analog{zoom:1.833}}@container (min-width:500px) and (min-height:500px){:host(hui-clock-card) hui-clock-card-analog{zoom:1.909}}@container (min-width:520px) and (min-height:520px){:host(hui-clock-card) hui-clock-card-analog{zoom:1.985}}@container (min-width:540px) and (min-height:540px){:host(hui-clock-card) hui-clock-card-analog{zoom:2.062}}@container (min-width:560px) and (min-height:560px){:host(hui-clock-card) hui-clock-card-analog{zoom:2.138}}@container (min-width:580px) and (min-height:580px){:host(hui-clock-card) hui-clock-card-analog{zoom:2.215}}@container (min-width:600px) and (min-height:600px){:host(hui-clock-card) hui-clock-card-analog{zoom:2.291}}@container (min-width:620px) and (min-height:620px){:host(hui-clock-card) hui-clock-card-analog{zoom:2.367}}@container (min-width:640px) and (min-height:640px){:host(hui-clock-card) hui-clock-card-analog{zoom:2.444}}@container (min-width:660px) and (min-height:660px){:host(hui-clock-card) hui-clock-card-analog{zoom:2.520}}@container (min-width:680px) and (min-height:680px){:host(hui-clock-card) hui-clock-card-analog{zoom:2.596}}@container (min-width:700px) and (min-height:700px){:host(hui-clock-card) hui-clock-card-analog{zoom:2.673}}@container (min-width:720px) and (min-height:720px){:host(hui-clock-card) hui-clock-card-analog{zoom:2.749}}@container (min-width:740px) and (min-height:740px){:host(hui-clock-card) hui-clock-card-analog{zoom:2.825}}@container (min-width:760px) and (min-height:760px){:host(hui-clock-card) hui-clock-card-analog{zoom:2.902}}@container (min-width:780px) and (min-height:780px){:host(hui-clock-card) hui-clock-card-analog{zoom:2.978}}@container (min-width:800px) and (min-height:800px){:host(hui-clock-card) hui-clock-card-analog{zoom:3.055}}@container (min-width:820px) and (min-height:820px){:host(hui-clock-card) hui-clock-card-analog{zoom:3.131}}@container (min-width:840px) and (min-height:840px){:host(hui-clock-card) hui-clock-card-analog{zoom:3.207}}@container (min-width:860px) and (min-height:860px){:host(hui-clock-card) hui-clock-card-analog{zoom:3.284}}@container (min-width:880px) and (min-height:880px){:host(hui-clock-card) hui-clock-card-analog{zoom:3.360}}@container (min-width:900px) and (min-height:900px){:host(hui-clock-card) hui-clock-card-analog{zoom:3.436}}@container (min-width:920px) and (min-height:920px){:host(hui-clock-card) hui-clock-card-analog{zoom:3.513}}@container (min-width:940px) and (min-height:940px){:host(hui-clock-card) hui-clock-card-analog{zoom:3.589}}@container (min-width:960px) and (min-height:960px){:host(hui-clock-card) hui-clock-card-analog{zoom:3.665}}@container (min-width:980px) and (min-height:980px){:host(hui-clock-card) hui-clock-card-analog{zoom:3.742}}@container (min-width:1000px) and (min-height:1000px){:host(hui-clock-card) hui-clock-card-analog{zoom:3.818}}
+      vars: '[[[ return {"glass": {"hv-bg": "linear-gradient(150deg, rgba(255,255,255,.15) 0%, rgba(255,255,255,.07) 100%)", "hv-bg-on": "linear-gradient(150deg, rgba(196,182,255,.46) 0%, rgba(160,140,250,.34) 100%)", "hv-border": "rgba(255,255,255,.25)", "hv-border-on": "rgba(225,215,255,.42)", "hv-shadow": "inset 0 1px 0 rgba(255,255,255,.25), inset 0 0 0 .5px rgba(255,255,255,.06), 0 1.2vh 3.6vh rgba(6,8,60,.26)", "hv-shadow-on": "inset 0 1px 0 rgba(255,255,255,.35), inset 0 0 0 .5px rgba(255,255,255,.12), 0 1.2vh 3.6vh rgba(50,30,160,.30)", "hv-blur": "blur(26px) saturate(180%)", "hv-text": "#ffffff", "hv-text-strong": "#ffffff", "hv-text2": "rgba(255,255,255,.66)", "hv-text-on": "#ffffff", "hv-text2-on": "rgba(255,255,255,.80)", "hv-icon": "#ffffff", "hv-icon-on": "#f3efff", "hv-shade": "0 1px 6px rgba(0,0,40,.25)", "hv-icon-shade": "drop-shadow(0 .3vh .8vh rgba(0,0,40,.25))", "hv-accent": "#d4c9ff", "hv-track": "rgba(255,255,255,.18)", "hv-radius": "min(5.6vh, 3vw)"}, "light": {"hv-bg": "#ffffff", "hv-bg-on": "#cbc4ee", "hv-border": "rgba(0,0,0,.035)", "hv-border-on": "rgba(110,90,210,.15)", "hv-shadow": "0 .4vh 1.4vh rgba(30,30,60,.06)", "hv-shadow-on": "none", "hv-blur": "none", "hv-text": "#3c3c43", "hv-text-strong": "#1c1c1e", "hv-text2": "rgba(60,60,67,.55)", "hv-text-on": "#3f3399", "hv-text2-on": "rgba(63,51,153,.65)", "hv-icon": "#3c3c43", "hv-icon-on": "#5a4bc4", "hv-shade": "none", "hv-icon-shade": "none", "hv-accent": "#7a6ae0", "hv-track": "rgba(60,60,67,.12)", "hv-radius": "min(5.6vh, 3vw)"}}[variables.theme] || {"glass": {"hv-bg": "linear-gradient(150deg, rgba(255,255,255,.15) 0%, rgba(255,255,255,.07) 100%)", "hv-bg-on": "linear-gradient(150deg, rgba(196,182,255,.46) 0%, rgba(160,140,250,.34) 100%)", "hv-border": "rgba(255,255,255,.25)", "hv-border-on": "rgba(225,215,255,.42)", "hv-shadow": "inset 0 1px 0 rgba(255,255,255,.25), inset 0 0 0 .5px rgba(255,255,255,.06), 0 1.2vh 3.6vh rgba(6,8,60,.26)", "hv-shadow-on": "inset 0 1px 0 rgba(255,255,255,.35), inset 0 0 0 .5px rgba(255,255,255,.12), 0 1.2vh 3.6vh rgba(50,30,160,.30)", "hv-blur": "blur(26px) saturate(180%)", "hv-text": "#ffffff", "hv-text-strong": "#ffffff", "hv-text2": "rgba(255,255,255,.66)", "hv-text-on": "#ffffff", "hv-text2-on": "rgba(255,255,255,.80)", "hv-icon": "#ffffff", "hv-icon-on": "#f3efff", "hv-shade": "0 1px 6px rgba(0,0,40,.25)", "hv-icon-shade": "drop-shadow(0 .3vh .8vh rgba(0,0,40,.25))", "hv-accent": "#d4c9ff", "hv-track": "rgba(255,255,255,.18)", "hv-radius": "min(5.6vh, 3vw)"}, "light": {"hv-bg": "#ffffff", "hv-bg-on": "#cbc4ee", "hv-border": "rgba(0,0,0,.035)", "hv-border-on": "rgba(110,90,210,.15)", "hv-shadow": "0 .4vh 1.4vh rgba(30,30,60,.06)", "hv-shadow-on": "none", "hv-blur": "none", "hv-text": "#3c3c43", "hv-text-strong": "#1c1c1e", "hv-text2": "rgba(60,60,67,.55)", "hv-text-on": "#3f3399", "hv-text2-on": "rgba(63,51,153,.65)", "hv-icon": "#3c3c43", "hv-icon-on": "#5a4bc4", "hv-shade": "none", "hv-icon-shade": "none", "hv-accent": "#7a6ae0", "hv-track": "rgba(60,60,67,.12)", "hv-radius": "min(5.6vh, 3vw)"}}.glass ]]]'
+    custom_fields:
+      hv: "[[[\n/* HomeView style helper: applies the shared HomeView CSS (same rules as themes/homeview.yaml) to every card in THIS view,\n   so the tiles themselves stay plain native cards. Delete this card once the HomeView theme file is installed. */\nconst me = this, STY = variables.styles || {}, VARS = variables.vars || {};\nconst W = window.__homeview || (window.__homeview = {sheets: new Map()});\nconst sheet = css => { let s = W.sheets.get(css); if (!s) { s = new CSSStyleSheet(); s.replaceSync(css); W.sheets.set(css, s); } return s; };\nconst adopt = (root, css) => { if (!root || !css) return; const s = sheet(css); if (!root.adoptedStyleSheets.includes(s)) root.adoptedStyleSheets = [...root.adoptedStyleSheets, s]; };\nconst isCard = el => el.shadowRoot && Array.from(el.shadowRoot.children).some(c => c.tagName === 'HA-CARD');\nconst styleCard = el => {\n  for (const [sel, css] of Object.entries(STY)) {\n    let roots = [el.shadowRoot];\n    for (const seg of sel.split('$').map(s => s.trim()).filter(s => s && s !== '.')) {\n      const next = []; roots.forEach(r => r.querySelectorAll(seg).forEach(x => x.shadowRoot && next.push(x.shadowRoot))); roots = next;\n    }\n    roots.forEach(r => adopt(r, css));\n  }\n};\nconst scan = (root, view) => {\n  for (const el of root.querySelectorAll('*')) {\n    if (el === me || el.tagName === 'POPUP-CARD') continue;\n    if (isCard(el)) styleCard(el); else if (el.shadowRoot) scan(el.shadowRoot, view);\n  }\n};\nconst findView = () => { let n = me; for (let i = 0; i < 25 && n; i++) { const h = n.getRootNode && n.getRootNode().host; if (!h) return null;\n  if (h.tagName === 'HUI-SECTIONS-VIEW') return h;\n  if (h.shadowRoot && h.shadowRoot.getElementById('root') && h.tagName.endsWith('-LAYOUT')) return h; n = h; } return null; };\n/* sections view: the wrapper <div class=\"card\"> around this helper's <hui-card> (never the whole section) */\nconst sectionCell = () => { let n = me; for (let i = 0; i < 20 && n; i++) { if (n.tagName === 'HUI-CARD') { const p = n.parentElement; return p && p.classList.contains('card') ? p : null; }\n  n = n.parentElement || (n.getRootNode && n.getRootNode().host); } return null; };\n/* sections view \"fill\": rows stretch so the grid fills the window height (like the old full-screen grid). Drag & drop and the\n   native Layout tab are untouched; only --row-height / gaps / paddings change, and only outside edit mode. */\nconst SAT = 'env(safe-area-inset-top, 0px)', SAB = 'env(safe-area-inset-bottom, 0px)';\nconst FIT = variables.fit === false ? null : Object.assign({ margin: 'clamp(8px, 1.6vmin, 12px)', gap: 'calc(max(8px, 2.2vmin) + 8px)', side: 'calc(max(8px, 2.2vmin) + 4px)', min_row: 28 }, variables.fit || {});\nconst VIEW_FIT_CSS = `:host([hv-fit]) .wrapper{padding:0 var(--hv-fit-right) 0 var(--hv-fit-left) !important}\n:host([hv-fit]) .container{padding:var(--hv-fit-top) 0 var(--hv-fit-bottom) !important;min-height:0 !important}`;\nconst GRID_FIT_CSS = `.container{--row-height:var(--hv-fit-row, 56px) !important;--row-gap:var(--hv-fit-gap, 8px) !important;--column-gap:var(--hv-fit-gap, 8px) !important;gap:var(--hv-fit-gap, 8px) !important}`;\n/* measure CSS lengths (safe areas, vmin based margins) in px with a hidden probe */\nconst px = css => { let p = W.probe; if (!p || !p.isConnected) { p = W.probe = document.createElement('div'); p.style.cssText = 'position:fixed;left:-9999px;top:0;width:0;visibility:hidden;pointer-events:none'; document.body.appendChild(p); }\n  p.style.height = css; return p.getBoundingClientRect().height; };\n/* padding that Home Assistant / kiosk-mode already put around the view (safe areas, header offset) */\nconst outerPad = view => { const o = { t: 0, b: 0, l: 0, r: 0 }; let n = view.parentElement || view.getRootNode().host;\n  for (let i = 0; i < 8 && n && n.tagName !== 'HUI-ROOT'; i++) { const cs = getComputedStyle(n); o.t += parseFloat(cs.paddingTop) || 0; o.b += parseFloat(cs.paddingBottom) || 0;\n    o.l += parseFloat(cs.paddingLeft) || 0; o.r += parseFloat(cs.paddingRight) || 0; n = n.parentElement || (n.getRootNode && n.getRootNode().host); } return o; };\n/* more than one section: section 1 keeps filling the window; every further section is its own full-width page to the right\n   (swipe / scroll horizontally, snaps per section). Edit mode keeps the native sections layout (drag & drop, add section). */\nconst HS_CSS = `:host([hv-hs]) .wrapper{padding-left:0 !important;padding-right:0 !important}\n:host([hv-hs]) .container{display:block !important;padding-left:0 !important;padding-right:0 !important}\n:host([hv-hs]) .content{display:flex !important;flex-wrap:nowrap !important;align-items:flex-start !important;justify-content:flex-start !important;place-content:normal !important;justify-content:flex-start !important;margin:0 !important;gap:0 !important;width:100% !important;max-width:none !important;\n overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch;scrollbar-width:none;touch-action:pan-x pan-y}\n:host([hv-hs]) .content::-webkit-scrollbar{display:none}\n:host([hv-hs]) .content > .section{flex:0 0 100% !important;width:100% !important;max-width:none !important;min-width:0;box-sizing:border-box;\n padding:0 var(--hv-fit-right, 0px) 0 var(--hv-fit-left, 0px) !important;margin:0 !important;scroll-snap-align:start;scroll-snap-stop:always;grid-column:auto !important;grid-row:auto !important}`;\n/* pages: native CSS scroll-snap does the snapping (iOS / Safari / Chrome). Nothing here ever scrolls on its own during or\n   right after a swipe: the page is remembered when scrolling has stopped and restored only if the scroller is rebuilt or resized.\n   A gentle fallback (nearest page from the CURRENT position, once scrolling is idle) runs only where native snap is missing or\n   did not settle (never on iOS / WebKit touch devices). */\nconst HS_IOS = /AppleWebKit/.test(navigator.userAgent) && !/Chrome|Chromium|CriOS|FxiOS|Edg|Android/.test(navigator.userAgent) && (navigator.maxTouchPoints || 0) > 0;\nconst HS_NATIVE = !!(window.CSS && CSS.supports && CSS.supports('scroll-snap-type', 'x mandatory'));\nconst bindSnap = (c, key) => { if (!c) return; const P = W.hsPage || (W.hsPage = new Map()); const w = () => c.clientWidth || 1;\n  const want = () => (P.get(key) || 0) * w();\n  if (c.__hvSnap) return; c.__hvSnap = true;\n  let touching = false, t = null;\n  const restore = () => { if (touching) return; const x = want(); if (Math.abs(c.scrollLeft - x) > 2) c.scrollLeft = x; };\n  if (P.get(key)) { restore(); requestAnimationFrame(restore); }\n  const settle = () => { if (touching) return; const i = Math.round(c.scrollLeft / w()); P.set(key, i);\n    if (HS_IOS) return; const x = i * w(); if (Math.abs(c.scrollLeft - x) > 2) c.scrollTo({ left: x, behavior: HS_NATIVE ? 'auto' : 'smooth' }); };\n  c.addEventListener('touchstart', () => { touching = true; clearTimeout(t); }, { passive: true });\n  const up = () => { touching = false; clearTimeout(t); t = setTimeout(settle, 400); };\n  c.addEventListener('touchend', up, { passive: true }); c.addEventListener('touchcancel', up, { passive: true });\n  c.addEventListener('scroll', () => { clearTimeout(t); t = setTimeout(settle, 400); }, { passive: true });\n  if (window.ResizeObserver) new ResizeObserver(restore).observe(c); };\nconst fitSections = (view, edit) => {\n  const on = !!FIT && !edit;\n  /* one full-width column: the single section spans the whole window (12 sub-columns), also in edit mode */\n  if (FIT && view.style.getPropertyValue('--column-max-width') !== '100vw') view.style.setProperty('--column-max-width', '100vw');\n  if (view.hasAttribute('hv-fit') !== on) view.toggleAttribute('hv-fit', on);\n  const sr = view.shadowRoot; if (!sr) return;\n  if (FIT) adopt(sr, VIEW_FIT_CSS);\n  const hs = on && sr.querySelectorAll('.content > .section').length > 1; if (view.hasAttribute('hv-hs') !== hs) view.toggleAttribute('hv-hs', hs); if (FIT) adopt(sr, HS_CSS); if (hs) bindSnap(sr.querySelector('.content'), location.pathname);\n  const grids = []; const walk = r => { for (const e of r.querySelectorAll('*')) { if (e.tagName === 'HUI-GRID-SECTION') grids.push(e); else if (e.shadowRoot && grids.length < 20) walk(e.shadowRoot); } }; walk(sr);\n  const set = (k, v) => { if (v == null) { if (view.style.getPropertyValue(k)) view.style.removeProperty(k); } else if (view.style.getPropertyValue(k) !== v) view.style.setProperty(k, v); };\n  if (!on) { ['--hv-fit-row', '--hv-fit-gap', '--hv-fit-top', '--hv-fit-bottom', '--hv-fit-left', '--hv-fit-right'].forEach(k => set(k, null)); return; }\n  grids.forEach(g => g.shadowRoot && adopt(g.shadowRoot, GRID_FIT_CSS));\n  /* rows to fit = tallest grid section (in row units), read from the resolved grid tracks */\n  let rows = 0; for (const g of grids) { const c = g.shadowRoot && g.shadowRoot.querySelector('.container'); if (!c) continue;\n    const t = getComputedStyle(c).gridTemplateRows; const n = t && t !== 'none' ? t.trim().split(/\\s+/).length : 0; if (n > rows) rows = n; }\n  if (!rows) return;\n  const o = outerPad(view), m = px(FIT.margin), gap = px(FIT.gap), side = px(FIT.side);\n  const sat = px(SAT), sab = px(SAB), sal = px('env(safe-area-inset-left, 0px)'), sar = px('env(safe-area-inset-right, 0px)');\n  const top = Math.max(sat + m, o.t), bottom = Math.max(m, sab + 4, o.b);             // wanted distance from the window edges\n  const left = Math.max(side, sal, o.l), right = Math.max(side, sar, o.r);\n  const r1 = v => Math.round(v * 10) / 10 + 'px';\n  set('--hv-fit-gap', r1(gap)); set('--hv-fit-top', r1(top - o.t)); set('--hv-fit-bottom', r1(bottom - o.b));\n  set('--hv-fit-left', r1(left - o.l)); set('--hv-fit-right', r1(right - o.r));\n  set('--hv-fit-row', `max(${FIT.min_row}px, calc((var(--hv-vh, 100dvh) - ${r1(top + bottom + (rows - 1) * gap)}) / ${rows}))`);\n};\nconst tick = () => {\n  const view = findView(); if (!view) return false;\n  for (const [k, v] of Object.entries(VARS)) if (view.style.getPropertyValue('--' + k) !== v) view.style.setProperty('--' + k, v);\n  const edit = !!(view.lovelace && view.lovelace.editMode);\n  /* hide this helper's grid cell outside edit mode */\n  let cell = null;\n  if (view.tagName === 'HUI-SECTIONS-VIEW') cell = sectionCell();\n  else { cell = me; while (cell && cell.parentElement && cell.parentElement.id !== 'root') cell = cell.parentElement;\n    if (!cell || !cell.parentElement) { let n = me; while (n && n.getRootNode() !== view.shadowRoot) n = n.getRootNode().host; cell = n; } }\n  if (cell && cell.style.display !== (edit ? '' : 'none')) cell.style.display = edit ? '' : 'none';\n  if (view.tagName === 'HUI-SECTIONS-VIEW') fitSections(view, edit);\n  scan(view.shadowRoot, view); return true;\n};\nif (!me.__hvTimer) {\n  me.__hvTimer = setInterval(() => { if (!me.isConnected) { clearInterval(me.__hvTimer); me.__hvTimer = null; return; } tick(); }, 700);\n  setTimeout(tick, 50);\n}\nreturn '';\n]]]"
+    styles:
+      card:
+      - padding: 2vh
+      - font-size: 1.6vh
+      - opacity: '.7'
+kiosk_mode:
+  hide_header: true
+  hide_sidebar: true
+wallpanel:
+  enabled: false
+  enabled_on_views:
+  - main
+  - light
+  hide_toolbar: true
+  hide_sidebar: true
+  fullscreen: true
+  keep_fullscreen: true
+  idle_time: 90
+  fade_in_time: 2.0
+  fade_out_time_interaction: 0.3
+  crossfade_time: 2.5
+  display_time: 25
+  control_reactivation_time: 0.8
+  keep_screen_on_time: 86400
+  black_screen_after_time: 0
+  stop_screensaver_on_mouse_move: true
+  stop_screensaver_on_mouse_click: true
+  disable_screensaver_on_browser_mod_popup: true
+  screensaver_stop_close_browser_mod_popup: true
+  image_url: media-source://media_source/local/
+  media_order: random
+  media_list_update_interval: 3600
+  exclude_filenames:
+  - /(cdrom|floppy|usb)(/|$)
+  exclude_media_types:
+  - video
+  image_fit_landscape: cover
+  image_fit_portrait: cover
+  show_image_info: false
+  show_progress_bar: false
+  info_animation_duration_x: 0
+  info_animation_duration_y: 0
+  info_move_interval: 0
+  cards:
+  - type: clock
+    clock_style: digital
+    clock_size: large
+    time_format: '12'
+    show_seconds: false
+    no_background: true
+    card_mod:
+      style:
+        .: ha-card{background:none !important;border:none !important;box-shadow:none !important;backdrop-filter:none !important;--frosted-glass-card-layer-content:none}ha-card::before{content:none !important;display:none !important;backdrop-filter:none !important}
+        hui-clock-card-digital $: .time-parts{font-family:ui-rounded, "SF Pro Rounded", "Nunito", -apple-system, BlinkMacSystemFont, sans-serif !important;font-size:min(40vh,27vw) !important;font-weight:500 !important;line-height:1 !important;color:rgba(255,255,255,.62) !important;letter-spacing:-.005em;text-shadow:0 .4vh 4vh rgba(0,0,0,.16);gap:0 !important}.time-part{font-size:inherit !important;font-weight:inherit !important;color:inherit !important;font-family:inherit !important}.time-part.minute::before,.time-part + .time-part::before{color:inherit !important}.time-part.am-pm{display:none !important}
+    wp_style:
+      width: 100vw
+  style:
+    wallpanel-screensaver-info-container:
+      align-items: flex-start
+      justify-content: center
+      padding: 3vh 0 0 0
+    wallpanel-screensaver-info-box:
+      background-color: transparent
+      box-shadow: none
+      border-radius: '0'
+      padding: '0'
+      margin: 0 auto
+      --ha-card-background: transparent
+      --primary-text-color: rgba(255,255,255,.72)
+    wallpanel-screensaver-info-box-content:
+      background: transparent
+      box-shadow: none
+      backdrop-filter: none
+    wp-card:
+      background: transparent
+    wallpanel-screensaver-overlay:
+      background-color: rgba(0,0,0,.08)
+views:
+- title: Home
+  path: main
+  icon: mdi:view-dashboard
+  type: sections
+  theme: HomeView Glass
+  background: 'radial-gradient(60% 80% at 88% 8%, rgba(150,165,255,.85) 0%, rgba(150,165,255,0) 60%),radial-gradient(70% 60% at 30% 108%, rgba(40,30,190,.95) 0%, rgba(40,30,190,0) 70%),radial-gradient(45% 35% at 58% 46%, rgba(190,200,255,.55) 0%, rgba(190,200,255,0) 70%),radial-gradient(90% 40% at 70% 70%, rgba(85,70,230,.65) 0%, rgba(85,70,230,0) 70%),linear-gradient(140deg, #0a1050 0%, #1a2391 38%, #3341cf 62%, #18208a 82%, #0b1050 100%)'
+  max_columns: 1
+  dense_section_placement: true
+  sections:
+  - type: grid
+    column_span: 1
+    cards:
+    - type: custom:homeview-thermostat-card
+      entity: climate.example_thermostat
+      name: Thermostat
+      room: Living Room
+      step: 0.5
+      tap_action:
+        action: more-info
+      hold_action:
+        action: more-info
+      grid_options:
+        columns: 6
+        rows: 4
+    - type: clock
+      clock_style: analog
+      clock_size: small
+      show_seconds: true
+      seconds_motion: continuous
+      ticks: minute
+      face_style: numbers_upright
+      border: false
+      card_mod:
+        style:
+          hui-clock-card-analog $: .analog-clock{--clock-size:220px !important}.tick .number.small{font-size:var(--ha-font-size-l) !important}
+      grid_options:
+        columns: 3
+        rows: 4
+    - type: custom:homeview-music-card
+      np_popup_style: fullscreen   # tap opens Now Playing full screen (or: window)
+      entity: media_player.example_speaker
+      name: Music
+      icon: mdi:music
+      hold_action:
+        action: more-info
+      entities:
+      - media_player.example_speaker_2
+      grid_options:
+        columns: 3
+        rows: 2
+    - type: custom:homeview-nav-card
+      name: Home
+      icon: mdi:home-outline
+      navigation_path: /<your-dashboard-url>/light
+      alt_navigation_path: /<your-dashboard-url>/main
+      keep_query: true
+      entity: zone.home
+      active: entity
+      hold_action:
+        action: fire-dom-event
+        browser_mod:
+          service: browser_mod.popup
+          data:
+            content:
+              type: custom:auto-entities
+              show_empty: false
+              card_param: cards
+              sort:
+                method: friendly_name
+              card:
+                type: grid
+                columns: 2
+                square: false
+              filter:
+                include:
+                - domain: light
+                  options:
+                    type: tile
+                    tap_action:
+                      action: toggle
+                    hold_action:
+                      action: more-info
+                    features:
+                    - type: light-brightness
+                    features_position: bottom
+                exclude:
+                - state: unavailable
+                - entity_id: light.browser_mod_*
+            title: Lights
+            dismissable: true
+      grid_options:
+        columns: 3
+        rows: 2
+    # HomeView Camera (1.7): uncomment and pick your camera. Sizes 2x3 / 2x6 / 4x6; the editor sets grid_options.
+    # NotHomeView Battery: big %, rounded bar (green / yellow / red), bolt while charging (auto-detected on the same device)
+    # NotHomeView People: avatar, badge, name, zone or street; tap = map popup
+    # - type: custom:homeview-person-card
+    #   entity: person.jane
+    # - type: custom:homeview-battery-card
+    #   entity: sensor.phone_battery_level
+    #   name: Phone
+    #   grid_options: {columns: 3, rows: 2}
+    # - type: custom:homeview-camera-card
+    #   entity: camera.front_yard
+    #   name: Front Yard
+    #   size: 2x6   # 2x3 | 2x6 | 4x6 | 4x3 (Tall: one tile wide, two tiles tall)
+    #   grid_options: {columns: 6, rows: 2}
+    #   buttons:
+    #   - entity: light.example_ceiling
+    #     name: Lights
+    - type: custom:homeview-scene-card
+      entity: scene.example_good_night
+      name: Good Night
+      icon: mdi:weather-night
+      confirm_text: Run the Good Night scene?
+      grid_options:
+        columns: 3
+        rows: 2
+    - type: custom:homeview-garage-card
+      entity: cover.example_garage_door
+      name: Garage
+      confirm: true
+      confirm_text: Open or close the garage door?
+      grid_options:
+        columns: 3
+        rows: 2
+    - type: custom:homeview-light-card
+      entity: light.example_ceiling
+      name: Ceiling Lights
+      icon: mdi:ceiling-light
+      grid_options:
+        columns: 3
+        rows: 2
+    - type: custom:homeview-light-card
+      entity: light.example_floor_lamp
+      name: Floor Lamp
+      icon: mdi:floor-lamp
+      grid_options:
+        columns: 3
+        rows: 2
+    - type: custom:button-card
+      template: homeview_styles
+      variables:
+        theme: glass
+      grid_options:
+        columns: full
+        rows: auto
+    - type: custom:homeview-edit-button-card
+      position: top-right
+      style: dark
+      admin_only: true
+      show_screensaver_button: true   # Wallpanel screensaver settings button under the pencil
+      grid_options:
+        columns: full
+        rows: auto
+- title: Light
+  path: light
+  icon: mdi:white-balance-sunny
+  type: sections
+  theme: HomeView Light
+  background: 'radial-gradient(80% 90% at 20% 0%, #ffffff 0%, rgba(255,255,255,0) 70%), linear-gradient(160deg,#f1f1f4 0%,#e3e3e8 100%)'
+  max_columns: 1
+  dense_section_placement: true
+  sections:
+  - type: grid
+    column_span: 1
+    cards:
+    - type: clock
+      clock_style: analog
+      clock_size: small
+      show_seconds: true
+      seconds_motion: continuous
+      ticks: minute
+      face_style: numbers_upright
+      border: false
+      card_mod:
+        style:
+          hui-clock-card-analog $: .analog-clock{--clock-size:220px !important}.tick .number.small{font-size:var(--ha-font-size-l) !important}
+      grid_options:
+        columns: 3
+        rows: 4
+    - type: custom:homeview-thermostat-card
+      entity: climate.example_thermostat
+      name: Thermostat
+      room: Living Room
+      step: 0.5
+      tap_action:
+        action: more-info
+      hold_action:
+        action: more-info
+      grid_options:
+        columns: 6
+        rows: 4
+    - type: custom:homeview-light-card
+      entity: light.example_ceiling
+      name: Lights
+      icon: mdi:ceiling-light
+      grid_options:
+        columns: 3
+        rows: 2
+    - type: custom:homeview-music-card
+      np_popup_style: fullscreen   # tap opens Now Playing full screen (or: window)
+      entity: media_player.example_speaker
+      name: Music
+      icon: mdi:music
+      hold_action:
+        action: more-info
+      entities:
+      - media_player.example_speaker_2
+      grid_options:
+        columns: 3
+        rows: 2
+    - type: custom:homeview-scene-card
+      entity: scene.example_good_night
+      name: Good Night
+      icon: mdi:weather-night
+      confirm_text: Run the Good Night scene?
+      grid_options:
+        columns: 3
+        rows: 2
+    - type: custom:homeview-scene-card
+      entity: scene.example_bright
+      name: Good Morning
+      icon: mdi:white-balance-sunny
+      grid_options:
+        columns: 3
+        rows: 2
+    - type: custom:homeview-nav-card
+      name: Home
+      icon: mdi:home-outline
+      navigation_path: /<your-dashboard-url>/main
+      alt_navigation_path: /<your-dashboard-url>/light
+      keep_query: true
+      entity: zone.home
+      active: entity
+      hold_action:
+        action: fire-dom-event
+        browser_mod:
+          service: browser_mod.popup
+          data:
+            content:
+              type: custom:auto-entities
+              show_empty: false
+              card_param: cards
+              sort:
+                method: friendly_name
+              card:
+                type: grid
+                columns: 2
+                square: false
+              filter:
+                include:
+                - domain: light
+                  options:
+                    type: tile
+                    tap_action:
+                      action: toggle
+                    hold_action:
+                      action: more-info
+                    features:
+                    - type: light-brightness
+                    features_position: bottom
+                exclude:
+                - state: unavailable
+                - entity_id: light.browser_mod_*
+            title: Lights
+            dismissable: true
+      grid_options:
+        columns: 3
+        rows: 2
+    - type: custom:homeview-scene-card
+      entity: scene.example_dim
+      name: Dim
+      icon: mdi:lightbulb-night-outline
+      grid_options:
+        columns: 3
+        rows: 2
+    - type: custom:homeview-light-card
+      entity: light.example_bedroom
+      name: Bedroom
+      icon: mdi:lightbulb
+      grid_options:
+        columns: 3
+        rows: 2
+    - type: custom:homeview-light-card
+      entity: light.example_desk_lamp
+      name: Desk Lamp
+      icon: mdi:lamp
+      grid_options:
+        columns: 3
+        rows: 2
+    - type: custom:homeview-garage-card
+      entity: cover.example_garage_door
+      name: Garage
+      confirm: true
+      confirm_text: Open or close the garage door?
+      grid_options:
+        columns: 3
+        rows: 2
+    - type: custom:button-card
+      template: homeview_styles
+      variables:
+        theme: light
+      grid_options:
+        columns: full
+        rows: auto
+    - type: custom:homeview-edit-button-card
+      position: top-right
+      style: light
+      admin_only: true
+      show_screensaver_button: true   # Wallpanel screensaver settings button under the pencil
+      grid_options:
+        columns: full
+        rows: auto

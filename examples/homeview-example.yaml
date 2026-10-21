@@ -1,0 +1,544 @@
+# HomeView example dashboard. Needs the HomeView cards (dist/homeview-cards.js, see README) plus the plugins listed there.
+# Settings > Dashboards > Add dashboard > New dashboard from scratch, open it, pencil > three dots > Raw configuration editor,
+# paste this, then replace the example entities and <your-dashboard-url>.
+title: NotHomeView
+button_card_templates:
+  homeview_tile:
+    show_icon: true
+    show_name: true
+    show_label: true
+    show_state: false
+    variables:
+      theme: dark
+      'on': '[[[ return entity ? ["on","open","opening","closing","playing","unlocked"].includes(entity.state) : false ]]]'
+    hold_action:
+      action: more-info
+    double_tap_action:
+      action: none
+    extra_styles: :host{display:block !important;height:100% !important;width:100% !important;max-width:none !important;container-type:size;--frosted-glass-card-layer-content:none;--hp-rad:min(5.6vh, 3vw)}ha-card::before{content:none !important;display:none !important;backdrop-filter:none !important}
+    styles:
+      card:
+      - height: 100%
+      - width: 100%
+      - border-radius: var(--hp-rad)
+      - padding: 7cqh 5cqw 8cqh
+      - box-sizing: border-box
+      - font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", Roboto, sans-serif
+      - overflow: hidden
+      - -webkit-tap-highlight-color: transparent
+      - user-select: none
+      - -webkit-user-select: none
+      - -webkit-touch-callout: none
+      - transition: background .25s ease, box-shadow .25s ease
+      - background: '[[[ const on=variables.on; if(variables.theme=="light") return on? "#cbc4ee" : "#ffffff"; return on? "linear-gradient(150deg, rgba(196,182,255,.46) 0%, rgba(160,140,250,.34) 100%)" : "linear-gradient(150deg, rgba(255,255,255,.15) 0%, rgba(255,255,255,.07) 100%)"; ]]]'
+      - border: '[[[ if(variables.theme=="light") return "1px solid rgba(0,0,0,.035)"; return variables.on? "1px solid rgba(225,215,255,.42)" : "1px solid rgba(255,255,255,.25)"; ]]]'
+      - box-shadow: '[[[ if(variables.theme=="light") return "0 .4vh 1.4vh rgba(30,30,60,.06)"; return variables.on? "inset 0 1px 0 rgba(255,255,255,.35), inset 0 0 0 .5px rgba(255,255,255,.12), 0 1.2vh 3.6vh rgba(50,30,160,.30)" : "inset 0 1px 0 rgba(255,255,255,.25), inset 0 0 0 .5px rgba(255,255,255,.06), 0 1.2vh 3.6vh rgba(6,8,60,.26)"; ]]]'
+      - backdrop-filter: '[[[ return variables.theme=="light" ? "none" : "blur(26px) saturate(180%)"; ]]]'
+      - -webkit-backdrop-filter: '[[[ return variables.theme=="light" ? "none" : "blur(26px) saturate(180%)"; ]]]'
+      grid:
+      - grid-template-areas: '"i" "n" "l"'
+      - grid-template-rows: 1fr min-content min-content
+      - grid-template-columns: 100%
+      - height: 100%
+      img_cell:
+      - align-self: center
+      - justify-self: center
+      - width: 100%
+      - height: 100%
+      - display: flex
+      - align-items: center
+      - justify-content: center
+      icon:
+      - width: min(30cqh, 20cqw)
+      - height: min(30cqh, 20cqw)
+      - color: '[[[ if(variables.theme=="light") return variables.on? "#5a4bc4" : "#3c3c43"; return variables.on? "#f3efff" : "#ffffff"; ]]]'
+      - filter: '[[[ return (variables.theme=="light") ? "none" : "drop-shadow(0 .3vh .8vh rgba(0,0,40,.25))"; ]]]'
+      name:
+      - font-size: min(11.5cqh,7cqw)
+      - font-weight: '650'
+      - margin-top: 1cqh
+      - letter-spacing: -.01em
+      - white-space: nowrap
+      - overflow: hidden
+      - text-overflow: ellipsis
+      - max-width: 100%
+      - color: '[[[ if(variables.theme=="light") return variables.on? "#3f3399" : "#3c3c43"; return "#ffffff"; ]]]'
+      - text-shadow: '[[[ return (variables.theme=="light") ? "none" : "0 1px 6px rgba(0,0,40,.25)"; ]]]'
+      label:
+      - font-size: min(9.6cqh,5.9cqw)
+      - font-weight: '500'
+      - margin-top: .5cqh
+      - white-space: nowrap
+      - overflow: hidden
+      - text-overflow: ellipsis
+      - max-width: 100%
+      - color: '[[[ if(variables.theme=="light") return variables.on? "rgba(63,51,153,.65)" : "rgba(60,60,67,.55)"; return variables.on? "rgba(255,255,255,.80)" : "rgba(255,255,255,.66)"; ]]]'
+  homeview_light:
+    variables:
+      theme: light
+  homeview_thermostat:
+    template: homeview_tile
+    show_icon: false
+    name: Thermostat
+    variables:
+      'on': false
+      compact: false
+    show_label: '[[[ return !variables.compact ]]]'
+    hold_action:
+      action: more-info
+    custom_fields:
+      temp: '[[[ const a=entity.attributes; const t=parseFloat(a.temperature); let i="--",f=""; if(!isNaN(t)){i=Math.trunc(t); f=(Math.round((t-i)*10)? "."+Math.round((t-i)*10) : "");} const cur=a.current_temperature!=null? (Math.round(a.current_temperature*10)/10)+"°" : ""; const mode = entity.state=="off" ? "Off" : (a.hvac_action=="heating"? "Heating" : (entity.state=="heat"? "Heat" : entity.state)); return `<div class="big">${i}<span class="dec">${f}</span><span class="deg">°</span></div>` + (variables.compact? "" : `<div class="sub">${mode} · Now ${cur}</div>`); ]]]'
+      down:
+        card:
+          type: custom:button-card
+          icon: mdi:chevron-down
+          show_name: false
+          show_state: false
+          extra_styles: ha-card{background:transparent !important;border:none !important;box-shadow:none !important;backdrop-filter:none !important;-webkit-backdrop-filter:none !important}ha-card::before{content:none !important;display:none !important;backdrop-filter:none !important}
+          tap_action:
+            action: perform-action
+            perform_action: climate.set_temperature
+            data:
+              entity_id: '[[[ return entity.entity_id ]]]'
+              temperature: '[[[ const a=entity.attributes; let t=(parseFloat(a.temperature)||20)-0.5; t=Math.max(a.min_temp||5, Math.min(a.max_temp||30, t)); return Math.round(t*2)/2; ]]]'
+          hold_action:
+            action: none
+          double_tap_action:
+            action: none
+          styles:
+            card:
+            - padding: '0'
+            - height: 100%
+            - width: 100%
+            - border-radius: var(--hp-rad)
+            - -webkit-tap-highlight-color: transparent
+            grid:
+            - grid-template-areas: '"i"'
+            - height: 100%
+            img_cell:
+            - height: 100%
+            - width: 100%
+            - display: flex
+            - align-items: center
+            - justify-content: center
+            icon:
+            - width: '[[[ return variables.compact ? "min(30cqh,18cqw)" : "min(17cqh,11cqw)"; ]]]'
+            - height: '[[[ return variables.compact ? "min(30cqh,18cqw)" : "min(17cqh,11cqw)"; ]]]'
+            - color: '[[[ return variables.theme=="light" ? "#3c3c43" : "#ffffff"; ]]]'
+      up:
+        card:
+          type: custom:button-card
+          icon: mdi:chevron-up
+          show_name: false
+          show_state: false
+          extra_styles: ha-card{background:transparent !important;border:none !important;box-shadow:none !important;backdrop-filter:none !important;-webkit-backdrop-filter:none !important}ha-card::before{content:none !important;display:none !important;backdrop-filter:none !important}
+          tap_action:
+            action: perform-action
+            perform_action: climate.set_temperature
+            data:
+              entity_id: '[[[ return entity.entity_id ]]]'
+              temperature: '[[[ const a=entity.attributes; let t=(parseFloat(a.temperature)||20)+0.5; t=Math.max(a.min_temp||5, Math.min(a.max_temp||30, t)); return Math.round(t*2)/2; ]]]'
+          hold_action:
+            action: none
+          double_tap_action:
+            action: none
+          styles:
+            card:
+            - padding: '0'
+            - height: 100%
+            - width: 100%
+            - border-radius: var(--hp-rad)
+            - -webkit-tap-highlight-color: transparent
+            grid:
+            - grid-template-areas: '"i"'
+            - height: 100%
+            img_cell:
+            - height: 100%
+            - width: 100%
+            - display: flex
+            - align-items: center
+            - justify-content: center
+            icon:
+            - width: '[[[ return variables.compact ? "min(30cqh,18cqw)" : "min(17cqh,11cqw)"; ]]]'
+            - height: '[[[ return variables.compact ? "min(30cqh,18cqw)" : "min(17cqh,11cqw)"; ]]]'
+            - color: '[[[ return variables.theme=="light" ? "#3c3c43" : "#ffffff"; ]]]'
+    styles:
+      card:
+      - padding: '0'
+      grid:
+      - grid-template-areas: '[[[ return variables.compact ? ''"temp temp temp" "down n up"'' : ''"temp temp temp" "down n up" "down l up"''; ]]]'
+      - grid-template-rows: '[[[ return variables.compact ? "1fr min-content" : "1fr min-content min-content"; ]]]'
+      - grid-template-columns: '[[[ return variables.compact ? "26% 1fr 26%" : "24% 1fr 24%"; ]]]'
+      custom_fields:
+        temp:
+        - align-self: center
+        - justify-self: center
+        - text-align: center
+        - padding-top: 4cqh
+        - overflow: visible
+        - color: '[[[ return variables.theme=="light" ? "#1c1c1e" : "#ffffff"; ]]]'
+        down:
+        - height: 100%
+        - align-self: stretch
+        - overflow: visible
+        up:
+        - height: 100%
+        - align-self: stretch
+        - overflow: visible
+      name:
+      - font-size: '[[[ return variables.compact ? "min(10.5cqh,6.6cqw)" : "min(6.2cqh,3.6cqw)"; ]]]'
+      - padding-bottom: '[[[ return variables.compact ? "7cqh" : "0"; ]]]'
+      label:
+      - font-size: min(5.2cqh,3cqw)
+      - padding-bottom: 6cqh
+    extra_styles: ':host{display:block !important;height:100% !important;width:100% !important;max-width:none !important;container-type:size;--frosted-glass-card-layer-content:none;--hp-rad:min(5.6vh, 3vw)}ha-card::before{content:none !important;display:none !important;backdrop-filter:none !important}#down > *, #up > *{display:block !important;height:100% !important;width:100% !important;max-width:none !important}.big{font-family:ui-rounded, "SF Pro Rounded", "Nunito", -apple-system, BlinkMacSystemFont, sans-serif; font-weight:300; font-size:min(50cqh,30cqw); line-height:1.05; letter-spacing:-.04em; font-variant-numeric:tabular-nums}.dec{font-size:.42em; letter-spacing:0} .deg{font-size:.42em; vertical-align:top; position:relative; top:.08em; margin-left:.04em; opacity:.85}.sub{font-size:min(4.8cqh,2.9cqw); font-weight:550; opacity:.62; margin-top:1.4cqh; letter-spacing:.02em}'
+  homeview_popup_climate:
+    tap_action:
+      action: fire-dom-event
+      browser_mod:
+        service: browser_mod.popup
+        data:
+          title: Climate
+          dismissable: true
+          content:
+            type: custom:auto-entities
+            show_empty: false
+            card_param: cards
+            sort:
+              method: friendly_name
+            card:
+              type: grid
+              columns: 2
+              square: false
+            filter:
+              include:
+              - domain: climate
+                options:
+                  type: tile
+                  features:
+                  - type: target-temperature
+                  features_position: bottom
+              exclude:
+              - state: unavailable
+kiosk_mode:
+  hide_header: true
+  hide_sidebar: true
+wallpanel:
+  enabled: false
+  enabled_on_views:
+  - main
+  - light
+  hide_toolbar: true
+  hide_sidebar: true
+  fullscreen: true
+  keep_fullscreen: true
+  idle_time: 90
+  fade_in_time: 2.0
+  fade_out_time_interaction: 0.3
+  crossfade_time: 2.5
+  display_time: 25
+  control_reactivation_time: 0.8
+  keep_screen_on_time: 86400
+  black_screen_after_time: 0
+  stop_screensaver_on_mouse_move: true
+  stop_screensaver_on_mouse_click: true
+  disable_screensaver_on_browser_mod_popup: true
+  screensaver_stop_close_browser_mod_popup: true
+  image_url: media-source://media_source/local/
+  media_order: random
+  media_list_update_interval: 3600
+  exclude_filenames:
+  - /(cdrom|floppy|usb)(/|$)
+  exclude_media_types:
+  - video
+  image_fit_landscape: cover
+  image_fit_portrait: cover
+  show_image_info: false
+  show_progress_bar: false
+  info_animation_duration_x: 0
+  info_animation_duration_y: 0
+  info_move_interval: 0
+  cards:
+  - type: clock
+    clock_style: digital
+    clock_size: large
+    time_format: '12'
+    show_seconds: false
+    no_background: true
+    card_mod:
+      style:
+        .: ha-card{background:none !important;border:none !important;box-shadow:none !important;backdrop-filter:none !important;--frosted-glass-card-layer-content:none}ha-card::before{content:none !important;display:none !important;backdrop-filter:none !important}
+        hui-clock-card-digital $: .time-parts{font-family:ui-rounded, "SF Pro Rounded", "Nunito", -apple-system, BlinkMacSystemFont, sans-serif !important;font-size:min(40vh,27vw) !important;font-weight:500 !important;line-height:1 !important;color:rgba(255,255,255,.62) !important;letter-spacing:-.005em;text-shadow:0 .4vh 4vh rgba(0,0,0,.16);gap:0 !important}.time-part{font-size:inherit !important;font-weight:inherit !important;color:inherit !important;font-family:inherit !important}.time-part.minute::before,.time-part + .time-part::before{color:inherit !important}.time-part.am-pm{display:none !important}
+    wp_style:
+      width: 100vw
+  style:
+    wallpanel-screensaver-info-container:
+      align-items: flex-start
+      justify-content: center
+      padding: 3vh 0 0 0
+    wallpanel-screensaver-info-box:
+      background-color: transparent
+      box-shadow: none
+      border-radius: '0'
+      padding: '0'
+      margin: 0 auto
+      --ha-card-background: transparent
+      --primary-text-color: rgba(255,255,255,.72)
+    wallpanel-screensaver-info-box-content:
+      background: transparent
+      box-shadow: none
+      backdrop-filter: none
+    wp-card:
+      background: transparent
+    wallpanel-screensaver-overlay:
+      background-color: rgba(0,0,0,.08)
+views:
+- title: Home
+  path: main
+  icon: mdi:view-dashboard
+  type: custom:grid-layout
+  theme: HomeView Glass
+  background: 'radial-gradient(60% 80% at 88% 8%, rgba(150,165,255,.85) 0%, rgba(150,165,255,0) 60%),radial-gradient(70% 60% at 30% 108%, rgba(40,30,190,.95) 0%, rgba(40,30,190,0) 70%),radial-gradient(45% 35% at 58% 46%, rgba(190,200,255,.55) 0%, rgba(190,200,255,0) 70%),radial-gradient(90% 40% at 70% 70%, rgba(85,70,230,.65) 0%, rgba(85,70,230,0) 70%),linear-gradient(140deg, #0a1050 0%, #1a2391 38%, #3341cf 62%, #18208a 82%, #0b1050 100%)'
+  layout:
+    grid-template-rows: repeat(2, minmax(0, 1fr))
+    grid-auto-flow: column dense
+    grid-auto-columns: calc((100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 2 * max(8px, 2.2vmin) - 3 * max(8px, 2.2vmin)) / 4)
+    grid-gap: max(8px, 2.2vmin)
+    height: calc(var(--hv-vh, 100dvh) - var(--kiosk-header-height, var(--header-height, 56px)) - calc(var(--safe-area-inset-top, env(safe-area-inset-top, 0px)) + clamp(8px, 1.6vmin, 12px) - 4px) - calc(max(clamp(8px, 1.6vmin, 12px), var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)) + 4px) - 8px))
+    margin: 0 0 calc(-1 * var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))) 0
+    card_margin: '0'
+    padding: calc(var(--safe-area-inset-top, env(safe-area-inset-top, 0px)) + clamp(8px, 1.6vmin, 12px) - 4px) max(max(8px, 2.2vmin), env(safe-area-inset-right, 0px)) calc(max(clamp(8px, 1.6vmin, 12px), var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)) + 4px) - 8px) max(max(8px, 2.2vmin), env(safe-area-inset-left, 0px))
+  cards:
+  - type: custom:homeview-thermostat-card
+    entity: climate.example_thermostat
+    name: Thermostat
+    room: Living Room
+    step: 0.5
+    tap_action:
+      action: more-info
+    hold_action:
+      action: more-info
+    view_layout:
+      grid-column: span 2
+      grid-row: span 2
+  - type: clock
+    clock_style: analog
+    clock_size: large
+    show_seconds: true
+    seconds_motion: continuous
+    ticks: minute
+    face_style: numbers_upright
+    border: false
+    view_layout:
+      grid-row: span 2
+  - type: custom:homeview-music-card
+    np_popup_style: fullscreen   # tap opens Now Playing full screen (or: window)
+    entity: media_player.example_speaker
+    name: Music
+    icon: mdi:music
+    hold_action:
+      action: more-info
+    entities:
+    - media_player.example_speaker_2
+  - type: custom:homeview-nav-card
+    name: Home
+    icon: mdi:home-outline
+    navigation_path: /<your-dashboard-url>/light
+    alt_navigation_path: /<your-dashboard-url>/main
+    keep_query: true
+    entity: zone.home
+    active: entity
+    hold_action:
+      action: fire-dom-event
+      browser_mod:
+        service: browser_mod.popup
+        data:
+          content:
+            type: custom:auto-entities
+            show_empty: false
+            card_param: cards
+            sort:
+              method: friendly_name
+            card:
+              type: grid
+              columns: 2
+              square: false
+            filter:
+              include:
+              - domain: light
+                options:
+                  type: tile
+                  tap_action:
+                    action: toggle
+                  hold_action:
+                    action: more-info
+                  features:
+                  - type: light-brightness
+                  features_position: bottom
+              exclude:
+              - state: unavailable
+              - entity_id: light.browser_mod_*
+          title: Lights
+          dismissable: true
+  # HomeView Camera (1.7): uncomment and pick your camera. Sizes 2x3 / 2x6 / 4x6; the editor sets grid_options.
+  # NotHomeView Battery: big %, rounded bar (green / yellow / red), bolt while charging (auto-detected on the same device)
+  # NotHomeView People: avatar, badge, name, zone or street; tap = map popup
+  # - type: custom:homeview-person-card
+  #   entity: person.jane
+  # - type: custom:homeview-battery-card
+  #   entity: sensor.phone_battery_level
+  #   name: Phone
+  #   grid_options: {columns: 3, rows: 2}
+  # - type: custom:homeview-camera-card
+  #   entity: camera.front_yard
+  #   name: Front Yard
+  #   size: 2x6   # 2x3 | 2x6 | 4x6 | 4x3 (Tall: one tile wide, two tiles tall)
+  #   view_layout: {grid-column: span 2}
+  #   buttons:
+  #   - entity: light.example_ceiling
+  #     name: Lights
+  - type: custom:homeview-scene-card
+    entity: scene.example_good_night
+    name: Good Night
+    icon: mdi:weather-night
+    confirm_text: Run the Good Night scene?
+  - type: custom:homeview-garage-card
+    entity: cover.example_garage_door
+    name: Garage
+    confirm: true
+    confirm_text: Open or close the garage door?
+  - type: custom:homeview-light-card
+    entity: light.example_ceiling
+    name: Ceiling Lights
+    icon: mdi:ceiling-light
+  - type: custom:homeview-light-card
+    entity: light.example_floor_lamp
+    name: Floor Lamp
+    icon: mdi:floor-lamp
+  - type: custom:homeview-edit-button-card
+    position: top-right
+    style: dark
+    admin_only: true
+    show_screensaver_button: true   # Wallpanel screensaver settings button under the pencil
+- title: Light
+  path: light
+  icon: mdi:white-balance-sunny
+  type: custom:grid-layout
+  theme: HomeView Light
+  background: 'radial-gradient(80% 90% at 20% 0%, #ffffff 0%, rgba(255,255,255,0) 70%), linear-gradient(160deg,#f1f1f4 0%,#e3e3e8 100%)'
+  layout:
+    grid-template-rows: repeat(2, minmax(0, 1fr))
+    grid-auto-flow: column dense
+    grid-auto-columns: calc((100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 2 * max(8px, 2.2vmin) - 3 * max(8px, 2.2vmin)) / 4)
+    grid-gap: max(8px, 2.2vmin)
+    height: calc(var(--hv-vh, 100dvh) - var(--kiosk-header-height, var(--header-height, 56px)) - calc(var(--safe-area-inset-top, env(safe-area-inset-top, 0px)) + clamp(8px, 1.6vmin, 12px) - 4px) - calc(max(clamp(8px, 1.6vmin, 12px), var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)) + 4px) - 8px))
+    margin: 0 0 calc(-1 * var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))) 0
+    card_margin: '0'
+    padding: calc(var(--safe-area-inset-top, env(safe-area-inset-top, 0px)) + clamp(8px, 1.6vmin, 12px) - 4px) max(max(8px, 2.2vmin), env(safe-area-inset-right, 0px)) calc(max(clamp(8px, 1.6vmin, 12px), var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)) + 4px) - 8px) max(max(8px, 2.2vmin), env(safe-area-inset-left, 0px))
+  cards:
+  - type: clock
+    clock_style: analog
+    clock_size: large
+    show_seconds: true
+    seconds_motion: continuous
+    ticks: minute
+    face_style: numbers_upright
+    border: false
+    view_layout:
+      grid-row: span 2
+  - type: custom:homeview-thermostat-card
+    entity: climate.example_thermostat
+    name: Thermostat
+    room: Living Room
+    step: 0.5
+    tap_action:
+      action: more-info
+    hold_action:
+      action: more-info
+    view_layout:
+      grid-column: span 2
+      grid-row: span 2
+  - type: custom:homeview-light-card
+    entity: light.example_ceiling
+    name: Lights
+    icon: mdi:ceiling-light
+  - type: custom:homeview-music-card
+    np_popup_style: fullscreen   # tap opens Now Playing full screen (or: window)
+    entity: media_player.example_speaker
+    name: Music
+    icon: mdi:music
+    hold_action:
+      action: more-info
+    entities:
+    - media_player.example_speaker_2
+  - type: custom:homeview-scene-card
+    entity: scene.example_good_night
+    name: Good Night
+    icon: mdi:weather-night
+    confirm_text: Run the Good Night scene?
+  - type: custom:homeview-scene-card
+    entity: scene.example_bright
+    name: Good Morning
+    icon: mdi:white-balance-sunny
+  - type: custom:homeview-nav-card
+    name: Home
+    icon: mdi:home-outline
+    navigation_path: /<your-dashboard-url>/main
+    alt_navigation_path: /<your-dashboard-url>/light
+    keep_query: true
+    entity: zone.home
+    active: entity
+    hold_action:
+      action: fire-dom-event
+      browser_mod:
+        service: browser_mod.popup
+        data:
+          content:
+            type: custom:auto-entities
+            show_empty: false
+            card_param: cards
+            sort:
+              method: friendly_name
+            card:
+              type: grid
+              columns: 2
+              square: false
+            filter:
+              include:
+              - domain: light
+                options:
+                  type: tile
+                  tap_action:
+                    action: toggle
+                  hold_action:
+                    action: more-info
+                  features:
+                  - type: light-brightness
+                  features_position: bottom
+              exclude:
+              - state: unavailable
+              - entity_id: light.browser_mod_*
+          title: Lights
+          dismissable: true
+  - type: custom:homeview-scene-card
+    entity: scene.example_dim
+    name: Dim
+    icon: mdi:lightbulb-night-outline
+  - type: custom:homeview-light-card
+    entity: light.example_bedroom
+    name: Bedroom
+    icon: mdi:lightbulb
+  - type: custom:homeview-light-card
+    entity: light.example_desk_lamp
+    name: Desk Lamp
+    icon: mdi:lamp
+  - type: custom:homeview-garage-card
+    entity: cover.example_garage_door
+    name: Garage
+    confirm: true
+    confirm_text: Open or close the garage door?
+  - type: custom:homeview-edit-button-card
+    position: top-right
+    style: light
+    admin_only: true
+    show_screensaver_button: true   # Wallpanel screensaver settings button under the pencil

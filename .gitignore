@@ -1,0 +1,13 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/
+# local tooling and secrets – never commit
+node_modules/
+*.log
+.env
+secrets.yaml
+snapshots/
+screenshots_private/

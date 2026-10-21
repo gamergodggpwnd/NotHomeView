@@ -1,0 +1,130 @@
+# HomeView - Apple "HomePad"-style glass tiles for Home Assistant dashboards.
+# Requires card-mod (HACS). Apply per view:  theme: HomeView Glass   (or HomeView Light)
+# All tile styling lives here (card-mod theme), so dashboard cards stay plain native cards that the visual editor can edit.
+HomeView Glass:
+  card-mod-theme: HomeView Glass
+  # plain theme variables (also give a basic glass look without card-mod)
+  ha-card-border-radius: "min(5.6vh, 3vw)"
+  ha-card-border-width: "1px"
+  ha-card-border-color: "rgba(255,255,255,.25)"
+  ha-card-box-shadow: "inset 0 1px 0 rgba(255,255,255,.25), inset 0 0 0 .5px rgba(255,255,255,.06), 0 1.2vh 3.6vh rgba(6,8,60,.26)"
+  ha-card-backdrop-filter: "blur(26px) saturate(180%)"
+  ha-card-background: "linear-gradient(150deg, rgba(255,255,255,.15) 0%, rgba(255,255,255,.07) 100%)"
+  primary-text-color: "#ffffff"
+  secondary-text-color: "rgba(255,255,255,.66)"
+  state-icon-color: "#ffffff"
+  frosted-glass-card-layer-content: "none"
+  hv-bg: "linear-gradient(150deg, rgba(255,255,255,.15) 0%, rgba(255,255,255,.07) 100%)"
+  hv-bg-on: "linear-gradient(150deg, rgba(196,182,255,.46) 0%, rgba(160,140,250,.34) 100%)"
+  hv-border: "rgba(255,255,255,.25)"
+  hv-border-on: "rgba(225,215,255,.42)"
+  hv-shadow: "inset 0 1px 0 rgba(255,255,255,.25), inset 0 0 0 .5px rgba(255,255,255,.06), 0 1.2vh 3.6vh rgba(6,8,60,.26)"
+  hv-shadow-on: "inset 0 1px 0 rgba(255,255,255,.35), inset 0 0 0 .5px rgba(255,255,255,.12), 0 1.2vh 3.6vh rgba(50,30,160,.30)"
+  hv-blur: "blur(26px) saturate(180%)"
+  hv-text: "#ffffff"
+  hv-text-strong: "#ffffff"
+  hv-text2: "rgba(255,255,255,.66)"
+  hv-text-on: "#ffffff"
+  hv-text2-on: "rgba(255,255,255,.80)"
+  hv-icon: "#ffffff"
+  hv-icon-on: "#f3efff"
+  hv-shade: "0 1px 6px rgba(0,0,40,.25)"
+  hv-icon-shade: "drop-shadow(0 .3vh .8vh rgba(0,0,40,.25))"
+  hv-accent: "#d4c9ff"
+  hv-track: "rgba(255,255,255,.18)"
+  hv-radius: "min(5.6vh, 3vw)"
+  # card-mod: this CSS is applied inside every card of a view that uses this theme (shared by both themes via the YAML anchor).
+  # Plain "card-mod-card" CSS on purpose: no nested "$" selectors needed, so it works without the card-mod-card-yaml parser.
+  card-mod-card: &homeview_card_mod |
+    :host(:not(button-card)){display:block;height:100%;width:100%;container-type:size;--frosted-glass-card-layer-content:none}
+    :host(:not(button-card)) ha-card{height:100%;box-sizing:border-box;overflow:hidden;font-family:-apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", Roboto, sans-serif; background:var(--hv-bg) !important;border:1px solid var(--hv-border) !important;border-radius:var(--hv-radius) !important; box-shadow:var(--hv-shadow) !important;backdrop-filter:var(--hv-blur) !important;-webkit-backdrop-filter:var(--hv-blur) !important; --ha-card-border-radius:var(--hv-radius);--primary-text-color:var(--hv-text);--secondary-text-color:var(--hv-text2); transition:background .25s ease, box-shadow .25s ease;-webkit-tap-highlight-color:transparent}
+    ha-card::before{content:none !important;display:none !important;backdrop-filter:none !important}
+    :host(:not(button-card)) ha-card.active{background:var(--hv-bg-on) !important;border-color:var(--hv-border-on) !important;box-shadow:var(--hv-shadow-on) !important; --primary-text-color:var(--hv-text-on);--secondary-text-color:var(--hv-text2-on)}
+    :host(hui-tile-card) ha-tile-icon{--tile-icon-size:min(34cqh,22cqw);--mdc-icon-size:min(30cqh,20cqw);--tile-icon-opacity:0;--tile-icon-hover-opacity:.08; --tile-icon-color:var(--hv-icon) !important;filter:var(--hv-icon-shade)}
+    :host(hui-tile-card) ha-card.active ha-tile-icon{--tile-icon-color:var(--hv-icon-on) !important}
+    :host(hui-tile-card) ha-tile-info{--ha-tile-info-primary-font-size:min(11.5cqh,7cqw);--ha-tile-info-primary-font-weight:650;--ha-tile-info-primary-line-height:1.2; --ha-tile-info-secondary-font-size:min(9.6cqh,5.9cqw);--ha-tile-info-secondary-font-weight:500;--ha-tile-info-secondary-line-height:1.2; --ha-tile-info-primary-color:var(--hv-text);--ha-tile-info-secondary-color:var(--hv-text2);text-shadow:var(--hv-shade)}
+    :host(hui-tile-card) ha-card.active ha-tile-info{--ha-tile-info-primary-color:var(--hv-text-on);--ha-tile-info-secondary-color:var(--hv-text2-on)}
+    :host(hui-button-card) ha-card{display:flex;flex-direction:column;justify-content:center;align-items:center;padding:7cqh 5cqw 8cqh !important}
+    :host(hui-button-card) ha-state-icon{--mdc-icon-size:min(30cqh,20cqw);width:min(30cqh,20cqw) !important;height:min(30cqh,20cqw) !important;color:var(--hv-icon);filter:var(--hv-icon-shade);flex:1;display:flex;align-items:center}
+    :host(hui-button-card) span{font-size:min(11.5cqh,7cqw);font-weight:650;color:var(--hv-text);text-shadow:var(--hv-shade)}
+    :host(hui-clock-card) ha-card{display:flex;align-items:center;justify-content:center;padding:0 !important}
+    :host(hui-clock-card) hui-clock-card-analog{--ha-clock-card-analog-face-background:#fff;--ha-clock-card-analog-face-border-radius:50%; --primary-text-color:#1c1c1e;--ha-color-border-danger-normal:#ff9500;--divider-color:transparent;border-radius:50%; box-shadow:0 .6vh 2vh rgba(0,0,40,.18);zoom:.45}
+    @container (min-width:120px) and (min-height:120px){:host(hui-clock-card) hui-clock-card-analog{zoom:0.458}
+    @container (min-width:140px) and (min-height:140px){:host(hui-clock-card) hui-clock-card-analog{zoom:0.535}
+    @container (min-width:160px) and (min-height:160px){:host(hui-clock-card) hui-clock-card-analog{zoom:0.611}
+    @container (min-width:180px) and (min-height:180px){:host(hui-clock-card) hui-clock-card-analog{zoom:0.687}
+    @container (min-width:200px) and (min-height:200px){:host(hui-clock-card) hui-clock-card-analog{zoom:0.764}
+    @container (min-width:220px) and (min-height:220px){:host(hui-clock-card) hui-clock-card-analog{zoom:0.840}
+    @container (min-width:240px) and (min-height:240px){:host(hui-clock-card) hui-clock-card-analog{zoom:0.916}
+    @container (min-width:260px) and (min-height:260px){:host(hui-clock-card) hui-clock-card-analog{zoom:0.993}
+    @container (min-width:280px) and (min-height:280px){:host(hui-clock-card) hui-clock-card-analog{zoom:1.069}
+    @container (min-width:300px) and (min-height:300px){:host(hui-clock-card) hui-clock-card-analog{zoom:1.145}
+    @container (min-width:320px) and (min-height:320px){:host(hui-clock-card) hui-clock-card-analog{zoom:1.222}
+    @container (min-width:340px) and (min-height:340px){:host(hui-clock-card) hui-clock-card-analog{zoom:1.298}
+    @container (min-width:360px) and (min-height:360px){:host(hui-clock-card) hui-clock-card-analog{zoom:1.375}
+    @container (min-width:380px) and (min-height:380px){:host(hui-clock-card) hui-clock-card-analog{zoom:1.451}
+    @container (min-width:400px) and (min-height:400px){:host(hui-clock-card) hui-clock-card-analog{zoom:1.527}
+    @container (min-width:420px) and (min-height:420px){:host(hui-clock-card) hui-clock-card-analog{zoom:1.604}
+    @container (min-width:440px) and (min-height:440px){:host(hui-clock-card) hui-clock-card-analog{zoom:1.680}
+    @container (min-width:460px) and (min-height:460px){:host(hui-clock-card) hui-clock-card-analog{zoom:1.756}
+    @container (min-width:480px) and (min-height:480px){:host(hui-clock-card) hui-clock-card-analog{zoom:1.833}
+    @container (min-width:500px) and (min-height:500px){:host(hui-clock-card) hui-clock-card-analog{zoom:1.909}
+    @container (min-width:520px) and (min-height:520px){:host(hui-clock-card) hui-clock-card-analog{zoom:1.985}
+    @container (min-width:540px) and (min-height:540px){:host(hui-clock-card) hui-clock-card-analog{zoom:2.062}
+    @container (min-width:560px) and (min-height:560px){:host(hui-clock-card) hui-clock-card-analog{zoom:2.138}
+    @container (min-width:580px) and (min-height:580px){:host(hui-clock-card) hui-clock-card-analog{zoom:2.215}
+    @container (min-width:600px) and (min-height:600px){:host(hui-clock-card) hui-clock-card-analog{zoom:2.291}
+    @container (min-width:620px) and (min-height:620px){:host(hui-clock-card) hui-clock-card-analog{zoom:2.367}
+    @container (min-width:640px) and (min-height:640px){:host(hui-clock-card) hui-clock-card-analog{zoom:2.444}
+    @container (min-width:660px) and (min-height:660px){:host(hui-clock-card) hui-clock-card-analog{zoom:2.520}
+    @container (min-width:680px) and (min-height:680px){:host(hui-clock-card) hui-clock-card-analog{zoom:2.596}
+    @container (min-width:700px) and (min-height:700px){:host(hui-clock-card) hui-clock-card-analog{zoom:2.673}
+    @container (min-width:720px) and (min-height:720px){:host(hui-clock-card) hui-clock-card-analog{zoom:2.749}
+    @container (min-width:740px) and (min-height:740px){:host(hui-clock-card) hui-clock-card-analog{zoom:2.825}
+    @container (min-width:760px) and (min-height:760px){:host(hui-clock-card) hui-clock-card-analog{zoom:2.902}
+    @container (min-width:780px) and (min-height:780px){:host(hui-clock-card) hui-clock-card-analog{zoom:2.978}
+    @container (min-width:800px) and (min-height:800px){:host(hui-clock-card) hui-clock-card-analog{zoom:3.055}
+    @container (min-width:820px) and (min-height:820px){:host(hui-clock-card) hui-clock-card-analog{zoom:3.131}
+    @container (min-width:840px) and (min-height:840px){:host(hui-clock-card) hui-clock-card-analog{zoom:3.207}
+    @container (min-width:860px) and (min-height:860px){:host(hui-clock-card) hui-clock-card-analog{zoom:3.284}
+    @container (min-width:880px) and (min-height:880px){:host(hui-clock-card) hui-clock-card-analog{zoom:3.360}
+    @container (min-width:900px) and (min-height:900px){:host(hui-clock-card) hui-clock-card-analog{zoom:3.436}
+    @container (min-width:920px) and (min-height:920px){:host(hui-clock-card) hui-clock-card-analog{zoom:3.513}
+    @container (min-width:940px) and (min-height:940px){:host(hui-clock-card) hui-clock-card-analog{zoom:3.589}
+    @container (min-width:960px) and (min-height:960px){:host(hui-clock-card) hui-clock-card-analog{zoom:3.665}
+    @container (min-width:980px) and (min-height:980px){:host(hui-clock-card) hui-clock-card-analog{zoom:3.742}
+    @container (min-width:1000px) and (min-height:1000px){:host(hui-clock-card) hui-clock-card-analog{zoom:3.818}
+
+HomeView Light:
+  card-mod-theme: HomeView Light
+  # plain theme variables (also give a basic glass look without card-mod)
+  ha-card-border-radius: "min(5.6vh, 3vw)"
+  ha-card-border-width: "1px"
+  ha-card-border-color: "rgba(0,0,0,.035)"
+  ha-card-box-shadow: "0 .4vh 1.4vh rgba(30,30,60,.06)"
+  ha-card-backdrop-filter: "none"
+  ha-card-background: "#ffffff"
+  primary-text-color: "#3c3c43"
+  secondary-text-color: "rgba(60,60,67,.55)"
+  state-icon-color: "#3c3c43"
+  frosted-glass-card-layer-content: "none"
+  hv-bg: "#ffffff"
+  hv-bg-on: "#cbc4ee"
+  hv-border: "rgba(0,0,0,.035)"
+  hv-border-on: "rgba(110,90,210,.15)"
+  hv-shadow: "0 .4vh 1.4vh rgba(30,30,60,.06)"
+  hv-shadow-on: "none"
+  hv-blur: "none"
+  hv-text: "#3c3c43"
+  hv-text-strong: "#1c1c1e"
+  hv-text2: "rgba(60,60,67,.55)"
+  hv-text-on: "#3f3399"
+  hv-text2-on: "rgba(63,51,153,.65)"
+  hv-icon: "#3c3c43"
+  hv-icon-on: "#5a4bc4"
+  hv-shade: "none"
+  hv-icon-shade: "none"
+  hv-accent: "#7a6ae0"
+  hv-track: "rgba(60,60,67,.12)"
+  hv-radius: "min(5.6vh, 3vw)"
+  card-mod-card: *homeview_card_mod
