@@ -9,12 +9,6 @@ batteries, people, a screensaver settings popup and more), two themes (**HomeVie
 ready‑made example dashboards. Every card has a visual editor and a simple **Size** dropdown, so you build and change the
 dashboard with clicks instead of code.
 
-**Upcoming Features**
-- NotHomeView Home Screen - shortcuts, calendar, photos, all at a glance.
-- TV Controls - allows user to control playback and navigation.
-- Media uploader - allows user to upload photos directly to screensaver, no swiping out of the dashboard required.
-- AI Assist support - allows user to access their preferred voice Assistant directly from dashboard. (must have assistant linked through plugin)
-- Bug fixes and tweaks.
 
 ![Glass theme on a tablet](docs/images/banner_glass.png)
 
@@ -24,6 +18,13 @@ dashboard with clicks instead of code.
 
 > In the card picker the cards are called **"NotHomeView …"**. In YAML their types are `custom:homeview-*`
 > (for example `custom:homeview-light-card`).
+
+**Upcoming Features**
+- NotHomeView Home Screen - shortcuts, calendar, photos, all at a glance.
+- TV Controls - allows user to control playback and navigation.
+- Media uploader - allows user to upload photos directly to screensaver, no swiping out of the dashboard required.
+- AI Assist support - allows user to access their preferred voice Assistant directly from dashboard. (must have assistant linked through plugin)
+- Bug fixes and tweaks.
 
 ## Contents
 
