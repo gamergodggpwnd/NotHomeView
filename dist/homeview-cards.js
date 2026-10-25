@@ -1,9 +1,13 @@
 /*! HomeView cards for Home Assistant - one bundle, no build step, no dependencies.
- *  Cards: homeview-now-playing-card, homeview-thermostat-card, homeview-entity-card, homeview-light-card, homeview-garage-card,
+ *  Cards: homeview-garage-chooser-card (1.29), homeview-now-playing-card, homeview-thermostat-card, homeview-entity-card, homeview-light-card, homeview-garage-card,
  *         homeview-group-card, homeview-scene-card, homeview-music-card, homeview-nav-card, homeview-edit-button-card
  *  Every card has a visual editor (ha-form). Look = HomeView glass tiles; colours come from the
  *  HomeView CSS variables (--hv-*) set by the HomeView theme / style helper, with glass fall-backs. */
-const HV_VERSION = '1.12.0';
+const HV_VERSION = '1.30.7';
+// Registered colour properties so a scene background written as linear-gradient(var(--hv-bg-top), var(--hv-bg-bottom))
+// can fade smoothly between scenes (plain gradients can't transition). Unused unless a dashboard style sets them.
+try { if (window.CSS && CSS.registerProperty) for (const n of ['--hv-bg-top', '--hv-bg-bottom'])
+  CSS.registerProperty({ name: n, syntax: '<color>', inherits: false, initialValue: '#0d0f0e' }); } catch (e) { /* already registered */ }
 const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", Roboto, sans-serif';
 const ROUND = 'ui-rounded, "SF Pro Rounded", "Nunito", -apple-system, BlinkMacSystemFont, sans-serif';
 // --hv-vh = the real visible window height in px. Full-screen HomeView layouts use calc(var(--hv-vh, 100dvh) - ...) because
@@ -38,8 +42,183 @@ function stateActive(s) {
   }
   return st !== 'off';
 }
+// "running": on / open / playing / above 0 — and not one of the usual idle words (used by active: running)
+const IDLE_WORDS = ['off', 'power_off', 'idle', 'standby', 'closed', 'not_home', 'none', 'false', 'unknown', 'unavailable', ''];
+const isRunning = s => { if (!s) return false; const v = String(s.state).toLowerCase().trim(); if (IDLE_WORDS.includes(v)) return false; const n = Number(v); return isNaN(n) ? true : n > 0; };
+const TPL_RE = /\{([a-z_]+\.[a-z0-9_]+)\}/g;
+const tplEntities = t => t ? [...String(t).matchAll(TPL_RE)].map(m => m[1]) : [];
 const fmtState = (hass, s) => !s ? '' : (hass.formatEntityState ? hass.formatEntityState(s) : s.state);
+// sub-label text: {state} = this card's state, {count} = group count, {sensor.xyz} = any entity's state (formatted)
+const fmtTpl = (hass, t, s, extra = {}) => String(t).replace(/\{(state|count)\}/g, (m, k) => k === 'state' ? fmtState(hass, s) : (extra[k] != null ? extra[k] : m))
+  .replace(TPL_RE, (m, id) => hass.states[id] ? fmtState(hass, hass.states[id]) : '—');
 const fmtAttr = (hass, s, a) => !s ? '' : (hass.formatEntityAttributeValue ? hass.formatEntityAttributeValue(s, a) : String(s.attributes[a]));
+
+/* ---------------- theme: Night (dark glass, default) / Day (white) / Auto (follow the sun) — 1.30.5, device pages only since 1.30.6 ----------------
+ * Only the device pages (the views with the button tiles: Page Grid cards, tiles and their popups such as the garage chooser) change.
+ * The Home Screen card and everything on its view (photo backdrop, Photos card, its sheets and gallery) always keep the original look.
+ * Dashboard-wide: "Device pages theme" = the `theme` option of the NotHomeView Home Screen card (visual editor, or the Edit Page menu).
+ * A NotHomeView Page Grid can override it for its own page ("Same as all device pages" by default).
+ * Nothing set (or Night) = the original dark glass look, unchanged. Day colours = the "HomeView Light" theme palette. */
+const HV_THEMES = ['night', 'day', 'auto'];
+const HV_DAY_VARS = '--hv-bg:#ffffff;--hv-bg-on:#cdc6ef;--hv-border:rgba(0,0,0,.05);--hv-border-on:rgba(110,90,210,.18);--hv-shadow:0 .4vh 1.4vh rgba(30,30,60,.07);' +
+  '--hv-shadow-on:0 .3vh 1vh rgba(80,60,180,.08);--hv-blur:none;--hv-text:#3c3c43;--hv-text-strong:#1c1c1e;--hv-text2:rgba(60,60,67,.72);--hv-text-on:#3f3399;' +
+  '--hv-text2-on:rgba(63,51,153,.85);--hv-icon:#3c3c43;--hv-icon-on:#5b3fc4;--hv-shade:none;--hv-icon-shade:none;--hv-accent:#7a6ae0;--hv-track:rgba(60,60,67,.12);' +
+  '--hv-gc-bg:#f2f2f6;--hv-gc-bd:rgba(0,0,0,.06);--hv-gc-busy:#cdc6ef';
+const HV_DAY_BG = 'radial-gradient(80% 90% at 20% 0%, #ffffff 0%, rgba(255,255,255,0) 70%), linear-gradient(160deg,#f1f1f4 0%,#e3e3e8 100%)';
+// for :host CSS of every card (custom properties set on the card itself win over the dark ones inherited from the view)
+const HV_DAY_HOST = `:host([hv-day]){${HV_DAY_VARS};--primary-text-color:#1c1c1e;--secondary-text-color:rgba(60,60,67,.72)}`;
+const hvSunUp = h => { const s = h && h.states && h.states['sun.sun']; return s ? s.state === 'above_horizon' : (new Date().getHours() >= 7 && new Date().getHours() < 19); };
+const hvMode = (t, h) => t === 'day' ? 'day' : t === 'auto' ? (hvSunUp(h) ? 'day' : 'night') : 'night';
+const HVT = { els: new Set(), over: '', cur: 'night', root: null, hass: null, key: '', page: null, docStyle: null, cfg: undefined, path: null, t: '' };
+const hvFindRoot = el => { let n = el; for (let i = 0; i < 80 && n; i++) { if (n.tagName === 'HUI-ROOT') return n; n = n.parentNode || n.host; } return null; };
+// the theme of the current view (1.30.6: it only styles the device pages). A view with a Home Screen card always stays Night (the Home
+// Screen keeps its original look); otherwise a Page Grid in the view with its own setting wins, then the dashboard-wide "Device pages
+// theme" set on the Home Screen card.
+function hvCfgTheme(cfg) {
+  if (!cfg || !Array.isArray(cfg.views)) return '';
+  const seg = decodeURIComponent((location.pathname.split('/')[2] || ''));
+  let vi = cfg.views.findIndex(v => v && v.path != null && String(v.path) === seg); if (vi < 0) vi = /^\d+$/.test(seg) ? +seg : 0;
+  const find = (o, types, d = 0) => { if (!o || typeof o !== 'object' || d > 14) return '';
+    if (Array.isArray(o)) { for (const x of o) { const r = find(x, types, d + 1); if (r) return r; } return ''; }
+    if (types.includes(o.type) && HV_THEMES.includes(o.theme)) return o.theme;
+    for (const k of ['sections', 'cards', 'card', 'elements']) if (o[k]) { const r = find(o[k], types, d + 1); if (r) return r; } return ''; };
+  const HUB = 'custom:homeview-hub-card', has = (o, d = 0) => { if (!o || typeof o !== 'object' || d > 14) return false;
+    if (Array.isArray(o)) return o.some(x => has(x, d + 1)); if (o.type === HUB) return true;
+    return ['sections', 'cards', 'card', 'elements'].some(k => o[k] && has(o[k], d + 1)); };
+  if (has(cfg.views[vi])) return '';
+  return find(cfg.views[vi], ['custom:homeview-grid-card']) || find(cfg.views, [HUB]) || '';
+}
+// the dashboard-wide Device pages theme = `theme` of the first NotHomeView Home Screen card (returns that card's config object)
+function hvHubCfgOf(cfg) { const walk = (o, d = 0) => { if (!o || typeof o !== 'object' || d > 14) return null;
+    if (Array.isArray(o)) { for (const x of o) { const r = walk(x, d + 1); if (r) return r; } return null; }
+    if (o.type === 'custom:homeview-hub-card') return o;
+    for (const k of ['views', 'sections', 'cards', 'card', 'elements']) if (o[k]) { const r = walk(o[k], d + 1); if (r) return r; } return null; };
+  return walk(cfg); }
+// the theme of one device-page view (1.30.7: also used when the Home Screen shows that view as a sheet): its Page Grid's own
+// setting, else the dashboard's Device pages theme (Home Screen card), else Night
+function hvViewTheme(cfg, v) {
+  const find = (o, d = 0) => { if (!o || typeof o !== 'object' || d > 14) return '';
+    if (Array.isArray(o)) { for (const x of o) { const r = find(x, d + 1); if (r) return r; } return ''; }
+    if (o.type === 'custom:homeview-grid-card' && HV_THEMES.includes(o.theme)) return o.theme;
+    for (const k of ['sections', 'cards', 'card', 'elements']) if (o[k]) { const r = find(o[k], d + 1); if (r) return r; } return ''; };
+  const hub = cfg ? hvHubCfgOf(cfg) : null;
+  return find(v) || (hub && HV_THEMES.includes(hub.theme) ? hub.theme : '') || 'night'; }
+// while the Home Screen shows a device page as a sheet, popups opened from it (garage chooser, room picker …) follow that page
+function hvThemeOver(mode) { if (HVT.over === mode) return; HVT.over = mode;
+  const ha = document.querySelector('home-assistant'), hr = ha && ha.shadowRoot, day = mode === 'day' || HVT.cur === 'day';
+  if (hr && HV_POPUP_SHEET) { const has = hr.adoptedStyleSheets.includes(HV_POPUP_SHEET);
+    if (day && !has) hr.adoptedStyleSheets = [...hr.adoptedStyleSheets, HV_POPUP_SHEET]; else if (!day && has) hr.adoptedStyleSheets = hr.adoptedStyleSheets.filter(x => x !== HV_POPUP_SHEET); }
+  for (const e of HVT.els) hvThemeApply(e); }
+// Home Assistant's own toast at the bottom of the screen
+const hvToast = message => { const ha = document.querySelector('home-assistant'); if (ha) ha.dispatchEvent(new CustomEvent('hass-notification', { bubbles: true, composed: true, detail: { message } })); };
+function hvThemeTick(el, hass) {
+  if (hass) HVT.hass = hass;
+  const r = el && el.isConnected ? hvFindRoot(el) : null; if (r) HVT.root = r;
+  const root = HVT.root && HVT.root.isConnected ? HVT.root : null, cfg = root && root.lovelace && root.lovelace.config;
+  if (cfg !== HVT.cfg || location.pathname !== HVT.path) { HVT.cfg = cfg; HVT.path = location.pathname; HVT.t = cfg ? hvCfgTheme(cfg) : ''; } // config scan only when it changes
+  const mode = hvMode(HVT.t, HVT.hass), key = mode + '|' + location.pathname + '|' + (root ? 1 : 0);
+  if (key !== HVT.key) { HVT.key = key; HVT.cur = mode; hvThemePage(root, mode === 'day'); for (const e of HVT.els) hvThemeApply(e); }
+  else if (mode === 'day' && root && HVT.page && hvViewOf(root) !== HVT.page.view) hvThemePage(root, true); // the view was re-created
+  else if (mode === 'day' && HVT.page && HVT.page.view && Date.now() - HVT.page.t > 1500) { HVT.page.t = Date.now(); hvHideBgCards(HVT.page.view, HVT.page.hid); } // cards rendered later
+  if (el) hvThemeApply(el);
+}
+// own setting (Home Screen / Page Grid, also in the card editor preview) > dashboard theme
+const hvOwnTheme = el => { if (el && el._hvThemeVal) return el._hvThemeVal; if (el && el._hvNight) return 'night'; // the Home Screen and everything in it: always the original look
+  const c = el && el._config; return c && el._hvOwnTheme && HV_THEMES.includes(c.theme) ? c.theme : ''; };
+// the Home Screen / Page Grid a card sits in (its tiles follow that card's own setting, e.g. in the card editor preview)
+const hvBoxOf = el => { let n = el.parentNode || el.host; for (let i = 0; i < 40 && n; i++) { if (n._hvOwnTheme) return n; n = n.parentNode || n.host; } return null; };
+const hvThemeOf = el => { let own = hvOwnTheme(el), n = el;
+  for (let i = 0; !own && n && i < 8; i++) { if (n.isConnected && n._hvBox === undefined) n._hvBox = hvBoxOf(n); n = n._hvBox; if (n) own = hvOwnTheme(n); }
+  return own ? hvMode(own, (el && el._hass) || HVT.hass) : (HVT.over ? hvMode(HVT.over, HVT.hass) : HVT.cur); };
+const hvPopupOf = el => { let n = el; for (let i = 0; i < 40 && n; i++) { if (n.tagName === 'BROWSER-MOD-POPUP') return n; n = n.parentNode || n.host; } return null; };
+function hvThemeApply(el) {
+  const day = hvThemeOf(el) === 'day';
+  if (el.isConnected && el._hvPop === undefined) el._hvPop = hvPopupOf(el);
+  if (el._hvPop && el._hvPop.hasAttribute('hv-day') !== day) el._hvPop.toggleAttribute('hv-day', day);
+  if (el.hasAttribute('hv-day') !== day) { el.toggleAttribute('hv-day', day); if (el._hvThemeChanged) try { el._hvThemeChanged(day); } catch (e) { /* ignore */ }
+    if (el._hvOwnTheme) for (const e of HVT.els) if (e !== el && e._hvBox === el) hvThemeApply(e); }
+}
+// page level: view background + the --hv-* colours for everything in the view (native cards styled by HomeView too) and for popups
+// browser_mod popups that show a NotHomeView card (e.g. the garage chooser) while Day is on: light dialog, dark text. Popups with only
+// other cards keep their own look (their cards may set dark backgrounds); a popup's own style (e.g. Now Playing) always wins.
+const HV_POPUP_DAY = 'browser-mod-popup[hv-day]{' + HV_DAY_VARS + ';--ha-dialog-surface-background:#f2f2f6;--mdc-theme-surface:#f2f2f6;--wa-color-surface-raised:#f2f2f6;' +
+  '--primary-text-color:#1c1c1e;--secondary-text-color:rgba(60,60,67,.72);--mdc-theme-on-surface:#1c1c1e;--ha-card-background:#ffffff;--card-background-color:#ffffff;' +
+  '--primary-background-color:#f2f2f6;--secondary-background-color:#e9e9ee;--divider-color:rgba(0,0,0,.08);--state-icon-color:#3c3c43;--ha-card-border-color:rgba(0,0,0,.05);' +
+  '--ha-card-box-shadow:0 .3vh 1vh rgba(30,30,60,.08)}';
+const HV_POPUP_SHEET = (() => { try { const s = new CSSStyleSheet(); s.replaceSync(HV_POPUP_DAY); return s; } catch (e) { return null; } })();
+const HV_DAY_SHEET = (() => { try { const s = new CSSStyleSheet(); s.replaceSync(`*{${HV_DAY_VARS}}`); return s; } catch (e) { return null; } })();
+const hvViewOf = root => { const hv = root && root.shadowRoot && root.shadowRoot.querySelector('hui-view'); return hv ? (hv.firstElementChild || hv) : null; };
+// 1.30.7: a full-screen page-background card (card_mod: position:fixed; inset:0; z-index:-1, e.g. a "scene" sky) — it is the dark
+// page behind the tiles; in Day it is hidden so the light grey page shows (Night: untouched)
+const hvIsBgCard = c => { const st = c && c.card_mod && c.card_mod.style; if (!st) return false;
+  const t = typeof st === 'string' ? st : typeof st === 'object' ? Object.values(st).filter(x => typeof x === 'string').join(' ') : '';
+  return /position:\s*fixed/.test(t) && /inset:\s*0/.test(t) && /z-index:\s*-\d/.test(t); };
+function hvHideBgCards(view, list) { if (!view || !view.shadowRoot) return;
+  const walk = (r, d) => { if (d > 6) return; for (const e of r.querySelectorAll('*')) {
+    if (e.tagName === 'HUI-CARD') { if (!list.includes(e) && hvIsBgCard(e.config)) { e.style.setProperty('display', 'none', 'important'); list.push(e); } continue; }
+    if (e.shadowRoot && /^HUI-|^HA-/.test(e.tagName)) walk(e.shadowRoot, d + 1); } };
+  walk(view.shadowRoot, 0); }
+function hvThemePage(root, day) {
+  const P = HVT.page; if (P) { // undo the previous page
+    if (P.bg) { P.bg.style.removeProperty('background'); P.bg.style.removeProperty('--hv-day-bg'); }
+    if (P.hid) P.hid.forEach(e => e.style.removeProperty('display'));
+    if (P.view && P.view.shadowRoot && HV_DAY_SHEET) P.view.shadowRoot.adoptedStyleSheets = P.view.shadowRoot.adoptedStyleSheets.filter(s => s !== HV_DAY_SHEET);
+    HVT.page = null; }
+  if (!HVT.docStyle) { HVT.docStyle = document.createElement('style'); HVT.docStyle.id = 'homeview-theme'; }
+  HVT.docStyle.textContent = day ? `html{${HV_DAY_VARS}}` : '';
+  const ha = document.querySelector('home-assistant'), hr = ha && ha.shadowRoot;
+  if (hr && HV_POPUP_SHEET) { const has = hr.adoptedStyleSheets.includes(HV_POPUP_SHEET);
+    if (day && !has) hr.adoptedStyleSheets = [...hr.adoptedStyleSheets, HV_POPUP_SHEET]; else if (!day && has) hr.adoptedStyleSheets = hr.adoptedStyleSheets.filter(x => x !== HV_POPUP_SHEET); }
+  if (day && !HVT.docStyle.isConnected) document.head.appendChild(HVT.docStyle);
+  if (!day || !root || !root.shadowRoot) return;
+  const bg = root.shadowRoot.querySelector('hui-view-background'), view = hvViewOf(root);
+  if (bg) bg.style.setProperty('background', HV_DAY_BG, 'important');
+  if (view && view.shadowRoot && HV_DAY_SHEET && !view.shadowRoot.adoptedStyleSheets.includes(HV_DAY_SHEET)) view.shadowRoot.adoptedStyleSheets = [...view.shadowRoot.adoptedStyleSheets, HV_DAY_SHEET];
+  HVT.page = { bg, view, hid: [], t: 0 }; hvHideBgCards(view, HVT.page.hid);
+}
+// re-check after navigation (the new view's cards also tick when they connect) and when a view is re-rendered
+if (!window.__hvThemeNav) { window.__hvThemeNav = true;
+  const later = () => setTimeout(() => { HVT.key = ''; hvThemeTick(null); }, 60);
+  window.addEventListener('location-changed', later); window.addEventListener('popstate', later); }
+// hooks every NotHomeView card class (hass setter + connect / disconnect) — no change to the cards themselves
+function hvThemeWrap(cls) {
+  const P = cls.prototype; let p = P, d = null;
+  while (p && p !== HTMLElement.prototype) { d = Object.getOwnPropertyDescriptor(p, 'hass'); if (d && d.set) break; d = null; p = Object.getPrototypeOf(p); }
+  if (d && !d.set.__hvT) { const set = d.set; const ns = function (h) { set.call(this, h); hvThemeTick(this, h); }; ns.__hvT = true; Object.defineProperty(p, 'hass', Object.assign({}, d, { set: ns })); }
+  const sc = P.setConfig; if (sc && !sc.__hvT) { const f = function (c) { const r = sc.call(this, c); if (this.isConnected) hvThemeTick(this); return r; }; f.__hvT = true; P.setConfig = f; }
+  const cc = P.connectedCallback; if (!cc || !cc.__hvT) { const f = function () { HVT.els.add(this); if (cc) cc.call(this); hvThemeTick(this, this._hass); }; f.__hvT = true; P.connectedCallback = f; }
+  const dc = P.disconnectedCallback; if (!dc || !dc.__hvT) { const f = function () { HVT.els.delete(this); if (this._hvPop) { this._hvPop.removeAttribute('hv-day'); } this._hvPop = undefined; this._hvBox = undefined; if (dc) dc.call(this); }; f.__hvT = true; P.disconnectedCallback = f; }
+}
+// popups / sheets built by the cards themselves (attached to <body>) follow the current theme
+const hvDayNow = () => HVT.cur === 'day';
+
+/* ---------------- required plugins (1.30.5): a friendly hint instead of silently doing nothing ----------------
+ * Wallpanel (HACS) runs the screensaver. Without it the screensaver features (Home Screen swipe / hold, the screensaver button,
+ * the Screensaver Settings card) can't work: the card editors say so, and a card that is set up for it shows a small note.
+ * Nothing is shown when Wallpanel is installed (it defines <wallpanel-view>); the hint also disappears as soon as it loads. */
+const HV_WP_HINT = "Wallpanel isn't installed. Install it from HACS to use the screensaver.";
+const HV_WP_URL = 'https://github.com/j-a-n/lovelace-wallpanel';
+const hvHasWallpanel = () => !!customElements.get('wallpanel-view');
+// Wallpanel is loaded as a dashboard resource like this bundle, possibly a moment later: only call it "missing" once the page has settled
+const hvWpMissing = () => !hvHasWallpanel() && (performance.now() > 12000 || document.readyState === 'complete' && performance.now() > 6000);
+let hvWpWait = null;
+const hvWhenWallpanel = f => { if (!hvWpWait) hvWpWait = customElements.whenDefined('wallpanel-view'); hvWpWait.then(f).catch(() => {}); };
+function hvWpHint(box, want) { // box = an editor element (light DOM); shows / removes one hint at the top
+  let el = box.querySelector(':scope > .hv-wp-hint');
+  const show = !!want && !hvHasWallpanel();
+  if (!show) { if (el) el.remove(); return; }
+  if (!el) {
+    el = document.createElement('div'); el.className = 'hv-wp-hint'; el.setAttribute('role', 'note');
+    el.style.cssText = 'display:flex;gap:10px;align-items:flex-start;margin:0 0 14px;padding:10px 12px;border-radius:12px;font-size:14px;line-height:1.4;' +
+      'background:rgba(3,169,244,.12);border:1px solid rgba(3,169,244,.35);color:var(--primary-text-color,#1c1c1e)';
+    el.innerHTML = `<ha-icon icon="mdi:information-outline" style="--mdc-icon-size:20px;color:#039be5;flex:none;display:flex;margin-top:1px"></ha-icon><span>${esc(HV_WP_HINT)} <a href="${HV_WP_URL}" target="_blank" rel="noopener" style="color:inherit;font-weight:600">Wallpanel on GitHub</a></span>`;
+    box.insertBefore(el, box.firstChild);
+    hvWhenWallpanel(() => el.remove());
+  } else if (box.firstChild !== el) box.insertBefore(el, box.firstChild);
+}
+
+// debugging / tests: window.__hvTheme.get() -> 'day' | 'night'; .refresh() re-reads the dashboard config
+window.__hvTheme = { get: () => HVT.cur, info: () => ({ cur: HVT.cur, t: HVT.t, root: !!HVT.root, rootOn: !!(HVT.root && HVT.root.isConnected), els: HVT.els.size, key: HVT.key }), refresh: () => { HVT.cfg = undefined; HVT.key = ''; hvThemeTick(null); return HVT.cur; } };
 
 /* Now Playing popup (used by the Music tile's tap): browser_mod 3.x popup style, identical to the hand-written popup it replaces */
 const NP_POPUP_CSS = "ha-dialog,ha-adaptive-dialog{--dialog-surface-margin-top:max(8px, calc((var(--hv-vh, 100dvh) - min(calc(var(--hv-vh, 100dvh) - 24px), 640px)) / 2)) !important;--popup-min-height:0px !important;--popup-max-height:calc(100dvh - 16px) !important;--popup-border-radius:30px !important;--popup-min-width:min(94vw,660px) !important;--popup-max-width:94vw !important;--popup-width-full:94vw !important;--popup-padding-x:0px !important;--popup-padding-y:0px !important;--ha-dialog-surface-background:transparent;--mdc-theme-surface:transparent;--wa-color-surface-raised:transparent;--ha-card-background:transparent;--card-background-color:transparent;--primary-text-color:#fff;--dialog-box-shadow:none;--dialog-backdrop-filter:blur(6px);--mdc-dialog-scrim-color:rgba(0,0,20,.35)}.content .container{padding:0 !important}@media (max-height:520px){ha-dialog,ha-adaptive-dialog{--popup-min-width:min(94vw,800px) !important;--popup-max-height:100dvh !important}.content .container{padding:12px 0 !important}}";
@@ -54,6 +233,25 @@ const NP_TILE_DEFAULTS = Object.assign(Object.fromEntries(NP_TILE_KEYS.map(k => 
 const BASE_CSS = `
 /* fills its grid cell; where the parent has no height (card editor preview, masonry) it falls back to a tile ratio */
 :host{display:block;height:100%;width:100%;aspect-ratio:var(--hv-aspect,1.12);container-type:size;-webkit-tap-highlight-color:transparent}
+/* responsive sizes (grid rows: auto): height follows the width via the tile shape; text never smaller than a phone-readable minimum */
+:host([auto]){height:auto;aspect-ratio:var(--hv-aspect,1.12)}
+:host([auto]) .p{font-size:max(13px,min(11.5cqh,7cqw))} :host([auto]) .s{font-size:max(11px,min(9.6cqh,5.9cqw))}
+/* inside a NotHomeView Page Grid (narrow portrait tiles): text follows the width more, never below phone size */
+:host([floor]) .p{font-size:max(13px,min(11.5cqh,10cqw))} :host([floor]) .s{font-size:max(11px,min(9.6cqh,8cqw))}
+:host([floor]) .ic{width:min(34cqh,30cqw);height:min(34cqh,30cqw)} :host([floor]) .ic ha-state-icon,:host([floor]) .ic ha-icon{--mdc-icon-size:min(30cqh,26cqw);width:min(30cqh,26cqw);height:min(30cqh,26cqw)}
+/* "Light style while the sun is up": white glass, dark text (for light / sky backgrounds) */
+:host([day]){--hv-bg:linear-gradient(150deg,rgba(255,255,255,.82) 0%,rgba(255,255,255,.64) 100%);--hv-border:rgba(255,255,255,.95);--hv-text:#14263b;--hv-text2:#4b6079;--hv-text-strong:#14263b;
+ --hv-icon:#2c4a6b;--hv-shade:none;--hv-icon-shade:none;--hv-shadow:0 4px 16px rgba(40,90,140,.14);--hv-bg-on:linear-gradient(150deg,rgba(220,211,255,.96) 0%,rgba(190,175,255,.88) 100%);
+ --hv-border-on:rgba(255,255,255,.95);--hv-text-on:#1f1747;--hv-text2-on:#4a3f80;--hv-icon-on:#4b3bb5;--hv-shadow-on:0 4px 16px rgba(80,60,180,.18)}
+/* day style must also win over theme-level card styles (e.g. a glass theme that makes every ha-card transparent) */
+:host([day]) ha-card{--frosted-glass-card-layer-content:none;background:var(--hv-bg);border:1px solid var(--hv-border);box-shadow:var(--hv-shadow);
+ backdrop-filter:blur(18px) saturate(160%);-webkit-backdrop-filter:blur(18px) saturate(160%)}
+:host([day]) ha-card.active{background:var(--hv-bg-on);border-color:var(--hv-border-on);box-shadow:var(--hv-shadow-on)}
+${HV_DAY_HOST}
+/* Day: white tiles also where a glass HA theme (card-mod) makes every ha-card transparent */
+:host([hv-day]) ha-card{--frosted-glass-card-layer-content:none;background:var(--hv-bg) !important;border-color:var(--hv-border) !important;box-shadow:var(--hv-shadow) !important;backdrop-filter:none !important;-webkit-backdrop-filter:none !important}
+:host([hv-day]) ha-card.active{background:var(--hv-bg-on) !important;border-color:var(--hv-border-on) !important;box-shadow:var(--hv-shadow-on) !important}
+:host([hv-day]) ha-card::before{content:none !important;display:none !important}
 ha-card{position:relative;height:100%;width:100%;box-sizing:border-box;overflow:hidden;font-family:${FONT};cursor:pointer;
  background:var(--hv-bg,linear-gradient(150deg,rgba(255,255,255,.15) 0%,rgba(255,255,255,.07) 100%));
  border:1px solid var(--hv-border,rgba(255,255,255,.25));border-radius:var(--hv-radius,min(5.6vh,3vw));
@@ -90,12 +288,13 @@ class HVBase extends HTMLElement {
     if (!config) throw new Error('Invalid configuration');
     this.validate(config);
     this._config = Object.assign({}, this.constructor.defaults, config);
+    this.toggleAttribute('auto', !!(config.grid_options && config.grid_options.rows === 'auto'));
     this._built = false; this._sig = null; this._render();
   }
   validate(c) { if (this.constructor.needsEntity && !c.entity) throw new Error('Please choose an entity'); }
   set hass(h) { this._hass = h; this._render(); }
   get hass() { return this._hass; }
-  watched() { const c = this._config || {}; return [c.entity].concat(c.entities || []).filter(Boolean).map(e => typeof e === 'string' ? e : e.entity); }
+  watched() { const c = this._config || {}; return [c.entity].concat(c.entities || []).filter(Boolean).map(e => typeof e === 'string' ? e : e.entity).concat(tplEntities(c.label)); }
   get stateObj() { return this._hass && this._config.entity ? this._hass.states[this._config.entity] : undefined; }
   getCardSize() { return 2; }
   getGridOptions() { return { columns: 3, rows: 2, min_columns: 2, min_rows: 1 }; }
@@ -104,7 +303,8 @@ class HVBase extends HTMLElement {
   // --- rendering
   _render() {
     if (!this._config || !this._hass) return;
-    const sig = JSON.stringify(this.watched().map(e => { const s = this._hass.states[e]; return s ? [s.state, s.last_updated, s.attributes] : 0; })) + (this._pending ?? '') + (this._hass.locale && this._hass.locale.language);
+    const sun = this._config.day_light && this._hass.states['sun.sun'] ? this._hass.states['sun.sun'].state : '';
+    const sig = JSON.stringify(this.watched().map(e => { const s = this._hass.states[e]; return s ? [s.state, s.last_updated, s.attributes] : 0; })) + (this._pending ?? '') + (this._hass.locale && this._hass.locale.language) + sun;
     const loc = this._hass.formatEntityState || this._hass.localize;
     if (this._built && sig === this._sig && loc === this._loc) return;
     this._loc = loc;
@@ -113,6 +313,17 @@ class HVBase extends HTMLElement {
     if (!this._built) this._build();
     this._applyColors();
     this.update();
+    if (this.hasAttribute('floor')) this._fitSoon();
+  }
+  // Page-grid tiles: a label that doesn't fit is scaled down (to at most 62%) instead of being cut off with "...".
+  _fitSoon() { cancelAnimationFrame(this._fitRaf); this._fitRaf = requestAnimationFrame(() => this._fitText());
+    if (window.ResizeObserver && !this._fitRo) { this._fitRo = new ResizeObserver(() => this._fitSoon()); this._fitRo.observe(this); } }
+  _fitText() {
+    if (!this.isConnected || !this.hasAttribute('floor')) return;
+    for (const el of this.shadowRoot.querySelectorAll('.p,.s,.n,.l,.sub,.nm,.lc')) {
+      el.style.fontSize = ''; const w = el.clientWidth; if (!w || el.scrollWidth <= w + 1) continue;
+      const fs = parseFloat(getComputedStyle(el).fontSize) || 14; el.style.fontSize = Math.max(fs * 0.62, fs * w / el.scrollWidth * 0.97) + 'px';
+    }
   }
   _loadTranslations() { // entity-state translations are loaded per domain on demand (native cards do the same)
     const h = this._hass; if (!h.loadBackendTranslation) return;
@@ -130,6 +341,9 @@ class HVBase extends HTMLElement {
     set('--hv-icon', c.icon_color || c.text_color); set('--hv-icon-on', c.icon_color || c.text_color);
     set('--hv-bg', c.background_color); set('--hv-bg-on', c.accent_color);
     set('--hv-border-on', c.accent_color ? 'transparent' : '');
+    set('--hv-aspect', c.aspect ? String(c.aspect) : '');
+    const sun = this._hass && this._hass.states['sun.sun'];
+    this.toggleAttribute('day', !!(c.day_light && sun && sun.state === 'above_horizon'));
   }
   // tile body; subclasses provide view() => {icon, stateObj, name, secondary, active, layout}
   update() {
@@ -200,7 +414,11 @@ ha-card{cursor:pointer}
 .ch ha-icon{--mdc-icon-size:min(17cqh,11cqw);width:min(17cqh,11cqw);height:min(17cqh,11cqw);color:var(--hv-icon,#fff);display:flex;transition:transform .12s ease}
 .compact .ch ha-icon{--mdc-icon-size:min(30cqh,18cqw);width:min(30cqh,18cqw);height:min(30cqh,18cqw)}
 .ch:active ha-icon{transform:scale(.86)}
-.ch.dis{opacity:.3;pointer-events:none}`; }
+.ch.dis{opacity:.3;pointer-events:none}
+:host([auto]) .n{font-size:max(13px,min(6.2cqh,3.6cqw))} :host([auto]) .compact .n{font-size:max(13px,min(10.5cqh,6.6cqw))}
+:host([auto]) .l{font-size:max(11px,min(5.2cqh,3cqw))} :host([auto]) .sub{font-size:max(11px,min(4.8cqh,2.9cqw))}
+:host([floor]) .n{font-size:max(13px,min(6.2cqh,6cqw))} :host([floor]) .l{font-size:max(11px,min(5.2cqh,5cqw))} :host([floor]) .sub{font-size:max(11px,min(4.8cqh,4.6cqw))}
+:host([floor]) .compact .n{font-size:max(13px,min(10.5cqh,9cqw))} :host([floor]) .big{font-size:min(50cqh,40cqw)}`; }
   defaultAction() { return { action: 'more-info' }; }
   _build() {
     super._build();
@@ -255,9 +473,11 @@ class HVEntityCard extends HVBase {
   static getStubConfig(hass) { const e = Object.keys(hass.states).find(k => /^(switch|light|fan|input_boolean)\./.test(k)) || Object.keys(hass.states)[0]; return { entity: e }; }
   view() {
     const c = this._config, s = this.stateObj;
-    let sec = c.label != null && c.label !== '' ? c.label : (c.attribute ? fmtAttr(this._hass, s, c.attribute) : fmtState(this._hass, s));
+    const noAttr = c.attribute && c.empty_label && (!s || s.attributes[c.attribute] == null || s.attributes[c.attribute] === '');
+    let sec = c.label != null && c.label !== '' ? fmtTpl(this._hass, c.label, s) : noAttr ? c.empty_label : (c.attribute ? fmtAttr(this._hass, s, c.attribute) : fmtState(this._hass, s));
     if (c.show_state === false && !c.label) sec = '';
-    const active = c.active === 'always' ? true : c.active === 'never' ? false : stateActive(s);
+    const active = c.active === 'always' ? true : c.active === 'never' ? false
+      : c.active === 'running' ? [s, ...tplEntities(c.label).map(e => this._hass.states[e])].some(isRunning) : stateActive(s);
     return { stateObj: s, icon: c.icon, name: this.name(), secondary: s ? sec : 'Not found', active, layout: c.layout };
   }
 }
@@ -274,9 +494,10 @@ class HVLightCard extends HVEntityCard {
   }
 }
 class HVGarageCard extends HVEntityCard {
-  static get defaults() { return { confirm: true }; }
+  static get defaults() { return { confirm: true, show_both: true, both_label: 'Open both' }; }
   static getStubConfig(hass) { return { entity: Object.keys(hass.states).find(k => k.startsWith('cover.')) || 'cover.example', name: 'Garage', confirm: true }; }
   validate(c) { super.validate(c); if (domainOf(c.entity) !== 'cover') throw new Error('homeview-garage-card needs a cover entity'); }
+  watched() { const c = this._config || {}; return [c.entity, c.entity_b].filter(Boolean).concat(tplEntities(c.label)); }
   defaultAction(kind) {
     if (kind !== 'tap') return { action: 'more-info' };
     const c = this._config, s = this.stateObj, closed = !s || ['closed', 'closing'].includes(s.state);
@@ -284,8 +505,122 @@ class HVGarageCard extends HVEntityCard {
     if (c.confirm !== false) a.confirmation = { text: c.confirm_text || `${closed ? 'Open' : 'Close'} ${this.name('the garage door')}?` };
     return a;
   }
-  view() { const v = super.view(); return v; }
+  // Chooser mode (1.29): tap opens a popup to open door 1, door 2 or both (cover.open_cover only, never close).
+  view() {
+    const v = super.view(), c = this._config;
+    if (!c.chooser || !c.entity_b || !this._hass) return v;
+    const h = this._hass, a = h.states[c.entity], b = h.states[c.entity_b], isO = x => !!x && GC_OPEN.includes(x.state);
+    const an = c.door_name || (a && a.attributes.friendly_name) || 'Garage Door', bn = c.door_b_name || (b && b.attributes.friendly_name) || 'Garage Door B';
+    let sec;
+    if (isO(a) && isO(b)) sec = 'Both open'; else if (isO(a)) sec = an + ' open'; else if (isO(b)) sec = bn + ' open';
+    else sec = a && b && a.state === b.state ? fmtState(h, a) : (fmtState(h, a) || '\u2014');
+    if (c.show_state === false || (c.label != null && c.label !== '')) sec = v.secondary; // hidden / custom sub-label wins
+    return Object.assign(v, { secondary: sec, stateObj: isO(b) && !isO(a) ? b : a,
+      active: c.active === 'always' ? true : c.active === 'never' ? false : (stateActive(a) || stateActive(b)) });
+  }
+  chooserData() {
+    const c = this._config, content = { type: 'custom:homeview-garage-chooser-card', entity: c.entity };
+    for (const k of ['entity_b', 'door_name', 'door_b_name']) if (c[k]) content[k] = c[k];
+    if (c.both_label && c.both_label !== 'Open both') content.both_label = c.both_label;
+    if (c.show_both === false) content.show_both = false;
+    return { title: c.chooser_title || 'Garage', content, dismissable: true, size: 'normal' };
+  }
+  openChooser() {
+    if (!window.browser_mod) { fire(this, 'hass-more-info', { entityId: this._config.entity }); return; } // browser_mod not installed
+    fire(this, 'll-custom', { action: 'fire-dom-event', browser_mod: { service: 'browser_mod.popup', data: this.chooserData() } });
+  }
+  runAction(kind) {
+    if (kind === 'tap' && this._config.chooser) { this.openChooser(); return; }
+    super.runAction(kind);
+  }
 }
+/* ---------------- garage chooser (popup content, also usable as a card) ---------------- */
+// Two garage doors + "open both". Shows each door's live state; a button calls cover.open_cover on that door (or both) and
+// closes the popup. It never closes a door. Everything is editable in the visual editor (door entities, names, open-both button).
+const GC_OPEN = ['open', 'opening'];
+class HVGarageChooserCard extends HTMLElement {
+  constructor() { super(); this.attachShadow({ mode: 'open' }); }
+  static get defaults() { return { both_label: 'Open both', show_both: true }; }
+  static getStubConfig(hass) {
+    const g = Object.keys(hass.states).filter(k => k.startsWith('cover.') && (hass.states[k].attributes.device_class === 'garage' || /garage/.test(k)));
+    return { entity: g[0] || 'cover.example', entity_b: g[1] || '' };
+  }
+  static getConfigElement() { const e = document.createElement('homeview-card-editor'); e.cardClass = this; return e; }
+  setConfig(c) {
+    if (!c || !c.entity) throw new Error('Please choose the first garage door');
+    this._config = Object.assign({}, this.constructor.defaults, c); this._sig = null; this._render();
+  }
+  set hass(h) { this._hass = h; this._render(); }
+  get hass() { return this._hass; }
+  getCardSize() { return 3; }
+  getGridOptions() { return { columns: 6, rows: 3, min_columns: 3, min_rows: 2 }; }
+  _doors() {
+    const c = this._config, h = this._hass, out = [];
+    const add = (id, nm, def) => { if (!id) return; const st = h && h.states[id]; out.push({ id, st, name: nm || (st && st.attributes.friendly_name) || def }); };
+    add(c.entity, c.door_name, 'Garage Door'); add(c.entity_b, c.door_b_name, 'Garage Door B');
+    return out;
+  }
+  _stateText(d) {
+    const x = d.st ? d.st.state : '';
+    if (!d.st) return 'Not found';
+    if (x === 'open') return 'Open'; if (x === 'opening') return 'Opening\u2026'; if (x === 'closing') return 'Closing\u2026'; if (x === 'closed') return 'Closed';
+    return x === 'unavailable' ? 'Unavailable' : (this._hass.formatEntityState ? this._hass.formatEntityState(d.st) : x);
+  }
+  _render() {
+    if (!this._config || !this._hass) return;
+    const ds = this._doors(), c = this._config;
+    const sig = JSON.stringify([ds.map(d => [d.id, d.name, d.st && d.st.state]), c.both_label, c.show_both, this._busy || '']);
+    if (sig === this._sig) return; this._sig = sig;
+    const btn = (cls, key, icon, name, sub, dis, isOpen) => `<button class="${cls}${isOpen ? ' open' : ''}${this._busy === key ? ' busy' : ''}" data-k="${key}"${dis ? ' disabled' : ''}>
+      <ha-icon icon="${icon}"></ha-icon><span class="t"><span class="n">${esc(name)}</span><span class="s">${esc(sub)}</span></span></button>`;
+    let html = '';
+    ds.forEach((d, i) => {
+      const o = !!d.st && GC_OPEN.includes(d.st.state), un = !d.st || d.st.state === 'unavailable';
+      const sub = this._busy === 'd' + i ? 'Opening\u2026' : (o ? this._stateText(d) + ' \u00b7 already open' : this._stateText(d));
+      html += btn('door', 'd' + i, o ? 'mdi:garage-open-variant' : 'mdi:garage-variant', d.name, sub, un, o);
+    });
+    if (c.show_both !== false && ds.length > 1) {
+      const all = ds.every(d => d.st && GC_OPEN.includes(d.st.state)), un = ds.every(d => !d.st || d.st.state === 'unavailable');
+      html += btn('both', 'all', 'mdi:garage-open-variant', c.both_label || 'Open both', this._busy === 'all' ? 'Opening\u2026' : (all ? 'Both already open' : ds.map(d => d.name).join(' + ')), un, false);
+    }
+    this.shadowRoot.innerHTML = `<style>${HVGarageChooserCard.css}</style><div class="w${ds.length < 2 ? ' one' : ''}">${html}</div>`;
+    this.shadowRoot.querySelectorAll('button').forEach(b => b.addEventListener('click', () => this._press(b.dataset.k)));
+  }
+  _press(k) {
+    const ds = this._doors(), ids = (k === 'all' ? ds : ds.filter((d, i) => 'd' + i === k)).filter(d => d.st && d.st.state !== 'unavailable').map(d => d.id);
+    if (!ids.length || !this._hass) return;
+    this._hass.callService('cover', 'open_cover', { entity_id: ids.length === 1 ? ids[0] : ids }); // open only - this card never closes a door
+    this._busy = k; this._sig = null; this._render();
+    setTimeout(() => { this._busy = ''; this._sig = null; this._render(); this._dismiss(); }, 900);
+  }
+  _dismiss() {
+    fire(this, 'dismiss-popup');
+    try { if (window.browser_mod && window.browser_mod.service) window.browser_mod.service('close_popup'); } catch (e) { /* not in a popup */ }
+  }
+  static get css() { return `
+:host{display:block;container-type:inline-size;font-family:${FONT}}
+.w{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:2px}
+.w.one{grid-template-columns:1fr}
+button{all:unset;box-sizing:border-box;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:116px;padding:16px 10px;border-radius:24px;text-align:center;
+ background:var(--hv-gc-bg,rgba(127,127,127,.16));border:1px solid var(--hv-gc-bd,rgba(127,127,127,.24));color:var(--primary-text-color,#fff);-webkit-tap-highlight-color:transparent;touch-action:manipulation;
+ transition:transform .12s ease,background .2s ease,opacity .2s ease}
+button:focus-visible{outline:2px solid #6e5ad2;outline-offset:2px}
+button:active{transform:scale(.97)}
+button[disabled]{opacity:.4;cursor:not-allowed}
+ha-icon{--mdc-icon-size:38px;width:38px;height:38px;display:flex;color:#34c759}
+button.open ha-icon{color:#ff9f0a}
+.t{display:flex;flex-direction:column;gap:3px;min-width:0;max-width:100%}
+.n{font-size:17px;font-weight:650;line-height:1.2}
+.s{font-size:12.5px;line-height:1.25;opacity:.72}
+button.both{grid-column:1/-1;min-height:92px;flex-direction:row;gap:16px;background:linear-gradient(150deg,#7d6cf0,#5a49d6);border-color:transparent;color:#fff}
+button.both ha-icon{color:#fff}
+button.busy{background:var(--hv-gc-busy,rgba(110,90,210,.45))}
+.w.one button.door{min-height:130px}
+@container (max-width:250px){.w{grid-template-columns:1fr}}
+${HV_DAY_HOST} :host([hv-day]) button.door{color:#1c1c1e;background:#ffffff;border-color:rgba(0,0,0,.06);box-shadow:0 .3vh 1.2vh rgba(30,30,60,.08)}
+:host([hv-day]) ha-icon{color:#248a3d} :host([hv-day]) button.open ha-icon{color:#c96a00} :host([hv-day]) button.both ha-icon{color:#fff}`; }
+}
+HVGarageChooserCard.layoutSection = false; HVGarageChooserCard.sizePresets = false; HVGarageChooserCard.editorDefaults = true;
 class HVSceneCard extends HVEntityCard {
   static get defaults() { return { layout: 'button' }; }
   static getStubConfig(hass) { return { entity: Object.keys(hass.states).find(k => /^(scene|script)\./.test(k)) || 'scene.example' }; }
@@ -371,7 +706,7 @@ class HVGroupCard extends HVBase {
     const c = this._config, h = this._hass, ids = this._members();
     const n = ids.filter(e => stateActive(h.states[e])).length;
     const word = c.unit || 'on';
-    const sec = c.show_state === false ? '' : (n ? `${n} ${word}` : (c.none_label || 'All off'));
+    const sec = c.show_state === false ? '' : c.label ? fmtTpl(h, c.label, undefined, { count: n }) : (n ? `${n} ${word}` : (c.none_label || 'All off'));
     const s = c.entity ? h.states[c.entity] : undefined;
     return { stateObj: s, icon: c.icon || (s ? undefined : 'mdi:lightbulb-group'), name: c.name != null ? c.name : (s ? s.attributes.friendly_name : 'Group'), secondary: sec, active: n > 0, layout: c.layout };
   }
@@ -446,6 +781,8 @@ class HVBatteryCard extends HVBase {
 .chg .bolt{display:flex}
 .na .pc,.na .hd{opacity:.5} .na .fl{width:0 !important}
 .nopc .pc{display:none} .nopc{gap:7cqh}
+:host([auto]) .nm{font-size:max(13px,min(11.5cqh,7cqw))}
+:host([floor]) .nm{font-size:max(13px,min(11.5cqh,10cqw))} :host([floor]) .pc{font-size:min(30cqh,26cqw)}
 /* wide (2 x 6): name and % share the first row, bar below */
 @container (min-aspect-ratio: 19/10){
  .b{display:grid;grid-template-columns:1fr auto;grid-template-areas:"hd pc" "box box";align-content:center;row-gap:7cqh;column-gap:4cqw;padding:10cqh 6cqw 12cqh}
@@ -481,6 +818,7 @@ class HVBatteryCard extends HVBase {
 const ACT = def => ({ ui_action: def ? { default_action: def } : {} });
 const LAYOUT = { name: 'layout', selector: { select: { mode: 'dropdown', options: [{ value: 'tile', label: 'Tile (icon, name, state)' }, { value: 'button', label: 'Button (big icon, name)' }] } } };
 const COLORS = { type: 'expandable', name: '', flatten: true, title: 'Colours (optional)', icon: 'mdi:palette', schema: [
+  { name: 'day_light', selector: { boolean: {} } },
   { name: 'text_color', selector: { text: {} } }, { name: 'icon_color', selector: { text: {} } },
   { name: 'accent_color', selector: { text: {} } }, { name: 'background_color', selector: { text: {} } }] };
 const ACTIONS = (tap, hold) => ({ type: 'expandable', name: '', flatten: true, title: 'Interactions', icon: 'mdi:gesture-tap', schema: [
@@ -491,7 +829,9 @@ const LABELS = { entity: 'Entity', entities: 'Entities', name: 'Name', room: 'Ro
   tap_action: 'Tap action', hold_action: 'Hold action', confirm: 'Ask for confirmation', confirm_text: 'Confirmation text', show_media: 'Show now playing',
   show_artist: 'Show artist', unit: 'Word after the count (e.g. "on", "lights on")', none_label: 'Text when none are on',
   navigation_path: 'Navigate to', alt_navigation_path: 'Toggle back to (when already on "Navigate to")', keep_query: 'Keep URL parameters (?kiosk&wp_enabled…)' };
-const HELPERS = { text_color: 'Any CSS colour, e.g. #ffffff or rgba(255,255,255,.9). Empty = HomeView theme.', accent_color: 'Background when active, e.g. #cbc4ee or a gradient.',
+Object.assign(LABELS, { theme: 'Theme', day_light: 'Light style while the sun is up (dark text on white glass)', aspect: 'Tile shape (for the "height follows width" sizes)',
+  label: 'Sub-label (overrides state)', empty_label: 'Text when the attribute is empty' });
+const HELPERS = { label: 'Live values: {state} = this entity, {count} = how many are on (groups), {sensor.any_entity} = any entity\'s state.', text_color: 'Any CSS colour, e.g. #ffffff or rgba(255,255,255,.9). Empty = HomeView theme.', accent_color: 'Background when active, e.g. #cbc4ee or a gradient.',
   background_color: 'Card background, e.g. rgba(255,255,255,.12).', alt_navigation_path: 'Makes the card a view switch, e.g. /dashboard/main <-> /dashboard/light.' };
 HVThermostatCard.schema = [
   { name: 'entity', required: true, selector: { entity: { domain: 'climate' } } },
@@ -504,13 +844,26 @@ const ENTITY_SCHEMA = (domain, tap, hold, extra = []) => [
   ...extra, COLORS, ACTIONS(tap, hold)];
 HVEntityCard.schema = ENTITY_SCHEMA(null, 'more-info', 'more-info', [
   { type: 'grid', name: '', schema: [{ name: 'label', selector: { text: {} } }, { name: 'attribute', selector: { attribute: {} }, context: { filter_entity: 'entity' } }] },
+  { name: 'empty_label', selector: { text: {} } },
   { type: 'grid', name: '', schema: [{ name: 'show_state', selector: { boolean: {} } },
-    { name: 'active', selector: { select: { mode: 'dropdown', options: [{ value: 'auto', label: 'When on / open / playing' }, { value: 'always', label: 'Always' }, { value: 'never', label: 'Never' }] } } }] },
+    { name: 'active', selector: { select: { mode: 'dropdown', options: [{ value: 'auto', label: 'When on / open / playing' }, { value: 'running', label: 'When on / running / above 0' }, { value: 'always', label: 'Always' }, { value: 'never', label: 'Never' }] } } }] },
   LAYOUT]);
 HVLightCard.schema = ENTITY_SCHEMA('light', 'toggle', 'more-info', [
   { type: 'grid', name: '', schema: [{ name: 'room', selector: { text: {} } }, { name: 'show_state', selector: { boolean: {} } }] }, LAYOUT]);
+HVGarageCard.editorDefaults = true;
+const GC_FIELDS = [
+  { name: 'entity_b', selector: { entity: { domain: 'cover' } } },
+  { type: 'grid', name: '', schema: [{ name: 'door_name', selector: { text: {} } }, { name: 'door_b_name', selector: { text: {} } }] },
+  { type: 'grid', name: '', schema: [{ name: 'both_label', selector: { text: {} } }, { name: 'show_both', selector: { boolean: {} } }] }];
 HVGarageCard.schema = ENTITY_SCHEMA('cover', null, 'more-info', [
+  { name: 'chooser', selector: { boolean: {} } },
+  { type: 'expandable', name: '', flatten: true, title: 'Garage chooser popup (Garage Door / Garage Door B / Open both)', icon: 'mdi:garage-variant', schema: GC_FIELDS },
   { type: 'grid', name: '', schema: [{ name: 'confirm', selector: { boolean: {} } }, { name: 'confirm_text', selector: { text: {} } }] }, LAYOUT]);
+HVGarageChooserCard.schema = [
+  { name: 'entity', required: true, selector: { entity: { domain: 'cover' } } }, ...GC_FIELDS];
+Object.assign(LABELS, { chooser: 'Tap opens a popup: open Garage Door, Garage Door B or both (never closes)', entity_b: 'Second door (Garage Door B)',
+  door_name: 'Name of the first door (in the popup)', door_b_name: 'Name of the second door (in the popup)', both_label: 'Text of the "open both" button', show_both: 'Show the "open both" button' });
+Object.assign(HELPERS, { chooser: 'Needs the second door below. Ask-for-confirmation / Tap action are not used while this is on (Hold still works).' });
 HVSceneCard.schema = ENTITY_SCHEMA(['scene', 'script', 'automation', 'button', 'input_button'], null, 'none', [
   { type: 'grid', name: '', schema: [{ name: 'confirm_text', selector: { text: {} } }, { name: 'label', selector: { text: {} } }] }, LAYOUT]);
 HVMusicCard.schema = [
@@ -531,6 +884,7 @@ HVGroupCard.schema = [
   { name: 'entity', selector: { entity: { domain: ['group', 'light', 'switch', 'fan'] } } },
   { type: 'grid', name: '', schema: [{ name: 'name', selector: { text: {} } }, { name: 'icon', selector: { icon: {} } }] },
   { type: 'grid', name: '', schema: [{ name: 'unit', selector: { text: {} } }, { name: 'none_label', selector: { text: {} } }] },
+  { name: 'label', selector: { text: {} } },
   LAYOUT, COLORS, ACTIONS('toggle', 'more-info')];
 HVNavCard.schema = [
   { name: 'navigation_path', required: true, selector: { navigation: {} } },
@@ -555,6 +909,7 @@ Object.assign(HELPERS, { charging_entity: 'Shows a bolt while it is on / chargin
 // Floating "edit" mini button in a corner of the page. Takes no grid space: outside edit mode its own grid cell is hidden and the
 // button is drawn as a position:fixed overlay on <body> (so tile transforms / backdrop-filters can't trap it and kiosk-mode can't hide it).
 // Tap = full page load of <this view>?disable_km&edit=1 -> kiosk-mode off (header back) + Lovelace edit mode. Works in browsers and the iOS/Android app.
+// 1.30.6: tap opens a small menu (Edit page + Device pages theme) unless edit_menu: false.
 const PENCIL = 'M20.71,7.04C21.1,6.65 21.1,6 20.71,5.63L18.37,3.29C18,2.9 17.35,2.9 16.96,3.29L15.12,5.12L18.87,8.87M3,17.25V21H6.75L17.81,9.93L14.06,6.18L3,17.25Z';
 const EDIT_CSS = `
 :host{all:initial}
@@ -564,6 +919,25 @@ button{all:unset;box-sizing:border-box;display:flex;align-items:center;justify-c
  backdrop-filter:blur(18px) saturate(170%);-webkit-backdrop-filter:blur(18px) saturate(170%)}
 button:hover,button:focus-visible{opacity:1}
 button:active{transform:scale(.9);opacity:1}
+.menu{position:absolute;min-width:236px;box-sizing:border-box;padding:8px;border-radius:18px;font:500 14px/1.25 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif;
+ color:#fff;background:linear-gradient(160deg,rgba(64,72,86,.96),rgba(30,36,46,.97));border:1px solid rgba(255,255,255,.14);box-shadow:0 1.6vh 5vh rgba(0,0,20,.38);
+ backdrop-filter:blur(26px) saturate(160%);-webkit-backdrop-filter:blur(26px) saturate(160%);animation:mi .14s ease-out}
+@keyframes mi{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:none}}
+.menu button.mi{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:10px;width:100%;padding:10px 10px;border-radius:11px;cursor:pointer;opacity:1;
+ background:none;border:0;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none;height:auto;color:inherit;transform:none}
+.menu button.mi:hover,.menu button.mi:focus-visible{background:rgba(255,255,255,.10)}
+.menu button.mi:active{background:rgba(255,255,255,.16);transform:none}
+.menu button.mi[disabled]{opacity:.45;cursor:default}
+.menu svg,.menu ha-icon{width:20px;height:20px;--mdc-icon-size:20px;flex:none;fill:currentColor;display:flex}
+.menu .sep{height:1px;margin:6px 4px;background:rgba(255,255,255,.12)}
+.menu .hd{padding:4px 10px 4px;font-size:12px;font-weight:600;letter-spacing:.02em;text-transform:uppercase;color:rgba(255,255,255,.55)}
+.menu .ck{margin-left:auto;width:18px;height:18px;color:#a99dff;visibility:hidden} .menu [aria-checked="true"] .ck{visibility:visible}
+.menu .sw{width:20px;height:20px;border-radius:7px;flex:none;box-sizing:border-box;border:1px solid rgba(255,255,255,.25)}
+.menu .st{padding:4px 10px 2px;font-size:12px;color:rgba(255,255,255,.62);min-height:0} .menu .st:empty{display:none} .menu .st.err{color:#ff9f95}
+.menu.lt{color:#1c1c1e;background:rgba(250,250,252,.97);border-color:rgba(0,0,0,.08);box-shadow:0 1.4vh 4vh rgba(30,30,60,.18)}
+.menu.lt button.mi:hover,.menu.lt button.mi:focus-visible{background:rgba(60,60,67,.08)} .menu.lt .sep{background:rgba(60,60,67,.12)}
+.menu.lt .hd{color:rgba(60,60,67,.6)} .menu.lt .ck{color:#5b3fc4} .menu.lt .st{color:rgba(60,60,67,.72)} .menu.lt .sw{border-color:rgba(0,0,0,.12)} .menu.lt .st.err{color:#c4291c}
+
 svg,ha-icon{width:calc(var(--s) * .5);height:calc(var(--s) * .5);--mdc-icon-size:calc(var(--s) * .5);fill:currentColor;display:flex;pointer-events:none}
 .dark{--bg:linear-gradient(150deg,rgba(255,255,255,.20),rgba(255,255,255,.08));--bd:rgba(255,255,255,.30);--fg:rgba(255,255,255,.92);
  --sh:inset 0 1px 0 rgba(255,255,255,.25),0 .6vh 1.8vh rgba(6,8,60,.28)}
@@ -572,7 +946,7 @@ svg,ha-icon{width:calc(var(--s) * .5);height:calc(var(--s) * .5);--mdc-icon-size
 `;
 class HVEditButtonCard extends HTMLElement {
   constructor() { super(); this.attachShadow({ mode: 'open' }); }
-  static get defaults() { return { position: 'top-right', style: 'auto', admin_only: true, size: 30, offset: 6, opacity: 0.6, show_edit_button: true, show_screensaver_button: true }; }
+  static get defaults() { return { position: 'top-right', style: 'auto', admin_only: true, size: 30, offset: 6, opacity: 0.6, show_edit_button: true, show_screensaver_button: true, edit_menu: true }; }
   static getStubConfig() { return { position: 'top-right', style: 'auto', admin_only: true }; }
   static getConfigElement() { const e = document.createElement('homeview-card-editor'); e.cardClass = this; return e; }
   setConfig(c) { if (!c) throw new Error('Invalid configuration'); this._config = Object.assign({}, this.constructor.defaults, c); this._paint(); this._tick(); }
@@ -598,6 +972,7 @@ class HVEditButtonCard extends HTMLElement {
     let n = this; while (n && n.getRootNode() !== view.shadowRoot) n = n.getRootNode().host; // top-level element in the view
     let c = this; while (c && c.parentElement && c.parentElement.id !== 'root') c = c.parentElement; return (c && c.parentElement) ? c : n; }
   _theme() {
+    if (hvThemeOf(this) === 'day') return 'light'; // Day theme: the light button on the white page
     const s = this._config.style; if (s === 'dark' || s === 'light') return s;
     const col = getComputedStyle(this).getPropertyValue('--primary-text-color').trim(), m = col.match(/\d+(\.\d+)?/g);
     if (col.startsWith('#') && col.length >= 7) { const v = [1, 3, 5].map(i => parseInt(col.substr(i, 2), 16)); return (v[0] * .3 + v[1] * .59 + v[2] * .11) > 128 ? 'dark' : 'light'; }
@@ -633,22 +1008,67 @@ class HVEditButtonCard extends HTMLElement {
   }
   _portal() {
     const theme = this._theme(), c = this._config, key = theme + JSON.stringify(c) + this._ssWanted();
+    if (this._menuEl && this._fab && this._fab.isConnected) return; // menu open: keep it (re-styled after it closes)
     if (this._fab && this._fab.isConnected && this._fabKey === key) return;
     this._unportal();
     const host = document.createElement('homeview-edit-fab'), r = host.attachShadow({ mode: 'open' });
     const off = (+c.offset || 0) + 'px', [v, h] = String(c.position || 'top-right').split('-');
     // fixed to the viewport, inside the safe area; z-index below dialogs / browser_mod popups / the Wallpanel screensaver
-    host.style.cssText = `position:fixed;z-index:${c.z_index || 3};${v === 'bottom' ? 'bottom' : 'top'}:calc(env(safe-area-inset-${v === 'bottom' ? 'bottom' : 'top'},0px) + ${off});`
+    host.style.cssText = `position:fixed;z-index:${c.z_index || 3};${v === 'bottom' ? 'bottom' : 'top'}:calc(var(--hv-safe-${v === 'bottom' ? 'bottom' : 'top'}, env(safe-area-inset-${v === 'bottom' ? 'bottom' : 'top'},0px)) + ${off});`
       + `${h === 'left' ? 'left' : 'right'}:calc(env(safe-area-inset-${h === 'left' ? 'left' : 'right'},0px) + ${off});display:block;width:auto;height:auto;margin:0;padding:0`;
     r.innerHTML = this._btnHTML(theme);
     const pen = r.querySelector('.pen'), scr = r.querySelector('.scr');
-    if (pen) pen.addEventListener('click', e => this._go(e));
+    if (pen) pen.addEventListener('click', e => this._config.edit_menu === false ? this._go(e) : this._menu(e, r, pen));
     if (scr) scr.addEventListener('click', e => this._openScreensaver(e));
     // keep the tap from reaching anything underneath (Wallpanel idle timer still sees the activity on window)
     for (const b of r.querySelectorAll('button')) for (const t of ['pointerdown', 'pointerup', 'touchstart', 'touchend']) b.addEventListener(t, e => e.stopPropagation(), { passive: true });
     document.body.appendChild(host); this._fab = host; this._fabKey = key;
   }
-  _unportal() { if (this._fab) { this._fab.remove(); this._fab = null; } }
+  _unportal() { this._menuClose(); if (this._fab) { this._fab.remove(); this._fab = null; } }
+  // 1.30.6: the pencil opens a small menu: "Edit page" + the Device pages theme (Night / Day / Auto). The choice is saved as the
+  // `theme` option of the dashboard's NotHomeView Home Screen card (same place as its visual editor), so it persists for everyone.
+  _menuClose() { if (this._menuEl) { this._menuEl.remove(); this._menuEl = null; } if (this._menuOff) { this._menuOff(); this._menuOff = null; } }
+  _menu(e, r, pen) {
+    e.preventDefault(); e.stopPropagation(); if (this._config.preview_only) return;
+    if (this._menuEl) { this._menuClose(); return; }
+    const root = hvFindRoot(this), lv = root && root.lovelace, cfg = lv && lv.config, hub = cfg ? hvHubCfgOf(cfg) : null;
+    const cur = hub && HV_THEMES.includes(hub.theme) ? hub.theme : 'night', admin = !this._hass || !this._hass.user || this._hass.user.is_admin;
+    const yaml = lv && lv.mode === 'yaml', can = admin && !!hub && !yaml;
+    const m = document.createElement('div'); m.className = 'menu' + (hvThemeOf(this) === 'day' ? ' lt' : ''); m.setAttribute('role', 'menu');
+    const [v, h] = String(this._config.position || 'top-right').split('-'), gap = (+this._config.size || 30) + 8 + 'px';
+    m.style.cssText = `${v === 'bottom' ? 'bottom' : 'top'}:${gap};${h === 'left' ? 'left' : 'right'}:0;transform-origin:${v === 'bottom' ? 'bottom' : 'top'} ${h === 'left' ? 'left' : 'right'}`;
+    const opt = (val, label, sw) => `<button class="mi th" role="menuitemradio" data-v="${val}" aria-checked="${val === cur}"${can ? '' : ' disabled'}><span class="sw" style="background:${sw}"></span><span>${label}</span><svg class="ck" viewBox="0 0 24 24"><path d="M9,20.42L2.79,14.21L5.62,11.38L9,14.77L18.88,4.88L21.71,7.71L9,20.42Z"/></svg></button>`;
+    const why = !admin ? 'Only an admin can change the theme.' : yaml ? 'This dashboard is in YAML mode: set theme: on the Home Screen card in its YAML.' : !hub ? 'Add a NotHomeView Home Screen card to this dashboard to choose a theme.' : '';
+    m.innerHTML = `<button class="mi ed" role="menuitem"><svg viewBox="0 0 24 24"><path d="${PENCIL}"/></svg><span>Edit page</span></button><div class="sep"></div>
+      <div class="hd">Device pages theme</div>
+      ${opt('night', 'Night (dark glass)', 'linear-gradient(150deg,#3b3f8f,#1b1d3a)')}${opt('day', 'Day (white)', 'linear-gradient(150deg,#ffffff,#e6e6eb)')}${opt('auto', 'Auto (follow sun)', 'linear-gradient(90deg,#1b1d3a 50%,#ffffff 50%)')}
+      <div class="st${why ? '' : ''}">${esc(why || 'The Home Screen keeps its own look.')}</div>`;
+    m.querySelector('.ed').addEventListener('click', ev => this._go(ev));
+    m.querySelectorAll('.th').forEach(b => b.addEventListener('click', ev => { ev.preventDefault(); ev.stopPropagation(); this._setTheme(b.dataset.v, m); }));
+    for (const t of ['pointerdown', 'pointerup', 'touchstart', 'touchend', 'click']) m.addEventListener(t, ev => ev.stopPropagation(), { passive: t !== 'click' });
+    pen.parentNode.style.position = 'relative'; pen.parentNode.appendChild(m); this._menuEl = m;
+    const out = ev => { if (!ev.composedPath().includes(this._fab)) this._menuClose(); }, key = ev => { if (ev.key === 'Escape') this._menuClose(); };
+    setTimeout(() => { if (this._menuEl !== m) return; window.addEventListener('pointerdown', out, true); window.addEventListener('keydown', key, true); }, 0);
+    this._menuOff = () => { window.removeEventListener('pointerdown', out, true); window.removeEventListener('keydown', key, true); };
+    const first = m.querySelector('.ed'); if (first) first.focus({ preventScroll: true });
+  }
+  async _setTheme(val, m) {
+    const st = m.querySelector('.st'), btns = [...m.querySelectorAll('.th')]; st.className = 'st'; st.textContent = 'Saving…'; btns.forEach(b => { b.disabled = true; });
+    try {
+      const root = hvFindRoot(this), lv = root && root.lovelace, dash = (lv && lv.urlPath) || ssDash();
+      const q = { type: 'lovelace/config', force: true }; if (dash) q.url_path = dash;
+      const fresh = JSON.parse(JSON.stringify(await this._hass.callWS(q))); // re-read: only this one key changes, everything else stays as saved
+      const hub = hvHubCfgOf(fresh); if (!hub) throw new Error('no NotHomeView Home Screen card on this dashboard');
+      if (val === 'night') delete hub.theme; else hub.theme = val; // Night = default: the key is removed
+      if (lv && typeof lv.saveConfig === 'function' && (lv.urlPath || null) === (dash || null)) await lv.saveConfig(fresh); // updates the open dashboard at once
+      else { const sv = { type: 'lovelace/config/save', config: fresh }; if (dash) sv.url_path = dash; await this._hass.callWS(sv); }
+      btns.forEach(b => b.setAttribute('aria-checked', String(b.dataset.v === val)));
+      st.textContent = 'Saved ✓ Device pages use ' + ({ night: 'Night', day: 'Day', auto: 'Auto' })[val] + '.';
+      setTimeout(() => { HVT.key = ''; hvThemeTick(this, this._hass); }, 50);
+      hvToast('Device pages theme: ' + ({ night: 'Night (dark glass)', day: 'Day (white)', auto: 'Auto (follow sun)' })[val] + ' ✓'); // the page re-renders (menu closes)
+    } catch (e) { st.className = 'st err'; st.textContent = 'Not saved: ' + (e && (e.message || e.code) || e); hvToast('Theme not saved: ' + (e && (e.message || e.code) || e)); }
+    btns.forEach(b => { b.disabled = false; });
+  }
 }
 HVEditButtonCard.layoutSection = false; // it takes no grid space
 HVEditButtonCard.sizePresets = false;
@@ -662,8 +1082,11 @@ HVEditButtonCard.schema = [
   { name: 'opacity', selector: { number: { min: 0.2, max: 1, step: 0.05, mode: 'slider' } } },
   { name: 'url', selector: { text: {} } },
   { type: 'grid', name: '', schema: [{ name: 'show_edit_button', selector: { boolean: {} } }, { name: 'show_screensaver_button', selector: { boolean: {} } }] },
+  { name: 'edit_menu', selector: { boolean: {} } },
   { name: 'screensaver_icon', selector: { icon: {} } }];
 HVEditButtonCard.editorDefaults = true;
+Object.assign(LABELS, { edit_menu: 'Pencil opens a menu (Edit page + Device pages theme)' });
+Object.assign(HELPERS, { edit_menu: 'On: a tap shows "Edit page" and the Night / Day / Auto choice for the device pages (saved on the Home Screen card, admins only). Off: a tap goes straight to the editor.' });
 Object.assign(LABELS, { show_edit_button: 'Show the edit pencil', show_screensaver_button: 'Show the screensaver button (below the pencil)', screensaver_icon: 'Screensaver button icon (empty = mdi:monitor-shimmer)' });
 Object.assign(HELPERS, { show_screensaver_button: 'Opens the Wallpanel screensaver settings for this dashboard. Only shown when Wallpanel is installed.' });
 Object.assign(LABELS, { position: 'Corner', style: 'Look', admin_only: 'Admins only', size: 'Size', offset: 'Distance from the edge', opacity: 'Opacity when idle', url: 'Open URL (empty = this view with ?disable_km&edit=1)' });
@@ -689,6 +1112,9 @@ ha-card{position:relative !important;height:100%;width:100%;box-sizing:border-bo
  backdrop-filter:blur(30px) saturate(150%) !important;-webkit-backdrop-filter:blur(30px) saturate(150%) !important;
  box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 2vh 6vh rgba(0,0,20,.35) !important}
 ha-card::before,ha-card::after{content:none !important;display:none !important}
+/* Day theme: Now Playing keeps its dark artwork look (also where a HomeView style helper paints every card with --hv-bg) */
+:host([hv-day]){--hv-bg:var(--hv-np-bg,linear-gradient(160deg,rgba(78,92,108,.94) 0%,rgba(46,56,68,.95) 55%,rgba(30,37,46,.97) 100%));--hv-bg-on:var(--hv-bg);--hv-border:rgba(255,255,255,.10);--hv-border-on:rgba(255,255,255,.10);
+ --hv-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 2vh 6vh rgba(0,0,20,.35);--hv-shadow-on:var(--hv-shadow);--hv-blur:blur(30px) saturate(150%);--hv-text:#fff;--hv-text2:rgba(255,255,255,.66);--hv-text-on:#fff;--hv-text2-on:rgba(255,255,255,.8);--hv-icon:#fff;--hv-icon-on:#fff;--primary-text-color:#fff;--secondary-text-color:rgba(255,255,255,.66)}
 .bg,.bg i,.shade{position:absolute;inset:0;pointer-events:none}
 .bg i{inset:-18%;background-size:cover;background-position:center;opacity:0;transition:opacity .9s ease;
  filter:blur(var(--hv-np-blur,52px)) saturate(1.45) brightness(.9);transform:translateZ(0) scale(1.08)}
@@ -764,6 +1190,31 @@ input[type=range]::-moz-range-thumb{width:1px;height:100%;border:0;background:tr
 :host([fs]) .ctl button{height:calc(var(--s)*8.6)}
 :host([fs]) .art{max-width:100%;max-height:100%}
 :host([fs]) .pop{top:calc(var(--npt) + (var(--nph0) - var(--nph)) / 2 + var(--s) * 12.5);right:calc(50% - var(--npw) / 2 + var(--s) * 4.6)}
+/* full screen, PORTRAIT (phone, tablet held upright): one tall column — top buttons, big square art, title / artist under the
+   art, progress, then large touch-size controls. Width follows the screen (max 600 px), height follows the width, centred.
+   Landscape full screen and the window popup are not affected. */
+@container (max-aspect-ratio: 9/10){
+ :host([fs]) .w,:host([fs]) .pop{
+  --npa:calc(100cqh - var(--npt) - var(--npb));
+  --npw:min(calc(100cqw - env(safe-area-inset-left,0px) - env(safe-area-inset-right,0px) - 32px),600px,calc(var(--npa) / 1.62));
+  --nph:min(var(--npa),calc(var(--npw) * 1.78));
+  --s:calc(var(--npw) / 100);--nprb:clamp(34px,calc(var(--s) * 8),46px)}
+ :host([fs]) .pop{--s:clamp(4.4px,calc(var(--npw) / 100),6px)}
+ :host([fs]) .w{top:calc(var(--npt) + (var(--npa) - var(--nph)) / 2);width:var(--npw);height:var(--nph);padding:0;
+  grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto auto auto;grid-template-areas:"top" "stage" "meta" "prog" "ctl";row-gap:calc(var(--s) * 4)}
+ :host([fs]) .stage{display:contents}
+ :host([fs]) .art{grid-area:stage;width:100%;height:auto;max-width:100%;max-height:100%;aspect-ratio:1;align-self:center;justify-self:center;border-radius:calc(var(--s) * 3)}
+ :host([fs]) .meta{grid-area:meta;position:static;align-items:center}
+ :host([fs]) .t{font-size:clamp(18px,calc(var(--s) * 6),32px)} :host([fs]) .ar{font-size:clamp(14px,calc(var(--s) * 4.4),24px)}
+ :host([fs]) .more{width:clamp(32px,calc(var(--s) * 7),42px);height:clamp(32px,calc(var(--s) * 7),42px);margin:0} :host([fs]) .more ha-icon{--mdc-icon-size:clamp(18px,calc(var(--s) * 4.4),24px)}
+ :host([fs]) .rb{width:var(--nprb);height:var(--nprb)} :host([fs]) .pill{height:var(--nprb);padding:0 6px} :host([fs]) .pill button{padding:0 clamp(8px,calc(var(--s) * 2),14px)}
+ :host([fs]) .rb ha-icon,:host([fs]) .pill ha-icon{--mdc-icon-size:clamp(18px,calc(var(--s) * 4.6),26px)}
+ :host([fs]) .bar{height:max(4px,calc(var(--s) * 1))} :host([fs]) .times{font-size:clamp(11px,calc(var(--s) * 3),15px);margin-top:calc(var(--s) * 1.6)}
+ :host([fs]) .ctl button{width:clamp(48px,calc(var(--s) * 16),96px);height:clamp(48px,calc(var(--s) * 14),84px)}
+ :host([fs]) .ctl .sm ha-icon{--mdc-icon-size:clamp(20px,calc(var(--s) * 5.6),28px)} :host([fs]) .ctl .md ha-icon{--mdc-icon-size:clamp(30px,calc(var(--s) * 10),56px)}
+ :host([fs]) .ctl .big ha-icon{--mdc-icon-size:clamp(40px,calc(var(--s) * 13),72px)} :host([fs]) .ctl .tr{gap:clamp(8px,calc(var(--s) * 5),40px)}
+ :host([fs]) .pop{top:calc(var(--npt) + (var(--npa) - var(--nph)) / 2 + var(--nprb) + 10px);right:calc(50% - var(--npw) / 2);min-width:min(calc(var(--npw) * .86),420px);max-width:var(--npw)}
+}
 /* window mode, landscape (short wide popups such as a phone): art on the left, info + controls on the right */
 @container (min-aspect-ratio: 13/10){
  :host(:not([fs])) .w,:host(:not([fs])) .pop{--s:min(.62cqw,1.25cqh)}
@@ -1037,6 +1488,11 @@ Object.assign(HELPERS, { entities: 'Players to switch between (the speaker pill)
 // more-info). Tap the picture = larger view as a browser_mod popup (window or full screen, swipe down to close).
 const HV_SIZES = { '2x3': { columns: 3, rows: 2 }, '2x6': { columns: 6, rows: 2 }, '4x6': { columns: 6, rows: 4 } };
 // the camera also has a portrait size: 4 rows × 3 columns (one tile wide, two tiles tall)
+const SIZE_OPTS_FIXED = [{ value: '2x3', label: '2 × 3 (one tile)' }, { value: '2x6', label: '2 × 6 (two tiles wide)' }, { value: '4x6', label: '4 × 6 (2 tiles wide & tall)' }];
+// responsive sizes (phones / portrait): a share of the section's width, height follows the width (Tile shape)
+const RESP_SIZES = { 'r3': { columns: 3, rows: 'auto' }, 'r4': { columns: 4, rows: 'auto' }, 'r6': { columns: 6, rows: 'auto' }, 'r12': { columns: 12, rows: 'auto' } };
+const RESP_OPTS = [{ value: 'r3', label: 'Responsive · 3 columns (¼ of a section)' }, { value: 'r4', label: 'Responsive · 4 columns (⅓)' },
+  { value: 'r6', label: 'Responsive · 6 columns (½)' }, { value: 'r12', label: 'Responsive · 12 columns (full section width)' }];
 const CAM_SIZES = Object.assign({}, HV_SIZES, { '4x3': { columns: 3, rows: 4 } });
 const CAM_ASPECT = { '2x3': '1.3', '2x6': '2.75', '4x6': '1.3', '4x3': '0.62' };
 const CAM_POPUP_W = 'min(94vw, 960px)';
@@ -1272,6 +1728,7 @@ HVCameraCard.layoutSection = false;
 HVCameraCard.editorDefaults = true;
 HVCameraCard.sizePresetsMap = CAM_SIZES;
 HVCameraCard.sizeOptionsExtra = [{ value: '4x3', label: '4 × 3 Tall (one tile wide, two tiles tall)' }];
+HVCameraCard.sizeOptions = [...SIZE_OPTS_FIXED, ...HVCameraCard.sizeOptionsExtra];
 HVCameraCard.schema = [
   { name: 'entity', required: true, selector: { entity: { domain: 'camera' } } },
   { type: 'grid', name: '', schema: [{ name: 'name', selector: { text: {} } },
@@ -1351,6 +1808,8 @@ class HVPersonCard extends HVBase {
 .lc{font-size:min(8.8cqh,6.6cqw);font-weight:500;color:var(--hv-text2,rgba(255,255,255,.66));line-height:1.22;margin-top:.6cqh;
  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .lc.one{-webkit-line-clamp:1}
+:host([auto]) .nm{font-size:max(13px,min(11.5cqh,8.5cqw))} :host([auto]) .lc{font-size:max(11px,min(8.8cqh,6.6cqw))}
+:host([floor]) .nm{font-size:max(13px,min(11.5cqh,10cqw))} :host([floor]) .lc{font-size:max(11px,min(8.8cqh,8cqw))}
 .since,.mapw,.x,.grab{display:none}
 /* the large view (popup) */
 :host([large]) ha-card{cursor:default;border-radius:26px !important;border:1px solid rgba(255,255,255,.12) !important;touch-action:none;
@@ -1438,12 +1897,13 @@ class HVPersonCard extends HVBase {
 }
 for (const k of ['_popupHost', '_swipeAttr', '_resetDrag', '_bindSwipe', '_snapBack', '_dismiss']) HVPersonCard.prototype[k] = HVNowPlayingCard.prototype[k];
 HVPersonCard.sizePresetsMap = PER_SIZES;
-HVPersonCard.sizeOptions = [{ value: '2x3', label: '2 × 3 (one tile)' }, { value: '4x6', label: '4 × 6 (2 tiles wide & tall)' }];
+Object.assign(PER_SIZES, RESP_SIZES);
+HVPersonCard.sizeOptions = [{ value: '2x3', label: '2 × 3 (one tile)' }, { value: '4x6', label: '4 × 6 (2 tiles wide & tall)' }, ...RESP_OPTS];
 HVPersonCard.schema = [
   { name: 'entity', required: true, selector: { entity: { domain: 'person' } } },
   { name: 'name', selector: { text: {} } },
   { name: 'location_entity', selector: { entity: { domain: 'sensor' } } },
-  { name: 'badge_entity', selector: { entity: {} } }];
+  { name: 'badge_entity', selector: { entity: {} } }, COLORS, ACTIONS(null, 'none')];
 Object.assign(LABELS, { location_entity: 'Location sensor (optional)', badge_entity: 'Badge entity (optional)' });
 Object.assign(HELPERS, { location_entity: 'Street and city when away from a zone. Empty = the phone\'s "Geocoded location" sensor, found automatically.',
   badge_entity: 'Shows a small badge on the avatar while it is on, e.g. a Focus / Do Not Disturb sensor. Empty = no badge.' });
@@ -1499,8 +1959,9 @@ ha-card{position:relative !important;height:100%;width:100%;box-sizing:border-bo
 :host([large]) .x{display:flex} .x ha-icon{--mdc-icon-size:20px;display:flex}
 .bd{flex:1;min-height:0;overflow:auto;padding:4px 20px 12px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-y}
 .msg{padding:18px 4px;color:rgba(255,255,255,.7);font-size:14px;line-height:1.4}
-.ft{display:flex;align-items:center;gap:10px;padding:12px 20px 18px;flex:none;border-top:1px solid rgba(255,255,255,.08)}
+.ft{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:12px 20px 14px;flex:none;border-top:1px solid rgba(255,255,255,.08)}
 .ft .st{flex:1;min-width:0;font-size:13px;color:rgba(255,255,255,.65);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ft .hint{flex:0 0 100%;order:9;font-size:12px;line-height:1.35;color:rgba(255,255,255,.5);text-align:right}
 .ft .st.ok{color:#7be0a0} .ft .st.err{color:#ff8a80}
 .ft button{all:unset;box-sizing:border-box;cursor:pointer;height:40px;padding:0 18px;border-radius:999px;font:600 14px ${FONT};display:flex;align-items:center;gap:8px;white-space:nowrap;
  background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.16);color:#fff;transition:transform .12s ease,opacity .2s}
@@ -1508,7 +1969,7 @@ ha-card{position:relative !important;height:100%;width:100%;box-sizing:border-bo
 .ft .save{background:linear-gradient(150deg,#8f86ff,#6e5ad2);border-color:rgba(255,255,255,.25)}
 .grab{display:none;position:absolute;z-index:4;top:8px;left:50%;width:40px;height:5px;margin-left:-20px;border-radius:9px;background:rgba(255,255,255,.42);pointer-events:none}
 :host([swipe]) .grab{display:block}
-@media (max-width:520px){ .ft{flex-wrap:wrap} .ft .st{flex-basis:100%;order:3} }
+@media (max-width:520px){ .ft .st{flex-basis:100%;order:3} .ft .hint{text-align:left} }
 @media (max-height:520px){ .hd{padding:14px 20px 8px} .hd .ic{width:36px;height:36px;border-radius:12px} .hd .t1{font-size:17px} .ft{padding:8px 16px 10px} .ft button{height:36px} }
 `;
 class HVScreensaverCard extends HTMLElement {
@@ -1531,13 +1992,16 @@ class HVScreensaverCard extends HTMLElement {
     this.shadowRoot.innerHTML = `<style>${SS_CSS}</style><ha-card><div class="hd"><div class="ic"><ha-icon icon="mdi:monitor-shimmer"></ha-icon></div>
       <div class="tt"><div class="t1">Screensaver</div><div class="t2">Wallpanel</div></div><div class="x" role="button" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></div></div>
       <div class="bd pop"><div class="msg">Loading…</div></div>
-      <div class="ft"><div class="st"></div><button class="pv"><ha-icon icon="mdi:play-circle-outline"></ha-icon>Preview</button><button class="save" disabled><ha-icon icon="mdi:content-save-outline"></ha-icon>Save</button></div>
+      <div class="ft"><div class="st"></div><button class="pv"><ha-icon icon="mdi:play-circle-outline"></ha-icon>Preview</button><button class="save" disabled><ha-icon icon="mdi:content-save-outline"></ha-icon>Save</button><div class="hint">Shows the screensaver now with the values above, even while it is off. Nothing is saved. Tap the screen to stop.</div></div>
       <div class="grab" aria-hidden="true"></div></ha-card>`;
     const R = this.shadowRoot; this._card = R.querySelector('ha-card'); this._bd = R.querySelector('.bd'); this._st = R.querySelector('.st');
     R.querySelector('.x').addEventListener('click', () => this._close());
     R.querySelector('.save').addEventListener('click', () => this._save());
     R.querySelector('.pv').addEventListener('click', () => this._preview());
     this._bindSwipe(); this._built = true;
+    const t2 = R.querySelector('.t2'), note = () => { const m = hvWpMissing(); if (m) { if (!t2.dataset.t) t2.dataset.t = t2.textContent; t2.textContent = HV_WP_HINT; } else if (t2.dataset.t) { t2.textContent = t2.dataset.t; delete t2.dataset.t; } t2.title = m ? HV_WP_URL : ''; };
+    this._wpNoteFn = note;
+    if (!hvHasWallpanel()) { note(); setTimeout(note, 13000); hvWhenWallpanel(note); } // Wallpanel missing: say so (the form still works and saves)
   }
   _status(t, cls) { this._st.textContent = t || ''; this._st.className = 'st' + (cls ? ' ' + cls : ''); }
   async _fetch() { const m = { type: 'lovelace/config', force: true }; if (this._dash) m.url_path = this._dash; return this._hass.callWS(m); }
@@ -1548,7 +2012,7 @@ class HVScreensaverCard extends HTMLElement {
       const cfg = await this._fetch(); this._cfg = cfg;
       const wp = cfg.wallpanel || {}; this._wp0 = JSON.parse(JSON.stringify(wp));
       this._views = (cfg.views || []).map((v, i) => ({ value: v.path || String(i), label: v.title || v.path || 'View ' + (i + 1) }));
-      const t2 = this.shadowRoot.querySelector('.t2'); t2.textContent = 'Wallpanel · ' + ((cfg.title || this._dash || 'Overview'));
+      const t2 = this.shadowRoot.querySelector('.t2'); t2.textContent = 'Wallpanel · ' + ((cfg.title || this._dash || 'Overview')); delete t2.dataset.t; if (this._wpNoteFn && !hvHasWallpanel()) this._wpNoteFn();
       this._data0 = this._toData(wp); this._data = Object.assign({}, this._data0);
       this._renderForm();
       this.shadowRoot.querySelector('.save').disabled = false;
@@ -1638,10 +2102,44 @@ class HVScreensaverCard extends HTMLElement {
     } catch (e) { this._status('Save failed: ' + (e && (e.message || e.code) || e), 'err'); }
     btn.disabled = false;
   }
+  // Preview (1.30.2). Wallpanel refuses to start while `enabled` is false (it also drops its photos, fullscreen ... when disabled) and while a browser_mod popup is open,
+  // and its settings are private to it. So the preview hands it a TEMPORARY copy of the settings through the page address (Wallpanel's own `wp_*` URL options:
+  // enabled on + the unsaved values from this sheet), starts it, and puts the address and Wallpanel's real settings back as soon as the screensaver stops.
+  // Nothing is saved; Wallpanel's saved `enabled` stays as it is.
+  _previewParams() {
+    const d = this._data || {}, ch = this._changes(), wp = this._apply(JSON.parse(JSON.stringify(this._wp0 || {})), ch), o = {};
+    for (const k of ['idle_time', 'fade_in_time', 'display_time', 'crossfade_time', 'media_order', 'image_fit_landscape', 'image_fit_portrait', 'black_screen_after_time', 'show_images', 'image_url', 'show_progress_bar', 'show_image_info'])
+      if (wp[k] !== undefined && JSON.stringify(wp[k]) !== JSON.stringify((this._wp0 || {})[k])) o[k] = wp[k];
+    o.idle_time = d.idle_time; o.fade_in_time = d.fade_in_time;
+    const here = decodeURIComponent(location.pathname.split('/')[2] || ''), views = (d.enabled_on_views || []).slice();
+    if (views.length) { if (here && !views.includes(here)) views.push(here); o.enabled_on_views = JSON.stringify(views); }
+    else if (Array.isArray((this._wp0 || {}).enabled_on_views) && this._wp0.enabled_on_views.length) { const all = this._views.map(v => v.value); if (here && !all.includes(here)) all.push(here); o.enabled_on_views = JSON.stringify(all); }
+    Object.assign(o, { enabled: true, fullscreen: false, keep_screen_on_time: 0, hide_toolbar: false, hide_sidebar: false, disable_screensaver_on_browser_mod_popup: false });
+    return o;
+  }
   _preview() {
-    if (this._changes().length) this._status('Previewing the saved settings (Save first to see your changes).');
-    const go = () => { const w = ssWallpanel(); if (w && typeof w.startScreensaver === 'function') { try { w.startScreensaver(); } catch (e) {} } else this._status('Wallpanel is not running on this page.', 'err'); };
-    if (this.hasAttribute('large')) { this._close(); setTimeout(go, 700); } else go();
+    const w = ssWallpanel();
+    if (!w || typeof w.startScreensaver !== 'function') { this._status('Wallpanel is not running on this page.', 'err'); return; }
+    if (this._pvBusy) return; this._pvBusy = true;
+    const host = document.querySelector('home-assistant') || window, url0 = location.pathname + location.search + location.hash, st0 = history.state;
+    const relocate = () => host.dispatchEvent(new Event('location-changed', { bubbles: true, cancelable: false, composed: true }));
+    const done = () => { // Wallpanel back to its saved settings: change the address once (so it re-reads it), then restore it exactly
+      this._pvBusy = false; try { history.replaceState(st0, '', url0 + (url0.includes('#') ? '' : '#hv-preview-end')); relocate();
+        setTimeout(() => { try { history.replaceState(st0, '', url0); relocate(); } catch (e) {} }, 250); } catch (e) {} };
+    const popupOpen = () => { const m = document.querySelector('home-assistant'); return !!(m && m.shadowRoot && [...m.shadowRoot.querySelectorAll('*')].some(e => e.tagName.toLowerCase().startsWith('browser-mod-popup') && e.shadowRoot && e.shadowRoot.querySelector('ha-dialog'))); };
+    const apply = () => { const q = new URLSearchParams(location.search); for (const [k, v] of Object.entries(this._previewParams())) q.set('wp_' + k, typeof v === 'string' ? v : String(v));
+      history.replaceState(st0, '', location.pathname + '?' + q.toString() + location.hash); relocate(); };
+    const start = () => {
+      try { apply(); } catch (e) { done(); fire(host, 'hass-notification', { message: 'Preview could not start.' }); return; }
+      // Wallpanel notices the new address after ~30 ms and re-reads its settings (and would stop a running screensaver on an address change), so start only after that
+      setTimeout(() => { try { if (!/[?&]wp_enabled=true/.test(location.search)) { apply(); } } catch (e) { /* checked below */ }
+        setTimeout(() => { try { const r = w.startScreensaver(); if (r && r.catch) r.catch(() => {}); } catch (e) { /* checked below */ }
+          let t = 0; const iv = setInterval(() => { t++;
+            if (!w.screensaverRunning()) { clearInterval(iv); if (t <= 2) fire(host, 'hass-notification', { message: 'Preview could not start. Is Wallpanel running on this page?' }); done(); } }, 300); }, 100); }, 150);
+    };
+    // the sheet is a browser_mod popup: let it finish closing first (its closing also touches the page address), then switch Wallpanel over
+    const afterClose = () => { let n = 0; const iv = setInterval(() => { if (!popupOpen() || ++n > 30) { clearInterval(iv); setTimeout(start, 120); } }, 100); };
+    if (this.hasAttribute('large')) { this._close(); setTimeout(afterClose, 350); } else start();
   }
   _close() {
     if (this._overlay) { this._overlay.remove(); return; }
@@ -1712,7 +2210,10 @@ function hvInSectionsView(lovelace) {
 /* ---------------- Size presets (every HomeView card) ----------------
    Rows × columns of the sections grid. Picking one writes grid_options; the dropdown shows the card's current size, or
    "Custom" when it was resized some other way (e.g. HA's own Layout tab). */
-const SIZE_OPTS = [{ value: '2x3', label: '2 × 3 (one tile)' }, { value: '2x6', label: '2 × 6 (two tiles wide)' }, { value: '4x6', label: '4 × 6 (2 tiles wide & tall)' }];
+const SIZE_OPTS = [...SIZE_OPTS_FIXED, ...RESP_OPTS];
+Object.assign(HV_SIZES, RESP_SIZES);
+const ASPECT_FIELD = { name: 'aspect', selector: { select: { mode: 'dropdown', options: [{ value: '1.12', label: 'Standard tile' }, { value: '1', label: 'Square' },
+  { value: '1.5', label: 'Wide (3 : 2)' }, { value: '2.4', label: 'Extra wide (strip)' }] } } };
 Object.assign(LABELS, { hv_size: 'Size' });
 Object.assign(HELPERS, { hv_size: 'Rows × columns of the sections grid. One NotHomeView tile is 2 × 3.' });
 const hvSizeOf = (cls, cfg) => {
@@ -1724,11 +2225,12 @@ const hvSizeOf = (cls, cfg) => {
 const hvPresets = cls => (cls && cls.sizePresetsMap) || HV_SIZES;
 const hvSizeField = cur => ({ name: 'hv_size', selector: { select: { mode: 'dropdown', options: [...cur.opts,
   ...(cur.key === 'custom' ? [{ value: 'custom', label: `Custom${cur.rows != null && cur.cols != null ? ` (${cur.rows} × ${cur.cols})` : ''}` }] : [])] } } });
-const hvWithSize = (schema, cur) => { // camera: in place of its placeholder; others: before Colours / the first expandable section
+const hvWithSize = (schema, cur, cls) => { // camera: in place of its placeholder; others: before Colours / the first expandable section
   const f = hvSizeField(cur), out = schema.slice(), i = out.findIndex(x => x && x.name === 'hv_size');
   if (i >= 0) { out[i] = f; return out; }
   let j = out.findIndex(x => x && x.type === 'expandable' && /Colour/.test(x.title || '')); if (j < 0) j = out.findIndex(x => x && x.type === 'expandable');
-  out.splice(j < 0 ? out.length : j, 0, f); return out;
+  const add = cls && cls.prototype instanceof HVBase ? [{ type: 'grid', name: '', schema: [f, ASPECT_FIELD] }] : [f];
+  out.splice(j < 0 ? out.length : j, 0, ...add); return out;
 };
 class HVEditor extends HTMLElement {
   get _sizes() { return !!this.cardClass && this.cardClass.sizePresets !== false; }
@@ -1814,7 +2316,8 @@ class HVEditor extends HTMLElement {
     const SZ = this._sizes ? hvSizeOf(this.cardClass, this._config) : null;
     this._form.data = Object.assign({}, data, L ? L.data : {}, SZ ? { hv_size: SZ.key } : {});
     const base = (this.cardClass && this.cardClass.schema) || [];
-    this._form.schema = [...(SZ ? hvWithSize(base, SZ) : base.filter(x => !x || x.name !== 'hv_size')), ...(L ? [vlSchema(L.c, L.r)] : [])];
+    this._form.schema = [...(SZ ? hvWithSize(base, SZ, this.cardClass) : base.filter(x => !x || x.name !== 'hv_size')), ...(L ? [vlSchema(L.c, L.r)] : [])];
+    hvWpHint(this, this.cardClass === HVScreensaverCard || (this.cardClass === HVEditButtonCard && this._config.show_screensaver_button !== false));
     if (this._bar) {
       const vl = this._vlCurrent();
       const parts = ['grid-column', 'grid-row', 'grid-area'].filter(k => vl[k]).map(k => `${k}: ${vl[k]}`);
@@ -1824,11 +2327,1945 @@ class HVEditor extends HTMLElement {
 }
 
 /* ---------------- registration ---------------- */
+/* ---------------- calendar ---------------- */
+// Upcoming events from one or more calendars on NotHomeView glass: header (title + chevron, tap = tap_action), then per day a
+// date block (weekday / day / month, optional forecast) and the day's events (title, time range or "All day", location).
+// Events come from the calendar REST API (read only) and refresh every few minutes; tapping an event opens a details sheet.
+const WX_ICON = { 'clear-night': 'mdi:weather-night', cloudy: 'mdi:weather-cloudy', exceptional: 'mdi:alert-circle-outline', fog: 'mdi:weather-fog',
+  hail: 'mdi:weather-hail', lightning: 'mdi:weather-lightning', 'lightning-rainy': 'mdi:weather-lightning-rainy', partlycloudy: 'mdi:weather-partly-cloudy',
+  pouring: 'mdi:weather-pouring', rainy: 'mdi:weather-rainy', snowy: 'mdi:weather-snowy', 'snowy-rainy': 'mdi:weather-snowy-rainy', sunny: 'mdi:weather-sunny',
+  windy: 'mdi:weather-windy', 'windy-variant': 'mdi:weather-windy-variant' };
+const calDate = v => { if (!v) return null; if (typeof v === 'object') v = v.dateTime || v.date; if (!v) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) { const [y, m, d] = v.split('-').map(Number); return new Date(y, m - 1, d); } return new Date(v); };
+const calAllDay = e => { const s = e.start; return typeof s === 'string' ? /^\d{4}-\d{2}-\d{2}$/.test(s) : !!(s && s.date && !s.dateTime); };
+const dayKey = d => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+const startOfDay = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+class HVCalendarCard extends HVBase {
+  static get defaults() { return { title: 'Calendar', days: 7, max_events: 4, show_location: true, show_weather: false, refresh_interval: 5 }; }
+  static getStubConfig(hass) { return { entities: Object.keys(hass.states).filter(k => k.startsWith('calendar.')).slice(0, 3), title: 'Calendar' }; }
+  validate(c) { if (!c.entities || !c.entities.length) throw new Error('Choose at least one calendar'); }
+  getCardSize() { return 4; }
+  getGridOptions() { return { columns: 6, rows: 3, min_columns: 4, min_rows: 2 }; }
+  _ids() { return (this._config.entities || []).map(e => typeof e === 'string' ? e : e.entity).filter(Boolean); }
+  _wx() { const c = this._config; if (!c.show_weather) return null; return c.weather_entity || (this._hass && Object.keys(this._hass.states).find(k => k.startsWith('weather.'))) || null; }
+  watched() { return this._ids().concat(this._hass ? [this._wx()] : []).filter(Boolean); }
+  defaultAction() { return { action: 'none' }; }
+  setConfig(c) { super.setConfig(c); this._fkey = null; this._wsub(); }
+  connectedCallback() { clearInterval(this._tick); this._tick = setInterval(() => { this._fkey = null; this._sig = null; this._render(); }, 60000); this._wsub(); }
+  disconnectedCallback() { clearInterval(this._tick); this._unsubWx(); }
+  _unsubWx() { if (this._wxUnsub) { const u = this._wxUnsub; this._wxUnsub = null; this._wxFor = null; Promise.resolve(u).then(f => f && f()).catch(() => {}); } }
+  _wsub() { // daily forecast for the date blocks (read only subscription, no service call)
+    const id = this._wx(); if (!this._hass || !this.isConnected) return;
+    if (this._wxFor === id) return; this._unsubWx(); this._fc = null; if (!id) return;
+    this._wxFor = id;
+    try { this._wxUnsub = this._hass.connection.subscribeMessage(m => { this._fc = m.forecast || []; this._paint(); },
+      { type: 'weather/subscribe_forecast', forecast_type: 'daily', entity_id: id }); if (this._wxUnsub.catch) this._wxUnsub.catch(() => { this._fc = null; }); } catch (e) {}
+  }
+  async _fetch() {
+    const c = this._config, ids = this._ids(), now = new Date(), from = startOfDay(now);
+    const to = new Date(from.getTime() + Math.max(1, Number(c.days) || 7, c.layout === 'wide' ? (Number(c.columns) || 3) * 2 : 1) * 864e5);
+    const q = `?start=${encodeURIComponent(from.toISOString())}&end=${encodeURIComponent(to.toISOString())}`;
+    const seq = (this._seq = (this._seq || 0) + 1);
+    const res = await Promise.all(ids.map(id => this._hass.callApi('GET', `calendars/${id}${q}`).then(r => (r || []).map(e => Object.assign({}, e, { _cal: id }))).catch(() => [])));
+    if (seq !== this._seq) return;
+    const seen = new Set(), list = [];
+    for (const e of res.flat()) {
+      const s = calDate(e.start), en = calDate(e.end) || s; if (!s) continue;
+      if (en <= now && !(calAllDay(e) && en > from)) continue; // already over
+      const k = (e.summary || '') + '|' + s.getTime(); if (seen.has(k)) continue; seen.add(k); // same event in two calendars
+      list.push(Object.assign(e, { _s: s, _e: en, _all: calAllDay(e) }));
+    }
+    list.sort((a, b) => a._s - b._s || (b._all - a._all));
+    this._events = list; this._paint();
+  }
+  update() {
+    this._wsub();
+    const key = this._ids().map(id => { const s = this._hass.states[id]; return s ? s.state + (s.attributes.message || '') + (s.attributes.start_time || '') : ''; }).join('|') + '|' + this._config.days;
+    const iv = Math.max(1, Number(this._config.refresh_interval) || 5) * 60000;
+    if (key !== this._fkey || !this._ft || Date.now() - this._ft > iv) { this._fkey = key; this._ft = Date.now(); this._fetch(); }
+    this._paint();
+  }
+  _fmtT(d) { const h = this._hass, lang = (h.locale && h.locale.language) || navigator.language, tf = h.locale && h.locale.time_format;
+    const o = { hour: 'numeric', minute: '2-digit' }; if (tf === '12') o.hour12 = true; else if (tf === '24') o.hour12 = false;
+    return d.toLocaleTimeString(lang, o); }
+  _timeText(e) { if (e._all) { const days = Math.round((startOfDay(e._e) - startOfDay(e._s)) / 864e5); return days > 1 ? `All day · ${days} days` : 'All day'; }
+    const multi = dayKey(e._s) !== dayKey(new Date(e._e.getTime() - 1));
+    return `${this._fmtT(e._s)} – ${multi ? e._e.toLocaleDateString((this._hass.locale || {}).language, { month: 'short', day: 'numeric' }) + ' ' : ''}${this._fmtT(e._e)}`; }
+  _paint() {
+    if (!this._built || !this._hass) return;
+    if (this._config.layout === 'wide') { this._paintWide(); return; }
+    const c = this._config, h = this._hass, lang = (h.locale && h.locale.language) || navigator.language, max = Math.max(1, Number(c.max_events) || 4);
+    const today = startOfDay(new Date()), ev = (this._events || []).slice(0, max);
+    const groups = []; for (const e of ev) { const d = e._s < today ? today : startOfDay(e._s), k = dayKey(d); let g = groups.find(x => x.k === k); if (!g) groups.push(g = { k, d, ev: [] }); g.ev.push(e); }
+    const fc = {}; for (const f of (this._fc || [])) { const d = new Date(f.datetime); fc[dayKey(d)] = f; }
+    const wxu = this._wx() && h.states[this._wx()] ? '°' : '';
+    const day = g => { const f = c.show_weather ? fc[g.k] : null, isT = g.k === dayKey(today);
+      return `<div class="day"><div class="db${isT ? ' today' : ''}"><div class="wd">${esc(g.d.toLocaleDateString(lang, { weekday: 'short' }))}</div>
+        <div class="dn">${g.d.getDate()}</div><div class="mo">${esc(g.d.toLocaleDateString(lang, { month: 'short' }))}</div>
+        ${f ? `<div class="wx"><ha-icon icon="${WX_ICON[f.condition] || 'mdi:weather-partly-cloudy'}"></ha-icon><span>${Math.round(f.temperature)}${wxu}</span></div>` : ''}</div>
+        <div class="evs">${g.ev.map(e => `<div class="ev" data-own data-i="${ev.indexOf(e)}" role="button" tabindex="0"><div class="et">${esc(e.summary || '(No title)')}</div>
+          <div class="em"><ha-icon icon="mdi:clock-outline"></ha-icon><span class="tm">${esc(this._timeText(e))}</span></div>
+          ${c.show_location && e.location ? `<div class="em"><ha-icon icon="mdi:map-marker-outline"></ha-icon><span>${esc(e.location)}</span></div>` : ''}</div>`).join('')}</div></div>`; };
+    const body = this._events == null ? `<div class="empty"><span>Loading…</span></div>`
+      : !groups.length ? `<div class="empty"><ha-icon icon="mdi:calendar-check-outline"></ha-icon><span>No upcoming events</span></div>` : groups.map(day).join('');
+    this._root.innerHTML = `<div class="cal"><div class="hd"><ha-icon class="hi" icon="${esc(c.icon || 'mdi:calendar')}"></ha-icon><span class="ht">${esc(c.title != null ? c.title : 'Calendar')}</span>
+      ${(this.actionConfig('tap') || {}).action !== 'none' ? '<ha-icon class="chev" icon="mdi:chevron-right"></ha-icon>' : ''}</div><div class="list">${body}</div></div>`;
+    this._card.setAttribute('aria-label', `${c.title || 'Calendar'}, ${ev.length} upcoming events`);
+    this._root.querySelectorAll('.ev').forEach(el => {
+      const open = e2 => { e2.stopPropagation(); this._details(ev[Number(el.dataset.i)]); };
+      el.addEventListener('click', open); el.addEventListener('keydown', k => { if (k.key === 'Enter' || k.key === ' ') { k.preventDefault(); open(k); } });
+    });
+    requestAnimationFrame(() => this._fit());
+  }
+  // Wide layout: the next N days side by side (Today / Tomorrow / weekday), each column with its forecast and events.
+  // Narrow cards (phones) keep the columns readable and scroll them sideways.
+  _paintWide() {
+    const c = this._config, h = this._hass, lang = (h.locale && h.locale.language) || navigator.language, nc = Math.max(1, Math.min(7, Number(c.columns) || 3)), rows = this._wideRows(), n = nc * rows;
+    const today = startOfDay(new Date()), fc = {}; for (const f of (this._fc || [])) fc[dayKey(new Date(f.datetime))] = f;
+    const cols = []; for (let i = 0; i < n; i++) { const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + i), e = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1); cols.push({ i, d, e, k: dayKey(d), ev: [] }); }
+    const all = this._wev = (this._events || []);
+    for (const ev of all) for (const col of cols) if (ev._s < col.e && ev._e > col.d) col.ev.push(ev);
+    const rel = i => { if (i < 2) { try { const s = new Intl.RelativeTimeFormat(lang, { numeric: 'auto' }).format(i, 'day'); return s.charAt(0).toUpperCase() + s.slice(1); } catch (x) {} return i ? 'Tomorrow' : 'Today'; }
+      return cols[i].d.toLocaleDateString(lang, { weekday: 'long' }); };
+    const tt = e => e._all ? 'All day' : this._fmtT(e._s) + (e._e - e._s > 60000 ? ' – ' + this._fmtT(e._e) : '');
+    this._narrowNow = !!(this._card && this._card.clientWidth && this._card.clientWidth < 520);
+    const col = cl => { const f = c.show_weather ? fc[cl.k] : null;
+      return `<div class="col${cl.i === 0 ? ' today' : ''}"><div class="ch"><div class="cn">${esc(rel(cl.i))}</div><div class="cd">${esc(cl.d.toLocaleDateString(lang, rows > 1 && !this._narrowNow ? { month: 'short', day: 'numeric' } : { weekday: 'short', month: 'short', day: 'numeric' }))}</div>
+        ${f ? `<div class="cw"><ha-icon icon="${WX_ICON[f.condition] || 'mdi:weather-partly-cloudy'}"></ha-icon><span>${Math.round(f.temperature)}°${f.templow != null ? `<i>${Math.round(f.templow)}°</i>` : ''}</span></div>` : ''}</div>
+        <div class="evs">${cl.ev.length ? cl.ev.map(e => `<div class="ev${e._all ? ' ad' : ''}" data-own data-i="${all.indexOf(e)}" role="button" tabindex="0"><div class="et">${esc(e.summary || '(No title)')}</div>
+          <div class="em"><span>${esc(tt(e))}${c.show_location && e.location ? ' · ' + esc(e.location) : ''}</span></div></div>`).join('') : `<div class="none">${this._events == null ? 'Loading…' : 'Nothing planned'}</div>`}</div><div class="more"></div></div>`; };
+    const narrow = this._card && this._card.clientWidth && this._card.clientWidth < 520; this._narrow = narrow;
+    this._rowsPainted = rows; this._root.innerHTML = `<div class="cal wide${narrow ? ' stack' : rows > 1 ? ' r2' : ''}" style="--nc:${nc}"><div class="hd"><ha-icon class="hi" icon="${esc(c.icon || 'mdi:calendar')}"></ha-icon><span class="ht">${esc(c.title != null ? c.title : 'Calendar')}</span>
+      ${(this.actionConfig('tap') || {}).action !== 'none' ? '<ha-icon class="chev" icon="mdi:chevron-right"></ha-icon>' : ''}</div><div class="cols">${cols.map(col).join('')}</div></div>`;
+    this._card.setAttribute('aria-label', `${c.title || 'Calendar'}, next ${n} days`);
+    this._root.querySelectorAll('.ev').forEach(el => {
+      const open = e2 => { e2.stopPropagation(); this._details(all[Number(el.dataset.i)]); };
+      el.addEventListener('click', open); el.addEventListener('keydown', k => { if (k.key === 'Enter' || k.key === ' ') { k.preventDefault(); open(k); } });
+    });
+    requestAnimationFrame(() => this._fit());
+  }
+  _build() { super._build(); if (window.ResizeObserver) { this._ro = new ResizeObserver(() => this._fit()); this._ro.observe(this._card); } }
+  // tall wide cards (e.g. tablet portrait) show a second row of days instead of empty space; rows: 1 / 2 forces it
+  _wideRows() { const c = this._config; if (Number(c.rows) === 1 || Number(c.rows) === 2) return Number(c.rows); const card = this._card; if (!card) return 1;
+    const H = card.clientHeight, W = card.clientWidth; return (H > 600 && W >= 560) || (W && W < 520) ? 2 : 1; }
+  _fitWide(root) {
+    const nw = !!(this._card && this._card.clientWidth && this._card.clientWidth < 520);
+    if (this._wideRows() !== this._rowsPainted || nw !== !!this._narrow) { this._paintWide(); return; }
+    if (nw) return; // stacked days scroll instead // per column: hide events that don't fit, show "+N more"
+    const rb = root.getBoundingClientRect().bottom + 1; root.querySelectorAll('.col').forEach(cl => { cl.style.visibility = ''; });
+    for (const cl of root.querySelectorAll('.col')) { if (cl.getBoundingClientRect().top + 40 > rb) { cl.style.visibility = 'hidden'; continue; } const box = cl.querySelector('.evs'), more = cl.querySelector('.more'), evs = [...box.querySelectorAll('.ev')];
+      evs.forEach(e => { e.style.display = ''; }); more.textContent = ''; more.style.display = 'none'; if (!evs.length) continue;
+      const two = this._rowsPainted === 2, bot = Math.min(root.getBoundingClientRect().bottom, two ? cl.getBoundingClientRect().bottom : 1e9) - 8; let hid = 0;
+      if (evs[evs.length - 1].getBoundingClientRect().bottom > bot) { const lb = bot - 18; // reserve a line for "+N more"; in 2 rows each day box is its own limit
+        for (const e of evs) if (hid || e.getBoundingClientRect().bottom > lb) { hid++; e.style.display = 'none'; } }
+      if (hid) { more.style.display = ''; more.textContent = `+${hid} more`; } }
+  }
+  _fit() {
+    if (this._config && this._config.layout === 'wide') { const r = this._root && this._root.querySelector('.cols'); if (r) this._fitWide(r); return; } // hide events that would only be half visible; drop days left empty
+    const list = this._root.querySelector('.list'); if (!list) return; const lb = list.getBoundingClientRect().bottom + 1;
+    list.querySelectorAll('.ev').forEach(e => { e.style.display = ''; });
+    list.querySelectorAll('.day').forEach(d => { d.style.display = ''; });
+    const evs = [...list.querySelectorAll('.ev')]; let cut = false;
+    for (const e of evs) { if (cut || e.getBoundingClientRect().bottom > lb) { cut = true; e.style.display = 'none'; } }
+    list.querySelectorAll('.day').forEach((d, i) => { if (i > 0 && ![...d.querySelectorAll('.ev')].some(e => e.style.display !== 'none')) d.style.display = 'none'; });
+  }
+  _details(e) { // glass details sheet on top of the page; nothing is sent to Home Assistant
+    if (!e) return; const h = this._hass, lang = (h.locale && h.locale.language) || navigator.language;
+    const cal = h.states[e._cal], calName = cal ? cal.attributes.friendly_name || e._cal : e._cal;
+    const date = e._s.toLocaleDateString(lang, { weekday: 'long', month: 'long', day: 'numeric' });
+    const host = document.createElement('div'); host.className = 'hv-cal-sheet';
+    const sr = host.attachShadow({ mode: 'open' }), dayStyle = this.hasAttribute('day');
+    sr.innerHTML = `<style>
+:host{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;font-family:${FONT};-webkit-tap-highlight-color:transparent}
+.bg{position:absolute;inset:0;background:rgba(6,8,30,.38);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);animation:f .18s ease}
+.p{position:relative;box-sizing:border-box;width:min(440px,calc(100vw - 32px));max-height:calc(100dvh - 48px);overflow:auto;padding:22px 22px 18px;border-radius:26px;
+ background:${dayStyle ? 'linear-gradient(150deg,rgba(255,255,255,.9),rgba(255,255,255,.76))' : 'linear-gradient(150deg,rgba(60,58,110,.72),rgba(28,28,60,.78))'};
+ border:1px solid ${dayStyle ? 'rgba(255,255,255,.95)' : 'rgba(255,255,255,.22)'};color:${dayStyle ? '#14263b' : '#fff'};
+ box-shadow:inset 0 1px 0 rgba(255,255,255,.25),0 20px 60px rgba(6,8,60,.45);backdrop-filter:blur(30px) saturate(180%);-webkit-backdrop-filter:blur(30px) saturate(180%);animation:u .22s ease}
+@keyframes f{from{opacity:0}} @keyframes u{from{opacity:0;transform:translateY(12px) scale(.98)}}
+.cn{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;padding:4px 10px;border-radius:999px;
+ background:rgba(196,182,255,.28);color:${dayStyle ? '#4b3bb5' : '#e6defe'}}
+h2{margin:12px 0 10px;font-size:22px;line-height:1.25;font-weight:700;overflow-wrap:break-word;word-break:normal;hyphens:auto}
+.r{display:flex;gap:10px;align-items:flex-start;margin:8px 0;font-size:15px;line-height:1.35;opacity:.92;overflow-wrap:break-word;word-break:normal}
+.r ha-icon{--mdc-icon-size:19px;flex:none;opacity:.75;margin-top:1px}
+.d{margin-top:14px;padding-top:12px;border-top:1px solid ${dayStyle ? 'rgba(20,40,70,.12)' : 'rgba(255,255,255,.14)'};font-size:14px;line-height:1.45;white-space:pre-wrap;opacity:.85;overflow-wrap:break-word}
+.x{position:absolute;top:12px;right:12px;width:36px;height:36px;border-radius:50%;border:0;display:flex;align-items:center;justify-content:center;cursor:pointer;
+ background:${dayStyle ? 'rgba(20,40,70,.08)' : 'rgba(255,255,255,.12)'};color:inherit}
+.x ha-icon{--mdc-icon-size:20px}
+</style><div class="bg"></div><div class="p" role="dialog" aria-modal="true"><button class="x" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button>
+<span class="cn"><ha-icon icon="mdi:calendar" style="--mdc-icon-size:14px"></ha-icon>${esc(calName)}</span>
+<h2>${esc(e.summary || '(No title)')}</h2>
+<div class="r"><ha-icon icon="mdi:calendar-today"></ha-icon><span>${esc(date)}</span></div>
+<div class="r"><ha-icon icon="mdi:clock-outline"></ha-icon><span>${esc(this._timeText(e))}</span></div>
+${e.location ? `<div class="r"><ha-icon icon="mdi:map-marker-outline"></ha-icon><span>${esc(e.location)}</span></div>` : ''}
+${e.description ? `<div class="d">${esc(String(e.description).replace(/<[^>]+>/g, ' ').trim())}</div>` : ''}</div>`;
+    const close = () => { host.remove(); removeEventListener('keydown', key); };
+    const key = k => { if (k.key === 'Escape') close(); };
+    sr.querySelector('.bg').addEventListener('click', close); sr.querySelector('.x').addEventListener('click', close); addEventListener('keydown', key);
+    document.body.appendChild(host); sr.querySelector('.x').focus();
+  }
+  static get css() { return `
+ha-card{cursor:default}
+.cal{height:100%;box-sizing:border-box;display:flex;flex-direction:column;padding:max(10px,min(4.2cqw,16px)) max(10px,min(4.2cqw,18px)) 6px;color:var(--hv-text,#fff);gap:max(6px,min(2.4cqw,10px))}
+.hd{display:flex;align-items:center;gap:6px;flex:none;cursor:pointer;min-width:0;text-shadow:var(--hv-shade,0 1px 6px rgba(0,0,40,.25))}
+.hd .hi{--mdc-icon-size:max(16px,min(6cqw,22px));color:var(--hv-icon,#fff);display:flex}
+.ht{font-size:max(13px,min(5.4cqw,18px));font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chev{--mdc-icon-size:max(16px,min(5.6cqw,20px));opacity:.7;display:flex;margin-left:-2px}
+.list{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;gap:max(6px,min(2.4cqw,10px))}
+.day{display:flex;gap:max(6px,min(3cqw,12px));align-items:flex-start;flex:none}
+.db{flex:none;width:max(36px,min(15cqw,56px));text-align:center;line-height:1.05;padding-top:2px;text-shadow:var(--hv-shade,0 1px 6px rgba(0,0,40,.25))}
+.wd,.mo{font-size:max(10px,min(3.6cqw,12px));font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--hv-text2,rgba(255,255,255,.66))}
+.dn{font-family:${ROUND};font-size:max(20px,min(9cqw,30px));font-weight:500;margin:1px 0;font-variant-numeric:tabular-nums}
+.today .dn{color:var(--hv-accent,#d4c9ff)} :host([day]) .today .dn{color:#5a45d6}
+.wx{display:flex;flex-direction:column;align-items:center;gap:1px;margin-top:5px;font-size:max(10px,min(3.4cqw,12px));color:var(--hv-text2,rgba(255,255,255,.66))}
+.wx ha-icon{--mdc-icon-size:max(14px,min(5cqw,18px));display:flex}
+.evs{flex:1;min-width:0;display:flex;flex-direction:column;gap:max(5px,min(2cqw,8px))}
+.ev{position:relative;box-sizing:border-box;padding:max(6px,min(2.4cqw,9px)) max(8px,min(3cqw,12px)) max(6px,min(2.4cqw,9px)) max(11px,min(4cqw,15px));
+ border-radius:max(12px,min(4.4cqw,16px));cursor:pointer;min-width:0;
+ background:color-mix(in srgb,var(--hv-text,#fff) 9%,transparent);border:1px solid color-mix(in srgb,var(--hv-text,#fff) 14%,transparent);
+ box-shadow:inset 0 1px 0 rgba(255,255,255,.14);transition:background .15s ease}
+.ev::before{content:'';position:absolute;left:max(4px,min(1.6cqw,6px));top:22%;bottom:22%;width:3px;border-radius:3px;background:var(--hv-accent,#c4b6ff)}
+:host([day]) .ev::before{background:#7b68ee}
+.ev:active{background:color-mix(in srgb,var(--hv-text,#fff) 16%,transparent)}
+.et{font-size:max(12.5px,min(4.6cqw,16px));font-weight:650;line-height:1.22;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;
+ overflow-wrap:normal;word-break:normal;hyphens:manual}
+.em{display:flex;align-items:center;gap:4px;margin-top:2px;font-size:max(11px,min(3.8cqw,13.5px));color:var(--hv-text2,rgba(255,255,255,.66));min-width:0}
+.em span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.em ha-icon{--mdc-icon-size:max(12px,min(4cqw,14px));flex:none;display:flex;opacity:.85}
+.em span.tm{white-space:normal;overflow:visible} .em:has(.tm){align-items:flex-start} .em:has(.tm) ha-icon{margin-top:.15em}
+.empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--hv-text2,rgba(255,255,255,.66));font-size:max(12px,min(4.4cqw,15px));text-align:center}
+.empty ha-icon{--mdc-icon-size:max(26px,min(11cqw,40px));opacity:.8}
+.cal.stack .cols{flex-direction:column;align-items:stretch;overflow-x:hidden;overflow-y:auto;scroll-snap-type:none;overscroll-behavior-y:contain;padding-bottom:4px}
+.cal.stack .col{flex:none;min-width:0;gap:7px;padding:10px 12px} .cal.stack .col .evs{overflow:visible} .cal.stack .none{padding:0 2px 2px}
+.cal.r2 .cols{display:grid;grid-template-columns:repeat(var(--nc,3),1fr);grid-auto-rows:auto;align-content:start;align-items:start;overflow:hidden}
+.cal.r2 .cols{grid-template-rows:repeat(2,minmax(0,1fr));align-items:stretch} .cal.r2 .col{min-height:0;overflow:hidden;max-height:none}
+.cal.r2 .ch{grid-template-columns:auto minmax(0,1fr) auto;align-items:baseline} .cal.r2 .cd{grid-row:1;grid-column:2} .cal.r2 .et,.cal.r2 .em{white-space:nowrap;overflow:hidden;text-overflow:ellipsis} .cal.r2 .cw{grid-row:1;grid-column:3;align-self:center}
+.cols{flex:1;min-height:0;display:flex;align-items:flex-start;gap:max(8px,min(1.4cqw,14px));overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;overscroll-behavior-x:contain;scrollbar-width:none;padding-bottom:8px}
+.cols::-webkit-scrollbar{display:none}
+.col{flex:1 1 0;min-width:min(190px,74cqw);scroll-snap-align:start;display:flex;flex-direction:column;gap:8px;min-height:0;box-sizing:border-box;padding:12px 12px 10px;border-radius:20px;
+ background:color-mix(in srgb,var(--hv-text,#fff) 6%,transparent);border:1px solid color-mix(in srgb,var(--hv-text,#fff) 9%,transparent)}
+.ch{display:grid;grid-template-columns:1fr auto;column-gap:8px;row-gap:1px;align-items:center;flex:none;min-width:0;text-shadow:var(--hv-shade,0 1px 6px rgba(0,0,40,.25))}
+.cn{font-size:17px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0} .today .cn{color:var(--hv-accent,#d4c9ff)} :host([day]) .today .cn{color:#5a45d6}
+.cd{font-size:13px;font-weight:500;color:var(--hv-text2,rgba(255,255,255,.66));white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.cw{grid-row:1/3;grid-column:2;display:flex;align-items:center;gap:4px;font-size:14px;font-weight:600;white-space:nowrap}
+.cw ha-icon{--mdc-icon-size:20px;display:flex} .cw i{font-style:normal;font-weight:500;margin-left:4px;color:var(--hv-text2,rgba(255,255,255,.66))}
+.col .evs{flex:none;min-height:0;overflow:visible;gap:7px} .col{max-height:100%}
+.col .ev.ad::before{top:18%;bottom:18%;background:var(--hv-text2,rgba(255,255,255,.6))}
+.col .et{font-size:15px} .col .em{font-size:13px}
+.none{color:var(--hv-text2,rgba(255,255,255,.6));font-size:14px;padding:6px 2px}
+.more{flex:none;font-size:12.5px;font-weight:600;color:var(--hv-text2,rgba(255,255,255,.7));padding:0 4px}`; }
+}
+HVCalendarCard.schema = [
+  { name: 'calendars', required: true, selector: { entity: { domain: 'calendar', multiple: true } } },
+  { type: 'grid', name: '', schema: [{ name: 'title', selector: { text: {} } }, { name: 'icon', selector: { icon: {} } }] },
+  { type: 'grid', name: '', schema: [{ name: 'days', selector: { number: { min: 1, max: 60, mode: 'box' } } }, { name: 'max_events', selector: { number: { min: 1, max: 30, mode: 'box' } } }] },
+  { type: 'grid', name: '', schema: [{ name: 'show_location', selector: { boolean: {} } }, { name: 'show_weather', selector: { boolean: {} } }] },
+  { type: 'grid', name: '', schema: [{ name: 'weather_entity', selector: { entity: { domain: 'weather' } } }, { name: 'refresh_interval', selector: { number: { min: 1, max: 120, mode: 'box', unit_of_measurement: 'min' } } }] },
+  { type: 'grid', name: '', schema: [{ name: 'layout', selector: { select: { mode: 'dropdown', options: [{ value: 'list', label: 'List (days stacked)' }, { value: 'wide', label: 'Wide: days side by side' }] } } },
+    { name: 'columns', selector: { number: { min: 1, max: 7, mode: 'box' } } }, { name: 'rows', selector: { select: { mode: 'dropdown', options: [{ value: 'auto', label: 'Auto (2 when tall)' }, { value: '1', label: '1' }, { value: '2', label: '2' }] } } }] },
+  COLORS, ACTIONS('none', 'none')];
+HVCalendarCard.editorDefaults = true;
+HVCalendarCard.editorAlias = { calendars: 'entities' };
+HVCalendarCard.sizePresetsMap = Object.assign({}, HV_SIZES, { '3x6': { columns: 6, rows: 3 }, '4x12': { columns: 12, rows: 4 }, '5x12': { columns: 12, rows: 5 } });
+HVCalendarCard.sizeOptionsExtra = [{ value: '3x6', label: '3 × 6 (half a section, 3 rows)' }, { value: '4x12', label: '4 × 12 (full section, 4 rows)' }, { value: '5x12', label: '5 × 12 (full section, 5 rows)' }];
+Object.assign(LABELS, { calendars: 'Calendars', title: 'Title', days: 'Days ahead', max_events: 'Max events', show_location: 'Show location', show_weather: 'Show weather per day',
+  weather_entity: 'Weather entity (empty = first one found)', refresh_interval: 'Refresh every', layout: 'Layout', columns: 'Days side by side (wide layout)', rows: 'Rows of days (wide layout)' });
+Object.assign(HELPERS, { calendars: 'Events from all of these are merged and sorted by time.', show_weather: 'Daily forecast under each date. Tapping an event opens its details; the Tap action (Interactions) is for the header.' });
+
+/* ---------------- TV (tile + Now Playing-style TV popup) ---------------- */
+// homeview-tv-player-card = the Now Playing popup layout with a 16:9 picture, power, app / source picker, TV switcher and an
+// optional remote (D-pad) that sends remote.send_command to the TV's remote entity (found on the same device, or set).
+const TV_KEYS = { // remote.send_command names per integration
+  apple_tv: { up: 'up', down: 'down', left: 'left', right: 'right', select: 'select', back: 'menu', home: 'home', menu: 'top_menu' },
+  roku: { up: 'up', down: 'down', left: 'left', right: 'right', select: 'select', back: 'back', home: 'home', menu: 'info' },
+  androidtv_remote: { up: 'DPAD_UP', down: 'DPAD_DOWN', left: 'DPAD_LEFT', right: 'DPAD_RIGHT', select: 'DPAD_CENTER', back: 'BACK', home: 'HOME', menu: 'MENU' },
+  androidtv: { up: 'UP', down: 'DOWN', left: 'LEFT', right: 'RIGHT', select: 'CENTER', back: 'BACK', home: 'HOME', menu: 'MENU' },
+  braviatv: { up: 'Up', down: 'Down', left: 'Left', right: 'Right', select: 'Confirm', back: 'Return', home: 'Home', menu: 'Options' } };
+const TV_OFF = ['off', 'standby', 'unavailable', 'unknown'];
+// no artwork: app icon + app colour (tinted placeholder and background glow)
+const TV_APPS = [[/youtube/i, 'mdi:youtube', '#ff2a3d'], [/netflix/i, 'mdi:netflix', '#e50914'], [/plex/i, 'mdi:plex', '#e5a00d'], [/spotify/i, 'mdi:spotify', '#1db954'],
+  [/twitch/i, 'mdi:twitch', '#9146ff'], [/prime|amazon/i, 'mdi:filmstrip-box', '#00a8e1'], [/disney/i, 'mdi:castle', '#2c5cff'], [/crave/i, 'mdi:movie-open', '#2f6bff'],
+  [/hulu/i, 'mdi:hulu', '#1ce783'], [/apple tv|^tv$/i, 'mdi:apple', '#8e8e93'], [/music/i, 'mdi:music', '#fa2d48'], [/hdmi|input|playstation|xbox|switch/i, 'mdi:video-input-hdmi', '#6e7bff']];
+const tvApp = n => { if (!n) return null; const m = TV_APPS.find(([re]) => re.test(n)); return m ? { icon: m[1], color: m[2] } : { icon: 'mdi:application-outline', color: '#7b6cf6' }; };
+const TV_CSS = `
+:host([tv]) .art{aspect-ratio:16/9;max-width:100%}
+:host([tv]) .ph ha-icon{--mdc-icon-size:calc(var(--s)*13)}
+:host([tv]) .ph{flex-direction:column;gap:calc(var(--s)*1.6)}
+:host([tv]) .ph .app{text-align:center;font-size:calc(var(--s)*3.4);font-weight:650;opacity:.9}
+:host([tv]) .ph.tint{color:#fff;background:radial-gradient(circle at 50% 42%,color-mix(in srgb,var(--tv-app) 55%,transparent) 0%,transparent 70%)}
+:host([tv]) .rb.on{background:rgba(196,182,255,.42);border-color:rgba(225,215,255,.5)}
+:host([tv][fs]) .w,:host([tv][fs]) .pop{--nph:min(var(--nph0),calc((100cqw - env(safe-area-inset-left,0px) - env(safe-area-inset-right,0px) - 24px) / 1.5));--npw:calc(var(--nph) * 1.5)}
+@container (max-aspect-ratio: 9/10){
+ :host([tv][fs]) .w,:host([tv][fs]) .pop{--npw:min(calc(100cqw - env(safe-area-inset-left,0px) - env(safe-area-inset-right,0px) - 32px),640px,calc(var(--npa) / 1.25));
+  --nph:min(var(--npa),calc(var(--npw) * 1.36))}
+ :host([tv][fs]) .art{width:100%;height:auto;aspect-ratio:16/9}
+}
+.lst .h{font-size:calc(var(--s)*2.6);font-weight:600;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.06em;padding:0 calc(var(--s)*1.4) calc(var(--s)*1.2)}
+.lst{max-height:min(60cqh,calc(var(--s)*80));overflow:auto}
+.lst button{width:100%;justify-content:flex-start;gap:calc(var(--s)*2.2);padding:calc(var(--s)*1.6) calc(var(--s)*1.4);border-radius:calc(var(--s)*2.2);text-align:left;font-size:calc(var(--s)*3.2);font-weight:600}
+.lst button:hover{background:rgba(255,255,255,.08)} .lst button.sel{background:rgba(255,255,255,.16)}
+.lst ha-icon{--mdc-icon-size:calc(var(--s)*4.6);flex:none} .lst .ck{opacity:0;margin-left:auto} .lst .sel .ck{opacity:1}
+.rem{display:flex;flex-direction:column;align-items:center;gap:calc(var(--s)*3);padding:calc(var(--s)*3.4) calc(var(--s)*3)}
+.pad{position:relative;width:calc(var(--s)*44);height:calc(var(--s)*44);border-radius:50%;background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.16);
+ display:grid;grid-template:1fr 1.25fr 1fr / 1fr 1.25fr 1fr}
+.pad button{border-radius:50%} .pad ha-icon{--mdc-icon-size:calc(var(--s)*7)}
+.pad .u{grid-area:1/2} .pad .l{grid-area:2/1} .pad .r{grid-area:2/3} .pad .d{grid-area:3/2}
+.pad .ok{grid-area:2/2;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.22);font-size:calc(var(--s)*3.4);font-weight:700;letter-spacing:.04em}
+.keys{display:flex;gap:calc(var(--s)*3)} .keys button{width:calc(var(--s)*12);height:calc(var(--s)*12)} .keys ha-icon{--mdc-icon-size:calc(var(--s)*5.4)}
+.rem .nm{font-size:calc(var(--s)*2.6);font-weight:600;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.06em}
+:host([fs]) .pop.rem,:host([fs]) .pop.lst{--s:clamp(4.4px,calc(var(--npw) / 100),6px)}`;
+class HVTvPlayerCard extends HVNowPlayingCard {
+  static get defaults() { return Object.assign({}, super.defaults, { show_remote: true, output_title: 'TVs', idle_title: 'Nothing playing' }); }
+  static getStubConfig(hass) { return { entity: Object.keys(hass.states).find(k => k.startsWith('media_player.') && /tv/.test(k)) || 'media_player.example' }; }
+  setConfig(c) { super.setConfig(c); this.setAttribute('tv', ''); }
+  _build() {
+    super._build();
+    const R = this.shadowRoot; R.querySelector('style').textContent += TV_CSS;
+    const app = this._$('[data-a="app"]'); app.style.display = 'none';
+    app.insertAdjacentHTML('beforebegin', '<button class="rb glass" data-a="power" aria-label="Power"><ha-icon icon="mdi:power"></ha-icon></button>');
+    this._$('[data-a="output"] ha-icon').icon = 'mdi:television';
+    this._$('.ph ha-icon').icon = 'mdi:television-play'; this._$('.ph').insertAdjacentHTML('beforeend', '<div class="app"></div>');
+    const ly = this._$('[data-a="lyrics"]'), qu = this._$('[data-a="queue"]'); ly.style.display = 'none'; qu.style.display = 'none';
+    ly.insertAdjacentHTML('beforebegin', '<button class="sm" data-a="remote" aria-label="Remote"><ha-icon icon="mdi:remote-tv"></ha-icon></button>');
+    qu.insertAdjacentHTML('afterend', '<button class="sm" data-a="source" aria-label="Apps and sources"><ha-icon icon="mdi:apps"></ha-icon></button>');
+    this._card.insertAdjacentHTML('beforeend', `<div class="pop lst src"></div><div class="pop rem"><div class="nm"></div>
+      <div class="pad"><button class="u" data-a="rk" data-k="up" aria-label="Up"><ha-icon icon="mdi:chevron-up"></ha-icon></button>
+      <button class="l" data-a="rk" data-k="left" aria-label="Left"><ha-icon icon="mdi:chevron-left"></ha-icon></button>
+      <button class="ok" data-a="rk" data-k="select" aria-label="Select">OK</button>
+      <button class="r" data-a="rk" data-k="right" aria-label="Right"><ha-icon icon="mdi:chevron-right"></ha-icon></button>
+      <button class="d" data-a="rk" data-k="down" aria-label="Down"><ha-icon icon="mdi:chevron-down"></ha-icon></button></div>
+      <div class="keys"><button class="glass" data-a="rk" data-k="back" aria-label="Back"><ha-icon icon="mdi:arrow-u-left-top"></ha-icon></button>
+      <button class="glass" data-a="rk" data-k="home" aria-label="Home"><ha-icon icon="mdi:home-outline"></ha-icon></button>
+      <button class="glass" data-a="rk" data-k="menu" aria-label="Menu"><ha-icon icon="mdi:menu"></ha-icon></button>
+      <button class="glass" data-a="play" aria-label="Play/Pause"><ha-icon icon="mdi:play-pause"></ha-icon></button></div></div>`);
+  }
+  _remote() { // the TV's remote entity: configured one for the main TV, else the remote.* on the same device
+    const c = this._config, h = this._hass, p = this._player(); if (!p) return null;
+    if (c.remote_entity && p.entity_id === c.entity) return c.remote_entity;
+    const E = h.entities || {}, me = E[p.entity_id];
+    if (me && me.device_id) { const r = Object.values(E).find(e => e.device_id === me.device_id && e.entity_id.startsWith('remote.')); if (r) return r.entity_id; }
+    const guess = 'remote.' + p.entity_id.split('.')[1]; return h.states[guess] ? guess : null;
+  }
+  _act(a, el) {
+    const p = this._player(), h = this._hass;
+    switch (a) {
+      case 'power': if (p) this._call(TV_OFF.includes(p.state) ? 'turn_on' : 'turn_off'); return;
+      case 'source': this._pop(this._open === 'src' ? null : 'src'); return;
+      case 'pick-src': this._call('select_source', { source: el.dataset.s }); this._pop(null); return;
+      case 'remote': this._pop(this._open === 'rem' ? null : 'rem'); return;
+      case 'rk': { const r = this._remote(); if (!r) return; const E = h.entities || {}, plat = (E[r] && E[r].platform) || (E[p && p.entity_id] || {}).platform;
+        const map = TV_KEYS[plat] || TV_KEYS.apple_tv; h.callService('remote', 'send_command', { entity_id: r, command: map[el.dataset.k] || el.dataset.k }); return; }
+    }
+    super._act(a, el);
+  }
+  _pop(w) {
+    this._open = w; const t = (s, on) => { const e = this._$(s); if (e) e.classList.toggle('open', on); };
+    t('.vol', w === 'vol'); t('.out', w === 'out'); t('.src', w === 'src'); t('.rem', w === 'rem');
+    if (w === 'out') this._paintOut(); if (w === 'src') this._paintSrc(); if (w === 'rem') this._paintRem();
+  }
+  _paintOut() { super._paintOut(); this.shadowRoot.querySelectorAll('.out button > ha-icon:first-child').forEach(i => i.icon = 'mdi:television'); }
+  _paintSrc() {
+    const p = this._player(), a = p ? p.attributes : {}, list = a.source_list || [], cur = a.source || a.app_name;
+    this._$('.src').innerHTML = `<div class="h">${esc(a.app_name || a.source ? 'Apps & sources' : 'Apps & sources')}</div>` + (list.length ? list.map(s =>
+      `<button data-a="pick-src" data-s="${esc(s)}" class="${s === cur ? 'sel' : ''}"><ha-icon icon="mdi:application-outline"></ha-icon><span>${esc(s)}</span><ha-icon class="ck" icon="mdi:check"></ha-icon></button>`).join('')
+      : `<div class="h" style="text-transform:none;letter-spacing:0">This TV doesn't list its apps</div>`);
+  }
+  _paintRem() { const p = this._player(); this._$('.rem .nm').textContent = p ? (p.attributes.friendly_name || p.entity_id) : ''; }
+  _render() {
+    super._render(); if (!this._built || !this._hass) return;
+    const c = this._config, p = this._player(), a = p ? p.attributes : {}, f = Number(a.supported_features) || 0;
+    const pw = this._$('[data-a="power"]'); pw.classList.toggle('on', !!p && !TV_OFF.includes(p.state)); pw.toggleAttribute('disabled', !p || p.state === 'unavailable' || !(f & (128 | 256)));
+    const rm = this._$('[data-a="remote"]'), hasR = c.show_remote !== false && !!this._remote(); rm.classList.toggle('ghost', !hasR);
+    const sb = this._$('[data-a="source"]'); sb.classList.toggle('ghost', !(a.source_list && a.source_list.length));
+    const appName = p && !TV_OFF.includes(p.state) ? (a.app_name || a.source || '') : '', st = tvApp(appName), ph = this._$('.ph');
+    this._$('.ph .app').textContent = appName; this._$('.ph ha-icon').icon = st ? st.icon : 'mdi:television-play';
+    ph.classList.toggle('tint', !!st); if (st) ph.style.setProperty('--tv-app', st.color); else ph.style.removeProperty('--tv-app');
+    // glow of the app colour behind everything while there is no artwork (artwork, when present, still drives the blurred background)
+    if (st) this.style.setProperty('--hv-np-bg', `radial-gradient(120% 85% at 50% 30%,color-mix(in srgb,${st.color} 38%,#232b36) 0%,#1f2631 62%,#161b23 100%)`);
+    else this.style.removeProperty('--hv-np-bg');
+    if (p && !a.media_title && (a.app_name || a.source) && !['playing', 'paused'].includes(p.state)) this._$('.ar').textContent = (a.app_name || a.source) + ' · ' + (a.friendly_name || '');
+    if (this._open === 'src') this._paintSrc(); if (this._open === 'rem') this._paintRem();
+    if (this._open === 'rem' && !hasR) this._pop(null);
+  }
+}
+HVTvPlayerCard.layoutSection = false;
+HVTvPlayerCard.editorDefaults = true;
+HVTvPlayerCard.schema = [
+  { name: 'entity', required: true, selector: { entity: { domain: 'media_player' } } },
+  { name: 'entities', selector: { entity: { domain: 'media_player', multiple: true } } },
+  { name: 'remote_entity', selector: { entity: { domain: 'remote' } } },
+  { type: 'grid', name: '', schema: [{ name: 'show_remote', selector: { boolean: {} } }, { name: 'art_background', selector: { boolean: {} } }] },
+  { type: 'grid', name: '', schema: [{ name: 'show_volume', selector: { boolean: {} } }, { name: 'show_progress', selector: { boolean: {} } }] },
+  { name: 'popup_style', selector: { select: { mode: 'dropdown', options: [{ value: 'window', label: 'Window' }, { value: 'fullscreen', label: 'Full screen' }] } } }];
+
+// the dashboard tile: looks like the Music tile; shows TV name, app · title (or state); tap = TV popup
+class HVTvCard extends HVMusicCard {
+  static get defaults() { return Object.assign({}, super.defaults, { show_remote: true, follow_playing: true }); }
+  static getStubConfig(hass) { return { entity: Object.keys(hass.states).find(k => k.startsWith('media_player.') && /tv/.test(k)) || 'media_player.example', name: 'TV' }; }
+  _player() {
+    const c = this._config, ids = [c.entity].concat(c.entities || []).filter(Boolean);
+    if (c.follow_playing === false) return this.stateObj;
+    return ids.map(e => this._hass.states[e]).find(s => s && s.state === 'playing') || this.stateObj;
+  }
+  view() {
+    const c = this._config, p = this._player(), a = p ? p.attributes : {}, on = p && ['playing', 'paused', 'buffering'].includes(p.state);
+    const app = a.app_name || a.source, title = a.media_title && a.media_title !== app && a.media_title !== 'TV' ? a.media_title : '';
+    let sec = on ? [app, title].filter(Boolean).join(' · ') || fmtState(this._hass, p) : fmtState(this._hass, p);
+    if (on && p.state === 'paused') sec = 'Paused · ' + sec;
+    if (c.show_state === false) sec = '';
+    const multi = (c.entities || []).length;
+    const name = c.name != null ? c.name : (p ? (multi ? (p.attributes.friendly_name || 'TV') : (p.attributes.friendly_name || 'TV')) : 'TV');
+    return { stateObj: p, icon: c.icon || 'mdi:television', name, secondary: p ? sec : 'Not found', active: !!p && p.state === 'playing', layout: c.layout };
+  }
+  nowPlayingData() {
+    const d = super.nowPlayingData(), c = this._config;
+    d.content.type = 'custom:homeview-tv-player-card';
+    if (c.remote_entity) d.content.remote_entity = c.remote_entity;
+    if (c.show_remote === false) d.content.show_remote = false;
+    delete d.content.show_extra; delete d.content.uppercase_title; d.content.uppercase_title = false;
+    return d;
+  }
+}
+HVTvCard.editorDefaults = true;
+HVTvCard.editorAlias = { tvs: 'entities' };
+HVTvCard.schema = [
+  { name: 'entity', required: true, selector: { entity: { domain: 'media_player' } } },
+  { name: 'tvs', selector: { entity: { domain: 'media_player', multiple: true } } },
+  { type: 'grid', name: '', schema: [{ name: 'name', selector: { text: {} } }, { name: 'icon', selector: { icon: {} } }] },
+  { name: 'remote_entity', selector: { entity: { domain: 'remote' } } },
+  { type: 'grid', name: '', schema: [{ name: 'show_remote', selector: { boolean: {} } }, { name: 'show_state', selector: { boolean: {} } }] },
+  { name: 'follow_playing', selector: { boolean: {} } },
+  { name: 'np_popup_style', selector: { select: { mode: 'dropdown', options: [{ value: 'fullscreen', label: 'Full screen' }, { value: 'window', label: 'Window' }] } } },
+  { type: 'grid', name: '', schema: [{ name: 'np_art_background', selector: { boolean: {} } }, { name: 'np_show_volume', selector: { boolean: {} } }] },
+  COLORS, ACTIONS(null, 'more-info')];
+Object.assign(LABELS, { follow_playing: 'Tile shows whichever TV is playing', tvs: 'TVs to switch between', remote_entity: 'Remote entity (optional)', show_remote: 'Remote / D-pad button', popup_style: 'Display mode', np_popup_style: 'Display mode' });
+Object.assign(HELPERS, { tvs: 'The Entity above is the default TV. The tile shows whichever is playing; the popup\'s TV button switches between them.',
+  remote_entity: 'For the D-pad (Apple TV, Roku, Android TV, Bravia). Empty = the remote on the same device as each TV, found automatically.' });
+
+/* ---------------- page grid (container) ---------------- */
+// NotHomeView Page Grid: its child cards flow, in order, into pages of R x C big tiles that fill the screen. Portrait and
+// landscape have their own rows x columns (default 3 x 3 / 3 x 4). Pages sit side by side in a native CSS scroll-snap
+// scroller (swipe with momentum; iOS Safari / companion app), with page dots. A tile's size comes from its Size
+// (grid_options: 3 columns x 2 rows = one tile, 6 x 4 = 2 x 2 tiles, "full" = whole row); a "NotHomeView Page Break" card starts a new page.
+const GRID_SHAPES = { fill: 0, tall: 1.6, balanced: 1.4, square: 1.05 };
+const gridSpan = (cfg, C, R) => { const g = cfg.grid_options || {};
+  const cs = g.columns === 'full' ? C : Math.max(1, Math.min(C, Math.round((Number(g.columns) || 3) / 3)));
+  const rs = Math.max(1, Math.min(R, Math.round((typeof g.rows === 'number' ? g.rows : 2) / 2))); return [cs, rs]; };
+function gridPack(items, C, R, dense = true) { // first fit in order; dense: a tile that fits a hole on an earlier page goes there
+  const pages = [], occs = []; let minPage = 0;           // (no back-filling across a Page Break)
+  const newPage = () => { occs.push(Array.from({ length: R }, () => Array(C).fill(false))); pages.push([]); };
+  newPage();
+  for (const it of items) {
+    if (it.brk) { if (pages[pages.length - 1].length) newPage(); minPage = pages.length - 1; continue; }
+    const [cs, rs] = it.span; let spot = null, pi = -1;
+    const fits = (occ, r, c) => { if (r + rs > R || c + cs > C) return false; for (let i = r; i < r + rs; i++) for (let j = c; j < c + cs; j++) if (occ[i][j]) return false; return true; };
+    const tryPage = k => { for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) if (fits(occs[k], r, c)) { spot = [r, c]; pi = k; return true; } return false; };
+    for (let k = dense ? minPage : pages.length - 1; k < pages.length && !spot; k++) tryPage(k);
+    if (!spot) { if (pages[pages.length - 1].length) newPage(); tryPage(pages.length - 1); }
+    if (!spot) continue;
+    for (let i = spot[0]; i < spot[0] + rs; i++) for (let j = spot[1]; j < spot[1] + cs; j++) occs[pi][i][j] = true;
+    pages[pi].push({ it, r: spot[0], c: spot[1], cs, rs });
+    if (pages.length > 30) break;
+  }
+  if (pages.length > 1 && !pages[pages.length - 1].length) pages.pop();
+  return pages;
+}
+class HVGridCard extends HTMLElement {
+  constructor() { super(); this.attachShadow({ mode: 'open' }); this._page = 0; }
+  static get defaults() { return { theme: 'inherit', portrait_rows: 3, portrait_columns: 3, landscape_rows: 3, landscape_columns: 4, portrait_shape: 'balanced', gap: 12, show_dots: true, fill_height: true, auto_rows: false, full_bleed: true, dense: true, edge_sidebar: true, swipe_back: false, swipe_back_path: '', block_pull_refresh: true }; }
+  static getStubConfig() { return { cards: [{ type: 'clock', clock_style: 'analog', grid_options: { columns: 3, rows: 2 } }, { type: 'custom:homeview-nav-card', name: 'Home', icon: 'mdi:home-outline', navigation_path: '/lovelace/0' }] }; }
+  static getConfigElement() { return document.createElement('homeview-grid-card-editor'); }
+  setConfig(c) {
+    if (!c || !Array.isArray(c.cards)) throw new Error('Add some cards (cards: [...])');
+    const old = this._config; this._config = Object.assign({}, HVGridCard.defaults, c);
+    if (!old || JSON.stringify(old.cards) !== JSON.stringify(c.cards)) this._makeChildren(); else this._layout(true);
+  }
+  set hass(h) { this._hass = h; (this._kids || []).forEach(k => { if (k.el) k.el.hass = h; }); }
+  get hass() { return this._hass; }
+  set editMode(v) { this._edit = v; (this._kids || []).forEach(k => { if (k.el) k.el.editMode = v; }); }
+  getCardSize() { return 12; }
+  getGridOptions() { return { columns: 'full', rows: 'auto', min_columns: 12 }; }
+  connectedCallback() {
+    if (!this._bound) { this._bound = () => this._layout(); }
+    addEventListener('resize', this._bound); addEventListener('hv-layout', this._bound); addEventListener('orientationchange', this._bound); if (window.visualViewport) visualViewport.addEventListener('resize', this._bound);
+    if (window.ResizeObserver && !this._ro) { this._ro = new ResizeObserver(() => this._layout()); this._ro.observe(this); }
+    this._edgeBind(true); this._backBind(true);
+    requestAnimationFrame(() => this._layout(true)); setTimeout(() => this._layout(true), 600); setTimeout(() => this._layout(), 1700); // 1700: after the edit buttons appear
+  }
+  // Edge swipe: a touch that starts in the left ~24 px and moves right opens Home Assistant's sidebar drawer (narrow screens,
+  // where the sidebar is a drawer) instead of moving the page scroller. Mid-screen swipes keep paging the grid.
+  _edgeBind(on) {
+    if (!this._edgeH) { let st = null;
+      const ts = e => { st = null; const c = this._config || {}; if (c.edge_sidebar === false || this._edit || !this.isConnected || e.touches.length !== 1) return;
+        const t = e.touches[0]; if (t.clientX <= 24 + this._px('env(safe-area-inset-left, 0px)')) st = { x: t.clientX, y: t.clientY, done: false }; };
+      const tm = e => { if (!st) return; const t = e.touches[0], dx = t.clientX - st.x, dy = t.clientY - st.y;
+        if (e.cancelable) e.preventDefault(); // hold the page scroller still during the edge gesture
+        if (!st.done && dx > 36 && Math.abs(dy) < dx) { st.done = true; this._openSidebar(); }
+        else if (!st.done && Math.abs(dy) > 60) st = null; };
+      const te = () => { st = null; };
+      this._edgeH = [['touchstart', ts, { capture: true, passive: true }], ['touchmove', tm, { capture: true, passive: false }], ['touchend', te, true], ['touchcancel', te, true]]; }
+    for (const [t, f, o] of this._edgeH) on ? addEventListener(t, f, o) : removeEventListener(t, f, o);
+  }
+  _drawer() { try { return document.querySelector('home-assistant').shadowRoot.querySelector('home-assistant-main').shadowRoot.querySelector('ha-drawer'); } catch (e) { return null; } }
+  _openSidebar() {
+    if (innerWidth >= 870) return; // wide screens: HA docks the sidebar (a saved preference) - leave that alone
+    const d = this._drawer(); if (d && d.open) return;
+    this.dispatchEvent(new CustomEvent('hass-toggle-menu', { bubbles: true, composed: true, detail: { open: true } }));
+  }
+  // Swipe down from the top (option): back to the launch page. The whole page follows the finger; a grab pill shows it's possible.
+  _backPath() { const c = this._config || {}; return c.swipe_back_path || `/${ssDash() || 'lovelace'}/main`; }
+  _backBind(on) {
+    if (!this._back) this._back = hvPullDown({ ok: (t) => { const c = this._config || {}; if (!c.swipe_back || this._edit || !this.isConnected || scrollY > 2) return false;
+        if (location.pathname.replace(/\/$/, '') === this._backPath().replace(/\?.*$/, '').replace(/\/$/, '')) return false;
+        return t.clientY <= this._px('var(--hv-safe-top, env(safe-area-inset-top, 0px))') + 96; },
+      target: hvHaRoot, done: () => hvNavigate(this._backPath()) });
+    if (!!on !== !!this._backOn) this._back.bind(!!on); this._backOn = !!on;
+    const c = this._config || {}; hvPTR.set(this, !!on && !!c.swipe_back && c.block_pull_refresh !== false);
+  }
+  disconnectedCallback() { this._edgeBind(false); this._backBind(false); removeEventListener('resize', this._bound); removeEventListener('hv-layout', this._bound); removeEventListener('orientationchange', this._bound); if (window.visualViewport) visualViewport.removeEventListener('resize', this._bound); }
+  _shell() {
+    if (this._sc) return;
+    this.shadowRoot.innerHTML = `<style>
+:host{display:block;width:100%;-webkit-tap-highlight-color:transparent}
+.sc{display:flex;box-sizing:border-box;width:calc(100% + var(--bl,0px) + var(--br,0px));margin-left:calc(-1 * var(--bl,0px));overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch;scrollbar-width:none;touch-action:pan-x pan-y;scroll-behavior:auto}
+.sc::-webkit-scrollbar{display:none}
+.pg{flex:0 0 100%;width:100%;box-sizing:border-box;padding:0 var(--pr,0px) 0 var(--pl,0px);scroll-snap-align:start;scroll-snap-stop:always;display:grid;justify-content:center;align-content:center;height:var(--ph,auto);
+ grid-template-columns:repeat(var(--c),var(--cw));grid-template-rows:repeat(var(--r),var(--ch));gap:var(--g)}
+.cell{position:relative;min-width:0;min-height:0;display:flex}
+.cell > *{flex:1;min-width:0;min-height:0;height:100%;width:100%;display:block}
+.dots{display:flex;justify-content:center;gap:8px;height:22px;align-items:center;margin-top:6px}
+.dots button{all:unset;cursor:pointer;width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.38);box-shadow:0 1px 3px rgba(0,0,30,.25);transition:all .25s ease}
+.dots button.on{width:22px;border-radius:4px;background:rgba(255,255,255,.95)}
+.dots.hide{display:none}
+:host([hv-day]) .dots button{background:rgba(60,60,67,.22);box-shadow:none} :host([hv-day]) .dots button.on{background:rgba(60,60,67,.62)}
+.pill{position:fixed;left:50%;top:calc(var(--hv-safe-top, env(safe-area-inset-top, 0px)) + 5px);width:38px;height:5px;margin-left:-19px;border-radius:3px;background:rgba(255,255,255,.55);box-shadow:0 1px 4px rgba(0,0,30,.25);pointer-events:none;z-index:3}
+.pill[hidden]{display:none}
+.empty{padding:24px;text-align:center;color:var(--primary-text-color);opacity:.7}
+</style><div class="sc"></div><div class="dots"></div><div class="pill" hidden></div>`;
+    this._sc = this.shadowRoot.querySelector('.sc'); this._dots = this.shadowRoot.querySelector('.dots');
+    this._sc.addEventListener('scroll', () => { cancelAnimationFrame(this._raf); this._raf = requestAnimationFrame(() => {
+      const w = this._sc.clientWidth || 1, i = Math.round(this._sc.scrollLeft / w); if (i !== this._page) { this._page = i; this._paintDots(); } }); }, { passive: true });
+    // Snap safety net: native CSS snap does the paging (iOS/Android momentum); if a WebView leaves the scroller between pages
+    // (no snap applied), settle on the nearest page once the finger is up and scrolling has stopped, biased to the swipe direction.
+    const sc = this._sc; let down = false, from = 0, idle;
+    const settle = () => { if (down) return; const w = sc.clientWidth || 1, x = sc.scrollLeft, d = x - from * w;
+      if (Math.abs(x - Math.round(x / w) * w) < 2) { from = Math.round(x / w); return; }
+      let t = Math.abs(d) > w * 0.18 ? from + Math.sign(d) * Math.max(1, Math.round(Math.abs(d) / w)) : from;
+      t = Math.max(0, Math.min((this._nPages || 1) - 1, t)); from = t; sc.scrollTo({ left: t * w, behavior: 'smooth' }); };
+    sc.addEventListener('touchstart', () => { down = this._down = true; from = Math.round(sc.scrollLeft / (sc.clientWidth || 1)); }, { passive: true });
+    const up = () => { down = this._down = false; clearTimeout(idle); idle = setTimeout(settle, 160); };
+    sc.addEventListener('touchend', up, { passive: true }); sc.addEventListener('touchcancel', up, { passive: true });
+    sc.addEventListener('scroll', () => { clearTimeout(idle); idle = setTimeout(settle, 160); }, { passive: true });
+    this._dots.addEventListener('click', e => { const b = e.composedPath().find(n => n.dataset && n.dataset.i != null); if (!b) return;
+      this._sc.scrollTo({ left: Number(b.dataset.i) * this._sc.clientWidth, behavior: 'smooth' }); });
+  }
+  async _makeChildren() {
+    this._shell(); const tok = this._tok = (this._tok || 0) + 1;
+    const helpers = window.loadCardHelpers ? await window.loadCardHelpers() : null; if (tok !== this._tok) return;
+    const kids = (this._config.cards || []).map((cfg, i) => {
+      if (!cfg || cfg.type === 'custom:homeview-page-break') return { cfg, brk: true };
+      let el; try { el = helpers ? helpers.createCardElement(cfg) : document.createElement('div'); } catch (e) { el = document.createElement('div'); el.textContent = String(e); }
+      if (this._hass) el.hass = this._hass; if (this._edit != null) el.editMode = this._edit;
+      const cell = document.createElement('div'); cell.className = 'cell'; cell.appendChild(el);
+      if (el.tagName && el.tagName.startsWith('HOMEVIEW-')) el.setAttribute('floor', '');
+      const k = { cfg, el, cell };
+      el.addEventListener('ll-rebuild', ev => { ev.stopPropagation(); try { const n = helpers.createCardElement(cfg); n.hass = this._hass; if (n.tagName.startsWith('HOMEVIEW-')) n.setAttribute('floor', ''); cell.replaceChild(n, k.el); k.el = n; } catch (x) {} });
+      return k;
+    });
+    this._kids = kids; this._packSig = null; this._layout(true);
+  }
+  _px(css) { let p = this._probe; if (!p || !p.isConnected) { p = this._probe = document.createElement('div'); p.style.cssText = 'position:absolute;visibility:hidden;width:0;pointer-events:none'; this.shadowRoot.appendChild(p); }
+    p.style.height = css; return p.getBoundingClientRect().height; }
+  _layout(force) {
+    if (!this._sc || !this._kids || !this.isConnected) return;
+    const c = this._config, fr = this._hvFrame ? this._hvFrame() : null, r0 = this.getBoundingClientRect(), W = r0.width; if (!W) return;
+    // inside a slide-up sheet (launch page): measure against the sheet, not the screen (transform-proof: relative to the sheet)
+    const rect = fr ? { top: r0.top - fr.y, left: r0.left - fr.x, right: r0.right - fr.x, width: W } : r0;
+    const vw = fr ? fr.w : document.documentElement.clientWidth || innerWidth, vh = fr ? fr.h : innerHeight;
+    const portrait = vh >= vw;
+    const g = Math.max(0, Number(c.gap) || 0);
+    // Full-bleed pages: the scroller spans the whole screen width and every page carries its own side padding (= the
+    // dashboard's side margin, at least the tile gap), so mid-swipe two pages are separated by a clear gutter and nothing
+    // is clipped at the screen edge. Not in edit mode or in the card-editor preview (card far from the screen edges).
+    const L = rect.left, Rm = vw - rect.right;
+    const bleed = !this._edit && c.full_bleed !== false && L >= 0 && Rm >= 0 && L <= 48 && Rm <= 48;
+    const pl = bleed ? Math.max(L, g) : 0, pr = bleed ? Math.max(Rm, g) : 0;
+    const C = Math.max(1, Number(portrait ? c.portrait_columns : c.landscape_columns) || (portrait ? 3 : 4));
+    const cw = Math.floor(((bleed ? vw - pl - pr : W) - (C - 1) * g) / C);
+    const dotsH = c.show_dots === false ? 0 : 28;
+    const safeTop = fr ? 0 : this._px('var(--hv-safe-top, env(safe-area-inset-top, 0px))');
+    const bottom = this._px('var(--hv-safe-bottom, env(safe-area-inset-bottom, 0px))') + 10;
+    // portrait: start below the status bar and the floating edit / screensaver buttons (they sit over the top-right tile otherwise)
+    let top = rect.top;
+    if (portrait) { top = Math.max(top, safeTop + 6);
+      if (!fr) for (const f of document.querySelectorAll('homeview-edit-fab')) { const fb = f.getBoundingClientRect(); if (fb.height && fb.top < vh / 3) top = Math.max(top, fb.bottom + 8); } }
+    const padTop = Math.max(0, Math.round(top - rect.top));
+    const avail = vh - top - bottom - dotsH;
+    let R = Math.max(1, Number(portrait ? c.portrait_rows : c.landscape_rows) || 3);
+    const autoRows = portrait && c.auto_rows === true && c.fill_height !== false;
+    if (autoRows) { let best = 1e9; // the row count whose tiles come out closest to square (a touch taller than wide, like the landscape tiles)
+      for (let r = 2; r <= 8; r++) { const h = (avail - (r - 1) * g) / r; if (h < 70) break; const d = Math.abs(Math.log(h / cw / 1.1)); if (d < best) { best = d; R = r; } } }
+    let ch = Math.floor((avail - (R - 1) * g) / R);
+    const ratio = portrait && !autoRows ? (GRID_SHAPES[c.portrait_shape] ?? GRID_SHAPES.balanced) : 0;
+    if (c.fill_height === false || ch < 60) ch = Math.max(ch, Math.round(cw * (ratio || 1)));
+    if (ratio) ch = Math.min(ch, Math.round(cw * ratio));
+    ch = Math.max(60, ch);
+    // portrait: centre the grid vertically when the shape caps the tile height
+    this._sc.style.setProperty('--ph', (c.fill_height !== false && avail > R * ch + (R - 1) * g + 1) ? Math.floor(avail) + 'px' : 'auto');
+    this.style.paddingTop = padTop ? padTop + 'px' : '';
+    const S0 = this._sc.style; S0.setProperty('--bl', (bleed ? L : 0) + 'px'); S0.setProperty('--br', (bleed ? Rm : 0) + 'px');
+    S0.setProperty('--pl', pl + 'px'); S0.setProperty('--pr', pr + 'px');
+    const items = this._kids.map(k => k.brk ? { brk: true } : { k, span: gridSpan(k.cfg, C, R) });
+    const pages = gridPack(items, C, R, c.dense !== false);
+    const sig = `${C}x${R}|` + pages.map(p => p.map(x => `${this._kids.indexOf(x.it.k)}@${x.r},${x.c}`).join(';')).join('/');
+    const S = this._sc.style; S.setProperty('--c', C); S.setProperty('--r', R); S.setProperty('--cw', cw + 'px'); S.setProperty('--ch', ch + 'px'); S.setProperty('--g', g + 'px');
+    if (sig !== this._packSig || force) {
+      const keepPage = this._page || 0; this._packSig = sig;
+      const frag = document.createDocumentFragment();
+      pages.forEach(p => { const pg = document.createElement('div'); pg.className = 'pg';
+        p.forEach(x => { const cell = x.it.k.cell; cell.style.gridArea = `${x.r + 1} / ${x.c + 1} / span ${x.rs} / span ${x.cs}`; pg.appendChild(cell); }); frag.appendChild(pg); });
+      this._sc.replaceChildren(frag); if (!this._kids.some(k => !k.brk)) this._sc.innerHTML = '<div class="empty">Add cards in the editor</div>';
+      this._nPages = pages.length; this._page = Math.min(keepPage, pages.length - 1);
+    }
+    requestAnimationFrame(() => { const w = this._sc.clientWidth, x = (this._page || 0) * w; // keep the current page exactly in place after a resize
+      if (!this._down && Math.abs(this._sc.scrollLeft - x) > 1) this._sc.scrollLeft = x; });
+    this._dots.classList.toggle('hide', c.show_dots === false || (this._nPages || 1) < 2); this._paintDots();
+    if (this._backOn) hvPTR.set(this, !!c.swipe_back && c.block_pull_refresh !== false);
+    const pill = this.shadowRoot.querySelector('.pill'); if (pill) pill.hidden = !c.swipe_back || !!this._edit || !bleed;
+  }
+  _paintDots() { const n = this._nPages || 1; if (this._dots.children.length !== n) this._dots.innerHTML = Array.from({ length: n }, (_, i) => `<button data-i="${i}" aria-label="Page ${i + 1}"></button>`).join('');
+    [...this._dots.children].forEach((b, i) => b.classList.toggle('on', i === this._page)); }
+}
+class HVPageBreakCard extends HTMLElement {
+  setConfig(c) { this._config = c; this.style.display = 'block'; this.innerHTML = '<div style="padding:10px;text-align:center;border:1px dashed rgba(255,255,255,.4);border-radius:12px;font:600 12px sans-serif;opacity:.7">— new page —</div>'; }
+  set hass(h) {} getCardSize() { return 1; } getGridOptions() { return { columns: 'full', rows: 1 }; }
+  static getStubConfig() { return {}; }
+}
+const HV_THEME_OPTS = [{ value: 'night', label: 'Night (dark glass, default)' }, { value: 'day', label: 'Day (white)' }, { value: 'auto', label: 'Auto (follow sun)' }];
+const GRID_SCHEMA = [
+  { name: 'theme', selector: { select: { mode: 'dropdown', options: [{ value: 'inherit', label: 'Same as all device pages (default)' }].concat(HV_THEME_OPTS.map(o => o.value === 'night' ? { value: 'night', label: 'Night (dark glass)' } : o)) } } },
+  { type: 'grid', name: '', schema: [{ name: 'portrait_rows', selector: { number: { min: 1, max: 6, mode: 'box' } } }, { name: 'portrait_columns', selector: { number: { min: 1, max: 6, mode: 'box' } } }] },
+  { type: 'grid', name: '', schema: [{ name: 'landscape_rows', selector: { number: { min: 1, max: 6, mode: 'box' } } }, { name: 'landscape_columns', selector: { number: { min: 1, max: 8, mode: 'box' } } }] },
+  { type: 'grid', name: '', schema: [{ name: 'portrait_shape', selector: { select: { mode: 'dropdown', options: [{ value: 'balanced', label: 'Balanced (a bit taller than wide)' },
+    { value: 'square', label: 'Square-ish' }, { value: 'tall', label: 'Tall' }, { value: 'fill', label: 'Fill the whole screen height' }] } } }, { name: 'gap', selector: { number: { min: 0, max: 40, mode: 'box', unit_of_measurement: 'px' } } }] },
+  { type: 'grid', name: '', schema: [{ name: 'show_dots', selector: { boolean: {} } }, { name: 'fill_height', selector: { boolean: {} } }] },
+  { type: 'grid', name: '', schema: [{ name: 'auto_rows', selector: { boolean: {} } }, { name: 'full_bleed', selector: { boolean: {} } }] },
+  { type: 'grid', name: '', schema: [{ name: 'dense', selector: { boolean: {} } }, { name: 'edge_sidebar', selector: { boolean: {} } }] },
+  { type: 'grid', name: '', schema: [{ name: 'swipe_back', selector: { boolean: {} } }, { name: 'swipe_back_path', selector: { navigation: {} } }] },
+  { name: 'block_pull_refresh', selector: { boolean: {} } }];
+Object.assign(LABELS, { portrait_rows: 'Portrait: rows per page', portrait_columns: 'Portrait: columns', landscape_rows: 'Landscape: rows per page', landscape_columns: 'Landscape: columns',
+  portrait_shape: 'Portrait tile shape', gap: 'Gap between tiles', show_dots: 'Page dots', fill_height: 'Size tiles to the screen height',
+  auto_rows: 'Portrait: auto rows (fill the screen with near-square tiles)', full_bleed: 'Edge-to-edge pages (gutter between pages)', dense: 'Fill gaps with later tiles', edge_sidebar: 'Edge swipe opens sidebar (from the left edge, phones)', swipe_back: 'Swipe down from the top to go back', swipe_back_path: 'Swipe down goes to (empty = /<dashboard>/main)', block_pull_refresh: 'Block pull-to-refresh (with swipe down to go back)' });
+class HVGridEditor extends HTMLElement {
+  setConfig(c) { this._config = c; this._render(); }
+  set hass(h) { this._hass = h; this._render(); }
+  set lovelace(l) { this._lovelace = l; if (this._stack) this._stack.lovelace = l; }
+  _emit(cfg) { this._config = cfg; fire(this, 'config-changed', { config: cfg }); }
+  async _render() {
+    if (!this._hass || !this._config) return;
+    if (!this._form && !this._building) {
+      this._building = true;
+      const f = this._form = document.createElement('ha-form');
+      f.computeLabel = s => LABELS[s.name] || s.name; f.computeHelper = s => s.name === 'theme' ? 'The look of this device page: its tiles, popups and page background. "Same as all device pages" uses the Device pages theme set on the Home Screen card (Night when there is none).' : s.name === 'portrait_shape' ? 'Tiles fill the width; their height follows this shape and the screen height.' : s.name === 'auto_rows' ? 'Picks the portrait row count for you (overrides rows and shape in portrait).' : undefined;
+      f.addEventListener('value-changed', ev => { ev.stopPropagation(); const v = Object.assign({}, ev.detail.value), cfg = Object.assign({}, this._config);
+        for (const k of Object.keys(HVGridCard.defaults)) { if (v[k] === undefined || v[k] === '' || v[k] === HVGridCard.defaults[k]) delete cfg[k]; else cfg[k] = v[k]; }
+        this._emit(cfg); });
+      const hd = document.createElement('div');
+      hd.innerHTML = '<p style="margin:18px 0 6px;font-weight:600">Tiles</p><p style="margin:0 0 8px;opacity:.75;font-size:.9em">Tiles fill the pages in this order (left/right arrows move them). Each tile\'s Size sets how many cells it covers. Add a "NotHomeView Page Break" card to start a new page.</p>';
+      f.hass = this._hass; f.schema = GRID_SCHEMA; f.data = Object.assign({}, HVGridCard.defaults, this._config); // schema before connect: ha-form can't render without one
+      this.append(f, hd);
+      try {
+        const helpers = await window.loadCardHelpers(); helpers.createCardElement({ type: 'vertical-stack', cards: [] });
+        await customElements.whenDefined('hui-vertical-stack-card');
+        const st = this._stack = await customElements.get('hui-vertical-stack-card').getConfigElement();
+        st.addEventListener('config-changed', ev => { ev.stopPropagation(); const cards = (ev.detail.config && ev.detail.config.cards) || []; this._lastCards = JSON.stringify(cards); this._emit(Object.assign({}, this._config, { cards })); });
+        this.append(st);
+        // the stack editor's own "Title" field has no meaning here (only the card list is kept), so hide it
+        const hideTitle = () => { const r = st.shadowRoot; if (!r) return; for (const x of r.querySelectorAll('ha-form, ha-textfield')) {
+          const sc = x.schema; if ((sc && sc.length === 1 && sc[0].name === 'title') || (x.tagName === 'HA-TEXTFIELD' && /title/i.test(x.label || ''))) x.style.display = 'none'; } };
+        Promise.resolve(st.updateComplete).then(hideTitle); setTimeout(hideTitle, 400);
+      } catch (e) { hd.insertAdjacentHTML('beforeend', '<p>Card list editor unavailable: ' + esc(e) + '</p>'); }
+      this._building = false;
+    }
+    if (!this._form) return;
+    this._form.hass = this._hass; this._form.schema = GRID_SCHEMA; this._form.data = Object.assign({}, HVGridCard.defaults, this._config);
+    if (this._stack) { this._stack.hass = this._hass; if (this._lovelace) this._stack.lovelace = this._lovelace;
+      const cs = JSON.stringify(this._config.cards || []); if (cs !== this._lastCards) { this._lastCards = cs; this._stack.setConfig({ type: 'vertical-stack', cards: this._config.cards || [] }); } }
+  }
+}
+if (!customElements.get('homeview-grid-card-editor')) customElements.define('homeview-grid-card-editor', HVGridEditor);
+
+/* ---------------- chips row ---------------- */
+// NotHomeView Chips: a horizontally scrollable row of glass pills. Each chip = an entity (light / switch / group: on-off with the
+// lavender "on" highlight, tap toggles; climate: current temperature; anything else: its state) or just a navigation target.
+// Tap / hold actions per chip, "Light style while the sun is up" like the tiles. Avoids the floating edit / screensaver buttons.
+const CHIP_TOGGLE = ['light', 'switch', 'fan', 'input_boolean', 'group', 'automation', 'siren'];
+const CHIP_CSS = `:host{display:block;-webkit-tap-highlight-color:transparent;font-family:${FONT}}
+${(BASE_CSS.match(/:host\(\[day\]\)\{[\s\S]*?\}/) || [''])[0]}
+.row{display:flex;gap:var(--chip-gap,8px);overflow-x:auto;overflow-y:hidden;overscroll-behavior-x:contain;scrollbar-width:none;-webkit-overflow-scrolling:touch;
+ padding:3px 2px 6px;touch-action:pan-x;mask-image:linear-gradient(90deg,#000 calc(100% - 18px),transparent);-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 18px),transparent)}
+.row::-webkit-scrollbar{display:none}
+.chip{all:unset;box-sizing:border-box;flex:none;display:inline-flex;align-items:center;gap:.5em;height:var(--chip-h,clamp(38px,5.4vw,50px));padding:0 1.05em 0 .8em;border-radius:999px;cursor:pointer;
+ font-size:var(--chip-font,clamp(13px,1.95vw,17px));font-weight:600;line-height:1;white-space:nowrap;color:var(--hv-text,#fff);
+ background:var(--hv-bg,linear-gradient(150deg,rgba(255,255,255,.15) 0%,rgba(255,255,255,.07) 100%));border:1px solid var(--hv-border,rgba(255,255,255,.25));
+ box-shadow:var(--hv-shadow,inset 0 1px 0 rgba(255,255,255,.25),0 6px 18px rgba(6,8,60,.22));
+ backdrop-filter:blur(20px) saturate(170%);-webkit-backdrop-filter:blur(20px) saturate(170%);
+ transition:background .25s ease,border-color .25s ease,transform .12s ease;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.chip:active{transform:scale(.96)}
+.chip:focus-visible{outline:2px solid var(--hv-accent,#d4c9ff)}
+.chip.on{background:var(--hv-bg-on,linear-gradient(150deg,rgba(196,182,255,.46) 0%,rgba(160,140,250,.34) 100%));border-color:var(--hv-border-on,rgba(225,215,255,.42));color:var(--hv-text-on,#fff)}
+.chip ha-state-icon,.chip ha-icon{--mdc-icon-size:1.3em;width:1.3em;height:1.3em;display:flex;color:var(--hv-icon,#fff);flex:none}
+.chip.on ha-state-icon,.chip.on ha-icon{color:var(--hv-icon-on,#f3efff)}
+.chip .v{font-weight:500;color:var(--hv-text2,rgba(255,255,255,.7))} .chip.on .v{color:var(--hv-text2-on,rgba(255,255,255,.85))}
+.chip.unavailable{opacity:.5}
+.empty{opacity:.7;padding:8px;color:var(--primary-text-color)}
+${HV_DAY_HOST}`;
+class HVChipsCard extends HTMLElement {
+  constructor() { super(); this.attachShadow({ mode: 'open' }); }
+  static get defaults() { return { chips: [], day_light: false, show_state: true }; }
+  static getStubConfig() { return { chips: [{ entity: 'sun.sun' }, { name: 'Home', icon: 'mdi:home-outline', tap_action: { action: 'navigate', navigation_path: '/lovelace/0' } }] }; }
+  static getConfigElement() { return document.createElement('homeview-chips-card-editor'); }
+  setConfig(c) { if (!c || (c.chips != null && !Array.isArray(c.chips))) throw new Error('chips must be a list');
+    this._config = Object.assign({}, HVChipsCard.defaults, c, { chips: (c.chips || []).filter(x => x && typeof x === 'object') }); this._sig = null; this._render(); }
+  set hass(h) { this._hass = h; this._render(); }
+  get hass() { return this._hass; }
+  getCardSize() { return 1; }
+  getGridOptions() { return { columns: 'full', rows: 'auto' }; }
+  connectedCallback() { if (!this._rz) { this._rz = () => this._avoidFab(); } addEventListener('resize', this._rz); this._rz(); setTimeout(this._rz, 1800); }
+  disconnectedCallback() { removeEventListener('resize', this._rz); this._closePicker(); }
+  _view(ch) {
+    const h = this._hass, s = ch.entity ? h.states[ch.entity] : null, d = ch.entity ? domainOf(ch.entity) : '';
+    const name = ch.name != null && ch.name !== '' ? ch.name : (s ? (s.attributes.friendly_name || ch.entity) : (ch.entity || ''));
+    let val = '', on = false;
+    if (s) {
+      if (CHIP_TOGGLE.includes(d)) { on = s.state === 'on'; val = on ? (d === 'light' && s.attributes.brightness != null && !(s.attributes.entity_id && s.attributes.entity_id.length) ? Math.round(s.attributes.brightness / 2.55) + '%' : 'On') : (s.state === 'off' ? 'Off' : (h.formatEntityState ? h.formatEntityState(s) : s.state)); }
+      else if (d === 'climate') { const t = s.attributes.current_temperature; val = t != null ? (Math.round(t * 10) / 10) + '°' : (h.formatEntityState ? h.formatEntityState(s) : s.state); on = s.attributes.hvac_action === 'heating' || s.attributes.hvac_action === 'cooling'; }
+      else { val = h.formatEntityState ? h.formatEntityState(s) : s.state; on = ['on', 'open', 'opening', 'home', 'playing', 'unlocked'].includes(s.state); }
+    }
+    if (ch.show_state === false || this._config.show_state === false && ch.show_state !== true) val = '';
+    return { s, d, name, val, on: on && ch.highlight !== false, unavailable: !!(s && s.state === 'unavailable') };
+  }
+  _action(ch, kind) {
+    const a = ch[kind + '_action']; if (a) return a;
+    const d = ch.entity ? domainOf(ch.entity) : '';
+    if (kind === 'tap') return ch.entity ? (CHIP_TOGGLE.includes(d) ? { action: 'toggle' } : { action: 'more-info' }) : { action: 'none' };
+    return ch.entity ? { action: 'more-info' } : { action: 'none' };
+  }
+  _run(i, kind) { const ch = this._config.chips[i]; if (!ch) return;
+    if (kind === 'tap' && ch.room_picker) { this._openPicker(ch); return; }
+    const cfg = this._action(ch, kind); if (!cfg || cfg.action === 'none') return;
+    if (navigator.vibrate && kind === 'hold') try { navigator.vibrate(30); } catch (e) {}
+    fire(this, 'hass-action', { config: { entity: ch.entity, [kind + '_action']: cfg }, action: kind }); }
+  _render() {
+    if (!this._config || !this._hass) return;
+    const c = this._config, sun = this._hass.states['sun.sun'];
+    this.toggleAttribute('day', !!(c.day_light && sun && sun.state === 'above_horizon'));
+    const views = c.chips.map(ch => this._view(ch));
+    const sig = JSON.stringify([views.map(v => [v.name, v.val, v.on, v.unavailable, v.s && v.s.attributes.icon]), c.chips.map(x => x.icon || ''), this._hass.locale && this._hass.locale.language]);
+    if (sig === this._sig && this._row) return; this._sig = sig;
+    if (!this._row) { this.shadowRoot.innerHTML = `<style>${CHIP_CSS}</style><div class="row" role="toolbar"></div>`; this._row = this.shadowRoot.querySelector('.row'); this._bind(); }
+    this._row.innerHTML = c.chips.length ? '' : '<div class="empty">Add chips in the editor</div>';
+    views.forEach((v, i) => { const ch = c.chips[i], b = document.createElement('button');
+      b.className = 'chip' + (v.on ? ' on' : '') + (v.unavailable ? ' unavailable' : ''); b.dataset.i = i; b.setAttribute('aria-label', [v.name, v.val].filter(Boolean).join(', '));
+      let ic; if (v.s && !ch.icon) { ic = document.createElement('ha-state-icon'); ic.hass = this._hass; ic.stateObj = v.s; } else { ic = document.createElement('ha-icon'); ic.icon = ch.icon || 'mdi:gesture-tap'; if (v.s && ch.icon) { ic = document.createElement('ha-state-icon'); ic.hass = this._hass; ic.stateObj = v.s; ic.icon = ch.icon; } }
+      b.appendChild(ic);
+      if (v.name) { const n = document.createElement('span'); n.className = 'n'; n.textContent = v.name; b.appendChild(n); }
+      if (v.val) { const s = document.createElement('span'); s.className = 'v'; s.textContent = v.val; b.appendChild(s); }
+      this._row.appendChild(b); });
+    this._avoidFab();
+  }
+  _bind() { // tap / hold per chip; a horizontal scroll of the row cancels the press
+    const r = this._row; let t = null, held = false, i = -1, sx = 0, sy = 0;
+    const cancel = () => { clearTimeout(t); t = null; i = -1; held = false; };
+    r.addEventListener('pointerdown', e => { if (e.pointerType === 'mouse' && e.button !== 0) return; const b = e.composedPath().find(n => n.classList && n.classList.contains('chip')); if (!b) return;
+      i = Number(b.dataset.i); held = false; sx = e.clientX; sy = e.clientY; clearTimeout(t); t = setTimeout(() => { t = null; held = true; }, 500); });
+    r.addEventListener('pointermove', e => { if (i >= 0 && Math.hypot(e.clientX - sx, e.clientY - sy) > 10) cancel(); });
+    r.addEventListener('pointerup', () => { if (i < 0) return; const k = i, h = held; cancel(); const ch = this._config.chips[k];
+      this._run(k, h && ch && this._action(ch, 'hold').action !== 'none' ? 'hold' : 'tap'); });
+    r.addEventListener('pointercancel', cancel); r.addEventListener('scroll', cancel, { passive: true });
+    r.addEventListener('contextmenu', e => e.preventDefault());
+    r.addEventListener('keydown', e => { if (e.key !== 'Enter' && e.key !== ' ') return; const b = e.composedPath().find(n => n.classList && n.classList.contains('chip')); if (b) { e.preventDefault(); this._run(Number(b.dataset.i), 'tap'); } });
+  }
+  // ---- room picker: a NotHomeView glass sheet listing rooms (icon, name, live status); tap a room to go to its page
+  _roomStatus(rm) {
+    const h = this._hass, areas = [].concat(rm.area || []).filter(Boolean); if (!areas.length || !h.entities) return rm.status || '';
+    let on = 0, lights = 0, temp = null;
+    for (const [id, e] of Object.entries(h.entities)) {
+      if (!e || e.hidden || e.entity_category) continue;
+      const a = e.area_id || (e.device_id && h.devices && h.devices[e.device_id] ? h.devices[e.device_id].area_id : null); if (!areas.includes(a)) continue;
+      const st = h.states[id]; if (!st) continue; const d = domainOf(id);
+      if (d === 'light' && !(st.attributes.entity_id && st.attributes.entity_id.length) && st.state !== 'unavailable') { lights++; if (st.state === 'on') on++; }
+      if (d === 'climate' && temp == null && st.attributes.current_temperature != null) temp = st.attributes.current_temperature;
+    }
+    const parts = []; if (lights) parts.push(on ? `${on} light${on > 1 ? 's' : ''} on` : 'Lights off'); if (temp != null) parts.push((Math.round(temp * 10) / 10) + '°');
+    return { text: parts.join(' · ') || rm.status || '', on: on > 0 };
+  }
+  _openPicker(ch) {
+    this._closePicker(); const rooms = (ch.rooms || []).filter(r => r && (r.name || r.navigation_path));
+    const host = this._pick = document.createElement('homeview-room-picker'), r = host.attachShadow({ mode: 'open' });
+    host.toggleAttribute('day', this.hasAttribute('day')); host.toggleAttribute('hv-day', this.hasAttribute('hv-day'));
+    r.innerHTML = `<style>${PICK_CSS}</style><div class="bd"></div><div class="sh" role="dialog" aria-modal="true" aria-label="${esc(ch.picker_title || ch.name || 'Rooms')}">
+      <div class="hd"><span>${esc(ch.picker_title || ch.name || 'Rooms')}</span><button class="x" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button></div>
+      <div class="gr">${rooms.map((rm, k) => { const st = this._roomStatus(rm), t = typeof st === 'string' ? { text: st, on: false } : st;
+        return `<button class="rm${t.on ? ' on' : ''}" data-k="${k}"><ha-icon icon="${esc(rm.icon || 'mdi:door')}"></ha-icon><span class="t"><span class="n">${esc(rm.name || '')}</span>${t.text ? `<span class="s">${esc(t.text)}</span>` : ''}</span></button>`; }).join('') || '<div class="s">Add rooms to this chip in the editor</div>'}</div></div>`;
+    const close = () => this._closePicker();
+    r.querySelector('.bd').addEventListener('click', close); r.querySelector('.x').addEventListener('click', close);
+    this._esc = e => { if (e.key === 'Escape') { e.stopPropagation(); close(); } }; addEventListener('keydown', this._esc, true); // first (capture): Escape closes only the picker
+    r.querySelectorAll('.rm').forEach(b => b.addEventListener('click', () => { const rm = rooms[Number(b.dataset.k)]; close();
+      if (rm && rm.navigation_path) fire(this, 'hass-action', { config: { tap_action: { action: 'navigate', navigation_path: rm.navigation_path } }, action: 'tap' }); }));
+    // 1.30.7: chips on a device page shown as a sheet over the Home Screen: open in the sheet's own layer (in front of it; closing
+    // returns to the sheet). Elsewhere on <body> as before.
+    (hvSheetLayer(this) || document.body).appendChild(host); requestAnimationFrame(() => requestAnimationFrame(() => host.classList.add('in')));
+  }
+  _closePicker() { if (this._esc) { removeEventListener('keydown', this._esc, true); this._esc = null; } const p = this._pick; this._pick = null;
+    if (p) { p.classList.remove('in'); setTimeout(() => p.remove(), 220); } }
+  _avoidFab() { // keep the chips clear of the floating edit / screensaver buttons (top corner)
+    if (!this._row || !this.isConnected) return;
+    // stay below the status bar / notch (iOS safe area) when the dashboard has no header
+    let p = this._probe; if (!p || !p.isConnected) { p = this._probe = document.createElement('div'); p.style.cssText = 'position:absolute;visibility:hidden;width:0;pointer-events:none;height:var(--hv-safe-top, env(safe-area-inset-top, 0px))'; this.shadowRoot.appendChild(p); }
+    const safeTop = p.getBoundingClientRect().height, top0 = this.getBoundingClientRect().top; // border-box top: padding doesn't move it
+    const pt = safeTop && top0 < safeTop + 4 ? Math.round(safeTop + 4 - top0) + 'px' : '';
+    if (this.style.paddingTop !== pt) { this.style.paddingTop = pt; requestAnimationFrame(() => dispatchEvent(new Event('hv-layout'))); } // page grid below re-measures
+    const me = this.getBoundingClientRect(); let pr = 0;
+    for (const f of document.querySelectorAll('homeview-edit-fab')) { const r = f.getBoundingClientRect(); if (r.height && r.top < me.bottom && r.bottom > me.top && r.left < me.right) pr = Math.max(pr, me.right - r.left + 6); }
+    this._row.style.marginRight = pr ? pr + 'px' : '';
+  }
+}
+const PICK_CSS = `:host{position:fixed;inset:0;z-index:8;font-family:${FONT};-webkit-tap-highlight-color:transparent}
+${(BASE_CSS.match(/:host\(\[day\]\)\{[\s\S]*?\}/) || [''])[0]}
+.bd{position:absolute;inset:0;background:rgba(4,6,24,.42);opacity:0;transition:opacity .22s ease}
+:host(.in) .bd{opacity:1}
+.sh{position:absolute;left:50%;top:50%;transform:translate(-50%,-46%) scale(.97);opacity:0;transition:transform .28s cubic-bezier(.2,.9,.3,1.08),opacity .2s ease;
+ width:min(600px,calc(100vw - 28px));max-height:calc(100% - 90px);overflow:auto;box-sizing:border-box;padding:18px;border-radius:30px;color:var(--hv-text,#fff);
+ background:var(--hv-sheet,linear-gradient(150deg,rgba(52,60,120,.62) 0%,rgba(22,26,60,.72) 100%));border:1px solid var(--hv-border,rgba(255,255,255,.25));
+ backdrop-filter:blur(30px) saturate(170%);-webkit-backdrop-filter:blur(30px) saturate(170%);box-shadow:0 24px 70px rgba(0,0,30,.45)}
+:host(.in) .sh{transform:translate(-50%,-50%);opacity:1}
+:host([day]) .sh{--hv-sheet:linear-gradient(150deg,rgba(255,255,255,.90) 0%,rgba(236,244,255,.82) 100%);box-shadow:0 24px 70px rgba(40,90,140,.25)}
+${HV_DAY_HOST}
+:host([hv-day]) .bd{background:rgba(0,0,0,.22)} :host([hv-day]) .sh{--hv-sheet:#f2f2f6;box-shadow:0 24px 70px rgba(30,30,60,.22)} :host([hv-day]) .x{background:rgba(120,120,128,.16)}
+.hd{display:flex;align-items:center;justify-content:space-between;font-size:21px;font-weight:700;margin:2px 4px 14px}
+.x{all:unset;cursor:pointer;width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.16);color:var(--hv-text,#fff)}
+.x ha-icon{--mdc-icon-size:22px;display:flex}
+.gr{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(140px,40vw),1fr));gap:10px}
+.rm{all:unset;cursor:pointer;box-sizing:border-box;display:flex;align-items:center;gap:12px;padding:14px;min-height:68px;border-radius:22px;
+ background:var(--hv-bg,linear-gradient(150deg,rgba(255,255,255,.15) 0%,rgba(255,255,255,.07) 100%));border:1px solid var(--hv-border,rgba(255,255,255,.25));transition:transform .12s ease}
+.rm:active{transform:scale(.97)} .rm:focus-visible{outline:2px solid var(--hv-accent,#d4c9ff)}
+.rm.on{background:var(--hv-bg-on,linear-gradient(150deg,rgba(196,182,255,.46) 0%,rgba(160,140,250,.34) 100%));border-color:var(--hv-border-on,rgba(225,215,255,.42))}
+.rm ha-icon{--mdc-icon-size:28px;width:28px;height:28px;display:flex;flex:none;color:var(--hv-icon,#fff)} .rm.on ha-icon{color:var(--hv-icon-on,#f3efff)}
+.t{min-width:0} .n{display:block;font-weight:650;font-size:16px;line-height:1.2} .s{display:block;font-size:13px;line-height:1.3;margin-top:2px;color:var(--hv-text2,rgba(255,255,255,.7))}
+.rm.on .n{color:var(--hv-text-on,#fff)} .rm.on .s{color:var(--hv-text2-on,rgba(255,255,255,.85))}`;
+const CHIP_FIELDS = {
+  entity: { label: 'Entity (light group, climate, ... - leave empty for a navigation chip)', selector: { entity: {} } },
+  name: { label: 'Name', selector: { text: {} } },
+  icon: { label: 'Icon', selector: { icon: {} } },
+  show_state: { label: 'Show state / temperature', selector: { boolean: {} }, default: true },
+  tap_action: { label: 'Tap action (default: toggle for lights / switches, more-info otherwise)', selector: { ui_action: {} } },
+  hold_action: { label: 'Hold action (default: more-info)', selector: { ui_action: {} } },
+  room_picker: { label: 'Tap opens the room picker (instead of the tap action)', selector: { boolean: {} } },
+  picker_title: { label: 'Room picker title', selector: { text: {} } },
+  rooms: { label: 'Room picker: rooms', selector: { object: { multiple: true, label_field: 'name', description_field: 'navigation_path', fields: {
+    name: { label: 'Name', selector: { text: {} } }, icon: { label: 'Icon', selector: { icon: {} } },
+    navigation_path: { label: 'Opens (view)', selector: { navigation: {} } },
+    area: { label: 'Area(s) for the status line (lights on, temperature)', selector: { area: { multiple: true } } } } } } } };
+const CHIPS_SCHEMA = [
+  { name: 'chips', selector: { object: { multiple: true, label_field: 'name', description_field: 'entity', fields: CHIP_FIELDS } } },
+  { type: 'grid', name: '', schema: [{ name: 'day_light', selector: { boolean: {} } }, { name: 'show_state', selector: { boolean: {} } }] }];
+class HVChipsEditor extends HTMLElement {
+  setConfig(c) { this._config = c; this._render(); }
+  set hass(h) { this._hass = h; this._render(); }
+  _render() {
+    if (!this._hass || !this._config) return;
+    if (!this._form) { const f = this._form = document.createElement('ha-form');
+      f.computeLabel = s => s.name === 'chips' ? 'Chips (drag to reorder, pencil to edit)' : s.name === 'show_state' ? 'Show states on all chips' : (LABELS[s.name] || s.name);
+      f.computeHelper = s => s.name === 'chips' ? 'Each chip: an entity (light group, thermostat, ...) and/or a tap action such as Navigate to a view.' : undefined;
+      f.hass = this._hass; f.schema = CHIPS_SCHEMA; f.data = Object.assign({}, HVChipsCard.defaults, this._config);
+      f.addEventListener('value-changed', ev => { ev.stopPropagation(); const v = ev.detail.value, cfg = Object.assign({}, this._config);
+        cfg.chips = (v.chips || []).map(x => { const o = {}; for (const [k, val] of Object.entries(x || {})) if (val !== undefined && val !== '' && !(k === 'show_state' && val === true)) o[k] = val; return o; });
+        for (const k of ['day_light', 'show_state']) { if (v[k] === undefined || v[k] === HVChipsCard.defaults[k]) delete cfg[k]; else cfg[k] = v[k]; }
+        this._config = cfg; fire(this, 'config-changed', { config: cfg }); });
+      this.appendChild(f); }
+    this._form.hass = this._hass; this._form.schema = CHIPS_SCHEMA; this._form.data = Object.assign({}, HVChipsCard.defaults, this._config);
+  }
+}
+if (!customElements.get('homeview-chips-card-editor')) customElements.define('homeview-chips-card-editor', HVChipsEditor);
+
+
+/* ---------------- swipe down to go back ----------------
+   hvPullDown: a vertical drag that starts near the top (or while the content is scrolled to the top) moves `target()` with the
+   finger (slide + fade); released far enough (or flicked) it calls done(), otherwise it springs back. Horizontal swipes, the
+   left-edge sidebar swipe and normal scrolling are left alone (direction lock; only engages for a clearly downward drag). */
+function hvPullDown(o) { // o: { on: el|window, ok(touch, ev) -> bool, target() -> el, done(), threshold }
+  let st = null;
+  const reset = (el, anim) => { if (!el) return; el.style.transition = anim ? 'transform .28s cubic-bezier(.2,.9,.3,1), opacity .28s ease' : ''; el.style.transform = ''; el.style.opacity = '';
+    if (anim) setTimeout(() => { el.style.transition = ''; el.style.willChange = ''; }, 300); };
+  const ts = e => { st = null; if (e.touches.length !== 1) return; const t = e.touches[0]; if (t.clientX <= 28 || !o.ok(t, e)) return;
+    st = { x: t.clientX, y: t.clientY, t: Date.now(), on: false, dy: 0, el: null }; };
+  const tm = e => { if (!st) return; const t = e.touches[0], dx = t.clientX - st.x, dy = t.clientY - st.y;
+    if (!st.on) { if (Math.abs(dx) > 14 && Math.abs(dx) > dy) { st = null; return; } if (dy < -6) { st = null; return; }
+      if (dy > 14 && dy > Math.abs(dx) * 1.4) { st.on = true; st.y0 = t.clientY; st.el = o.target(); if (st.el) st.el.style.willChange = 'transform,opacity'; } else return; }
+    if (e.cancelable) e.preventDefault(); st.dy = Math.max(0, t.clientY - st.y0); const H = innerHeight || 800;
+    if (st.el) { st.el.style.transition = 'none'; st.el.style.transform = `translateY(${st.dy}px) scale(${1 - Math.min(.06, st.dy / H * .12)})`; st.el.style.opacity = String(1 - Math.min(.55, st.dy / H * .9)); } };
+  const te = () => { if (!st) return; const s0 = st; st = null; if (!s0.on) return; const v = s0.dy / Math.max(1, Date.now() - s0.t), H = innerHeight || 800;
+    if (s0.dy > (o.threshold || Math.min(160, H * .2)) || (v > .6 && s0.dy > 50)) { const el = s0.el;
+      if (el) { el.style.transition = 'transform .22s ease-in, opacity .22s ease-in'; el.style.transform = `translateY(${Math.round(H * .4)}px) scale(.94)`; el.style.opacity = '0'; }
+      setTimeout(() => { o.done(); setTimeout(() => reset(el, false), 60); }, 200); }
+    else reset(s0.el, true); };
+  const L = [['touchstart', ts, { capture: true, passive: true }], ['touchmove', tm, { capture: true, passive: false }], ['touchend', te, true], ['touchcancel', te, true]];
+  return { bind: on => { const n = o.on || window; for (const [t, f, op] of L) on ? n.addEventListener(t, f, op) : n.removeEventListener(t, f, op); } };
+}
+const hvNavigate = path => { if (location.search && !path.includes('?')) path += location.search; history.pushState(null, '', path); fire(window, 'location-changed', { replace: false }); };
+const hvHaRoot = () => document.querySelector('home-assistant');
+
+/* ---------------- block pull-to-refresh ----------------
+   While a card that wants it is on the page (hub card; page grid with swipe-back), a downward drag that would overscroll the
+   page at the top is cancelled (touchmove preventDefault, non-passive), so neither the HA iOS / Android app's native
+   pull-to-refresh nor Chrome's / Safari's overscroll kicks in. Inner scrollers that can still scroll up keep scrolling,
+   horizontal swipes are never touched. Also sets overscroll-behavior-y: none on the page while active. */
+const hvPTR = (() => { const owners = new Set(); let st = null, saved = null;
+  const docTop = () => { const se = document.scrollingElement || document.documentElement; return (se.scrollTop || 0) <= 0 && (window.scrollY || 0) <= 0; };
+  const scroller = path => { for (const n of path) { if (!(n instanceof Element)) continue; if (n === document.documentElement || n === document.body) break;
+    if (n.scrollHeight > n.clientHeight + 1) { const oy = getComputedStyle(n).overflowY; if (oy === 'auto' || oy === 'scroll') return n; } } return null; };
+  const ts = e => { st = null; if (!owners.size || e.touches.length !== 1) return; const t = e.touches[0]; st = { x: t.clientX, y: t.clientY, sc: scroller(e.composedPath()) }; };
+  const tm = e => { if (!st || !e.cancelable || e.touches.length !== 1) return; const t = e.touches[0], dx = t.clientX - st.x, dy = t.clientY - st.y;
+    if (dy <= 0 || Math.abs(dx) > dy) return;              // up, or sideways (paging, sidebar swipe): leave alone
+    if (st.sc && st.sc.scrollTop > 0) return;               // an inner list that can still scroll up
+    if (!docTop()) return;                                   // the page itself is scrolled: normal scroll back up
+    e.preventDefault(); };
+  const te = () => { st = null; };
+  const css = on => { const els = [document.documentElement, document.body, document.querySelector('home-assistant')].filter(Boolean);
+    if (on && !saved) { saved = els.map(el => [el, el.style.overscrollBehaviorY]); els.forEach(el => { el.style.overscrollBehaviorY = 'none'; }); }
+    if (!on && saved) { saved.forEach(([el, v]) => { el.style.overscrollBehaviorY = v; }); saved = null; } };
+  const L = [['touchstart', ts, { capture: true, passive: true }], ['touchmove', tm, { capture: true, passive: false }], ['touchend', te, true], ['touchcancel', te, true]];
+  return { set(owner, on) { const had = owners.size; if (on) owners.add(owner); else owners.delete(owner);
+    if (!had && owners.size) { for (const [t, f, o] of L) addEventListener(t, f, o); css(true); }
+    if (had && !owners.size) { for (const [t, f, o] of L) removeEventListener(t, f, o); css(false); } } };
+})();
+
+/* ---------------- slide-up sheet (Apple modal sheet) ----------------
+   Used by the launch page for Home / Security (the view's cards), Weather and enlarged tiles: slides up from the bottom, the
+   launch page behind scales down a little with rounded corners and dims; grab pill + X; drag down anywhere at the top (or on
+   the pill) and it follows the finger, the launch page scaling back up; past a threshold it drops away. Horizontal swipes
+   (Home page paging) and scrolling inside the sheet are left alone. */
+const SHEET_EASE = 'cubic-bezier(.32,.72,0,1)';
+const SHEET_CSS = `:host{position:fixed;inset:0;z-index:9;font-family:${FONT};color:#fff;-webkit-tap-highlight-color:transparent}
+.scrim{position:absolute;inset:0;background:rgba(0,0,0,.45);opacity:0}
+.sh{position:absolute;left:0;right:0;bottom:0;top:var(--st,40px);border-radius:var(--sr,18px) var(--sr,18px) 0 0;overflow:hidden;background:var(--sbg,#16161c);
+ box-shadow:0 -8px 32px rgba(0,0,0,.35);transform:translate3d(0,100%,0);contain:layout paint}
+.grab{position:absolute;left:0;right:0;top:0;height:34px;z-index:6;touch-action:none;cursor:grab}
+.grab::before{content:'';position:absolute;left:50%;top:7px;width:38px;height:5px;margin-left:-19px;border-radius:3px;background:rgba(255,255,255,.62);box-shadow:0 1px 4px rgba(0,0,30,.3)}
+.x{all:unset;cursor:pointer;position:absolute;top:12px;right:14px;z-index:7;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+ background:rgba(120,120,128,.38);color:#fff;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
+.x ha-icon{--mdc-icon-size:20px;display:flex}
+.bd{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;box-sizing:border-box;padding:52px var(--spx,16px) 16px}
+.bd > .cw{margin-bottom:8px}
+:host([hv-day]){color:#1c1c1e} :host([hv-day]) .scrim{background:rgba(0,0,0,.22)} :host([hv-day]) .sh{box-shadow:0 -8px 32px rgba(30,30,60,.14)}
+:host([hv-day]) .grab::before{background:rgba(60,60,67,.32);box-shadow:none} :host([hv-day]) .x{background:rgba(120,120,128,.16);color:#3c3c43}`;
+// the shadow root of the Home Screen sheet an element sits in (null when it is not in one)
+const hvSheetLayer = el => { let n = el; for (let i = 0; i < 60 && n; i++) { if (n.tagName === 'HOMEVIEW-SHEET') return n.shadowRoot; n = n.parentNode || n.host; } return null; };
+// a popup / dialog of Home Assistant or browser_mod is open (Escape belongs to it, not to a sheet underneath)
+const hvDialogOpen = () => { const ha = document.querySelector('home-assistant'), r = ha && ha.shadowRoot; if (!r) return false;
+  for (const d of r.querySelectorAll('browser-mod-popup, ha-more-info-dialog, dialog-box')) { const x = d.shadowRoot && d.shadowRoot.querySelector('ha-dialog, ha-md-dialog, ha-adaptive-dialog, wa-dialog, dialog');
+    if (d.open === true || d.hasAttribute('open') || (x && (x.open === true || x.hasAttribute('open')))) return true; }
+  return false; };
+function hvSheet(o) { // o: { parent, launch() -> [els], label, bg, build(bd, frame) -> { hass }, onClose() }
+  const host = document.createElement('homeview-sheet'), sr = host.attachShadow({ mode: 'open' });
+  sr.innerHTML = `<style>${SHEET_CSS}</style><div class="scrim"></div><div class="sh" role="dialog" aria-modal="true" aria-label="${esc(o.label || '')}"><div class="bd"></div><div class="grab" aria-hidden="true"></div><button class="x" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button></div>`;
+  const sh = sr.querySelector('.sh'), bd = sr.querySelector('.bd'), scrim = sr.querySelector('.scrim'), grab = sr.querySelector('.grab');
+  const day = o.day === true || (o.day !== false && hvDayNow()); host.toggleAttribute('hv-day', day); // Day theme: light sheet (the music / photo / weather sheets keep their own dark look)
+  if (day) sh.style.setProperty('--sbg', o.dayBg || '#eeeef0'); else if (o.bg) sh.style.setProperty('--sbg', o.bg);
+  // cards inside report their own visibility / rebuilds: never let that reach the launch page's section (it would hide the hub)
+  for (const t of ['card-visibility-changed', 'll-rebuild', 'll-upgrade']) host.addEventListener(t, e => e.stopPropagation());
+  (o.parent || document.body).appendChild(host);
+  const pr = document.createElement('div'); pr.style.cssText = 'position:absolute;width:0;height:var(--hv-safe-top, env(safe-area-inset-top, 0px))'; sr.appendChild(pr);
+  const safeT = pr.getBoundingClientRect().height || 0; pr.remove();
+  const vw = innerWidth, vh = innerHeight, st = Math.round(Math.max(safeT + 10, vh * (vw > 700 ? 0.035 : 0.02)));
+  host.style.setProperty('--st', st + 'px'); host.style.setProperty('--sr', (vw > 700 ? 22 : 16) + 'px'); host.style.setProperty('--spx', Math.round(Math.max(12, Math.min(40, vw * 0.03))) + 'px');
+  const fabs = [...document.querySelectorAll('homeview-edit-fab')]; fabs.forEach(f => { f.style.visibility = 'hidden'; });
+  const L = () => (o.launch ? o.launch() : []).filter(Boolean), H = () => sh.offsetHeight || vh;
+  let dyNow = 0, closed = false;
+  const apply = (dy, anim, dur) => { dyNow = dy; const h = H(), p = Math.max(0, Math.min(1, 1 - dy / h)), d = (dur || 0.45) + 's ' + SHEET_EASE;
+    sh.style.transition = anim ? 'transform ' + d : 'none'; sh.style.transform = `translate3d(0,${dy.toFixed(1)}px,0)`;
+    scrim.style.transition = anim ? 'opacity ' + d : 'none'; scrim.style.opacity = p.toFixed(3);
+    for (const el of L()) { el.style.transition = anim ? `transform ${d}, border-radius ${d}` : 'none'; el.style.transformOrigin = '50% 0';
+      el.style.transform = p > 0.002 ? `translate3d(0,${(safeT * 0.6 * p + 8 * p).toFixed(1)}px,0) scale(${(1 - 0.075 * p).toFixed(4)})` : ''; el.style.borderRadius = p > 0.002 ? Math.round(18 * p) + 'px' : ''; } };
+  const frame = () => { const r = sh.getBoundingClientRect(); return { x: r.left, y: r.top, w: sh.offsetWidth, h: sh.offsetHeight }; };
+  apply(H(), false); const api = o.build ? o.build(bd, frame) || {} : {};
+  sh.getBoundingClientRect(); requestAnimationFrame(() => requestAnimationFrame(() => apply(0, true, 0.5)));
+  setTimeout(() => dispatchEvent(new Event('hv-layout')), 60); setTimeout(() => dispatchEvent(new Event('hv-layout')), 560);
+  const key = k => { if (k.key === 'Escape' && !sr.querySelector('homeview-room-picker') && !hvDialogOpen()) close(); };
+  const close = () => { if (closed) return; closed = true; removeEventListener('keydown', key); const left = Math.max(0.2, 0.36 * (1 - dyNow / H()));
+    apply(H(), true, left); setTimeout(() => { for (const el of L()) { el.style.transition = ''; el.style.transform = ''; el.style.borderRadius = ''; el.style.transformOrigin = ''; }
+      host.remove(); fabs.forEach(f => { f.style.visibility = ''; }); if (o.onClose) o.onClose(); }, left * 1000 + 30); };
+  sr.querySelector('.x').addEventListener('click', close); addEventListener('keydown', key);
+  // drag to dismiss: from the pill / top strip, or anywhere while the content under the finger is scrolled to the top
+  let g = null;
+  const scroller = path => { for (const n of path) { if (n === sh) break; if (!(n instanceof Element)) continue;
+    if (n.scrollHeight > n.clientHeight + 1) { const oy = getComputedStyle(n).overflowY; if (oy === 'auto' || oy === 'scroll') return n; } } return null; };
+  sh.addEventListener('touchstart', e => { g = null; if (closed || e.touches.length !== 1) return; const t = e.touches[0], path = e.composedPath(), top = sh.getBoundingClientRect().top;
+    const onGrab = path.includes(grab) || t.clientY - top < 34, sc = scroller(path); if (!onGrab && sc && sc.scrollTop > 1) return;
+    // never steal a drag that starts on a slider / seek bar / text field; a sheet can narrow it further (o.dragOk)
+    if (!onGrab && path.some(n => n instanceof Element && (/^(INPUT|TEXTAREA|SELECT|HA-SLIDER|HA-CONTROL-SLIDER|MD-SLIDER|HA-TEXTFIELD)$/.test(n.tagName) || n.getAttribute('role') === 'slider' || n.hasAttribute('data-no-sheet-drag')))) return;
+    if (!onGrab && o.dragOk && !o.dragOk(path, t.clientY - top, sh.offsetHeight)) return;
+    g = { x: t.clientX, y: t.clientY, t: Date.now(), on: false, dy: 0, grab: onGrab }; }, { passive: true });
+  sh.addEventListener('touchmove', e => { if (!g) return; const t = e.touches[0], dx = t.clientX - g.x, dy = t.clientY - g.y;
+    if (!g.on) { if (Math.abs(dx) < 3 && Math.abs(dy) < 3) return;
+      if (dy > 0 && (g.grab || dy >= Math.abs(dx) * 1.1)) { g.on = true; g.y0 = t.clientY; g.t = Date.now(); } else { g = null; return; } }
+    if (e.cancelable) e.preventDefault(); g.dy = Math.max(0, t.clientY - g.y0); apply(g.dy, false); }, { passive: false });
+  const end = () => { if (!g) return; const s0 = g; g = null; if (!s0.on) return; const v = s0.dy / Math.max(1, Date.now() - s0.t);
+    if (s0.dy > H() * 0.22 || (v > 0.5 && s0.dy > 40)) close(); else apply(0, true, 0.38); };
+  sh.addEventListener('touchend', end); sh.addEventListener('touchcancel', end);
+  return { close, host, set hass(h) { if (api) api.hass = h; }, get dy() { return dyNow; } };
+}
+// fit a card inside a fixed box. Default "contain": centre it; picture-elements (e.g. the house hero) is scaled so the
+// picture and all its labels fit, then centred on their combined bounds. With opt.zoom the picture is sized to zoom x the
+// box width (cropped at the sides if > 1), sat low in the box with sky above, labels kept inside the box; opt.label scales
+// the labels; opt.sky paints a scene sky (hvSky) behind it. The card keeps its own (glass) frame filling the box.
+const HV_SKY_CSS = `.hv-sky{position:absolute;inset:0;z-index:0;pointer-events:none;overflow:hidden;border-radius:inherit;background:linear-gradient(180deg,var(--sky-t,#8cc9fb) 0%,var(--sky-b,#b4e4fe) 100%);transition:background 1.6s ease}
+.hv-sky::after{content:'';position:absolute;inset:0;background:rgba(3,5,9,var(--sky-dim,0));transition:background 1.6s ease}
+.hv-sky i{position:absolute;inset:-20%;display:none;pointer-events:none}
+.hv-sky[fx=sun] .sun{display:block;background:radial-gradient(28% 28% at 82% 18%,rgba(255,246,214,.75) 0%,rgba(255,236,170,.25) 45%,rgba(255,236,170,0) 100%)}
+.hv-sky[fx=clouds] .c1,.hv-sky[fx=rain] .c1,.hv-sky[fx=snow] .c1{display:block;background:radial-gradient(22% 9% at 20% 22%,rgba(255,255,255,.55),rgba(255,255,255,0) 70%),radial-gradient(26% 10% at 62% 14%,rgba(255,255,255,.5),rgba(255,255,255,0) 70%),radial-gradient(18% 7% at 88% 30%,rgba(255,255,255,.45),rgba(255,255,255,0) 70%);animation:hvskyc 70s linear infinite}
+.hv-sky[fx=clouds] .c2,.hv-sky[fx=rain] .c2{display:block;background:radial-gradient(30% 11% at 35% 34%,rgba(255,255,255,.35),rgba(255,255,255,0) 70%),radial-gradient(24% 9% at 78% 8%,rgba(255,255,255,.35),rgba(255,255,255,0) 70%);animation:hvskyc 110s linear infinite reverse}
+.hv-sky[fx=rain] .c1,.hv-sky[fx=rain] .c2{filter:brightness(.72) saturate(.6)}
+.hv-sky[fx=rain] .rn{display:block;inset:0;background-image:repeating-linear-gradient(103deg,rgba(220,232,245,0) 0 9px,rgba(220,232,245,.38) 9px 10px,rgba(220,232,245,0) 10px 23px);background-size:46px 46px;-webkit-mask-image:linear-gradient(180deg,#000,rgba(0,0,0,.25));mask-image:linear-gradient(180deg,#000,rgba(0,0,0,.25));animation:hvskyr .5s linear infinite}
+.hv-sky[fx=snow] .sn{display:block;inset:0;background-image:radial-gradient(1.6px 1.6px at 10% 20%,#fff 98%,transparent),radial-gradient(1.2px 1.2px at 30% 70%,#fff 98%,transparent),radial-gradient(2px 2px at 55% 35%,#fff 98%,transparent),radial-gradient(1.4px 1.4px at 75% 80%,#fff 98%,transparent),radial-gradient(1.8px 1.8px at 90% 10%,#fff 98%,transparent),radial-gradient(1.2px 1.2px at 42% 92%,#fff 98%,transparent);background-size:90px 90px;opacity:.85;animation:hvskys 9s linear infinite}
+.hv-sky[fx=stars] .st{display:block;inset:0;background-image:radial-gradient(1px 1px at 12% 18%,#fff 98%,transparent),radial-gradient(1px 1px at 34% 8%,#fff 98%,transparent),radial-gradient(1.4px 1.4px at 58% 26%,#fff 98%,transparent),radial-gradient(1px 1px at 72% 12%,#fff 98%,transparent),radial-gradient(1.2px 1.2px at 90% 34%,#fff 98%,transparent),radial-gradient(1px 1px at 22% 40%,#fff 98%,transparent),radial-gradient(1px 1px at 46% 46%,#fff 98%,transparent);background-size:140px 120px;-webkit-mask-image:linear-gradient(180deg,#000 0%,rgba(0,0,0,.2) 70%,transparent);mask-image:linear-gradient(180deg,#000 0%,rgba(0,0,0,.2) 70%,transparent);opacity:.7;animation:hvskyt 5s ease-in-out infinite alternate}
+@keyframes hvskyc{from{transform:translateX(-12%)}to{transform:translateX(12%)}}
+@keyframes hvskyr{from{background-position:0 0}to{background-position:-10px 46px}}
+@keyframes hvskys{from{background-position:0 0}to{background-position:18px 90px}}
+@keyframes hvskyt{from{opacity:.45}to{opacity:.8}}
+@media (prefers-reduced-motion:reduce){.hv-sky i{animation:none !important}}`;
+// the same sky as the home-redesign scene background (sensor.house_scene + sun + moon phase), plus light weather effects
+const HV_MOON_SKY = { new_moon: ['#0d0f0e', '#0d0f0e'], waxing_crescent: ['#121822', '#0d1013'], waning_crescent: ['#121822', '#0d1013'], first_quarter: ['#15202f', '#0e1218'], last_quarter: ['#15202f', '#0e1218'],
+  waxing_gibbous: ['#182538', '#0e141d'], waning_gibbous: ['#182538', '#0e141d'], full_moon: ['#1b2a40', '#0f1622'] };
+const HV_DAY_SKY = { sunny: ['#8cc9fb', '#b4e4fe'], cloudy: ['#9fb3c4', '#c4d1dc'], rainy: ['#5d6f80', '#8a9aa8'], snowy: ['#cfe0ee', '#eef4f9'] };
+function hvSky(hass, entity, sim) {
+  const S = (hass && hass.states) || {}, raw = sim || (S[entity || 'sensor.house_scene'] || {}).state || '', s = raw.replace('_open', '').replace('_off', '');
+  const day = sim ? !/night/.test(raw) : (S['sun.sun'] || {}).state === 'above_horizon', moon = (HV_MOON_SKY[(S['sensor.moon_phase'] || {}).state] || HV_MOON_SKY.new_moon);
+  let c = s === 'night' ? moon : day && HV_DAY_SKY[s] ? HV_DAY_SKY[s] : day ? HV_DAY_SKY.sunny : moon, dim = 0;
+  if (/^night_off/.test(raw)) c = ['#05080e', '#020306']; else if (/^night/.test(raw)) dim = 0.45;
+  const fx = s === 'rainy' ? 'rain' : s === 'snowy' ? 'snow' : s === 'cloudy' ? 'clouds' : !day || s === 'night' ? 'stars' : 'sun';
+  return { top: c[0], bottom: c[1], dim, fx, sig: [c[0], c[1], dim, fx].join() };
+}
+function hvFitCard(el, W, H, pad, opt) {
+  opt = opt || {}; const sr = el && el.shadowRoot, card = sr && sr.querySelector('ha-card'); if (!card || !W || !H) return false;
+  let st = sr.querySelector('style[data-hv-fit]'); if (!st) { st = document.createElement('style'); st.setAttribute('data-hv-fit', ''); }
+  if (sr.lastElementChild !== st) sr.appendChild(st); // last, so it wins over card-mod
+  const root = card.querySelector('#root');
+  const css = `ha-card{height:100% !important;box-sizing:border-box !important;padding:0 !important;display:flex !important;flex-direction:column !important;align-items:center !important;justify-content:center !important;overflow:hidden !important;position:relative}`
+    + (root ? `#root{position:relative;z-index:1;flex:none !important;width:var(--hv-fit-w,100%) !important;transform:translate(var(--hv-fit-x,0px),var(--hv-fit-y,0px)) scale(var(--hv-fit-k,1));transform-origin:50% 50%}` : '')
+    + (opt.sky ? HV_SKY_CSS : '');
+  if (st.textContent !== css) st.textContent = css;
+  // sky layer (inside the glass frame, behind the picture; the picture's feathered edges blend into it)
+  let sky = card.querySelector(':scope > .hv-sky');
+  if (opt.sky) { if (!sky) { sky = document.createElement('div'); sky.className = 'hv-sky'; sky.innerHTML = '<i class="sun"></i><i class="c1"></i><i class="c2"></i><i class="rn"></i><i class="sn"></i><i class="st"></i>'; }
+    if (card.firstElementChild !== sky) card.insertBefore(sky, card.firstChild);
+    const k = opt.sky; sky.style.setProperty('--sky-t', k.top); sky.style.setProperty('--sky-b', k.bottom); sky.style.setProperty('--sky-dim', String(k.dim || 0)); sky.setAttribute('fx', k.fx || ''); }
+  else if (sky) sky.remove();
+  if (!root) return true;
+  const S = (k, v) => card.style.setProperty(k, v);
+  const labels = [...root.querySelectorAll('.element')].filter(e => e.tagName === 'BUTTON-CARD' || /hui-state-label|hui-state-badge/i.test(e.tagName));
+  labels.forEach(e => { e.style.translate = ''; e.style.scale = ''; });
+  const ext = all => { const rr = root.getBoundingClientRect(); let l = rr.left, t = rr.top, r = rr.right, b = rr.bottom;
+    for (const e of root.querySelectorAll('.element')) { const x = e.getBoundingClientRect(); if (!x.height || !x.width) continue; if (!all && x.top < rr.bottom - 2) continue; l = Math.min(l, x.left); t = Math.min(t, x.top); r = Math.max(r, x.right); b = Math.max(b, x.bottom); }
+    return { l, t, r, b, w: r - l, h: b - t, rr }; };
+  S('--hv-fit-x', '0px'); S('--hv-fit-y', '0px'); S('--hv-fit-k', '1');
+  const zoom = Number(opt.zoom) || 0, ls = Math.max(0.4, Math.min(3, Number(opt.label) || 1)), minD = 320;
+  if (!zoom) { // contain: everything fits
+    const iw = Math.max(40, W - 2 * pad), ih = Math.max(40, H - 2 * pad);
+    S('--hv-fit-w', iw + 'px'); let e = ext(true); if (!e.rr.height) return false;
+    const wt = Math.floor(iw * Math.min(1, iw / Math.max(1, e.w), ih / Math.max(1, e.h))), D = Math.max(wt, minD);
+    S('--hv-fit-w', D + 'px'); e = ext(true); const k = Math.min(1, iw / Math.max(1, e.w), ih / Math.max(1, e.h)); S('--hv-fit-k', k.toFixed(4));
+    if (ls !== 1) hvScaleLabels(root, labels, ls);
+    e = ext(true); const cr = card.getBoundingClientRect();
+    S('--hv-fit-x', Math.round((cr.left + cr.right) / 2 - (e.l + e.r) / 2) + 'px'); S('--hv-fit-y', Math.round((cr.top + cr.bottom) / 2 - (e.t + e.b) / 2) + 'px');
+    return true; }
+  // zoom: the picture is zoom x the box width; labels scaled; the picture + the labels under it sit low in the box (sky above)
+  const D = Math.max(minD, Math.round(W * zoom)); S('--hv-fit-w', D + 'px'); const k = Math.max(0.1, W * zoom / D); S('--hv-fit-k', k.toFixed(4));
+  if (ls !== 1) hvScaleLabels(root, labels, ls);
+  let e = ext(false); if (!e.rr.height) return false; const cr = card.getBoundingClientRect();
+  const free = H - e.h, dy = free > 0 ? cr.top + free * 0.78 - e.t : cr.top + (H - e.h) / 2 - e.t;
+  S('--hv-fit-x', Math.round((cr.left + cr.right) / 2 - (e.rr.left + e.rr.right) / 2) + 'px'); S('--hv-fit-y', Math.round(dy) + 'px');
+  // keep every label inside the box (nudged in, in the picture's own coordinates)
+  const p2 = Math.max(6, pad * 0.6), cb = card.getBoundingClientRect();
+  for (const lb of labels) { const x = lb.getBoundingClientRect(); if (!x.width) continue; let mx = 0, my = 0;
+    if (x.left < cb.left + p2) mx = cb.left + p2 - x.left; else if (x.right > cb.right - p2) mx = cb.right - p2 - x.right;
+    if (x.top < cb.top + p2) my = cb.top + p2 - x.top; else if (x.bottom > cb.bottom - p2) my = cb.bottom - p2 - x.bottom;
+    if (mx || my) lb.style.translate = `${(mx / k).toFixed(1)}px ${(my / k).toFixed(1)}px`; }
+  return true;
+}
+// labels grow from their anchor side (left labels from the left, right from the right, bottom ones from the centre)
+function hvScaleLabels(root, labels, ls) { const rr = root.getBoundingClientRect(), mid = (rr.left + rr.right) / 2;
+  for (const lb of labels) { const x = lb.getBoundingClientRect(); if (!x.width) continue; const c = (x.left + x.right) / 2, below = x.top >= rr.bottom - 4;
+    lb.style.transformOrigin = below ? '50% 0' : c < mid - rr.width * 0.1 ? '0 0' : c > mid + rr.width * 0.1 ? '100% 0' : '50% 0'; lb.style.scale = String(ls); } }
+// Is the Wallpanel screensaver enabled here? Same resolution as Wallpanel: dashboard config, wp_ URL params, profile,
+// device.<browser_mod id> / user.<name> profiles, profile_entity; then enabled + enabled_on_views (this view).
+const hvMerge = (a, b) => { const o = Object.assign({}, a); for (const k in b || {}) { const v = b[k];
+  o[k] = v && typeof v === 'object' && !Array.isArray(v) && o[k] && typeof o[k] === 'object' && !Array.isArray(o[k]) ? hvMerge(o[k], v) : v; } return o; };
+function hvWallpanelOn(hass, wp, view) {
+  const w = ssWallpanel(); if (!w || typeof w.startScreensaver !== 'function') return false;
+  const q = new URLSearchParams(location.search); if (q.get('edit') === '1') return false;
+  const base = Object.assign({}, wp || {}); if (base.enabled_on_tabs && !base.enabled_on_views) base.enabled_on_views = base.enabled_on_tabs;
+  let c = hvMerge({ enabled: false, enabled_on_views: [] }, base); const qp = {};
+  for (const [k0, v0] of q) { if (!k0.startsWith('wp_')) continue; let k = k0.slice(3), v = v0; if (k === 'enabled_on_tabs') k = 'enabled_on_views';
+    try { v = JSON.parse(v0); } catch (e) {} if (k === 'enabled_on_views' && typeof v === 'string') v = v.split(','); qp[k] = v; }
+  c = hvMerge(c, qp); const P = c.profiles || {};
+  if (c.profile && P[c.profile]) c = hvMerge(c, P[c.profile]);
+  const bm = window.browser_mod, dev = bm && (bm.entity_id || (bm.browserID && String(bm.browserID).replace('-', '_')));
+  if (dev && P['device.' + dev]) c = hvMerge(c, P['device.' + dev]);
+  const u = hass && hass.user; for (const n of [u && u.id, u && u.username, u && u.name]) { if (!n) continue; const k = 'user.' + String(n).toLowerCase().replace(/\s/g, '_'); if (P[k]) { c = hvMerge(c, P[k]); break; } }
+  c = hvMerge(c, qp); const pe = c.profile_entity, ps = pe && hass && hass.states[pe] && hass.states[pe].state; if (ps && P[ps]) c = hvMerge(c, P[ps]);
+  if (!c.enabled) return false; const ev = c.enabled_on_views; return !(Array.isArray(ev) && ev.length && view && !ev.includes(view));
+}
+/* ---------------- launch hub (Apple home hub style) ---------------- */
+// NotHomeView Hub: a full-screen launch page like the Apple home hub: greeting + the user's name (top left), their avatar
+// (top right), a 2 x 2 grid of iOS-style app icons and a Photos widget cycling the Wallpanel photos with a crossfade, a
+// heavily blurred, enlarged copy of the current photo as the page background under a see-through tint (Background
+// transparency: 0 = the classic near-opaque gradient, 100 = clear photo; no photo = the gradient), and optionally a wide calendar.
+// Photos are only read from Home Assistant (media source browse / resolve), never stored.
+const HUB_HOME_SVG = `<svg viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="hvh1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffb340"/><stop offset="1" stop-color="#ff7a00"/></linearGradient>
+<linearGradient id="hvh2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffd27a"/><stop offset="1" stop-color="#ffa21f"/></linearGradient></defs>
+<path d="M50 13 L88 44.5 Q90 46.3 90 49 L90 83 Q90 88 85 88 L15 88 Q10 88 10 83 L10 49 Q10 46.3 12 44.5 Z" fill="url(#hvh1)"/>
+<path d="M50 30 L75 51 Q76.5 52.3 76.5 54.3 L76.5 78 Q76.5 81 73.5 81 L26.5 81 Q23.5 81 23.5 78 L23.5 54.3 Q23.5 52.3 25 51 Z" fill="url(#hvh2)"/>
+<path d="M50 46 L63 57 L63 75 L37 75 L37 57 Z" fill="#fff3d6"/><rect x="45" y="62" width="10" height="13" rx="2" fill="#ffb340"/></svg>`;
+const HUB_APPS = [
+  { name: 'Home', icon: 'hv:home', color_from: '#ffffff', color_to: '#ededf2', kind: 'navigate', navigation_path: 'home' },
+  { name: 'Security', icon: 'mdi:shield-home', color_from: '#5b8cff', color_to: '#2b3fd6', kind: 'navigate', navigation_path: 'security' },
+  { name: 'Music', icon: 'mdi:music-note', color_from: '#ff6b81', color_to: '#f5163d', kind: 'now_playing' },
+  { name: 'Weather', icon: 'mdi:weather-partly-cloudy', color_from: '#5ec8ff', color_to: '#1a73e8', kind: 'weather' }];
+const HUB_CSS = `:host{display:block;position:relative;font-family:${FONT};color:#fff;-webkit-tap-highlight-color:transparent}
+.bg{position:fixed;inset:0;z-index:-1;pointer-events:none;overflow:hidden;background:radial-gradient(120% 90% at 20% 10%,#4b3a66 0%,#1c1a33 55%,#0d0f1a 100%)}
+:host([contained]) .bg{position:absolute;border-radius:24px;z-index:0}
+.bgi{position:absolute;inset:calc(-2 * var(--blur,32px));background-size:cover;background-position:center;filter:blur(var(--blur,32px)) saturate(1.35);transform:scale(1.08);opacity:0;transition:opacity 2.2s ease}
+.bgi.on{opacity:1}
+:host(:not([bgphoto])) .bgi{display:none}
+.tint{position:absolute;inset:0;background:radial-gradient(120% 90% at 20% 10%,#4b3a66 0%,#1c1a33 55%,#0d0f1a 100%);opacity:var(--tint,.24);transition:opacity .2s ease}
+:host(:not([bgphoto])) .tint{display:none}
+.dim{position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,calc(var(--dim,.35) + .08)) 0%,rgba(0,0,0,var(--dim,.35)) 40%,rgba(0,0,0,calc(var(--dim,.35) + .12)) 100%)}
+:host([bgphoto]) .dim{--dk:calc(var(--dim,.32) * var(--dsc,.55));--m:var(--dmix,0);background:linear-gradient(180deg,rgba(0,0,0,calc(var(--m) * (var(--dim,.32) + .08) + (1 - var(--m)) * var(--dk) * .95)) 0%,rgba(0,0,0,calc(var(--m) * (var(--dim,.32) + .01) + (1 - var(--m)) * var(--dk) * .38)) 35%,rgba(0,0,0,calc(var(--m) * (var(--dim,.32) + .04) + (1 - var(--m)) * var(--dk) * .32)) 60%,rgba(0,0,0,calc(var(--m) * (var(--dim,.32) + .12) + (1 - var(--m)) * var(--dk) * .88)) 100%),rgba(255,255,255,calc(var(--bgt,.6) * .09))}
+.w{position:relative;z-index:1;box-sizing:border-box;display:flex;flex-direction:column;padding:var(--pt,24px) var(--px,32px) var(--pb,20px);gap:var(--gap,24px);min-height:var(--h,auto)}
+.top{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex:none}
+.gr{text-transform:uppercase;font-size:var(--gfs,22px);line-height:1.22;letter-spacing:.01em;text-shadow:0 1px 8px rgba(0,0,0,.25);min-width:0}
+.g1{font-weight:400;color:rgba(255,255,255,.82)} .g2{font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.av{all:unset;cursor:pointer;flex:none;width:var(--av,64px);height:var(--av,64px);border-radius:50%;box-sizing:border-box;padding:3px;
+ background:var(--ring,linear-gradient(150deg,#c7b8ff,#8f7bf0));box-shadow:0 6px 18px rgba(0,0,0,.28);transition:transform .12s ease}
+.av:active{transform:scale(.95)}
+.av .pic{width:100%;height:100%;border-radius:50%;background:#2a2a40 center/cover no-repeat;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:calc(var(--av,64px) * .4)}
+.mid{display:flex;gap:var(--cg2,40px);align-items:flex-start;flex:none}
+.apps{display:grid;grid-template-columns:repeat(2,var(--I,110px));column-gap:var(--cg,40px);row-gap:var(--rg,22px)}
+.app{all:unset;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:var(--lg,9px);width:var(--I,110px)}
+.ico{width:var(--I,110px);height:var(--I,110px);border-radius:22.5%;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;
+ box-shadow:0 calc(var(--I) * .06) calc(var(--I) * .16) rgba(0,0,0,.28);transition:transform .14s ease,filter .14s ease}
+.ico::after{content:'';position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 1px 0 rgba(255,255,255,.35);pointer-events:none}
+.app:active .ico,.pw:active{transform:scale(.94);filter:brightness(.92)}
+.app:focus-visible .ico,.pw:focus-visible{outline:3px solid rgba(255,255,255,.8);outline-offset:3px}
+.ico ha-icon{--mdc-icon-size:calc(var(--I,110px) * .58);display:flex;filter:drop-shadow(0 1px 2px rgba(0,0,0,.12))}
+.ico svg{width:80%;height:80%}
+.lb{font-size:var(--lfs,17px);line-height:var(--lh,22px);font-weight:500;color:#fff;text-shadow:0 1px 6px rgba(0,0,0,.35);white-space:nowrap;max-width:calc(var(--I,110px) + var(--cg,40px));overflow:hidden;text-overflow:ellipsis}
+.phw{display:flex;flex-direction:column;align-items:center;gap:var(--lg,9px);flex:none}
+.pw{all:unset;cursor:pointer;position:relative;width:var(--pw,300px);height:var(--ph,290px);border-radius:calc(var(--I,110px) * .26);overflow:hidden;background:rgba(255,255,255,.12);
+ box-shadow:0 calc(var(--I) * .06) calc(var(--I) * .2) rgba(0,0,0,.3);transition:transform .14s ease,filter .14s ease}
+.pi{position:absolute;inset:0;background-size:cover;background-position:center;opacity:0;transition:opacity var(--fade,1.6s) ease}
+.pi.on{opacity:1}
+.pw .ph0{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.75)} .pw .ph0 ha-icon{--mdc-icon-size:calc(var(--I) * .5)}
+.row{display:flex;gap:var(--cg2,40px);align-items:flex-start;flex:none;min-width:0}
+.tile{position:relative;flex:none;width:var(--tw,300px);height:var(--th,var(--ph,290px))}
+.tile > *{position:absolute;inset:0;width:100%;height:100%;aspect-ratio:auto;--hv-aspect:auto}
+.below{display:flex;flex-wrap:wrap;gap:var(--cg2,40px);flex:none} .below[hidden]{display:none}
+.calw{flex:1 1 0;min-height:var(--calmin,240px);position:relative}
+.calw > *{position:absolute;inset:0;width:100%;height:100%;aspect-ratio:auto}
+.empty{opacity:.7;padding:12px}
+.ssp{position:fixed;left:50%;top:calc(var(--hv-safe-top, env(safe-area-inset-top, 0px)) + 5px);width:38px;height:5px;margin-left:-19px;border-radius:3px;background:rgba(255,255,255,.55);box-shadow:0 1px 4px rgba(0,0,30,.25);pointer-events:none;z-index:3}
+.ssp[hidden],:host([contained]) .ssp{display:none}
+.tile.fit > *{cursor:pointer}
+.ssv{position:fixed;inset:0;z-index:0;display:none;overflow:hidden;pointer-events:none;background:#000;will-change:transform;transform:translate3d(0,-100%,0)}
+.ssin{position:absolute;inset:0;will-change:transform}
+.ssb,.sss{position:absolute;inset:0;background:#111 center/cover no-repeat}
+.ssb{inset:-60px;filter:blur(28px) brightness(.75);transform:scale(1.04)} .sss{opacity:0;will-change:opacity}
+.ssg{position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.35),rgba(0,0,0,.15) 40%,rgba(0,0,0,.45))}
+.ssc{position:absolute;left:0;right:0;top:3vh;text-align:center;color:rgba(255,255,255,.62);text-shadow:0 .4vh 4vh rgba(0,0,0,.16);opacity:0;will-change:opacity;
+  font-family:ui-rounded,"SF Pro Rounded","Nunito",-apple-system,BlinkMacSystemFont,sans-serif}
+.sst{font-size:min(40vh,27vw);font-weight:500;line-height:1;letter-spacing:-.005em} .ssd{display:none}
+.wpn{position:fixed;left:50%;bottom:calc(10px + var(--hv-safe-bottom, env(safe-area-inset-bottom, 0px)));transform:translateX(-50%);z-index:3;max-width:calc(100vw - 32px);box-sizing:border-box;
+ padding:5px 12px;border-radius:999px;font-size:12px;line-height:1.3;text-align:center;color:rgba(255,255,255,.85);background:rgba(0,0,0,.30);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);pointer-events:none}
+:host([contained]) .wpn{position:absolute}`;
+const hubWeatherBg = (cond, night) => {
+  const n = night, g = { sunny: ['#2f86e0', '#8cc8f5'], 'clear-night': ['#0b1736', '#2a3d75'], partlycloudy: n ? ['#141d3a', '#3a4a72'] : ['#3d7fd0', '#9cc3e8'],
+    cloudy: n ? ['#1d2333', '#40485c'] : ['#5d7190', '#a9b7c9'], rainy: ['#33445c', '#6c7d93'], pouring: ['#2a3446', '#5b6a80'], lightning: ['#252a3d', '#555b78'], 'lightning-rainy': ['#252a3d', '#555b78'],
+    snowy: ['#8399b2', '#d3dce8'], 'snowy-rainy': ['#6d7f95', '#b8c4d2'], fog: ['#7e8a98', '#c0c7cf'], hail: ['#4c5a6e', '#98a6b6'], windy: ['#4a7cc0', '#a6c4e2'], 'windy-variant': ['#4a7cc0', '#a6c4e2'] }[cond] || (n ? ['#101a36', '#33406a'] : ['#3c7fd2', '#9cc6ec']);
+  const clouds = /cloud|rain|pour|snow|fog|lightning|hail/.test(cond) ? `radial-gradient(60% 35% at 30% 18%,rgba(255,255,255,${n ? .10 : .45}),transparent 70%),radial-gradient(55% 30% at 75% 26%,rgba(255,255,255,${n ? .08 : .38}),transparent 70%),` : '';
+  const sun = cond === 'sunny' || (cond === 'partlycloudy' && !n) ? 'radial-gradient(30% 22% at 18% 6%,rgba(255,250,220,.55),transparent 70%),' : '';
+  return `${sun}${clouds}linear-gradient(180deg,${g[0]} 0%,${g[1]} 100%)`; };
+const HUB_WX_COLOR = { sunny: '#ffd60a', 'clear-night': '#f2f2f7', rainy: '#9fd8ff', pouring: '#9fd8ff', lightning: '#ffe066', 'lightning-rainy': '#ffe066' };
+const WX_CSS = `:host{position:fixed;inset:0;z-index:8;font-family:${FONT};color:#fff;-webkit-tap-highlight-color:transparent}
+.sky{position:absolute;inset:0;opacity:0;transition:opacity .3s ease} :host(.in) .sky{opacity:1}
+.sc{position:absolute;inset:0;overflow:auto;box-sizing:border-box;padding:max(18px,env(safe-area-inset-top)) max(20px,env(safe-area-inset-right)) max(20px,env(safe-area-inset-bottom)) max(20px,env(safe-area-inset-left));
+ display:flex;flex-direction:column;align-items:center;opacity:0;transform:translateY(14px);transition:opacity .3s ease,transform .35s cubic-bezier(.2,.9,.3,1)}
+:host(.in) .sc{opacity:1;transform:none}
+.bar{align-self:stretch;display:flex;justify-content:space-between;align-items:center;min-height:44px;position:relative}
+.bar::before{content:'';position:absolute;left:50%;top:-10px;width:38px;height:5px;margin-left:-19px;border-radius:3px;background:rgba(255,255,255,.6)}
+.clk{font-size:20px;font-weight:600;text-shadow:0 1px 6px rgba(0,0,0,.2)}
+.x{all:unset;cursor:pointer;width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.2);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
+.x ha-icon{--mdc-icon-size:24px;display:flex}
+.hero{text-align:center;text-shadow:0 1px 10px rgba(0,0,0,.18);margin:clamp(4px,3vh,40px) 0 clamp(14px,4vh,48px)}
+.loc{font-size:clamp(28px,4.6vmin,46px);font-weight:500;letter-spacing:-.01em}
+.tmp{font-size:clamp(84px,17vmin,170px);font-weight:200;line-height:1;margin:2px 0 4px 0.12em;letter-spacing:-.03em}
+.cnd{font-size:clamp(18px,2.8vmin,26px);font-weight:500} .hl{font-size:clamp(17px,2.6vmin,24px);font-weight:500;margin-top:2px}
+.pn{box-sizing:border-box;width:min(100%,980px);border-radius:24px;padding:14px 18px 16px;margin-bottom:14px;
+ background:rgba(30,60,120,.22);border:1px solid rgba(255,255,255,.18);backdrop-filter:blur(26px) saturate(150%);-webkit-backdrop-filter:blur(26px) saturate(150%)}
+.pt{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.72);padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,.16)}
+.pt ha-icon{--mdc-icon-size:16px;display:flex}
+.hr{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;padding-top:12px;overscroll-behavior-x:contain} .hr::-webkit-scrollbar{display:none}
+.h{flex:none;min-width:62px;display:flex;flex-direction:column;align-items:center;gap:10px;font-size:16px;font-weight:600}
+.h .t{font-size:15px} .h .t small{font-size:12px;font-weight:600;margin-left:1px} .h ha-icon{--mdc-icon-size:30px;display:flex} .h .p{font-size:12px;color:#9fd8ff;margin-top:-8px;min-height:14px}
+.dl .d{display:grid;grid-template-columns:minmax(70px,1fr) 36px 52px minmax(80px,2.2fr) 52px;align-items:center;gap:10px;padding:10px 2px;border-bottom:1px solid rgba(255,255,255,.12);font-size:17px;font-weight:600}
+.dl .d:last-child{border-bottom:0} .dl ha-icon{--mdc-icon-size:26px;display:flex} .dl .lo{color:rgba(255,255,255,.62);text-align:right}
+.dl .rng{height:5px;border-radius:5px;background:rgba(0,0,0,.18);position:relative;overflow:hidden} .dl .rng i{position:absolute;top:0;bottom:0;border-radius:5px;background:linear-gradient(90deg,#8fd5ff,#ffd60a,#ff9f0a)}
+@media (min-width:900px) and (orientation:landscape){.grid2{display:grid;grid-template-columns:1.25fr 1fr;gap:14px;width:min(100%,1100px);align-items:start}.grid2 .pn{width:auto;margin:0;min-width:0}}`;
+const hvPreload = u => new Promise((ok, no) => { const im = new Image(); im.onload = ok; im.onerror = no; im.src = u; if (im.decode) im.decode().then(ok, () => {}); });
+
+/* Photo loader (1.30.2): the viewer's Previous / Next and the gallery used to fetch full-size photos from Home Assistant (often 2-8 MB over the cloud link) one
+   neighbour at a time, with no limit and no memory. Now: a small priority queue with at most 3 downloads at once (0 = the photo you asked for, 1-4 = the next 2
+   and previous 2, 5 = gallery thumbnails), the decoded images of the most recent photos are kept (LRU), and every photo that is downloaded also leaves a small
+   thumbnail (memory + IndexedDB) so the gallery and a not-yet-loaded photo can be shown at once, the next time without downloading anything. */
+const HVL = (() => {
+  const MAXC = 3, LRU_MAX = 9, Q = [], lru = new Map(), jobs = new Map(), TH = new Map(); let act = 0, seq = 0, dbp = null;
+  const pump = () => { while (act < MAXC && Q.length) { Q.sort((a, b) => a.p - b.p || a.n - b.n); Q.shift().run(); } };
+  const db = () => dbp || (dbp = new Promise(ok => { try { const r = indexedDB.open('hv-photo-thumbs', 1); r.onupgradeneeded = () => r.result.createObjectStore('t'); r.onsuccess = () => ok(r.result); r.onerror = r.onblocked = () => ok(null); } catch (e) { ok(null); } }));
+  const idb = async (mode, fn) => { const d = await db(); if (!d) return null; return new Promise(ok => { try { const tx = d.transaction('t', mode), rq = fn(tx.objectStore('t')); tx.oncomplete = () => ok(rq && rq.result); tx.onerror = tx.onabort = () => ok(null); } catch (e) { ok(null); } }); };
+  const thumb = async id => { if (TH.has(id)) return TH.get(id); const b = await idb('readonly', s => s.get(id));
+    if (b && b.blob) { const u = URL.createObjectURL(b.blob); if (!TH.has(id)) TH.set(id, u); return TH.get(id); } return null; };
+  const idle = f => { try { if (window.requestIdleCallback) return requestIdleCallback(f, { timeout: 4000 }); } catch (e) { /* fall through */ } return setTimeout(f, 600); };
+  const makeThumb = (id, im) => new Promise(ok => { try { if (!id || TH.has(id)) return ok(TH.get(id) || null); const w = im.naturalWidth, h = im.naturalHeight; if (!w || !h) return ok(null);
+    const k = Math.min(1, 360 / Math.max(w, h)), cw = Math.max(1, Math.round(w * k)), ch = Math.max(1, Math.round(h * k)), c = document.createElement('canvas'); c.width = cw; c.height = ch;
+    const fin = () => c.toBlob(bl => { if (!bl) return ok(null); const u = URL.createObjectURL(bl); TH.set(id, u); idb('readwrite', s => s.put({ blob: bl, t: Date.now() }, id)); ok(u); }, 'image/jpeg', 0.72);
+    const plain = () => { c.getContext('2d').drawImage(im, 0, 0, cw, ch); fin(); };
+    if (window.createImageBitmap) createImageBitmap(im, { resizeWidth: cw, resizeHeight: ch, resizeQuality: 'medium' }).then(bm => { c.getContext('2d').drawImage(bm, 0, 0); if (bm.close) bm.close(); fin(); }, plain); else plain(); } catch (e) { ok(null); } });
+  const keep = (url, im) => { lru.delete(url); lru.set(url, im); while (lru.size > LRU_MAX) lru.delete(lru.keys().next().value); };
+  // load(url, priority, id, { keep: false } for thumbnails only) -> Promise<Image> (decoded). .cancel() drops it while it is still waiting in the queue.
+  const load = (url, p, id, o) => { o = o || {}; const hit = lru.get(url); if (hit) { keep(url, hit); return Object.assign(Promise.resolve(hit), { cancel() {} }); }
+    let j = jobs.get(url); if (j) { j.p = Math.min(j.p, p); if (o.keep !== false) j.keep = true; if (id && !j.id) j.id = id; return j.pr; }
+    j = { url, p, n: seq++, id, keep: o.keep !== false, started: false };
+    j.pr = new Promise((ok, no) => { j.no = no;
+      j.run = () => { j.started = true; act++; const im = new Image(); let fin = false;
+        const end = (err, v) => { if (fin) return; fin = true; clearTimeout(tm); act--; jobs.delete(url); if (err) no(err); else ok(v); pump(); };
+        const tm = setTimeout(() => { im.src = ''; end(new Error('timeout')); }, 90000);
+        im.decoding = 'async'; im.onerror = () => end(new Error('load'));
+        im.onload = async () => { try { if (im.decode) await im.decode(); } catch (e) { /* still usable */ }
+          if (j.keep) keep(url, im); if (j.id) { if (j.keep) idle(() => makeThumb(j.id, im)); else await makeThumb(j.id, im); } end(null, im); };
+        im.src = url; }; });
+    j.pr.catch(() => {}); j.pr.cancel = () => { if (!j.started && j.p >= 5 && Q.includes(j)) { Q.splice(Q.indexOf(j), 1); jobs.delete(url); j.no(new Error('cancelled')); } };
+    jobs.set(url, j); Q.push(j); pump(); return j.pr; };
+  // drop queued neighbour jobs (priority 1-4) that are not in `keepUrls` any more (we moved on)
+  const prune = keepUrls => { for (const j of Q.slice()) if (j.p >= 1 && j.p <= 4 && !keepUrls.has(j.url)) { Q.splice(Q.indexOf(j), 1); jobs.delete(j.url); j.no(new Error('cancelled')); } };
+  const dropGallery = () => { for (const j of Q.slice()) if (j.p >= 5) { Q.splice(Q.indexOf(j), 1); jobs.delete(j.url); j.no(new Error('cancelled')); } };
+  return { load, has: url => lru.has(url), thumb, thumbSync: id => TH.get(id) || null, prune, dropGallery, stats: () => ({ lru: lru.size, queued: Q.length, active: act, thumbs: TH.size }) };
+})();
+const PV_CSS = `.pv{position:absolute;inset:0;overflow:hidden;background:#0b0b10;color:#fff;font-family:${FONT};user-select:none;-webkit-user-select:none}
+.pvb{position:absolute;inset:-40px;background:#111 center/cover no-repeat;filter:blur(38px) brightness(.55) saturate(1.2);transform:scale(1.1)}
+.pvs{position:absolute;left:0;right:0;top:44px;bottom:calc(96px + var(--hv-safe-bottom, env(safe-area-inset-bottom, 0px)));touch-action:pan-y}
+.pvi{position:absolute;inset:0 var(--pvx,12px);background:center/contain no-repeat;opacity:0;transition:opacity .38s ease,transform .38s cubic-bezier(.2,.9,.3,1);will-change:transform,opacity;filter:drop-shadow(0 10px 30px rgba(0,0,0,.45))}
+.pvi.on{opacity:1}
+.pv.ld .pvs::after{content:'';position:absolute;left:50%;top:50%;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;border:3px solid rgba(255,255,255,.28);border-top-color:#fff;animation:pvspin .8s linear infinite}
+@keyframes pvspin{to{transform:rotate(360deg)}}
+.pvh{position:absolute;left:0;right:0;top:0;height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 62px 0 20px;pointer-events:none;font-size:17px;font-weight:600;text-shadow:0 1px 6px rgba(0,0,0,.4)}
+.pvn{font-size:14px;font-weight:500;opacity:.75;font-variant-numeric:tabular-nums}
+.pve{position:absolute;left:0;right:0;top:44px;bottom:96px;display:flex;align-items:center;justify-content:center;font-size:18px;opacity:.7} .pve[hidden]{display:none}
+.pvc{position:absolute;left:0;right:0;bottom:0;padding:12px max(16px,env(safe-area-inset-left)) calc(14px + var(--hv-safe-bottom, env(safe-area-inset-bottom, 0px)));display:flex;flex-wrap:wrap;gap:10px;justify-content:center;align-items:center}
+.pvk{all:unset;cursor:pointer;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:6px;height:48px;padding:0 20px;border-radius:24px;font-size:16px;font-weight:600;color:#fff;
+ background:rgba(255,255,255,.16);backdrop-filter:blur(22px) saturate(1.4);-webkit-backdrop-filter:blur(22px) saturate(1.4);box-shadow:inset 0 0 0 1px rgba(255,255,255,.14);transition:transform .12s ease,background .15s ease,opacity .15s ease}
+.pvk:active{transform:scale(.95);background:rgba(255,255,255,.26)} .pvk:focus-visible{outline:3px solid rgba(255,255,255,.8);outline-offset:2px} .pvk[disabled]{opacity:.35;pointer-events:none}
+.pvk ha-icon{--mdc-icon-size:26px;display:flex} .pvp,.pvx{flex:1 1 0;max-width:190px}
+.pva{background:linear-gradient(180deg,#4f9dff,#2a6df0);box-shadow:0 4px 14px rgba(30,90,230,.4)} .pva:active{background:linear-gradient(180deg,#3f8bf0,#215fdc)}
+@media (max-width:640px){.pva{order:3;flex:1 1 100%;max-width:none}.pvk{height:46px}.pvs{bottom:calc(150px + var(--hv-safe-bottom, env(safe-area-inset-bottom, 0px)))}.pve{bottom:150px}.pvi{inset:0 4px}}
+.pg{box-sizing:border-box;padding:0 max(14px,env(safe-area-inset-left)) calc(24px + var(--hv-safe-bottom, env(safe-area-inset-bottom, 0px)));min-height:100%;color:#fff;font-family:${FONT}}
+.pgh{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 calc(-1 * max(14px,env(safe-area-inset-left))) 10px;padding:42px calc(max(14px,env(safe-area-inset-left)) + 36px) 10px max(14px,env(safe-area-inset-left));background:rgba(18,18,26,.88);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
+.pgt{display:flex;flex-direction:column;min-width:0} .pgt b{font-size:22px;font-weight:700;letter-spacing:-.01em} .pgc{font-size:13px;opacity:.65;min-height:16px}
+.pgh .pvk{height:42px;padding:0 16px;font-size:15px;background:linear-gradient(180deg,#4f9dff,#2a6df0)} .pgh .pvk ha-icon{--mdc-icon-size:22px}
+.pgs{margin:0 0 12px;padding:10px 14px;border-radius:12px;background:rgba(255,255,255,.12);font-size:14px;line-height:1.35} .pgs.err{background:rgba(255,69,58,.22)} .pgs[hidden],.pgm[hidden]{display:none}
+.pgm{padding:40px 12px;text-align:center;opacity:.7;font-size:16px}
+.pgg{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--gt,118px),1fr));gap:6px}
+.gt{all:unset;cursor:pointer;position:relative;aspect-ratio:1;border-radius:10px;overflow:hidden;background:rgba(255,255,255,.08);-webkit-tap-highlight-color:transparent}
+.gt img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .35s ease} .gt.ld img{opacity:1}
+.gt ha-icon{position:absolute;left:50%;top:50%;margin:-14px 0 0 -14px;--mdc-icon-size:28px;opacity:0;display:flex;color:rgba(255,255,255,.55)} .gt.bad ha-icon{opacity:1}
+.gt:active{transform:scale(.96)} .gt:focus-visible{outline:3px solid #fff;outline-offset:-3px}
+.gt.cur::after{content:'';position:absolute;inset:0;border-radius:10px;box-shadow:inset 0 0 0 3px #4f9dff,inset 0 0 0 5px rgba(255,255,255,.9)}
+.gt.new::before{content:'NEW';position:absolute;left:6px;top:6px;z-index:2;padding:2px 6px;border-radius:6px;background:#30d158;color:#04210d;font-size:10px;font-weight:800;letter-spacing:.04em}
+@media (min-width:900px){.pgg{--gt:150px}}
+:host([hv-day]) .pg{color:#1c1c1e} :host([hv-day]) .pgh{background:rgba(242,242,246,.9)} :host([hv-day]) .pgc{opacity:.75}
+:host([hv-day]) .pgs{background:rgba(60,60,67,.08)} :host([hv-day]) .pgs.err{background:rgba(255,59,48,.14)} :host([hv-day]) .gt{background:rgba(60,60,67,.08)}
+:host([hv-day]) .gt ha-icon{color:rgba(60,60,67,.45)} :host([hv-day]) .gt:focus-visible{outline-color:#5b3fc4}`;
+class HVHubCard extends HTMLElement {
+  constructor() { super(); this.attachShadow({ mode: 'open' }); this._layer = 0; }
+  static get defaults() { return { theme: 'night', person: '', morning_start: 5, afternoon_start: 12, evening_start: 17, greeting_morning: 'Good morning', greeting_afternoon: 'Good afternoon',
+    greeting_evening: 'Good evening', photo_source: '', photo_interval: 25, photo_order: 'random', blur: 32, dim: 0.32, bg_transparency: 60, photo_backdrop: true, bg_freeze: true, photo_tap: 'viewer', photo_viewer_nav: true, photo_viewer_swipe: true, photo_viewer_add: true, photo_gallery_upload: true, photo_viewer_pause: true, photo_label: 'Photos', photo_max_aspect: 2.6,
+    show_calendar: true, calendar_layout: 'wide', calendar_columns: 3, calendar_days: 7, calendar_title: 'Calendar', calendar_min_height: 240, max_icon: 140, edge_sidebar: true, ss_hold: true, weather_entity: '', photo_size: 'wide', side_portrait: 'below', side_sizes: '', row_units: 3, block_pull_refresh: true, calendar_rows: 'auto', swipe_screensaver: 'auto' }; }
+  static getStubConfig(hass) { return { apps: HUB_APPS.map(a => Object.assign({}, a)), calendar_entities: Object.keys((hass && hass.states) || {}).filter(k => k.startsWith('calendar.')).slice(0, 3) }; }
+  static getConfigElement() { return document.createElement('homeview-hub-card-editor'); }
+  setConfig(c) { if (!c) throw new Error('Invalid configuration'); const old = this._config, nc = Object.assign({}, HVHubCard.defaults, c);
+    this._blurX = c.blur !== undefined && c.blur !== null && c.blur !== '' && Number(c.blur) !== HVHubCard.defaults.blur; // an explicit Advanced blur (not the default value) stays exactly as set; the default one follows the transparency slider
+    if (!Array.isArray(nc.apps) || !nc.apps.length) nc.apps = HUB_APPS;
+    const BG = ['bg_transparency', 'blur', 'dim', 'photo_backdrop', 'bg_freeze'], rest = o => JSON.stringify(Object.keys(o).filter(k => !BG.includes(k)).sort().map(k => [k, o[k]]));
+    if (old && this._w && rest(old) === rest(nc)) { // only the background options changed (slider drag): update in place, no rebuild
+      this._config = nc; this.style.setProperty('--blur', (Number(nc.blur) || 0) + 'px'); this.style.setProperty('--dim', String(Math.max(0, Math.min(0.9, Number(nc.dim) || 0)))); this._bgMode(); if (nc.bg_freeze === false) this._paintBg(true, true); return; }
+    this._config = nc;
+    this._sig = null; if (old && (old.photo_source !== c.photo_source || old.photo_order !== c.photo_order)) { this._ids = null; this._loadPhotos(); }
+    this._calSig = null; this._render(); this._restartTimer(); if (this.isConnected) hvPTR.set(this, this._config.block_pull_refresh !== false); }
+  set hass(h) { const first = !this._hass; this._hass = h; this._render(); if (this._cal) this._cal.hass = h; (this._sideEls || []).forEach(e => { e._card.hass = this._simHass(h);
+      if (e._fit) { const o = hubTileOpt(this._config, this._sideEls.indexOf(e)); if (o.sky === true && hvSky(h, o.sky_entity, window.__hvSimScene).sig !== e._skySig) requestAnimationFrame(() => this._fitTile(e)); } }); if (first) { this._loadPhotos(); this._loadCfg(); } if (this._sheetO) this._sheetO.hass = h; }
+  get hass() { return this._hass; }
+  set editMode(v) { this._edit = v; this._layout(); this._ssPaint(); }
+  getCardSize() { return 12; }
+  getGridOptions() { return { columns: 'full', rows: 'auto', min_columns: 12 }; }
+  connectedCallback() {
+    if (!this._bound) this._bound = () => this._layout();
+    addEventListener('resize', this._bound); addEventListener('orientationchange', this._bound); addEventListener('hv-layout', this._bound); if (window.visualViewport) visualViewport.addEventListener('resize', this._bound);
+    if (window.ResizeObserver && !this._ro) { this._ro = new ResizeObserver(() => this._layout()); this._ro.observe(this); }
+    this._edgeBind(true); hvPTR.set(this, (this._config || {}).block_pull_refresh !== false); this._ssBind(true); if (this._hass) this._loadCfg(true);
+    clearInterval(this._tick); this._tick = setInterval(() => { this._sig = null; this._render(); if (++this._tn % 4 === 0) this._loadCfg(true); else this._ssPaint(); }, 30000); this._tn = 0;
+    if (!this._vis) { this._vis = () => { if (!document.hidden) this._restartTimer(); else this._paintBg(true, true); }; } document.addEventListener('visibilitychange', this._vis);
+    requestAnimationFrame(() => this._layout()); setTimeout(() => this._layout(), 700); setTimeout(() => this._layout(), 1800);
+    for (const t of [2500, 6000]) setTimeout(() => { this._vk = null; this._layout(); }, t); // re-measure the space below once the page has settled
+    if (this._hass) this._loadPhotos(); this._restartTimer(); this._paintBg(true, true); // back on the Home Screen (from another view): one instant catch-up before it shows
+  }
+  disconnectedCallback() { clearInterval(this._ssHoldIv); this._ssHoldIv = null; this._edgeBind(false); hvPTR.set(this, false); this._ssBind(false); if (this._galO) this._galO.close(); if (this._sheetO) this._sheetO.close(); this._ssPause(false); clearInterval(this._tick); clearTimeout(this._timer); this._timer = null;
+    removeEventListener('resize', this._bound); removeEventListener('orientationchange', this._bound); removeEventListener('hv-layout', this._bound); if (window.visualViewport) visualViewport.removeEventListener('resize', this._bound);
+    document.removeEventListener('visibilitychange', this._vis); }
+  // --- dashboard config (Wallpanel settings, views for the sheets), cached
+  async _loadCfg(force) { if (!this._hass) return this._lcfg; if (this._lcfgP && !force) return this._lcfgP;
+    this._lcfgP = (async () => { try { const m = { type: 'lovelace/config' }; const d = ssDash(); if (d) m.url_path = d; this._lcfg = await this._hass.callWS(m); } catch (e) {} this._ssPaint(); return this._lcfg; })();
+    return this._lcfgP; }
+  // --- swipe down from the top: start the Wallpanel screensaver (only when it is enabled here)
+  _viewPath() { return decodeURIComponent(location.pathname.split('/')[2] || ''); }
+  _wpOnHere() { return !!(this._hass && this._lcfg && hvWallpanelOn(this._hass, (this._lcfg || {}).wallpanel, this._viewPath())); } // Wallpanel's screensaver enabled on this view
+  _ssEnabled() { const m = (this._config || {}).swipe_screensaver; if (m === 'off' || m === false) return false; const w = ssWallpanel(); if (!w || typeof w.startScreensaver !== 'function') return false;
+    return this._wpOnHere(); } // 1.30.4: 'on' no longer starts a screensaver that is turned off
+  _wpNote() { // small note on the Home Screen when the dashboard asks for the screensaver but Wallpanel is missing
+    const c = this._config || {}, wp = (this._lcfg || {}).wallpanel, want = !!this._lcfg && ((wp && wp.enabled === true) || c.swipe_screensaver === 'on');
+    let n = this.shadowRoot && this.shadowRoot.querySelector('.wpn'); const show = want && !this._edit && hvWpMissing();
+    if (!show) { if (n) n.remove(); if (want && !hvHasWallpanel() && !this._wpT) this._wpT = setTimeout(() => { this._wpT = null; this._wpNote(); }, 13000); return; }
+    if (!n) { n = document.createElement('div'); n.className = 'wpn'; n.setAttribute('role', 'note'); n.textContent = HV_WP_HINT; this.shadowRoot.appendChild(n); hvWhenWallpanel(() => this._wpNote()); } }
+  _ssPaint() { this._wpNote(); this._wpOn = this._wpOnHere(); this._ssOn = !!(this._hass && this._lcfg && this._ssEnabled()); if (this._ssp) this._ssp.hidden = !this._ssOn || !!this._edit; this._ssHoldSet(); }
+  // 1.30.2: while the Home Screen is showing and the screensaver is on here, the screensaver stays paused in the background: Wallpanel's idle clock is kept fresh (so it
+  // never starts by itself behind the page and costs nothing), and only the Photos card changes its picture, on its own interval. Swiping the page away starts it again.
+  _ssHoldSet() { const on = !!this._wpOn && this._config && this._config.ss_hold !== false && this.isConnected && !this._edit;
+    if (on && !this._ssHoldIv) { this._ssHoldTick(); this._ssHoldIv = setInterval(() => this._ssHoldTick(), 2000); } else if (!on && this._ssHoldIv) { clearInterval(this._ssHoldIv); this._ssHoldIv = null; } }
+  _ssHeld() { const w = ssWallpanel(); return !!((w && w.screensaverRunning && w.screensaverRunning()) || this._ssBusy || (this._ssv && this._ssv.style.display === 'block')); } // screensaver up / being pulled in: the card's picture stays as it is
+  _ssHoldTick() { if (!this._wpOn || this._edit || !this.isConnected || (this._config && this._config.ss_hold === false) || document.hidden || !this.getClientRects().length) return;
+    const w = ssWallpanel(); if (w && !(w.screensaverRunning && w.screensaverRunning())) w.idleSince = Date.now(); }
+  // start Wallpanel on the picture the Photos card shows now: Wallpanel keeps its list of photos (the same media-source ids as ours) and steps to the next entry on start,
+  // so pointing its index one before ours makes the first photo it shows ours (matched by id; by file name if the id is not in its list)
+  _ssSync(w) { try { const L = w && w.mediaList; if (!Array.isArray(L) || !L.length) return false; let i = this._curId ? L.indexOf(this._curId) : -1;
+      if (i < 0 && this._cur) { const nm = x => { try { return decodeURIComponent(String(x).split('?')[0].split('/').pop()).toLowerCase(); } catch (e) { return ''; } }, b = nm(this._cur);
+        if (b) i = L.findIndex(m => typeof m === 'string' && nm(m) === b); }
+      if (i < 0) return false; w.mediaListDirection = 'forwards'; w.mediaIndex = i - 1; return true; } catch (e) { return false; } }
+  // Pull down from the top: the launch page follows the finger and reveals a preview of the screensaver (the current photo,
+  // blurred -> sharp, with the clock); past the threshold (or a fast flick) the page carries on off the bottom while Wallpanel
+  // starts right away; the preview holds until Wallpanel's own layer is up, then the page is put back underneath. Below the
+  // threshold it springs back. Transforms / opacity only.
+  _ssBind(on) {
+    if (!this._ssH) { let g = null;
+      const ok = t => this._ssOn && !this._edit && !this._sheetO && !this._ssBusy && this.isConnected && !this.hasAttribute('contained') && scrollY <= 2 && t.clientX > 28
+        && t.clientY <= this._px('var(--hv-safe-top, env(safe-area-inset-top, 0px))') + 96;
+      const ts = e => { g = null; if (e.touches.length !== 1) return; const t = e.touches[0]; if (!ok(t)) return; g = { x: t.clientX, y: t.clientY, on: false, pts: [] }; };
+      const tm = e => { if (!g) return; const t = e.touches[0], dx = t.clientX - g.x, dy = t.clientY - g.y;
+        if (!g.on) { if (Math.abs(dx) > 14 && Math.abs(dx) > dy) { g = null; return; } if (dy < -6) { g = null; return; }
+          if (dy > 10 && dy > Math.abs(dx) * 1.2) { g.on = true; g.y0 = t.clientY; this._ssPrev(true); } else return; }
+        if (e.cancelable) e.preventDefault(); const d = Math.max(0, t.clientY - g.y0), now = performance.now();
+        g.pts.push([now, d]); if (g.pts.length > 5) g.pts.shift(); g.dy = d;
+        if (!g.raf) g.raf = requestAnimationFrame(() => { g && (g.raf = 0, this._ssPose(g.dy, false)); }); };
+      const te = () => { if (!g) return; const s0 = g; g = null; if (!s0.on) return; cancelAnimationFrame(s0.raf);
+        const H = innerHeight || 800, p = s0.pts, v = p.length > 1 ? (p[p.length - 1][1] - p[0][1]) / Math.max(1, p[p.length - 1][0] - p[0][0]) : 0;
+        if ((s0.dy || 0) > H * 0.25 || (v > 0.55 && s0.dy > 40)) this._ssCommit(s0.dy, v); else this._ssSpring(); };
+      this._ssH = [['touchstart', ts, { capture: true, passive: true }], ['touchmove', tm, { capture: true, passive: false }], ['touchend', te, true], ['touchcancel', te, true]]; }
+    if (!!on !== !!this._ssOnB) for (const [t, f, o] of this._ssH) on ? addEventListener(t, f, o) : removeEventListener(t, f, o); this._ssOnB = !!on; }
+  _ssPrev(show) { let v = this._ssv;
+    if (!v) { v = this._ssv = document.createElement('div'); v.className = 'ssv';
+      v.innerHTML = '<div class="ssin"><div class="ssb"></div><div class="sss"></div><div class="ssg"></div><div class="ssc"><div class="sst"></div><div class="ssd"></div></div></div>'; this.shadowRoot.appendChild(v); }
+    if (!show) { v.style.display = 'none'; return v; }
+    const bg = this._cur ? `url("${this._cur.replace(/"/g, '%22')}")` : ''; v.querySelector('.ssb').style.backgroundImage = bg; v.querySelector('.sss').style.backgroundImage = bg;
+    const n = new Date(), lang = (this._hass && this._hass.locale && this._hass.locale.language) || navigator.language;
+    v.querySelector('.sst').textContent = n.toLocaleTimeString(lang, { hour: 'numeric', minute: '2-digit' }).replace(/\s?[AP]M$/i, '');
+    v.querySelector('.ssd').textContent = n.toLocaleDateString(lang, { weekday: 'long', month: 'long', day: 'numeric' });
+    v.style.display = 'block'; this._ssPose(0, false); return v; }
+  // dy = how far the page is pulled down; the preview hangs above the page (its picture held still), sharpening as it opens
+  _ssPose(dy, anim, dur, ease) { const H = innerHeight || 800, p = Math.max(0, Math.min(1, dy / H)), v = this._ssv; if (!v) return;
+    const tr = anim ? `transform ${dur}ms ${ease}, opacity ${dur}ms ${ease}` : 'none', bg = this.shadowRoot.querySelector('.bg');
+    for (const el of [this._w, bg]) { if (!el) continue; el.style.willChange = 'transform'; el.style.transition = tr; el.style.transform = dy > 0.5 ? `translate3d(0,${dy.toFixed(1)}px,0)` : ''; }
+    const inn = v.querySelector('.ssin'); v.style.transition = tr; inn.style.transition = tr; v.style.transform = `translate3d(0,${(dy - H).toFixed(1)}px,0)`; inn.style.transform = `translate3d(0,${(H - dy).toFixed(1)}px,0)`;
+    const q = Math.min(1, p * 1.8); for (const [c, o] of [['.sss', q], ['.ssc', Math.max(0, (p - 0.15) * 1.6)], ['.ssg', 1 - q * 0.6]]) { const e = v.querySelector(c); e.style.transition = anim ? `opacity ${dur}ms ${ease}` : 'none'; e.style.opacity = String(Math.min(1, o).toFixed(3)); } }
+  _ssSpring() { this._ssBusy = true; this._ssPose(0, true, 380, 'cubic-bezier(.32,.72,0,1)'); setTimeout(() => { this._ssReset(); this._ssBusy = false; }, 400); }
+  _ssReset() { const bg = this.shadowRoot.querySelector('.bg'); for (const el of [this._w, bg]) if (el) { el.style.transition = 'none'; el.style.transform = ''; el.style.willChange = ''; }
+    if (this._ssv) { this._ssv.style.transition = 'none'; this._ssv.style.opacity = ''; this._ssPrev(false); } }
+  _ssCommit(dy, v) { this._ssBusy = true; const H = innerHeight || 800, rest = H - dy, dur = Math.round(Math.max(200, Math.min(340, v > 0.3 ? rest / Math.max(v, 1.2) : 320)));
+    this._ssPose(H, true, dur, 'cubic-bezier(.17,.84,.32,1)'); const w = ssWallpanel(), t0 = performance.now();
+    // start on the next tick, once this touchend is fully dispatched (Wallpanel treats input as "stop")
+    setTimeout(() => { if (!this._startSS(true)) setTimeout(() => this._ssSpring(), dur); }, 16);
+    const wait = () => { const op = w ? Number(getComputedStyle(w).opacity) : 0, run = w && w.screensaverRunning && w.screensaverRunning();
+      const m = w && w.getActiveMediaElement && w.getActiveMediaElement(), ready = !m || m.tagName !== 'IMG' || (m.complete && m.naturalWidth > 0);
+      if (run && op > 0.98 && ready && performance.now() - t0 > dur) { // Wallpanel is up: put the launch page back underneath, drop the preview
+        this._paintBg(true, true); this._ssReset(); this._ssBusy = false; return; }
+      if (performance.now() - t0 > 7000 || (w && w.screensaverRunning && !run && performance.now() - t0 > 1500)) { this._ssSpring(); return; }
+      requestAnimationFrame(wait); };
+    requestAnimationFrame(wait); }
+  _startSS(quick) { const w = ssWallpanel(); if (!this._wpOnHere()) return false; if (w && typeof w.startScreensaver === 'function') { try { this._ssSync(w); w.startScreensaver();
+      // the pull preview already covers the screen: let Wallpanel's own layer come up quickly instead of its slow first fade-in
+      // (Wallpanel sets its fade-in transition synchronously at start; the next start / stop sets its own again)
+      if (quick) w.style.transition = 'opacity 320ms ease-out'; return true; } catch (e) {} } return false; }
+  // --- slide-up sheets on the launch page
+  _openSheet(o) { if (this._sheetO) return null;
+    const s = hvSheet(Object.assign({}, o, { day: o.day === true, parent: this.shadowRoot, launch: () => [this.shadowRoot.querySelector('.bg'), this._w],
+      onClose: () => { this._sheetO = null; if (o.onClose) o.onClose(); this._layout(); } }));
+    this._sheetO = s; if (this._hass) s.hass = this._hass; return s; }
+  async _openViewSheet(a) {
+    const np = a.navigation_path || 'home', dash = this._dash();
+    if (np.startsWith('/') && !np.startsWith(`/${dash}/`)) return false; // another dashboard: navigate
+    const vp = np.replace(new RegExp(`^/${dash}/`), '').replace(/^\//, '').replace(/[?#].*$/, '');
+    const cfg = await this._loadCfg(), v = cfg && (cfg.views || []).find(x => String(x.path || '') === vp); if (!v) return false;
+    let cards = [].concat(...(v.sections || []).map(s0 => s0.cards || []), v.cards || []).filter(x => x && x.type && x.type !== 'custom:homeview-edit-button-card' && !(x.type === 'custom:button-card' && x.template === 'homeview_styles')); // page-level helpers stay on the page
+    const helpers = window.loadCardHelpers ? await window.loadCardHelpers() : null; if (!helpers || this._sheetO) return !!this._sheetO;
+    // 1.30.7: a device page shown as a sheet follows the Device pages theme (from the live dashboard config, so a change shows at once)
+    const live = HVT.cfg || cfg, lv = live && (live.views || []).find(x => String(x.path || '') === vp) || v;
+    const mode = hvMode(hvViewTheme(live, lv), this._hass), day = mode === 'day';
+    if (day) { hvThemeOver('day'); cards = cards.filter(x => !hvIsBgCard(x)); } // Day: the light grey sheet instead of the page's dark background card
+    this._openSheet({ label: v.title || a.name || vp, bg: v.background || '', day, dayBg: '#eeeef0', onClose: () => { if (HVT.over) hvThemeOver(''); }, build: (bd, frame) => {
+      bd._hvOwnTheme = true; bd._hvThemeVal = mode; // the page's cards (and Page Grid tiles) follow this, not the Home Screen
+      if (day) bd.style.cssText += ';' + HV_DAY_VARS + ';--primary-text-color:#1c1c1e;--secondary-text-color:rgba(60,60,67,.72)'; // native cards styled with the --hv-* colours
+      const els = cards.map(c0 => { const cfg2 = c0.type === 'custom:homeview-grid-card' ? Object.assign({}, c0, { swipe_back: false, edge_sidebar: false, block_pull_refresh: false }) : c0;
+        let el; try { el = helpers.createCardElement(cfg2); } catch (e) { el = document.createElement('div'); el.textContent = String(e); }
+        el._hvFrame = frame; el.hass = this._hass; const w = document.createElement('div'); w.className = 'cw'; w.appendChild(el); bd.appendChild(w);
+        w.addEventListener('card-visibility-changed', e => { w.style.display = e.detail && e.detail.value === false ? 'none' : ''; });
+        return el; });
+      return { set hass(h) { els.forEach(e => { e.hass = h; }); } }; } });
+    return true; }
+  // Music: the Now Playing card (same card as the popup) inside the sheet. Its own swipe-to-close is off (the sheet does it);
+  // dismiss only from the pill / the artwork area, never from the controls, volume or seek bar.
+  _openMusicSheet(a, ids) {
+    const d = HVMusicCard.prototype.nowPlayingData.call({ _config: Object.assign({}, NP_TILE_DEFAULTS, a, { entity: ids[0], entities: ids.slice(1) }) });
+    const cfg = Object.assign({}, d.content, { height: '100%', popup_style: 'fullscreen', swipe_to_close: false });
+    this._openSheet({ label: a.name || 'Music', bg: '#121218', day: false, dragOk: (path, y, h) => y < h * 0.45 && !path.some(n => n instanceof Element && (n.tagName === 'BUTTON' || (n.classList && (n.classList.contains('pop') || n.classList.contains('prog') || n.classList.contains('ctl'))))),
+      build: bd => { bd.style.padding = '0'; bd.style.overflow = 'hidden'; const el = document.createElement('homeview-now-playing-card');
+        try { el.setConfig(cfg); } catch (e) { el.textContent = String(e); } el.style.cssText = 'display:block;position:absolute;inset:0;height:100%;--hv-safe-top:30px'; el.hass = this._hass; bd.appendChild(el);
+        return { set hass(h) { el.hass = h; } }; } }); }
+  _openTileSheet(cfg, o) { o = o || {}; const hub = this;
+    const helpers = window.loadCardHelpers ? window.loadCardHelpers() : null;
+    this._openSheet({ label: 'Enlarged view', bg: 'rgba(22,22,30,.72)', build: bd => {
+      bd.style.cssText = 'display:flex;align-items:center;justify-content:center;padding:48px 20px 24px;backdrop-filter:blur(30px) saturate(1.3);-webkit-backdrop-filter:blur(30px) saturate(1.3)';
+      const box = document.createElement('div'); box.style.cssText = 'position:relative;flex:none'; bd.appendChild(box); let el = null, ro = null;
+      const fit = () => { const W = Math.min(bd.clientWidth - 40, 1200), H = bd.clientHeight - 72; box.style.width = W + 'px'; box.style.height = H + 'px'; if (el) hvFitCard(el, W, H, Math.round(Math.min(W, H) * 0.04), { sky: o.sky === true ? hvSky(this._hass, o.sky_entity, window.__hvSimScene) : null, label: o.label_size_large ? Number(o.label_size_large) : 1.25 }); };
+      Promise.resolve(helpers).then(hp => { if (!hp) return; el = hp.createCardElement(cfg); el.style.cssText = 'display:block;position:absolute;inset:0;width:100%;height:100%'; el.hass = this._simHass(this._hass); box.appendChild(el);
+        if (window.ResizeObserver) { ro = new ResizeObserver(() => requestAnimationFrame(fit)); setTimeout(() => { const r = el.shadowRoot && el.shadowRoot.querySelector('#root'); if (r) ro.observe(r); }, 300); }
+        for (const t of [50, 300, 900, 2000]) setTimeout(fit, t); });
+      return { set hass(h) { if (el) el.hass = hub._simHass(h); } }; } }); }
+  // --- edge swipe opens the sidebar drawer (same gesture as the Page Grid)
+  _edgeBind(on) {
+    if (!this._edgeH) { let st = null;
+      const ts = e => { st = null; if ((this._config || {}).edge_sidebar === false || this._edit || !this.isConnected || e.touches.length !== 1) return;
+        const t = e.touches[0]; if (t.clientX <= 24) st = { x: t.clientX, y: t.clientY, done: false }; };
+      const tm = e => { if (!st) return; const t = e.touches[0], dx = t.clientX - st.x, dy = t.clientY - st.y; if (e.cancelable) e.preventDefault();
+        if (!st.done && dx > 36 && Math.abs(dy) < dx) { st.done = true; if (innerWidth < 870) { let d = null; try { d = document.querySelector('home-assistant').shadowRoot.querySelector('home-assistant-main').shadowRoot.querySelector('ha-drawer'); } catch (x) {}
+          if (!(d && d.open)) this.dispatchEvent(new CustomEvent('hass-toggle-menu', { bubbles: true, composed: true, detail: { open: true } })); } }
+        else if (!st.done && Math.abs(dy) > 60) st = null; };
+      const te = () => { st = null; };
+      this._edgeH = [['touchstart', ts, { capture: true, passive: true }], ['touchmove', tm, { capture: true, passive: false }], ['touchend', te, true], ['touchcancel', te, true]]; }
+    for (const [t, f, o] of this._edgeH) on ? addEventListener(t, f, o) : removeEventListener(t, f, o);
+  }
+  // --- person / greeting
+  _person() { const c = this._config, h = this._hass, S = h.states;
+    if (c.person && S[c.person]) return S[c.person];
+    const uid = h.user && h.user.id, p = uid && Object.values(S).find(s => s.entity_id.startsWith('person.') && s.attributes.user_id === uid);
+    return p || (c.fallback_person && S[c.fallback_person]) || null; }
+  _greeting() { const c = this._config, hr = new Date().getHours(), m = Number(c.morning_start), a = Number(c.afternoon_start), e = Number(c.evening_start);
+    if (c.night_start !== '' && c.night_start != null) { const n = Number(c.night_start); if (n >= e ? (hr >= n || hr < m) : (hr >= n && hr < m)) return c.greeting_night || 'Good night'; }
+    return hr >= m && hr < a ? c.greeting_morning : hr >= a && hr < e ? c.greeting_afternoon : c.greeting_evening; }
+  _dash() { return ssDash() || 'lovelace'; }
+  _path(p) { if (!p) return ''; return p.startsWith('/') ? p : `/${this._dash()}/${p}`; }
+  // --- render
+  _render() {
+    if (!this._config || !this._hass) return;
+    const c = this._config, h = this._hass, p = this._person();
+    const first = (c.name || (p && p.attributes.friendly_name) || (h.user && h.user.name) || '').trim().split(/\s+/)[0] || '';
+    const pic = p && p.attributes.entity_picture;
+    const sig = JSON.stringify([first, pic, this._greeting(), c.apps, c.ring_color, c.photo_label, c.show_calendar]);
+    if (sig === this._sig && this._w) return; this._sig = sig;
+    if (!this._w) {
+      this.shadowRoot.innerHTML = `<style>${HUB_CSS}</style><div class="bg"><div class="bgi"></div><div class="bgi"></div><div class="tint"></div><div class="dim"></div></div><div class="w"></div><div class="ssp" hidden title="Swipe down for the screensaver"></div>`;
+      this._ssp = this.shadowRoot.querySelector('.ssp'); this._ssPaint();
+      this._w = this.shadowRoot.querySelector('.w'); this._bgs = [...this.shadowRoot.querySelectorAll('.bgi')];
+      this._w.addEventListener('click', e => { const t = e.composedPath().find(n => n.dataset && (n.dataset.app != null || n.dataset.k)); if (!t) return;
+        if (t.dataset.app != null) this._runApp(c => c, Number(t.dataset.app)); else if (t.dataset.k === 'photos') this._photoTap(); else if (t.dataset.k === 'person') this._personTap(); });
+    }
+    const greet = String(this._greeting() || '').trim().replace(/,?$/, ',');
+    const glyph = a => a.icon === 'hv:home' ? HUB_HOME_SVG : `<ha-icon icon="${esc(a.icon || 'mdi:apps')}"></ha-icon>`;
+    const apps = c.apps.map((a, i) => `<button class="app" data-app="${i}" aria-label="${esc(a.name || '')}"><span class="ico" style="background:linear-gradient(180deg,${esc(a.color_from || '#8e8e93')} 0%,${esc(a.color_to || a.color_from || '#636366')} 100%);color:${esc(a.glyph_color || '#fff')}">${glyph(a)}</span><span class="lb">${esc(a.name || '')}</span></button>`).join('');
+    const keepCal = this._cal && c.show_calendar !== false ? this._cal : null;
+    this._w.innerHTML = `<div class="top"><div class="gr"><div class="g1">${esc(greet)}</div><div class="g2">${esc(first)}</div></div>
+      <button class="av" data-k="person" aria-label="${esc(first)}"${c.ring_color ? ` style="--ring:${esc(c.ring_color)}"` : ''}><div class="pic"${pic ? ` style="background-image:url('${esc(pic)}')"` : ''}>${pic ? '' : esc(first.charAt(0))}</div></button></div>
+      <div class="mid"><div class="apps">${apps}</div><div class="row"><div class="phw"><button class="pw" data-k="photos" aria-label="${esc(c.photo_label || 'Photos')}"><div class="ph0"><ha-icon icon="mdi:image-multiple-outline"></ha-icon></div><div class="pi"></div><div class="pi"></div></button>${c.photo_label ? `<span class="lb">${esc(c.photo_label)}</span>` : ''}</div></div></div>
+      <div class="below" hidden></div>${c.show_calendar !== false ? '<div class="calw"></div>' : ''}`;
+    this._rowEl = this._w.querySelector('.row'); this._belowEl = this._w.querySelector('.below'); this._makeSide();
+    this._pis = [...this._w.querySelectorAll('.pi')]; this._paintPhoto(true);
+    if (c.show_calendar !== false) { const w = this._w.querySelector('.calw'); this._makeCal(keepCal); w.appendChild(this._cal); } else this._cal = null;
+    this._layout();
+  }
+  // Side slot (Square photos): any cards (picked in the editor), right of the Photos tile, or below the row when there's no room
+  async _makeSide() {
+    const c = this._config, list = Array.isArray(c.side_cards) ? c.side_cards.filter(x => x && x.type) : [], sig = JSON.stringify(list);
+    if (sig !== this._sideSig || !this._sideEls) { this._sideSig = sig; const tok = this._sideTok = (this._sideTok || 0) + 1;
+      const helpers = list.length && window.loadCardHelpers ? await window.loadCardHelpers() : null; if (tok !== this._sideTok) return;
+      (this._sideEls || []).forEach(w => w.remove());
+      this._sideEls = list.map(cfg => { const wrap = document.createElement('div'); wrap.className = 'tile'; let el; try { el = helpers ? helpers.createCardElement(cfg) : document.createElement('div'); } catch (e) { el = document.createElement('div'); el.textContent = String(e); }
+        if (this._hass) el.hass = this._hass; if (this._edit != null) el.editMode = this._edit; if (el.tagName && el.tagName.startsWith('HOMEVIEW-')) el.setAttribute('floor', ''); // readable text, like Page Grid tiles
+        el.addEventListener('ll-rebuild', ev => { ev.stopPropagation(); this._sideSig = null; this._makeSide(); }); wrap.appendChild(el); wrap._card = el; wrap._cfg = cfg;
+        wrap.addEventListener('click', ev => { const o = hubTileOpt(this._config, this._sideEls.indexOf(wrap)); if (!o.enlarge || this._edit) return;
+          const path = ev.composedPath(); for (const n of path) { if (n === wrap) break; if (n.classList && n.classList.contains('element')) return; } // labels keep their own actions
+          ev.stopPropagation(); this._openTileSheet(wrap._cfg, o); });
+        if (window.ResizeObserver) { wrap._ro = new ResizeObserver(() => { if (wrap._fit) requestAnimationFrame(() => this._fitTile(wrap)); }); setTimeout(() => { const r = el.shadowRoot && el.shadowRoot.querySelector('#root'); if (r) wrap._ro.observe(r); }, 400); }
+        return wrap; }); }
+    (this._sideEls || []).forEach((w, i) => { const o = hubTileOpt(c, i), t = (w._cfg && w._cfg.type) || ''; w._fit = o.fit === 'contain' || (o.fit !== 'fill' && /^picture/.test(t)); });
+    if (this._rowEl) { for (const w of this._sideEls) this._rowEl.appendChild(w); this._layout(); }
+  }
+  _tileFitOpt(o) { const sky = o.sky === true ? hvSky(this._hass, o.sky_entity, window.__hvSimScene) : null;
+    return { zoom: o.zoom ? Number(o.zoom) : 0, label: o.label_size ? Number(o.label_size) : 1, sky }; }
+  // test hook only: window.__hvSimScene = 'rainy' | 'night' | ... previews a house scene in the tiles (never set by the cards)
+  _simHass(h) { const sim = window.__hvSimScene; if (!sim || !h) return h; const id = 'sensor.house_scene', s0 = h.states[id] || { entity_id: id, attributes: {} };
+    return Object.assign({}, h, { states: Object.assign({}, h.states, { [id]: Object.assign({}, s0, { state: sim }) }) }); }
+  _fitTile(w) { if (this._sheetO || !w.isConnected) return; const W = w.offsetWidth, H = w.offsetHeight; if (!W || !H) return;
+    const o = hubTileOpt(this._config, (this._sideEls || []).indexOf(w)), fo = this._tileFitOpt(o); w._skySig = fo.sky ? fo.sky.sig : '';
+    if (!hvFitCard(w._card, W, H, Math.round(Math.min(W, H) * 0.06), fo)) setTimeout(() => this._fitTile(w), 400); }
+  _makeCal(keep) {
+    const c = this._config, ids = c.calendar_entities && c.calendar_entities.length ? c.calendar_entities : Object.keys(this._hass.states).filter(k => k.startsWith('calendar.'));
+    const cfg = { type: 'custom:homeview-calendar-card', entities: ids, title: c.calendar_title, layout: c.calendar_layout, columns: c.calendar_columns, rows: c.calendar_rows || 'auto', days: c.calendar_days,
+      max_events: 30, show_location: c.calendar_show_location === true, show_weather: c.calendar_show_weather !== false, weather_entity: c.weather_entity || undefined, tap_action: { action: 'none' } };
+    const sig = JSON.stringify(cfg); if (keep && sig === this._calSig) { this._cal = keep; return; }
+    this._calSig = sig; const el = keep || document.createElement('homeview-calendar-card');
+    try { el.setConfig(cfg); } catch (e) { el.textContent = String(e); } el.hass = this._hass; this._cal = el;
+  }
+  _px(css) { let p = this._probe; if (!p || !p.isConnected) { p = this._probe = document.createElement('div'); p.style.cssText = 'position:absolute;visibility:hidden;width:0;pointer-events:none'; this.shadowRoot.appendChild(p); }
+    p.style.height = css; return p.getBoundingClientRect().height; }
+  _layout() {
+    if (!this._w || !this.isConnected || this._sheetO) return; const c = this._config, r = this.getBoundingClientRect(); if (!r.width) return;
+    const vw = document.documentElement.clientWidth || innerWidth, vh = innerHeight;
+    const full = !this._edit && r.left <= 48 && vw - r.right <= 48 && r.left >= -1; // on the page (not the editor preview / edit mode)
+    this.toggleAttribute('contained', !full);
+    const S = this._w.style, set = (k, v) => S.setProperty(k, v);
+    const safeT = this._px('var(--hv-safe-top, env(safe-area-inset-top, 0px))'), safeB = this._px('var(--hv-safe-bottom, env(safe-area-inset-bottom, 0px))');
+    const W = r.width, px = Math.round(Math.max(8, Math.max(18, Math.min(64, vw * 0.05)) - (full ? r.left : 0)));
+    const top = full ? Math.max(0, r.top + scrollY) : 0, pt = Math.round(full ? Math.max(safeT + 12, Math.min(48, vh * 0.04)) - top : 20), pb = Math.round(full ? safeB + 16 : 20);
+    // fill the screen exactly: minus whatever the view puts below the card (section padding), so the page doesn't scroll
+    // re-measured on every viewport size: first fill vh exactly (page overflows by the padding), then subtract that
+    const vk = vw + 'x' + vh + (this._edit ? 'e' : ''); if (vk !== this._vk) { this._vk = vk; this._below = 0; setTimeout(() => this._layout(), 300); }
+    const sh = document.documentElement.scrollHeight; if (full && sh > vh + 1) this._below = Math.max(0, Math.min(160, sh - (r.bottom + scrollY)));
+    const below = full ? this._below || 0 : 0;
+    const H = full ? vh - top - below : Math.max(520, r.width * 0.7);
+    const Wc = W - 2 * Math.max(0, px), gap = Math.round(Math.max(16, Math.min(36, vh * 0.032)));
+    const portrait = vh >= vw, calMin = c.show_calendar !== false ? Number(c.calendar_min_height) || 240 : 0;
+    const greetH = Math.max(15, Math.min(26, Wc * 0.03)) * 2.5;
+    // icon size: the 2 x 2 apps + Photos (= 2 icons tall) fit the width, and leave room for the calendar below
+    let I = Math.min(Wc / 5.2, (H - pt - pb - greetH - gap * 2 - calMin) / 2.75, Number(c.max_icon) || 140);
+    // landscape with extra tiles: size everything so the wanted units (Photos + extras, up to row_units) fit beside the apps
+    const xs0 = this._sideEls || [];
+    if (!portrait && xs0.length) { const sz = hubTileSizes(c), want = Math.min(Number(c.row_units) || 3, (c.photo_size === 'square' ? 1 : 2) + xs0.reduce((a, _, i) => a + (sz[i] === 2 ? 2 : 1), 0));
+      I = Math.min(I, (Wc - want * 22) / (2.72 + want * 2.26 + (want - 1) * 0.36) - 1); }
+    I = Math.max(portrait && W < 600 ? 60 : 72, Math.floor(I));
+    const lfs = Math.round(Math.max(13, Math.min(19, I * 0.155))), lh = Math.round(lfs * 1.3), lg = Math.round(I * 0.08), rg = Math.round(I * 0.18), cg = Math.round(I * 0.36);
+    const ph = 2 * I + lg + lh + rg, pwMax = Wc - 2 * I - cg - Math.round(I * 0.36), square = c.photo_size === 'square';
+    // Tile row right of the apps: Photos + the extra cards, Square = 1 unit (ph x ph), Wide = 2 units. As many units as fit
+    // (3 on a landscape tablet); what doesn't fit wraps to a row below (squares sized like the photo tile, or hidden).
+    const tg = Math.round(I * 0.36), U = ph, fit = Math.max(1, Math.floor((pwMax + tg) / (U + tg))), xs = this._sideEls || [], sizes = hubTileSizes(c);
+    const pu = square ? 1 : 2; let used = Math.min(pu, fit), pw;
+    if (!xs.length) pw = square ? ph : Math.max(ph * 0.9, Math.min(pwMax, ph * (Number(c.photo_max_aspect) || 2.6))); // alone: Wide fills the row (classic look)
+    else pw = used === 2 ? 2 * U + tg : U;
+    const bw = Math.min(U, Math.floor((Wc - tg) / 2)), wrapped = [];
+    xs.forEach((w, i) => { const u = sizes[i] === 2 ? 2 : 1;
+      if (used + u <= fit) { used += u; w.style.setProperty('--tw', (u === 2 ? 2 * U + tg : U) + 'px'); w.style.setProperty('--th', U + 'px'); if (w.parentNode !== this._rowEl) this._rowEl.appendChild(w); }
+      else { wrapped.push(w); w.style.setProperty('--tw', Math.min(Wc, u === 2 ? 2 * bw + tg : bw) + 'px'); w.style.setProperty('--th', bw + 'px'); if (w.parentNode !== this._belowEl) this._belowEl.appendChild(w); } });
+    if (this._belowEl) this._belowEl.hidden = !wrapped.length || c.side_portrait === 'hide';
+    xs.forEach(w => { w.classList.toggle('fit', w._fit); if (w._fit) this._fitTile(w); });
+    set('--px', px + 'px'); set('--pt', Math.max(0, pt) + 'px'); set('--pb', pb + 'px'); set('--gap', gap + 'px'); set('--I', I + 'px'); set('--lfs', lfs + 'px'); set('--lh', lh + 'px'); set('--lg', lg + 'px');
+    set('--rg', rg + 'px'); set('--cg', cg + 'px'); set('--cg2', Math.round(I * 0.36) + 'px'); set('--ph', ph + 'px'); set('--pw', Math.floor(pw) + 'px');
+    set('--gfs', Math.round(Math.max(15, Math.min(26, I * 0.2))) + 'px'); set('--av', Math.round(Math.max(44, Math.min(72, I * 0.56))) + 'px');
+    set('--h', Math.floor(H) + 'px'); set('--calmin', calMin + 'px');
+    this.style.setProperty('--blur', (Number(c.blur) || 0) + 'px'); this.style.setProperty('--dim', String(Math.max(0, Math.min(0.9, Number(c.dim) || 0))));
+    this._bgMode();
+    // keep the avatar clear of the floating edit / screensaver buttons
+    const av = this._w.querySelector('.av'); if (av) { av.style.marginRight = ''; const ar = av.getBoundingClientRect(); let m = 0;
+      for (const f of document.querySelectorAll('homeview-edit-fab')) { const fr = f.getBoundingClientRect(); if (fr.height && fr.left < ar.right && fr.right > ar.left && fr.top < ar.bottom && fr.bottom > ar.top) m = Math.max(m, ar.right - fr.left + 10); }
+      if (m) av.style.marginRight = m + 'px'; }
+  }
+  // --- apps
+  _runApp(_, i, page) { const a0 = this._config.apps[i]; if (!a0) return; const a = page ? Object.assign({}, a0, { open_as: 'page' }) : a0; const kind = a.kind || 'navigate';
+    if (kind === 'navigate' && a.open_as !== 'page' && !this._edit) { this._openViewSheet(a).then(ok => { if (!ok) this._runApp(_, i, true); }); return; }
+    if (kind === 'navigate') { let p = this._path(a.navigation_path || 'home'); if (location.search && !p.includes('?')) p += location.search; history.pushState(null, '', p); fire(window, 'location-changed', { replace: false }); return; }
+    if (kind === 'now_playing') { const ids = [a.entity].concat(a.entities || []).filter(Boolean); const def = Object.keys(this._hass.states).find(k => k.startsWith('media_player.'));
+      if (a.open_as !== 'page' && !this._edit && (ids[0] || def)) { this._openMusicSheet(a, ids.length ? ids : [def]); return; }
+      if (!window.browser_mod) { fire(this, 'hass-more-info', { entityId: ids[0] || def }); return; }
+      const data = HVMusicCard.prototype.nowPlayingData.call({ _config: Object.assign({}, NP_TILE_DEFAULTS, { entity: ids[0] || def, entities: ids.slice(1) }) });
+      fire(this, 'll-custom', { action: 'fire-dom-event', browser_mod: { service: 'browser_mod.popup', data } }); return; }
+    if (kind === 'weather') { this._openWeather(a.weather_entity); return; }
+    if (kind === 'photos') { this._openPhoto(); return; }
+    const cfg = a.tap_action; if (cfg && cfg.action !== 'none') fire(this, 'hass-action', { config: { entity: a.entity, tap_action: cfg }, action: 'tap' }); }
+  _personTap() { const p = this._person(); if (p) fire(this, 'hass-more-info', { entityId: p.entity_id }); }
+  // --- photos (same source as the Wallpanel screensaver)
+  async _source() { const c = this._config; if (c.photo_source) return { url: c.photo_source, ex: [] };
+    try { const m = { type: 'lovelace/config' }; const d = ssDash(); if (d) m.url_path = d; const cfg = await this._hass.callWS(m), wp = (cfg && cfg.wallpanel) || {};
+      return { url: wp.image_url || 'media-source://media_source/local/', ex: wp.exclude_filenames || [], noVideo: true }; } catch (e) { return { url: 'media-source://media_source/local/', ex: [] }; } }
+  // every photo under the source (same walk the tile and Wallpanel use: media-source folders, subfolders too, no videos), max 800
+  async _scan(src) { const ids = [];
+    if (/^media-source:\/\//.test(src.url)) { const ex = (src.ex || []).map(x => { try { return new RegExp(x); } catch (e) { return null; } }).filter(Boolean);
+      const walk = async (id, depth) => { if (ids.length >= 800 || depth > 5) return; let r; try { r = await this._hass.callWS({ type: 'media_source/browse_media', media_content_id: id }); } catch (e) { return; }
+        for (const ch of (r && r.children) || []) { if (ids.length >= 800) break; const nm = ch.media_content_id || '';
+          if (ex.some(re => re.test(nm) || re.test(ch.title || ''))) continue;
+          if (ch.can_expand && !ch.can_play) await walk(ch.media_content_id, depth + 1);
+          else if (ch.media_class === 'image' || /^image\//.test(ch.media_content_type || '')) ids.push(nm); } };
+      await walk(src.url.replace(/\/$/, '') + (src.url.endsWith('/') ? '/' : ''), 0); }
+    else ids.push(src.url);
+    return ids; }
+  async _loadPhotos() {
+    if (!this._hass || this._loading || this._ids) return; this._loading = true;
+    try { const src = await this._source(), C = window.__hvPhotoCache || (window.__hvPhotoCache = {}), key = src.url;
+      let ids = C[key] && Date.now() - C[key].t < 36e5 ? C[key].ids : null;
+      if (!ids) { ids = await this._scan(src); C[key] = { t: Date.now(), ids }; }
+      ids = ids.slice(); if (this._config.photo_order !== 'sorted') for (let i = ids.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [ids[i], ids[j]] = [ids[j], ids[i]]; }
+      this._ids = ids; this._pos = -1; if (ids.length) this._next(); }
+    finally { this._loading = false; } }
+  _urlPeek(id) { if (!/^media-source:\/\//.test(id)) return null; const x = (window.__hvPhotoUrl || {})[id]; return x && Date.now() - x.t < 30 * 6e4 ? x.u : null; }
+  async _url(id) { if (!/^media-source:\/\//.test(id)) return id.replace('${timestamp}', Date.now());
+    const C = window.__hvPhotoUrl || (window.__hvPhotoUrl = {}), x = C[id]; if (x && Date.now() - x.t < 30 * 6e4) return x.u;
+    const P = window.__hvPhotoUrlP || (window.__hvPhotoUrlP = {}); if (P[id]) return P[id];
+    return (P[id] = (async () => { try { const r = await this._hass.callWS({ type: 'media_source/resolve_media', media_content_id: id, expires: 3600 }); const u = this._hass.hassUrl ? this._hass.hassUrl(r.url) : r.url; C[id] = { t: Date.now(), u }; return u; } finally { delete P[id]; } })()); }
+  // viewer open: the next 2 and previous 2 photos are resolved, downloaded and decoded ahead (priority 1-4, in the direction of travel first); the rest of the folder's links are resolved once in the background
+  _prefetch(p, dir) { const ids = this._ids || [], n = ids.length; if (n < 2 || !this._hass || document.hidden) return; const d = dir < 0 ? -1 : 1, keepU = new Set(), at = o => ids[(((p + o) % n) + n) % n];
+    const cur = this._cur; if (cur) keepU.add(cur);
+    [d, 2 * d, -d, -2 * d].forEach((o, i) => { const id = at(o); if (!id) return; const pk = this._urlPeek(id); if (pk) keepU.add(pk); });
+    HVL.prune(keepU);
+    [d, 2 * d, -d, -2 * d].forEach((o, i) => { const id = at(o); if (!id || (n < 5 && Math.abs(o) > n - 1)) return; this._url(id).then(u => HVL.load(u, 1 + i, id)).catch(() => {}); });
+    this._resolveAll(p); }
+  _resolveAll(p) { if (this._resRun || !this._ids || !this._ids.length) return; const ids = this._ids, n = ids.length, order = []; for (let o = 0; o < n; o++) order.push(ids[((p + o) % n + n) % n]);
+    this._resRun = true; let i = 0, live = 3; const w = async () => { while (i < order.length && (this._pv || this._galO)) { try { await this._url(order[i++]); } catch (e) { /* later */ } } if (--live === 0) this._resRun = false; }; w(); w(); w(); }
+  async _next() {
+    if (!this._ids || !this._ids.length || !this.isConnected) return; clearTimeout(this._timer); this._timer = null;
+    for (let tries = 0; tries < 4; tries++) { this._pos = (this._pos + 1) % this._ids.length;
+      try { const u = await this._url(this._ids[this._pos]); await HVL.load(u, 0); // no id: the 25 s rotation makes no thumbnail
+        if (this._ssHeld()) { this._pos = (this._pos + this._ids.length - 1) % this._ids.length; break; } this._curId = this._ids[this._pos]; this._cur = u; this._layer = 1 - this._layer; this._paintPhoto(); if (this._pv) this._prefetch(this._pos, 1); break; } catch (e) { /* try the next photo */ } }
+    this._restartTimer(true); }
+  _restartTimer(force) { if (!this.isConnected || !this._ids || !this._ids.length || this._pv) return; if (this._timer && !force) return; clearTimeout(this._timer);
+    this._timer = setTimeout(() => { this._timer = null; if (document.hidden) return; if (this._ssHeld()) { this._bgAway(); this._restartTimer(true); return; } this._next(); }, Math.max(5, Number(this._config.photo_interval) || 25) * 1000); }
+  // Background transparency (0-100) -> --bgt 0..1; the photo backdrop shows once a photo is loaded (else the gradient)
+  // 60 = the approved look (tint .24, darkening x.55). Below 60 the gradient tint grows to fully opaque at 0 (solid gradient, darkening eases to the classic page
+  // look); above 60 the tint fades to 0 and the darkening to x.1 at 100 (nearly clear blurred photo).
+  _bgMode() { const c = this._config || {}, t = Number(c.bg_transparency), T = Math.max(0, Math.min(100, isNaN(t) || c.bg_transparency === '' || c.bg_transparency == null ? 60 : t)) / 100, st = this.style.setProperty.bind(this.style);
+    const tint = T >= 0.6 ? 0.24 * (1 - T) / 0.4 : 0.24 + (0.6 - T) / 0.6 * 0.76, dsc = T <= 0.6 ? 1 - 0.75 * T : 0.55 - (T - 0.6) / 0.4 * 0.45, mix = T >= 0.6 ? 0 : 1 - T / 0.6;
+    const bl = Math.max(0, Number(c.blur) || 0), eff = this._blurX ? bl : bl * (T <= 0.6 ? 1 : 1 - (T - 0.6) / 0.4); st('--blur', (Math.round(eff * 2) / 2) + 'px'); // default blur: full to 60, eased to 0 (sharp photo) at 100
+    st('--bgt', String(T)); st('--tint', tint.toFixed(4)); st('--dsc', dsc.toFixed(4)); st('--dmix', mix.toFixed(4)); this.toggleAttribute('bgphoto', c.photo_backdrop !== false && !!this._cur); }
+  _paintPhoto(instant, dir) { if (!this._cur) return; this._bgMode(); const L = this._layer, bg = `url("${this._cur.replace(/"/g, '%22')}")`;
+    const set = this._pis || []; if (set.length > 1) { const on = set[L], off = set[1 - L];
+      if (instant) { on.style.transition = 'none'; off.style.transition = 'none'; }
+      on.style.backgroundImage = bg; on.classList.add('on'); off.classList.remove('on');
+      if (instant) requestAnimationFrame(() => { on.style.transition = ''; off.style.transition = ''; }); }
+    this._paintBg(instant, false);
+    const ph0 = this._w && this._w.querySelector('.ph0'); if (ph0) ph0.style.display = 'none';
+    if (this._fs) this._fs.show(this._cur);
+    if (this._pv) this._pv.show(this._cur, dir || 0); }
+  // 1.30.4: the blurred backdrop. Frozen (bg_freeze, default on): once it shows a photo it is left completely alone while the Home Screen is showing (no swap, no fade,
+  // no style writes), whatever the Photos card does. force = the page is out of sight (screensaver fully up, another view, app hidden) or freeze was turned off:
+  // catch up with the current photo once, instantly. Off: follows the Photos card (cross-fade). A re-render never repaints layers already showing this photo.
+  _paintBg(instant, force) { const B = this._bgs; if (!B || B.length < 2 || !this._cur) return;
+    const live = this._bgEl === B[0] && !!this._bgUrl; if (live && this._bgUrl === this._cur) return;
+    if (live && !force && (this._config || {}).bg_freeze !== false) return;
+    const n = live ? 1 - this._bgL : 0, on = B[n], off = B[1 - n], im = !!(instant || force);
+    if (im) { on.style.transition = 'none'; off.style.transition = 'none'; }
+    on.style.backgroundImage = `url("${this._cur.replace(/"/g, '%22')}")`; on.classList.add('on'); off.classList.remove('on');
+    if (im) requestAnimationFrame(() => { on.style.transition = ''; off.style.transition = ''; });
+    this._bgEl = B[0]; this._bgUrl = this._cur; this._bgL = n; }
+  _bgAway() { const w = ssWallpanel(); try { if (w && w.screensaverRunning && w.screensaverRunning() && Number(getComputedStyle(w).opacity) > 0.98) this._paintBg(true, true); } catch (e) { /* later */ } }
+  _photoTap() { const c = this._config, t = c.photo_tap || 'viewer'; if (t === 'none' || this._edit) return;
+    if (t === 'screensaver') { if (this._startSS()) return; this._openPhotoViewer(); return; }
+    if (t === 'fullscreen') { this._openPhoto(); return; }
+    this._openPhotoViewer(); } // 'viewer' (default) and the old 'auto'
+  _openPhoto() { if (this._fs) return; const host = document.createElement('homeview-photo-view'), sr = host.attachShadow({ mode: 'open' });
+    sr.innerHTML = `<style>:host{position:fixed;inset:0;z-index:8;background:#000;cursor:pointer;opacity:0;transition:opacity .3s ease} :host(.in){opacity:1}
+      .b,.f{position:absolute;inset:0;background-position:center;background-repeat:no-repeat;transition:opacity 1.6s ease} .b{background-size:cover;filter:blur(40px) brightness(.6);transform:scale(1.15)} .f{background-size:contain}
+      .x{all:unset;position:absolute;top:max(14px,env(safe-area-inset-top));right:16px;width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.18);color:#fff;backdrop-filter:blur(20px)}
+      .x ha-icon{--mdc-icon-size:24px;display:flex}</style><div class="b"></div><div class="f"></div><button class="x" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button>`;
+    const show = u => { const bg = `url("${String(u).replace(/"/g, '%22')}")`; sr.querySelector('.b').style.backgroundImage = bg; sr.querySelector('.f').style.backgroundImage = bg; };
+    const close = () => { host.classList.remove('in'); setTimeout(() => host.remove(), 300); this._fs = null; removeEventListener('keydown', key); };
+    const key = k => { if (k.key === 'Escape') close(); };
+    host.addEventListener('click', close); addEventListener('keydown', key); this._fs = { show, close };
+    hvPullDown({ on: host, ok: () => true, target: () => host, done: close }).bind(true);
+    if (this._cur) show(this._cur); document.body.appendChild(host); requestAnimationFrame(() => host.classList.add('in')); }
+  // --- Photos viewer (1.30): tap the Photos tile -> sheet with the current photo big, Previous / Next (+ swipe), "View Gallery" -> gallery (which has the "Add photos" upload button).
+  // While it is open the Wallpanel screensaver is held off (its idle clock is kept fresh) and the tile stops rotating by itself; closing resumes both.
+  _ssPause(on) { clearInterval(this._ssKeep); this._ssKeep = null;
+    const bump = () => { const w = ssWallpanel(); if (w && !(w.screensaverRunning && w.screensaverRunning())) w.idleSince = Date.now(); };
+    if (on && this._config.photo_viewer_pause !== false) { this._ssPaused = true; bump(); this._ssKeep = setInterval(bump, 2000); }
+    else if (this._ssPaused) { this._ssPaused = false; bump(); } }
+  _openPhotoViewer() {
+    if (this._sheetO || this._edit) return; const c = this._config;
+    this._ssPause(true); clearTimeout(this._timer); this._timer = null;
+    const s = this._openSheet({ label: c.photo_label || 'Photos', bg: '#0b0b10', day: false, dragOk: path => !path.some(n => n instanceof Element && n.tagName === 'BUTTON'),
+      onClose: () => { if (this._galO) this._galO.close(); if (this._pv && this._pv.dispose) this._pv.dispose(); this._pv = null; this._ssPause(false); this._restartTimer(true); },
+      build: bd => this._buildViewer(bd) });
+    if (s && this._ids == null && this._hass) this._loadPhotos(); }
+  _buildViewer(bd) {
+    const hub = this, c = this._config, nav = c.photo_viewer_nav !== false, swipe = nav && c.photo_viewer_swipe !== false, add = c.photo_viewer_add !== false;
+    bd.style.cssText = 'padding:0;overflow:hidden';
+    bd.innerHTML = `<style>${PV_CSS}</style><div class="pv"><div class="pvb"></div><div class="pvs"><div class="pvi"></div><div class="pvi"></div></div>
+      <div class="pvh"><span class="pvt">${esc(c.photo_label || 'Photos')}</span><span class="pvn"></span></div><div class="pve" hidden>No pictures yet</div>
+      <div class="pvc">${nav ? '<button class="pvk pvp" aria-label="Previous picture"><ha-icon icon="mdi:chevron-left"></ha-icon><span>Previous</span></button>' : ''}${add ? '<button class="pvk pva" aria-label="View Gallery"><ha-icon icon="mdi:image-multiple"></ha-icon><span>View Gallery</span></button>' : ''}${nav ? '<button class="pvk pvx" aria-label="Next picture"><span>Next</span><ha-icon icon="mdi:chevron-right"></ha-icon></button>' : ''}</div></div>`;
+    const root = bd.querySelector('.pv'), back = bd.querySelector('.pvb'), L = [...bd.querySelectorAll('.pvi')], cnt = bd.querySelector('.pvn'), emp = bd.querySelector('.pve'), stage = bd.querySelector('.pvs');
+    let cur = 1, shown = null; this._pvEl = root;
+    const refresh = () => { const n = (hub._ids || []).length; cnt.textContent = n > 1 && hub._pos >= 0 ? `${hub._pos + 1} / ${n}` : ''; emp.hidden = !!shown || !!hub._loading;
+      for (const b of bd.querySelectorAll('.pvp,.pvx')) b.disabled = n < 2; };
+    const show = (url, dir) => { if (!url) { refresh(); return; }
+      if (url === shown) { refresh(); return; } shown = url; const on = L[cur = 1 - cur], off = L[1 - cur], bg = `url("${String(url).replace(/"/g, '%22')}")`, d = dir || 0, o = 36 * d;
+      on.style.transition = 'none'; on.style.transform = o ? `translateX(${o}px)` : ''; on.style.backgroundImage = bg; void on.offsetWidth; on.style.transition = ''; on.style.transform = ''; on.classList.add('on');
+      off.classList.remove('on'); off.style.transform = o ? `translateX(${-o}px)` : ''; back.style.backgroundImage = bg; refresh(); };
+    hub._pv = { show, refresh, busy: on => root.classList.toggle('ld', !!on) };
+    const go = d => { hub._go(d); };
+    if (nav) { bd.querySelector('.pvp').addEventListener('click', () => go(-1)); bd.querySelector('.pvx').addEventListener('click', () => go(1)); }
+    if (add) bd.querySelector('.pva').addEventListener('click', () => hub._openGallery());
+    const key = k => { if (!hub._pv || hub._galO) return; if (nav && k.key === 'ArrowLeft') go(-1); else if (nav && k.key === 'ArrowRight') go(1); };
+    addEventListener('keydown', key); hub._pv.dispose = () => removeEventListener('keydown', key);
+    if (swipe) { let g = null;
+      stage.addEventListener('touchstart', e => { g = e.touches.length === 1 ? { x: e.touches[0].clientX, y: e.touches[0].clientY, on: false, dx: 0 } : null; }, { passive: true });
+      stage.addEventListener('touchmove', e => { if (!g) return; const t = e.touches[0], dx = t.clientX - g.x, dy = t.clientY - g.y;
+        if (!g.on) { if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy) * 1.3) g.on = true; else return; }
+        g.dx = dx; const el = L[cur]; el.style.transition = 'none'; el.style.transform = `translateX(${(dx * 0.7).toFixed(0)}px)`; }, { passive: true });
+      const end = () => { if (!g) return; const s0 = g; g = null; if (!s0.on) return; const el = L[cur], W = stage.clientWidth || 400;
+        el.style.transition = ''; el.style.transform = '';
+        if (Math.abs(s0.dx) > Math.min(90, W * 0.18)) go(s0.dx < 0 ? 1 : -1); };
+      stage.addEventListener('touchend', end); stage.addEventListener('touchcancel', end); }
+    if (hub._cur) show(hub._cur, 0); else refresh();
+    if (hub._ids && hub._pos >= 0) hub._prefetch(hub._pos, 1);
+    return { set hass(h) {} }; }
+  // step through the list (Previous / Next, swipes): the tile, the page backdrop and the viewer all follow
+  async _go(d) { this._goQ = (this._goQ || 0) + d; if (this._going) return; this._going = true;
+    const tb = setTimeout(() => { if (this._pv) this._pv.busy(true); }, 250); // a slow photo (big file over a slow link): show a spinner
+    try { if (!this._ids && this._hass) await this._loadPhotos();
+      while (this._goQ) { const q = this._goQ; this._goQ = 0; await this._showPos(this._pos + q, Math.sign(q)); } } finally { clearTimeout(tb); if (this._pv) this._pv.busy(false); this._going = false; this._goQ = 0; } }
+  async _showPos(pos, dir) { const n = (this._ids || []).length; if (!n) return false;
+    for (let k = 0; k < Math.min(n, 5); k++) { const p = (((pos + k * dir) % n) + n) % n, id = this._ids[p]; let low = false;
+      try { const u0 = this._urlPeek(id);
+        if (!(u0 && HVL.has(u0)) && this._pv) { this._pos = p; const th = HVL.thumbSync(id) || await HVL.thumb(id); // not loaded yet: the counter moves now, and a small version shows at once
+          if (th && this._pv && !this._goQ) { this._pv.show(th, dir); low = true; } else if (this._pv) this._pv.refresh(); }
+        const u = await this._url(id); await HVL.load(u, 0, id); this._pos = p;
+        if (this._goQ) { this._prefetch(p, dir); return true; } // tapped again meanwhile: go straight on, don't paint this one
+        this._curId = id; this._cur = u; this._layer = 1 - this._layer; this._paintPhoto(false, low ? 0 : dir); this._prefetch(p, dir); return true; } catch (e) { /* skip an unreadable picture */ } }
+    return false; }
+  async _pickId(id) { if (!this._ids) this._ids = []; let p = this._ids.indexOf(id); if (p < 0) { this._ids.push(id); p = this._ids.length - 1; } return this._showPos(p, 1); }
+  // --- gallery popup: every photo in the media folder as a thumbnail grid (tap = show it, it also becomes the Photos tile photo) + upload from the device
+  async _openGallery() {
+    if (this._galO || !this._sheetO || !this._hass) return; const hub = this, c = this._config, h = () => this._hass;
+    let src = null, ids = [], busy = false, io = null; const names = () => new Set(ids.map(i => i.split('/').pop().toLowerCase()));
+    const folder = () => src && /^media-source:\/\//.test(src.url) ? src.url : null;
+    const admin = () => !h().user || h().user.is_admin !== false;
+    this._galO = hvSheet({ parent: this.shadowRoot, label: 'Photo gallery', bg: '#12121a', day: false, launch: () => [this._pvEl], dragOk: path => !path.some(n => n instanceof Element && n.tagName === 'BUTTON'),
+      onClose: () => { this._galO = null; if (io) io.disconnect(); HVL.dropGallery(); },
+      build: bd => { bd.style.padding = '0';
+        bd.innerHTML = `<style>${PV_CSS}</style><div class="pg"><div class="pgh"><div class="pgt"><b>Photo gallery</b><span class="pgc"></span></div>${c.photo_gallery_upload !== false ? '<button class="pvk pgu"><ha-icon icon="mdi:image-plus"></ha-icon><span>Add photos</span></button>' : ''}</div>
+          <input type="file" class="pgf" accept="image/*" multiple hidden><div class="pgs" hidden></div><div class="pgm">Loading photos…</div><div class="pgg"></div></div>`;
+        const grid = bd.querySelector('.pgg'), msg = bd.querySelector('.pgm'), cnt = bd.querySelector('.pgc'), st = bd.querySelector('.pgs'), file = bd.querySelector('.pgf'), upb = bd.querySelector('.pgu');
+        const status = (t, err) => { st.hidden = !t; st.textContent = t || ''; st.classList.toggle('err', !!err); };
+        const paint = fresh => { const curId = hub._ids && hub._ids[hub._pos]; cnt.textContent = ids.length ? `${ids.length} photo${ids.length === 1 ? '' : 's'}` : '';
+          msg.hidden = !!ids.length; if (!ids.length) msg.textContent = 'No photos in this folder yet.' + (upb && folder() ? ' Use “Add photos” to upload some.' : '');
+          if (io) io.disconnect(); HVL.dropGallery();
+          const fill = t => { const id = t.dataset.id, im = t.querySelector('img'), set = u => { im.onload = () => t.classList.add('ld'); im.onerror = () => t.classList.add('bad'); im.src = u; };
+            HVL.thumb(id).then(th => { if (th) { set(th); return; } if (!t._req) return;
+              return hub._url(id).then(u => { if (!t._req) return; const pr = HVL.load(u, 5, id, { keep: false }); t._job = pr; return pr.then(() => { t._job = null; set(HVL.thumbSync(id) || u); }); }); })
+              .catch(() => { t._job = null; if (t._req) { t._req = false; } }); };
+          io = new IntersectionObserver(es => { for (const e of es) { const t = e.target;
+            if (!e.isIntersecting) { if (t._job && !t.classList.contains('ld')) { t._job.cancel(); t._job = null; t._req = false; } continue; }
+            if (t._req || t.classList.contains('ld')) continue; t._req = true; fill(t); } }, { root: bd, rootMargin: '300px' });
+          grid.innerHTML = ids.map(id => `<button class="gt${id === curId ? ' cur' : ''}${fresh && fresh.has(id) ? ' new' : ''}" data-id="${esc(id)}" aria-label="${esc(id.split('/').pop())}"><img alt="" loading="lazy" decoding="async" width="150" height="150"><ha-icon icon="mdi:image-broken-variant"></ha-icon></button>`).join('');
+          for (const t of grid.children) io.observe(t); };
+        grid.addEventListener('click', ev => { const t = ev.composedPath().find(n => n.dataset && n.dataset.id); if (!t) return; hub._pickId(t.dataset.id).then(() => { if (hub._galO) hub._galO.close(); }); });
+        const reload = async force => { const r = await hub._listPhotos(force, src); src = r.src; ids = r.ids; };
+        if (upb) { const canUp = () => folder() && admin();
+          upb.addEventListener('click', () => { if (busy) return; if (!folder()) { status('Uploads need a media folder as the photo source (media-source://…); this one is a web address.', true); return; }
+            if (!admin()) { status('Only a Home Assistant administrator can add pictures.', true); return; } file.click(); });
+          file.addEventListener('change', async () => { const files = [...file.files]; file.value = ''; if (!files.length || busy || !canUp()) return; busy = true; upb.disabled = true;
+            const before = new Set(ids); let done = 0; const res = await hub._upload(files, folder(), names(), (i, n) => status(`Uploading ${i} of ${n}…`));
+            try { await reload(true); } catch (e) {} const fresh = new Set(ids.filter(i => !before.has(i)));
+            for (const id of ids) if (hub._ids && !hub._ids.includes(id)) hub._ids.push(id);
+            paint(fresh); busy = false; upb.disabled = false;
+            status((res.ok.length ? `Added ${res.ok.length} picture${res.ok.length === 1 ? '' : 's'}.` : '') + (res.fail.length ? ` ${res.fail.length} failed: ${res.fail.map(f => f.name + ' (' + f.why + ')').join('; ')}` : ''), !res.ok.length && res.fail.length > 0);
+            const n1 = grid.querySelector('.gt.new'); if (n1) n1.scrollIntoView({ block: 'center', behavior: 'smooth' }); setTimeout(() => { if (!busy) status(res.fail.length ? st.textContent : ''); }, 9000); }); }
+        (async () => { try { await reload(false); paint(); hub._resolveAll(Math.max(0, hub._pos)); const c1 = grid.querySelector('.gt.cur'); if (c1) c1.scrollIntoView({ block: 'center' }); } catch (e) { msg.hidden = false; msg.textContent = 'Could not load the photos: ' + (e && e.message || e); } })();
+        return { set hass(v) {} }; } }); }
+  async _listPhotos(force, src0) { const src = src0 || await this._source(), C = window.__hvPhotoCache || (window.__hvPhotoCache = {}), key = src.url;
+    let ids = !force && C[key] && Date.now() - C[key].t < 36e5 ? C[key].ids : null; if (!ids) { ids = await this._scan(src); C[key] = { t: Date.now(), ids }; } return { src, ids: ids.slice() }; }
+  // Upload through Home Assistant's media browser API (POST /api/media_source/local_source/upload, multipart media_content_id + file; admin only, 20 MB each).
+  // Never overwrites: a name that is already in the folder gets a short suffix. Returns { ok: [names], fail: [{ name, why }] }.
+  async _upload(files, folder, taken, onProg) { const out = { ok: [], fail: [] }, h = this._hass, MIME = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp', avif: 'image/avif', heic: 'image/heic', heif: 'image/heif', bmp: 'image/bmp' };
+    const url = '/api/media_source/local_source/upload'; let i = 0;
+    for (const f of files) { i++; onProg && onProg(i, files.length); const ext = (f.name.match(/\.([A-Za-z0-9]+)$/) || [])[1] || '', type = f.type || MIME[ext.toLowerCase()] || '';
+      if (!/^image\//.test(type)) { out.fail.push({ name: f.name, why: 'not a picture' }); continue; }
+      if (f.size > 20 * 1024 * 1024) { out.fail.push({ name: f.name, why: 'over 20 MB' }); continue; }
+      let nm = f.name.replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').replace(/^\.+/, '_') || 'photo.' + (ext || 'jpg');
+      if (taken.has(nm.toLowerCase())) { const b = nm.replace(/\.[^.]*$/, ''), e = (nm.match(/\.[^.]*$/) || [''])[0]; let k = 0; do { nm = `${b}_${Date.now().toString(36)}${k ? k : ''}${e}`; k++; } while (taken.has(nm.toLowerCase())); }
+      taken.add(nm.toLowerCase());
+      try { const fd = new FormData(); fd.append('media_content_id', folder); fd.append('file', nm === f.name && f.type === type ? f : new File([f], nm, { type }));
+        const r = await (h.fetchWithAuth ? h.fetchWithAuth(url, { method: 'POST', body: fd }) : fetch(h.hassUrl ? h.hassUrl(url) : url, { method: 'POST', body: fd, headers: { Authorization: 'Bearer ' + ((h.auth && (h.auth.accessToken || (h.auth.data && h.auth.data.access_token))) || '') } }));
+        if (r.ok) out.ok.push(nm); else out.fail.push({ name: f.name, why: r.status === 401 || r.status === 403 ? 'administrators only' : r.status === 413 ? 'too large' : 'Home Assistant refused it (' + r.status + ')' }); }
+      catch (e) { out.fail.push({ name: f.name, why: 'upload failed' }); } }
+    return out; }
+  // --- weather sheet (Apple Weather style); read-only forecast subscriptions while it is open
+  _openWeather(entity) {
+    if (this._sheetO) return; const h = this._hass, id = entity || this._config.weather_entity || (h.states['weather.forecast_home'] ? 'weather.forecast_home' : Object.keys(h.states).find(k => k.startsWith('weather.')));
+    if (!id) return; const host = document.createElement('homeview-weather-sheet'), sr = host.attachShadow({ mode: 'open' }); let fh = null, fd = null; const subs = [];
+    const sub = (type, cb) => { try { const u = h.connection.subscribeMessage(m => { cb(m.forecast || []); paint(); }, { type: 'weather/subscribe_forecast', forecast_type: type, entity_id: id }); subs.push(u); if (u.catch) u.catch(() => {}); } catch (e) {} };
+    const lang = () => (this._hass.locale && this._hass.locale.language) || navigator.language;
+    const tf = d => { const o = { hour: 'numeric' }; const t = this._hass.locale && this._hass.locale.time_format; if (t === '24') o.hour12 = false; else if (t === '12') o.hour12 = true;
+      const s = d.toLocaleTimeString(lang(), o); const m = s.match(/^(\d+)\s*([^\d\s]+)$/); return m ? `${m[1]}<small>${esc(m[2])}</small>` : esc(s); };
+    const paint = () => { const H = this._hass, s = H.states[id]; if (!s) return; const a = s.attributes, sun = H.states['sun.sun'], night = sun ? sun.state === 'below_horizon' : false;
+      const today = (fd || [])[0], u = a.temperature_unit || '°';
+      sr.querySelector('.sky').style.background = hubWeatherBg(s.state, night);
+      sr.querySelector('.clk').textContent = new Date().toLocaleTimeString(lang(), { hour: 'numeric', minute: '2-digit' }).replace(/\s?[AP]M$/i, '');
+      sr.querySelector('.loc').textContent = (this._config.location_name || (H.config && H.config.location_name) || a.friendly_name || 'Home');
+      sr.querySelector('.tmp').textContent = a.temperature != null ? Math.round(a.temperature) + '°' : '—';
+      sr.querySelector('.cnd').textContent = fmtState(H, s);
+      sr.querySelector('.hl').textContent = today ? `H:${Math.round(today.temperature)}°  L:${Math.round(today.templow)}°` : '';
+      const ic = (cnd, nt) => `<ha-icon icon="${(nt && cnd === 'partlycloudy') ? 'mdi:weather-night-partly-cloudy' : (WX_ICON[cnd] || 'mdi:weather-partly-cloudy')}" style="color:${HUB_WX_COLOR[cnd] || '#fff'}"></ha-icon>`;
+      const hrs = (fh || []).filter(f => new Date(f.datetime) > Date.now() - 36e5).slice(0, 24);
+      sr.querySelector('.hr').innerHTML = hrs.length ? hrs.map((f, i) => { const d = new Date(f.datetime), hh = d.getHours(), nt = night ? (hh < 7 || hh >= 19) : (hh < 6 || hh >= 20);
+        return `<div class="h"><div class="t">${i ? tf(d) : 'Now'}</div>${ic(f.condition, nt)}<div class="p">${f.precipitation_probability >= 20 ? Math.round(f.precipitation_probability) + '%' : ''}</div><div>${Math.round(f.temperature)}°</div></div>`; }).join('')
+        : '<div class="h" style="min-width:auto;opacity:.7">Loading…</div>';
+      const days = (fd || []).slice(0, 7), lo = Math.min(...days.map(f => f.templow ?? f.temperature)), hi = Math.max(...days.map(f => f.temperature)), sp = Math.max(1, hi - lo);
+      sr.querySelector('.dl').innerHTML = `<div class="pt"><ha-icon icon="mdi:calendar-month-outline"></ha-icon>${days.length}-day forecast</div>` + days.map((f, i) => { const d = new Date(f.datetime), l = f.templow ?? f.temperature;
+        return `<div class="d"><div>${i ? esc(d.toLocaleDateString(lang(), { weekday: 'short' })) : 'Today'}</div>${ic(f.condition)}<div class="lo">${Math.round(l)}°</div><div class="rng"><i style="left:${(l - lo) / sp * 100}%;right:${(hi - f.temperature) / sp * 100}%"></i></div><div>${Math.round(f.temperature)}°</div></div>`; }).join('');
+      sr.querySelector('.dl').style.display = days.length ? '' : 'none'; };
+    sr.innerHTML = `<style>${WX_CSS}</style><div class="sky"></div><div class="sc" role="dialog" aria-modal="true" aria-label="Weather"><div class="bar"><div class="clk"></div><button class="x" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button></div>
+      <div class="hero"><div class="loc"></div><div class="tmp"></div><div class="cnd"></div><div class="hl"></div></div>
+      <div class="grid2"><div class="pn"><div class="pt"><ha-icon icon="mdi:clock-outline"></ha-icon>Hourly forecast</div><div class="hr"></div></div><div class="pn dl"></div></div></div>`;
+    const st2 = document.createElement('style'); st2.textContent = ':host{position:absolute !important;inset:0 !important;z-index:auto !important} .sc{padding-top:46px !important} .grid2{width:min(100%,1100px);min-width:0} .bar .x{visibility:hidden} .bar::before{display:none}'; sr.appendChild(st2);
+    const tick = setInterval(paint, 30000); paint(); sub('hourly', f => { fh = f; }); sub('daily', f => { fd = f; });
+    this._openSheet({ label: 'Weather', bg: '#1d3b66', day: false, build: bd => { bd.style.padding = '0'; bd.style.overflow = 'hidden'; host.classList.add('in'); bd.appendChild(host); return { set hass(v) { paint(); } }; },
+      onClose: () => { clearInterval(tick); subs.forEach(u => Promise.resolve(u).then(f => f && f()).catch(() => {})); } }); }
+}
+const HUB_APP_FIELDS = {
+  name: { label: 'Label', selector: { text: {} } },
+  icon: { label: 'Icon (hv:home = the Home app house)', selector: { text: {} } },
+  color_from: { label: 'Gradient top colour (e.g. #5ec8ff)', selector: { text: {} } },
+  color_to: { label: 'Gradient bottom colour', selector: { text: {} } },
+  glyph_color: { label: 'Glyph colour (empty = white)', selector: { text: {} } },
+  kind: { label: 'What it does', selector: { select: { mode: 'dropdown', options: [{ value: 'navigate', label: 'Open a view' }, { value: 'now_playing', label: 'Now Playing popup' },
+    { value: 'weather', label: 'Weather popup' }, { value: 'photos', label: 'Full-screen photos' }, { value: 'action', label: 'Custom tap action' }] } } },
+  navigation_path: { label: 'View (Open a view)', selector: { navigation: {} } },
+  open_as: { label: 'Open as (Open a view / Now Playing; empty = Sheet)', selector: { select: { mode: 'dropdown', options: [{ value: 'sheet', label: 'Sheet (slides up over the launch page)' }, { value: 'page', label: 'Page / classic popup' }] } } },
+  entity: { label: 'Player (Now Playing) / entity (custom action)', selector: { entity: {} } },
+  entities: { label: 'Other speakers to switch between (Now Playing)', selector: { entity: { domain: 'media_player', multiple: true } } },
+  weather_entity: { label: 'Weather entity (Weather popup)', selector: { entity: { domain: 'weather' } } },
+  tap_action: { label: 'Tap action (Custom tap action)', selector: { ui_action: {} } } };
+const hubTileOpt = (c, i) => ((c && Array.isArray(c.side_tiles) ? c.side_tiles[i] : null) || {});
+const hubTileSizes = c => { const s = hubSizes(c && c.side_sizes); return Array.from({ length: Math.max(s.length, ((c && c.side_cards) || []).length) }, (_, i) => { const o = hubTileOpt(c, i); return o.size === 'wide' ? 2 : o.size === 'square' ? 1 : s[i] || 1; }); };
+const hubSizes = t => String(t || '').split(/[\s,;]+/).filter(Boolean).map(x => /^w/i.test(x) || x === '2' ? 2 : 1);
+const hubUnitsNote = c => { const n = ((c && c.side_cards) || []).length, sz = hubTileSizes(c), u = (c && c.photo_size === 'square' ? 1 : 2) + Array.from({ length: n }, (_, i) => sz[i] === 2 ? 2 : 1).reduce((a, b) => a + b, 0);
+  return `Photos + ${n} extra tile(s) = ${u} unit(s). A landscape tablet fits 3 beside the apps, a portrait tablet / phone 1;` + (u > 3 ? ' ⚠ more than 3: the rest wraps to a row below.' : ' the rest wraps to a row below.'); };
+const n_ = (name, min, max, step, unit) => ({ name, selector: { number: Object.assign({ min, max, step: step || 1, mode: 'box' }, unit ? { unit_of_measurement: unit } : {}) } });
+const HUB_SCHEMA = [
+  { name: 'theme', selector: { select: { mode: 'dropdown', options: HV_THEME_OPTS } } },
+  { name: 'apps', selector: { object: { multiple: true, label_field: 'name', description_field: 'kind', fields: HUB_APP_FIELDS } } },
+  { type: 'expandable', name: '', flatten: true, title: 'Person & greeting', icon: 'mdi:account-circle-outline', schema: [
+    { type: 'grid', name: '', schema: [{ name: 'person', selector: { entity: { domain: 'person' } } }, { name: 'fallback_person', selector: { entity: { domain: 'person' } } }] },
+    { type: 'grid', name: '', schema: [{ name: 'name', selector: { text: {} } }, { name: 'ring_color', selector: { text: {} } }] },
+    { type: 'grid', name: '', schema: [n_('morning_start', 0, 23), n_('afternoon_start', 0, 23), n_('evening_start', 0, 23), n_('night_start', 0, 23)] },
+    { type: 'grid', name: '', schema: [{ name: 'greeting_morning', selector: { text: {} } }, { name: 'greeting_afternoon', selector: { text: {} } }, { name: 'greeting_evening', selector: { text: {} } }, { name: 'greeting_night', selector: { text: {} } }] }] },
+  { type: 'expandable', name: '', flatten: true, title: 'Photos & background', icon: 'mdi:image-multiple-outline', schema: [
+    { name: 'photo_source', selector: { text: {} } },
+    { type: 'grid', name: '', schema: [n_('photo_interval', 5, 600, 1, 's'), { name: 'photo_order', selector: { select: { mode: 'dropdown', options: [{ value: 'random', label: 'Random' }, { value: 'sorted', label: 'In order' }] } } }] },
+    { type: 'grid', name: '', schema: [{ name: 'photo_backdrop', selector: { boolean: {} } }, { name: 'bg_freeze', selector: { boolean: {} } }] },
+    { name: 'bg_transparency', selector: { number: { min: 0, max: 100, step: 1, mode: 'slider', unit_of_measurement: '%' } } },
+    { type: 'expandable', name: '', flatten: true, title: 'Advanced background', icon: 'mdi:tune-variant', schema: [
+      { type: 'grid', name: '', schema: [n_('blur', 0, 120, 1, 'px'), n_('dim', 0, 0.9, 0.02)] }] },
+    { type: 'grid', name: '', schema: [{ name: 'photo_tap', selector: { select: { mode: 'dropdown', options: [{ value: 'viewer', label: 'Photo viewer (previous / next, add pictures)' }, { value: 'screensaver', label: 'Start the screensaver' }, { value: 'fullscreen', label: 'Full-screen photo (just the picture)' }, { value: 'none', label: 'Nothing' }] } } },
+      { name: 'photo_label', selector: { text: {} } }] },
+    { type: 'grid', name: '', schema: [{ name: 'photo_viewer_nav', selector: { boolean: {} } }, { name: 'photo_viewer_swipe', selector: { boolean: {} } }, { name: 'photo_viewer_add', selector: { boolean: {} } },
+      { name: 'photo_gallery_upload', selector: { boolean: {} } }, { name: 'photo_viewer_pause', selector: { boolean: {} } }] }] },
+  { type: 'expandable', name: '', flatten: true, title: 'Calendar', icon: 'mdi:calendar', schema: [
+    { type: 'grid', name: '', schema: [{ name: 'show_calendar', selector: { boolean: {} } }, { name: 'calendar_show_weather', selector: { boolean: {} } }] },
+    { name: 'calendar_entities', selector: { entity: { domain: 'calendar', multiple: true } } },
+    { type: 'grid', name: '', schema: [{ name: 'calendar_layout', selector: { select: { mode: 'dropdown', options: [{ value: 'wide', label: 'Wide: days side by side' }, { value: 'list', label: 'List' }] } } }, n_('calendar_columns', 1, 7), n_('calendar_days', 1, 30)] },
+    { name: 'calendar_rows', selector: { select: { mode: 'dropdown', options: [{ value: 'auto', label: 'Auto (2 when tall)' }, { value: '1', label: '1 row' }, { value: '2', label: '2 rows' }] } } },
+    { type: 'grid', name: '', schema: [{ name: 'calendar_title', selector: { text: {} } }, n_('calendar_min_height', 120, 800, 10, 'px')] }] },
+  { type: 'expandable', name: '', flatten: true, title: 'Layout & weather', icon: 'mdi:view-dashboard-outline', schema: [
+    { type: 'grid', name: '', schema: [{ name: 'photo_size', selector: { select: { mode: 'dropdown', options: [{ value: 'wide', label: 'Wide (2 units; alone it fills the row)' }, { value: 'square', label: 'Square (1 unit)' }] } } }, n_('photo_max_aspect', 0.8, 4, 0.1)] },
+    { type: 'grid', name: '', schema: [{ name: 'side_sizes', selector: { text: {} } }, n_('row_units', 1, 6)] },
+    { name: 'side_tiles', selector: { object: { multiple: true, label_field: 'size', description_field: 'fit', fields: {
+      size: { label: 'Size', selector: { select: { mode: 'dropdown', options: [{ value: 'square', label: 'Square (1 unit)' }, { value: 'wide', label: 'Wide (2 units)' }] } } },
+      fit: { label: 'Fit', selector: { select: { mode: 'dropdown', options: [{ value: 'auto', label: 'Auto (centre pictures, fill the rest)' }, { value: 'contain', label: 'Centre & fit inside' }, { value: 'fill', label: 'Fill the tile' }] } } },
+      enlarge: { label: 'Tap opens enlarged view', selector: { boolean: {} } },
+      zoom: { label: 'Scale / zoom: picture width vs the tile (empty = fit everything; 1.2 = a little cropped at the sides)', selector: { number: { min: 0.5, max: 2.5, step: 0.05, mode: 'slider' } } },
+      label_size: { label: 'Label size (1 = as designed)', selector: { number: { min: 0.5, max: 2.5, step: 0.05, mode: 'slider' } } },
+      sky: { label: 'Sky background (house scene: time of day, weather, moon)', selector: { boolean: {} } },
+      sky_entity: { label: 'Scene sensor for the sky (empty = sensor.house_scene)', selector: { entity: { domain: 'sensor' } } } } } } },
+    { type: 'grid', name: '', schema: [{ name: 'side_portrait', selector: { select: { mode: 'dropdown', options: [{ value: 'below', label: 'Wrap to a row below' }, { value: 'hide', label: 'Hide them' }] } } }, n_('max_icon', 60, 220, 2, 'px')] },
+    { type: 'grid', name: '', schema: [{ name: 'weather_entity', selector: { entity: { domain: 'weather' } } }, { name: 'location_name', selector: { text: {} } }] },
+    { type: 'grid', name: '', schema: [{ name: 'edge_sidebar', selector: { boolean: {} } }, { name: 'block_pull_refresh', selector: { boolean: {} } }] },
+    { name: 'swipe_screensaver', selector: { select: { mode: 'dropdown', options: [{ value: 'auto', label: 'Auto (when the screensaver is on here)' }, { value: 'on', label: 'On' }, { value: 'off', label: 'Off' }] } } }, { name: 'ss_hold', selector: { boolean: {} } }] }];
+Object.assign(LABELS, { apps: 'Apps (drag to reorder, pencil to edit)', person: 'Person (empty = the logged-in user)', fallback_person: 'Fallback person (no match)', ring_color: 'Avatar ring colour / gradient',
+  morning_start: 'Morning from (hour)', afternoon_start: 'Afternoon from', evening_start: 'Evening from', night_start: 'Night from (empty = evening until morning)', greeting_night: 'Night greeting', greeting_morning: 'Morning greeting', greeting_afternoon: 'Afternoon greeting', greeting_evening: 'Evening greeting',
+  photo_source: 'Photo source (empty = the Wallpanel screensaver\'s, e.g. media-source://media_source/local/)', photo_interval: 'Next photo every', photo_order: 'Order', blur: 'Background blur (px)', dim: 'Edge darkening for text readability (0-0.9)', photo_backdrop: 'Show the current photo, blurred, behind the page', bg_freeze: 'Freeze the blurred background while the Home Screen is showing', bg_transparency: 'Background transparency',
+  photo_tap: 'Tapping Photos', photo_label: 'Photos label', photo_viewer_nav: 'Viewer: Previous / Next buttons', photo_viewer_swipe: 'Viewer: swipe left / right to change picture', photo_viewer_add: 'Viewer: View Gallery button', photo_gallery_upload: 'Gallery: let people upload new pictures', photo_viewer_pause: 'Pause the screensaver while the viewer is open', show_calendar: 'Show the calendar', calendar_show_weather: 'Forecast per day', calendar_entities: 'Calendars (empty = all)', calendar_layout: 'Calendar layout',
+  calendar_columns: 'Days side by side', calendar_rows: 'Rows of days (phones always stack)', calendar_days: 'Days to load', calendar_title: 'Calendar title', calendar_min_height: 'Calendar min height', max_icon: 'Largest app icon', photo_max_aspect: 'Photos widget: widest aspect (w/h)', photo_size: 'Photos tile size', side_sizes: 'Extra tiles\' sizes, in order: S = square, W = wide (e.g. S, S)', side_portrait: 'Tiles that don\'t fit beside the apps', row_units: 'Landscape: units beside the apps (icons shrink to fit)',
+  location_name: 'Weather location name (empty = Home Assistant\'s)', swipe_screensaver: 'Swipe down for screensaver (grab bar at the top)', ss_hold: 'Keep the screensaver paused while the Home Screen is showing',
+  side_tiles: 'Extra tile options, in order (1st = first extra tile): size, fit, tap opens enlarged view' });
+class HVHubEditor extends HTMLElement {
+  setConfig(c) { this._config = c; this._render(); }
+  set hass(h) { this._hass = h; this._render(); }
+  _render() {
+    if (!this._hass || !this._config) return;
+    const data = Object.assign({}, HVHubCard.defaults, { calendar_show_weather: true, apps: HUB_APPS }, this._config);
+    if (!this._form) { const f = this._form = document.createElement('ha-form');
+      f.computeLabel = s => LABELS[s.name] || s.name;
+      f.computeHelper = s => s.name === 'bg_transparency' ? '0 = solid gradient, 60 = default look, 100 = clear photo. The preview updates while you drag.' : s.name === 'bg_freeze' ? 'On: the background keeps the photo it had when the Home Screen opened (the Photos card still changes); it moves to the current photo only while the page is out of sight (screensaver up, another view, app in the background). Off: it follows the Photos card.' : s.name === 'ss_hold' ? 'On: the screensaver does not start by itself behind the Home Screen (and uses nothing there); swipe the page away to start it, on the photo the Photos card shows. Off: Wallpanel\'s idle timer runs as before.' : s.name === 'blur' ? 'How soft the photo behind the page is. Left at the default it eases to 0 as Background transparency goes from 60 to 100 (a clear, sharp photo); set a value to keep it fixed.' : s.name === 'dim' ? 'Darkens the top and bottom of the page so the text stays readable; also fades out as transparency goes up.' : s.name === 'photo_viewer_add' ? 'The viewer button that opens the gallery (the gallery keeps its own “Add photos” upload button).' : s.name === 'side_sizes' ? hubUnitsNote(this._config) : s.name === 'photo_source' ? 'The photo viewer, the gallery and uploads all use this folder. Empty = the screensaver\'s folder (Media → My media). Uploading needs a media-source:// folder and an administrator.' : s.name === 'apps' ? 'Each app: label, icon, gradient colours and what it does (open a view, Now Playing, Weather, photos, or any tap action).' : undefined;
+      { const h0 = f.computeHelper; f.computeHelper = s => s.name === 'theme' ? 'The look of the device pages (the pages with the button tiles) on this dashboard: their tiles, popups and page background. The Home Screen itself always keeps its own look. Night = dark glass (default); Day = white tiles on a light grey page. A Page Grid card can choose its own.' : h0(s); }
+      { const l0 = f.computeLabel; f.computeLabel = s => s.name === 'theme' ? 'Device pages theme' : l0(s); }
+      f.addEventListener('input', ev => { const p = ev.composedPath(), sl = p.find(n => n.tagName === 'HA-SLIDER'), sel = p.find(n => n.tagName === 'HA-SELECTOR-NUMBER'); // live preview while dragging
+        if (!sl || !sel || sel.label !== LABELS.bg_transparency) return; const v = Number(sl.value); if (isNaN(v)) return; this._live = v;
+        if (!this._liveRaf) this._liveRaf = requestAnimationFrame(() => { this._liveRaf = 0; const cfg = Object.assign({}, this._config); if (this._live === HVHubCard.defaults.bg_transparency) delete cfg.bg_transparency; else cfg.bg_transparency = this._live; this._config = cfg; fire(this, 'config-changed', { config: cfg }); }); });
+      f.addEventListener('value-changed', ev => { ev.stopPropagation(); const v = ev.detail.value, cfg = { type: this._config.type };
+        for (const [k, val] of Object.entries(v)) { if (val === undefined || val === '' || (Array.isArray(val) && !val.length && k !== 'apps')) continue;
+          if (k !== 'apps' && HVHubCard.defaults[k] === val) continue; if (k === 'calendar_show_weather' && val === true) continue; cfg[k] = val; }
+        if (cfg.apps) cfg.apps = cfg.apps.map(x => { const o = {}; for (const [k, val] of Object.entries(x || {})) if (val !== undefined && val !== '' && !(Array.isArray(val) && !val.length)) o[k] = val; return o; });
+        for (const k of Object.keys(this._config)) if (!(k in v) && !(k in cfg)) cfg[k] = this._config[k]; // keep keys the form doesn't show (grid_options, ...)
+        this._config = cfg; fire(this, 'config-changed', { config: cfg }); });
+      this.appendChild(f); this._stackEd(); }
+    this._form.hass = this._hass; this._form.schema = HUB_SCHEMA; this._form.data = data;
+    hvWpHint(this, true); // the Home Screen's screensaver features (swipe away, hold, Photos) need Wallpanel
+    if (this._stack) { this._stack.hass = this._hass; const js = JSON.stringify(this._config.side_cards || []); if (js !== this._lastSide) { this._lastSide = js; this._stack.setConfig({ type: 'vertical-stack', cards: this._config.side_cards || [] }); } }
+  }
+}
+HVHubEditor.prototype._stackEd = async function () { // the side slot's cards: Home Assistant's own card picker + card editors (as in a vertical stack)
+  const hd = document.createElement('div');
+  hd.innerHTML = '<p style="margin:18px 0 4px;font-weight:600">Extra tiles (beside Photos)</p><p style="margin:0 0 8px;opacity:.75;font-size:.9em">Any cards (Add card picks from all cards, e.g. NotHomeView ones). They sit in the row right of the apps, same height as the app grid; set their sizes (Square / Wide) above under Layout. What doesn\'t fit wraps to a row below.</p>';
+  this.appendChild(hd);
+  try { const helpers = await window.loadCardHelpers(); helpers.createCardElement({ type: 'vertical-stack', cards: [] }); await customElements.whenDefined('hui-vertical-stack-card');
+    const st = this._stack = await customElements.get('hui-vertical-stack-card').getConfigElement(); st.hass = this._hass; if (this._lovelace) st.lovelace = this._lovelace;
+    this._lastSide = JSON.stringify(this._config.side_cards || []); st.setConfig({ type: 'vertical-stack', cards: this._config.side_cards || [] });
+    st.addEventListener('config-changed', ev => { ev.stopPropagation(); const cards = (ev.detail.config && ev.detail.config.cards) || []; this._lastSide = JSON.stringify(cards);
+      const cfg = Object.assign({}, this._config); if (cards.length) cfg.side_cards = cards; else delete cfg.side_cards; this._config = cfg; fire(this, 'config-changed', { config: cfg }); });
+    this.appendChild(st);
+    const hideTitle = () => { const r = st.shadowRoot; if (!r) return; for (const x of r.querySelectorAll('ha-form, ha-textfield')) { const sc = x.schema; if ((sc && sc.length === 1 && sc[0].name === 'title') || (x.tagName === 'HA-TEXTFIELD' && /title/i.test(x.label || ''))) x.style.display = 'none'; } };
+    Promise.resolve(st.updateComplete).then(hideTitle); setTimeout(hideTitle, 400);
+  } catch (e) { hd.insertAdjacentHTML('beforeend', '<p>Card editor unavailable: ' + esc(e) + '</p>'); }
+};
+Object.defineProperty(HVHubEditor.prototype, 'lovelace', { set(l) { this._lovelace = l; if (this._stack) this._stack.lovelace = l; }, configurable: true });
+if (!customElements.get('homeview-hub-card-editor')) customElements.define('homeview-hub-card-editor', HVHubEditor);
+
 const CARDS = [
+  ['homeview-hub-card', HVHubCard, 'NotHomeView Hub', 'Apple home hub style launch page: greeting, avatar, app icons, a Photos widget with the screensaver photos, blurred photo background and a wide calendar.'],
+  ['homeview-chips-card', HVChipsCard, 'NotHomeView Chips', 'A scrollable row of glass pills: light groups (tap toggles), thermostats with temperature, navigation chips.'],
   ['homeview-thermostat-card', HVThermostatCard, 'NotHomeView Thermostat', 'Big set-point with chevrons, mode and current temperature (NotHomeView glass).'],
+  ['homeview-grid-card', HVGridCard, 'NotHomeView Page Grid', 'Big NotHomeView tiles in swipeable pages: 3 × 3 in portrait, 3 × 4 in landscape (adjustable), sized to the screen.'],
+  ['homeview-page-break', HVPageBreakCard, 'NotHomeView Page Break', 'Inside a NotHomeView Page Grid: the next tile starts a new page.'],
+  ['homeview-tv-card', HVTvCard, 'NotHomeView TV', 'TV tile like the Music tile; tap opens a Now Playing-style TV popup with power, apps, TV switcher and remote.'],
+  ['homeview-tv-player-card', HVTvPlayerCard, 'NotHomeView TV Player', 'The TV popup on its own: 16:9 picture, transport, volume, power, apps, TV switcher, D-pad.'],
+  ['homeview-calendar-card', HVCalendarCard, 'NotHomeView Calendar', 'Upcoming events from your calendars on NotHomeView glass: date blocks, times, locations, optional weather.'],
   ['homeview-entity-card', HVEntityCard, 'NotHomeView Entity', 'Any entity as a NotHomeView tile: icon, name, state or custom sub-label.'],
   ['homeview-light-card', HVLightCard, 'NotHomeView Light', 'Light tile: tap toggles, shows brightness %, hold for more-info.'],
-  ['homeview-garage-card', HVGarageCard, 'NotHomeView Garage', 'Cover / garage door: open or close with optional confirmation.'],
+  ['homeview-garage-chooser-card', HVGarageChooserCard, 'NotHomeView Garage Chooser', 'Popup content: live state of two garage doors with buttons to open door 1, door 2 or both.'],
+  ['homeview-garage-card', HVGarageCard, 'NotHomeView Garage', 'Cover / garage door: open or close with optional confirmation, or (chooser) a popup to open door 1, door 2 or both.'],
   ['homeview-group-card', HVGroupCard, 'NotHomeView Group', 'Several entities or a group: "N on", tap toggles all or opens a popup.'],
   ['homeview-scene-card', HVSceneCard, 'NotHomeView Scene', 'Scene or script button with optional confirmation.'],
   ['homeview-music-card', HVMusicCard, 'NotHomeView Music', 'Media player tile showing what is playing; tap opens your music popup or more-info.'],
@@ -1841,6 +4278,9 @@ const CARDS = [
   ['homeview-edit-button-card', HVEditButtonCard, 'NotHomeView Edit Button', 'Small glass pencil button fixed in a corner; opens this dashboard in edit mode with kiosk-mode off.'],
 ];
 if (!customElements.get('homeview-card-editor')) customElements.define('homeview-card-editor', HVEditor);
+for (const [, cls] of CARDS) hvThemeWrap(cls); // Night / Day theme (1.30.5)
+HVHubCard.prototype._hvOwnTheme = true; HVGridCard.prototype._hvOwnTheme = true;
+HVHubCard.prototype._hvNight = true; // its "theme" option is the Device pages theme; the Home Screen itself never changes
 window.customCards = window.customCards || [];
 for (const [tag, cls, name, description] of CARDS) {
   if (!customElements.get(tag)) customElements.define(tag, cls);

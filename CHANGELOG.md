@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.30.7 – 2026-10-25
+
+From this release the GitHub version follows the card bundle's version (`HOMEVIEW-CARDS 1.30.7` in the browser console).
+The previous public release (v1.0.1) shipped bundle build 1.12.0.
+
+### New features
+* Device pages theme: **Night** (dark glass, default), **Day** (white) or **Auto** (follow the sun). Choose it from the pencil
+  (Edit Button) menu or the Home Screen card's editor; a Page Grid can override it for its own page.
+* NotHomeView Home Screen (Hub card): greeting, app icons, Photos widget, Now Playing, calendar and weather over a blurred photo
+  background that stays frozen while the Home Screen is showing.
+* The screensaver is paused while the Home Screen is showing and starts again only when it is enabled and the Home Screen is closed.
+* Photo viewer with Previous / Next (and swipe), View Gallery popup with Add photos (upload into the screensaver folder).
+* Garage chooser popup: open door 1, door 2 or both with live state (Garage card *chooser* option, Garage Chooser card).
+* Hint when the dashboard asks for the screensaver but Wallpanel is missing.
+* New cards: Hub (Home Screen), Chips (with Rooms picker), Page Grid, Page Break, TV, TV Player, Calendar, Garage Chooser.
+* New example dashboard (`examples/homeview-example-sections.yaml`): the full NotHomeView layout with generic placeholder entities.
+
+### Bug fixes / performance
+* The Rooms popup opens in front of a device page shown as a sheet; Escape closes only the top popup.
+* Smoother 25 s photo rotation: the next photo is downloaded and decoded before it is shown.
+* Faster gallery opening and Previous / Next (download queue, decoded-image cache, thumbnails).
+* The default background blur scales with the transparency slider.
+* Swiping the Home Screen away no longer starts a screensaver that is turned off.
+* The Day theme also applies to device pages opened as sheets from the Home Screen.
+
 ## 1.0.1 – 2026-10-21
 
 HACS validation workflow and repository metadata; no card changes.

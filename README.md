@@ -4,8 +4,8 @@
 
 **Apple‑HomePad‑style frosted‑glass dashboards for Home Assistant – no YAML needed.**
 
-NotHomeView gives you 14 good‑looking cards (thermostat, lights, scenes, music with a full "Now Playing" screen, cameras,
-batteries, people, a screensaver settings popup and more), two themes (**HomeView Glass** and **HomeView Light**) and two
+NotHomeView gives you 22 good‑looking cards (thermostat, lights, scenes, music with a full "Now Playing" screen, cameras,
+batteries, people, a Home Screen, TV, calendar, a screensaver settings popup and more), two themes (**HomeView Glass** and **HomeView Light**) and two
 ready‑made example dashboards. Every card has a visual editor and a simple **Size** dropdown, so you build and change the
 dashboard with clicks instead of code.
 
@@ -20,16 +20,101 @@ dashboard with clicks instead of code.
 > (for example `custom:homeview-light-card`).
 
 **Upcoming Features**
-- NotHomeView Home Screen - shortcuts, calendar, photos, all at a glance.
-- TV Controls - allows user to control playback and navigation.
-- Media uploader - allows user to upload photos directly to screensaver, no swiping out of the dashboard required.
+- ✅ NotHomeView Home Screen - shortcuts, calendar, photos, all at a glance. *(shipped in v1.30.7)*
+- ✅ TV Controls - allows user to control playback and navigation. *(shipped in v1.30.7: NotHomeView TV card)*
+- ✅ Media uploader - allows user to upload photos directly to screensaver, no swiping out of the dashboard required. *(shipped in v1.30.7: "Add photos" in the photo gallery)*
 - AI Assist support - allows user to access their preferred voice Assistant directly from dashboard. (must have assistant linked through plugin)
 - Bug fixes and tweaks.
+
+## Requirements
+
+Install these through **[HACS](https://hacs.xyz/)**. Restart Home Assistant after installing the browser_mod integration, and
+refresh the browser (clear its cache on phones and tablets) after installing frontend plugins. The NotHomeView cards themselves
+(`dist/homeview-cards.js`) load without any other plugin; when a plugin is missing the cards fall back gracefully (for example a
+tap opens Home Assistant's own more‑info dialog instead of a popup), and the Home Screen shows a small hint when the dashboard
+asks for the screensaver but Wallpanel is missing.
+
+**Required**
+
+| Plugin | Type | What it's for |
+|---|---|---|
+| [Wallpanel](https://github.com/j-a-n/lovelace-wallpanel) · [open in HACS](https://my.home-assistant.io/redirect/hacs_repository/?owner=j-a-n&repository=lovelace-wallpanel&category=plugin) | Frontend | The photo / clock screensaver: Home Screen swipe‑away, the Edit Button's screensaver button and the Screensaver Settings card. |
+| [card-mod](https://github.com/thomasloven/lovelace-card-mod) · [open in HACS](https://my.home-assistant.io/redirect/hacs_repository/?owner=thomasloven&repository=lovelace-card-mod&category=plugin) | Frontend | Applies the HomeView Glass / Light theme CSS (`themes/`), the example's sky background and the screensaver's clock setting. |
+| [browser_mod](https://github.com/thomasloven/hass-browser_mod) · [open in HACS](https://my.home-assistant.io/redirect/hacs_repository/?owner=thomasloven&repository=hass-browser_mod&category=integration) | Integration (recommended) | The rounded popups: Garage chooser, Now Playing, TV, People map, camera large view, Lights / Climate. Without it taps open more‑info. |
+
+**Optional**
+
+| Plugin | Type | What it's for |
+|---|---|---|
+| [kiosk-mode](https://github.com/NemesisRE/kiosk-mode) · [open in HACS](https://my.home-assistant.io/redirect/hacs_repository/?owner=NemesisRE&repository=kiosk-mode&category=plugin) | Frontend | Hides the header and sidebar for a full‑screen wall panel (the Edit Button turns it off for editing with `?disable_km`). |
+| [button-card](https://github.com/custom-cards/button-card) · [open in HACS](https://my.home-assistant.io/redirect/hacs_repository/?owner=custom-cards&repository=button-card&category=plugin) | Frontend | Only for the `homeview_styles` style helper (`button_card_templates/`), used by the example dashboards. |
+| [layout-card](https://github.com/thomasloven/lovelace-layout-card) · [open in HACS](https://my.home-assistant.io/redirect/hacs_repository/?owner=thomasloven&repository=lovelace-layout-card&category=plugin) | Frontend | Only for the full‑height "band" example (`examples/homeview-example.yaml`, `custom:grid-layout`). Not needed for sections views. |
+| [auto-entities](https://github.com/thomasloven/lovelace-auto-entities) · [open in HACS](https://my.home-assistant.io/redirect/hacs_repository/?owner=thomasloven&repository=lovelace-auto-entities&category=plugin) | Frontend | Only for the Lights / Climate popup contents in the example dashboards. |
+
+Tested with Home Assistant 2026.10, card-mod 4.2.1, layout-card 2.4.7, button-card 7.0.1, browser_mod 3.3.0, kiosk-mode 15.0.0
+and Wallpanel 4.67.2.
+
+## What's new in v1.30.7
+
+![Day and Night device pages](docs/images/v1.30.7/hero_daynight.png)
+
+From this release the GitHub version follows the card bundle's own version (the browser console shows `HOMEVIEW-CARDS 1.30.7`).
+Full list: [CHANGELOG.md](CHANGELOG.md).
+
+**New features**
+
+* **Device pages theme: Night / Day / Auto.** Pick it from the ✏️ pencil menu or in the Home Screen card's editor (details below).
+* **NotHomeView Home Screen** (picker name *NotHomeView Hub*): greeting, app icons, Photos widget, Now Playing, calendar and weather,
+  over a blurred photo background that stays **frozen** while the Home Screen is showing.
+* **Screensaver pauses on the Home Screen**: it starts again only when it is enabled and the Home Screen is closed / swiped away.
+* **Photo viewer** with **Previous / Next** (and swipe), and a **View Gallery** popup with **Add photos** (upload straight into the
+  screensaver folder).
+* **Garage chooser popup**: open door 1, door 2 or both, with the live state of each door (NotHomeView Garage card, *chooser* on).
+* **Wallpanel‑missing hint**: the Home Screen and the card editors tell you when the screensaver needs Wallpanel.
+* New cards: Home Screen (Hub), Chips, Page Grid (+ Page Break), TV and TV Player, Calendar, Garage Chooser.
+
+**Bug fixes / performance**
+
+* The **Rooms popup** now opens in front of a device page that is shown as a sheet; **Escape** closes only the top popup.
+* Smoother **25 s photo rotation**: the next photo is downloaded and decoded before it is shown.
+* Faster gallery opening and Previous / Next: a small download queue, decoded‑image cache and thumbnails.
+* The default background blur now scales with the **transparency** slider.
+* Swiping the Home Screen away can no longer start a screensaver that is turned off.
+* The **Day** theme also applies to device pages opened as sheets from the Home Screen.
+
+| Pencil menu | Home Screen | Garage chooser |
+|---|---|---|
+| ![Theme picker in the pencil menu](docs/images/v1.30.7/theme_menu_night.png) | ![Home Screen](docs/images/v1.30.7/home_screen.png) | ![Garage chooser](docs/images/v1.30.7/garage_chooser.png) |
+
+| Photo viewer and gallery | Rooms popup (Day theme) |
+|---|---|
+| ![Photo viewer and gallery](docs/images/v1.30.7/photos_gallery.png) | ![Rooms popup](docs/images/v1.30.7/rooms_popup_day.png) |
+
+## Device pages theme (Night / Day / Auto)
+
+The *device pages* are the views with the button tiles (Page Grid, tiles and their popups such as the garage chooser).
+They can use one of three looks; the Home Screen and its photo sheets always keep their own look.
+
+* **Night** (default): the dark glass look.
+* **Day**: white tiles on a light grey page.
+* **Auto**: follows the sun (`sun.sun`): Day while the sun is up, Night after sunset.
+
+Two ways to choose it (admins only; the dashboard must be in storage mode, not YAML):
+
+1. **Pencil menu**: tap the ✏️ pencil (NotHomeView Edit Button) → under *Device pages theme* pick **Night (dark glass)**,
+   **Day (white)** or **Auto (follow sun)**. It's saved at once for everyone using the dashboard.
+2. **Home Screen card editor**: edit the NotHomeView Home Screen (Hub) card and set **Theme**. In YAML this is the `theme:`
+   option of the `custom:homeview-hub-card` (`day` or `auto`; no key = Night).
+
+A single NotHomeView Page Grid can override it for its own page; by default it uses *Same as all device pages*.
+The dashboard needs a Home Screen card for the pencil menu to save the theme.
 
 ## Contents
 
 * [Card gallery](#card-gallery)
-* [What you need](#what-you-need)
+* [Requirements](#requirements)
+* [What's new in v1.30.7](#whats-new-in-v1307)
+* [Device pages theme (Night / Day / Auto)](#device-pages-theme-night--day--auto)
 * [Install (step by step)](#install-step-by-step)
 * [Walkthrough: add and edit cards](#walkthrough-add-and-edit-cards)
 * [Walkthrough: tile sizes and the Layout tab](#walkthrough-tile-sizes-and-the-layout-tab)
@@ -56,27 +141,22 @@ dashboard with clicks instead of code.
 | NotHomeView Battery | `custom:homeview-battery-card` | glass bar with a big %, green / yellow / red, bolt while charging | 2×3, 2×6, 4×6 |
 | NotHomeView People | `custom:homeview-person-card` | Find‑My‑style avatar, zone or street + city; tap = map | 2×3, 4×6 |
 | NotHomeView Edit Button | `custom:homeview-edit-button-card` | small glass pencil in a corner (opens edit mode) + screensaver button | no grid space |
+| NotHomeView Hub (Home Screen) | `custom:homeview-hub-card` | launch page: greeting, app icons, Photos widget (viewer + gallery), Now Playing, calendar, weather, blurred photo background; holds the Device pages theme | full width |
+| NotHomeView Chips | `custom:homeview-chips-card` | scrollable row of glass pills: light groups, thermostats, navigation, Rooms picker | full width |
+| NotHomeView Page Grid | `custom:homeview-grid-card` | big tiles in swipeable pages sized to the screen (3 × 3 portrait, 3 × 4 landscape) | full width |
+| NotHomeView Page Break | `custom:homeview-page-break` | inside a Page Grid: the next tile starts a new page | – |
+| NotHomeView TV | `custom:homeview-tv-card` | TV tile; tap opens a TV popup with power, apps, TV switcher and remote | 2×3, 2×6, 4×6 |
+| NotHomeView TV Player | `custom:homeview-tv-player-card` | the TV popup on its own: picture, transport, volume, D‑pad | any |
+| NotHomeView Calendar | `custom:homeview-calendar-card` | upcoming events from your calendars with optional weather | any |
+| NotHomeView Garage Chooser | `custom:homeview-garage-chooser-card` | popup content: two garage doors with Open door 1 / door 2 / both | popup |
 | NotHomeView Screensaver Settings | `custom:homeview-screensaver-card` | friendly form for the Wallpanel screensaver (usually opened from the button) | popup |
 
 ![Now Playing popup](docs/images/gallery_now_playing.png)
 
 ## What you need
 
-* A recent **Home Assistant** with sections dashboards and **[HACS](https://hacs.xyz)** (tested on Home Assistant 2026.10).
-* These HACS downloads (HACS → search → Download):
-
-| Name | Type in HACS | Needed? | What for |
-|---|---|---|---|
-| [card-mod](https://github.com/thomasloven/lovelace-card-mod) | Dashboard | **required** | the themes' glass look |
-| [browser_mod](https://github.com/thomasloven/hass-browser_mod) | Integration | **required for popups** | Now Playing, camera large view, People map, screensaver settings, Lights / Climate popups |
-| [button-card](https://github.com/custom-cards/button-card) | Dashboard | **required for the examples** | the `homeview_styles` helper (fills the screen, styles the view) |
-| [layout-card](https://github.com/thomasloven/lovelace-layout-card) | Dashboard | only for `examples/homeview-example.yaml` | the non‑sections layout |
-| [auto-entities](https://github.com/thomasloven/lovelace-auto-entities) | Dashboard | optional | the Lights popup in the examples |
-| [kiosk-mode](https://github.com/NemesisRE/kiosk-mode) | Dashboard | optional | hides the header and sidebar on a wall tablet |
-| [Wallpanel](https://github.com/j-a-n/lovelace-wallpanel) | Dashboard | optional | photo screensaver with clock (and the screensaver button) |
-
-browser_mod is an integration: after downloading it, restart Home Assistant and add it under
-*Settings → Devices & services → Add integration → Browser Mod*.
+See [Requirements](#requirements) above. browser_mod is an integration: after downloading it, restart Home Assistant and add it
+under *Settings → Devices & services → Add integration → Browser Mod*.
 
 ## Install (step by step)
 
@@ -97,8 +177,8 @@ Or add it manually as a custom repository:
 
 ### 2. Install the other downloads
 
-Download **card-mod**, **browser_mod**, **button-card** (and the optional ones you want) from HACS, as listed in
-[What you need](#what-you-need). Restart Home Assistant once after browser_mod and add its integration, then refresh the browser.
+Download **Wallpanel**, **card-mod**, **browser_mod**, **button-card** and **auto-entities** for the example (and the other optional ones you want) from HACS, as listed in
+[Requirements](#requirements). Restart Home Assistant once after browser_mod and add its integration, then refresh the browser.
 
 ### 3. Install the themes
 
@@ -122,11 +202,13 @@ Can't copy files? See [Can't install theme files?](#cant-install-theme-files): t
 1. *Settings → Dashboards → **Add dashboard** → New dashboard from scratch*, give it a name (e.g. "Home") and open it.
 2. Click the **✏️ pencil** (top right) → **⋮** → **Raw configuration editor**.
 3. Delete everything, paste the content of `examples/homeview-example-sections.yaml` and click **Save**, then close the editor.
-   This already includes the **style helper** (the `button_card_templates:` block and one hidden "HomeView styles" card per
-   view), both themes, the edit button and a screensaver config.
-4. Replace the example entities with your own. No YAML needed: click a tile in edit mode, pick your entity in the
-   **Entity** box and **Save** (see the next section). Also open the two **Home** navigation tiles and replace
-   `<your-dashboard-url>` in their *Navigation path* with your dashboard's URL.
+   This is the full NotHomeView layout: a Home Screen, a Home device page, Security, nine room pages, Lights On and Climate,
+   with the **style helper** (the `button_card_templates:` block and one hidden "HomeView styles" card per view), both themes,
+   the edit button and a screensaver config (Wallpanel `enabled: false` until you turn it on with the screensaver button).
+4. Replace the example entities (`light.example_…`, `climate.example_…`, `person.example_alex`, …) with your own. No YAML
+   needed: click a tile in edit mode, pick your entity in the **Entity** box and **Save** (see the next section). The example's
+   navigation paths use the dashboard URL `nothomeview`: give your dashboard that URL, or replace `/nothomeview/` in the raw
+   configuration editor with your dashboard's URL.
 5. Click **Done**. On a wall tablet, open `/<your-dashboard>/main?kiosk` (kiosk‑mode) and, if you use Wallpanel,
    `?kiosk&wp_enabled=true`.
 
@@ -659,13 +741,13 @@ Remove it once the theme is installed.
 
 | Path | What |
 |---|---|
-| `dist/homeview-cards.js` | the card bundle (all 14 cards with their editors) – installed by HACS |
+| `dist/homeview-cards.js` | the card bundle (all 22 cards with their editors) – installed by HACS |
 | `themes/homeview.yaml` | the **HomeView Glass** and **HomeView Light** themes |
 | `button_card_templates/homeview_styles.yaml` | the `homeview_styles` style helper (button‑card template) |
 | `button_card_templates/homeview_thermostat.yaml` | optional button‑card thermostat template |
-| `examples/homeview-example-sections.yaml` | example dashboard, native sections (recommended) |
+| `examples/homeview-example-sections.yaml` | the NotHomeView example dashboard, native sections (recommended) |
 | `examples/homeview-example.yaml` | example dashboard, layout‑card full‑height band |
-| `docs/images/` | the pictures in this README (taken from a demo dashboard with made‑up entities) |
+| `docs/images/` | the pictures in this README (taken from a demo dashboard with made‑up entities and generated placeholder photos) |
 
 ## License
 
