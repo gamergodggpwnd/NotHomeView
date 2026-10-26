@@ -7,9 +7,24 @@
 * Assistant popup (voice through the device microphone or typed) for any Assist pipeline; pipeline picker, mic button, Day / Night look. Opt-in: `assistant_enabled: true`.
 * Browser timers: spoken or typed timer requests open a full-screen countdown with pause / cancel / +1 min and an alert; no voice satellite needed.
 * New app type for the Home Screen: *Assistant (voice / typed)*.
-* Includes everything from 1.31.1 (setup popup fix + notification, full-height popups now on by default, tap-to-edit tiles).
+* Includes everything from 1.31.1 (setup popup fix + notification, full-height popups now on by default, tap-to-edit tiles) and 1.31.2 (setup notification for existing users, notification link fix).
 
-## 1.31.1 – unreleased
+## 1.31.2 – unreleased
+
+### New features
+* Existing users get the setup notification too: an administrator who already has a dashboard with the NotHomeView Home
+  Screen card (and never pressed Add or No) gets the bell notification once, offering to build a fresh NotHomeView dashboard
+  from their devices as a new, extra dashboard (current dashboards are not changed). Its link (`?nothomeview_setup=1`) opens
+  the setup dialog. The dialog itself still pops up by itself only on fresh installs (no NotHomeView dashboard yet).
+
+### Bug fixes
+* The notification's link now opens a dashboard that loads NotHomeView (the existing NotHomeView dashboard, or the dashboard
+  that was open when the notification was made) instead of `/lovelace/0`, which on recent Home Assistant versions can land on
+  the built-in Home overview, where the setup dialog could not open.
+* If the dashboard list can't be read, the setup now stays quiet (no notification, no dialog) instead of treating it as an
+  existing dashboard.
+
+## 1.31.1 – 2026-10-26
 
 ### New features
 * "NotHomeView is installed" notification (Home Assistant's notification bell, id `nothomeview_setup`) for administrators when

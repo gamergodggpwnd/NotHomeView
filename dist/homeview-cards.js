@@ -4923,6 +4923,8 @@ function hvClockTint(grid) { const sr = grid.shadowRoot; if (!sr) return; const 
    Never shown to non-admins, on a screen where a kiosk mode is active right now, or when a NotHomeView dashboard already exists
    (one made by this setup, or one using the Home Screen card). Admins also get a bell notification (persistent_notification
    'nothomeview_setup') whose link (?nothomeview_setup=1) opens the dialog; it is dismissed after Add or No.
+   Existing users (a dashboard with the Home Screen card already there) get only that notification, once, offering a fresh
+   NotHomeView dashboard as an extra dashboard; no dialog pops up for them (1.31.2).
    Bring it back: the "Create NotHomeView dashboard" button in the Home Screen card editor, or NotHomeView.setup() in the
    browser console. NotHomeView.dryRun() returns the generated dashboard config without saving anything. */
 const HV_SETUP_KEY = 'nothomeview_setup', HV_SETUP_LS = 'nothomeview-setup';
@@ -5039,12 +5041,13 @@ const hvSetupData = async hass => { const ws = async type => { try { return awai
   const [e, d, a] = await Promise.all([ws('config/entity_registry/list'), ws('config/device_registry/list'), ws('config/area_registry/list')]);
   return { themes: Object.keys((hass.themes && hass.themes.themes) || {}), states: hass.states, entities: e || Object.values(hass.entities || {}), devices: d || Object.values(hass.devices || {}), areas: a || Object.values(hass.areas || {}) }; };
 // a NotHomeView dashboard is already there: one this setup made (nothome-view, nothome-view-2 ...) or one using the Home Screen card (1.31.1)
+// returns its url_path ('lovelace' for the default dashboard), false when there is none, null when the list can't be read (1.31.2)
 async function hvSetupHasDash(hass) {
-  let list = []; try { list = await hass.callWS({ type: 'lovelace/dashboards/list' }); } catch (e) { return true; } // can't tell: don't ask
-  if (list.some(d => /^nothome-view(-\d+)?$/.test(d.url_path || ''))) return true;
+  let list = []; try { list = await hass.callWS({ type: 'lovelace/dashboards/list' }); } catch (e) { return null; } // can't tell: don't ask
+  const own = list.find(d => /^nothome-view(-\d+)?$/.test(d.url_path || '')); if (own) return own.url_path;
   for (const d of [{ url_path: null, mode: 'storage' }, ...list].slice(0, 30)) { if (d.mode && d.mode !== 'storage') continue;
     try { const m = { type: 'lovelace/config' }; if (d.url_path) m.url_path = d.url_path; const c = await hass.callWS(m);
-      if (/custom:homeview-hub-card/.test(JSON.stringify(c))) return true; } catch (e) { /* empty / auto-generated */ } }
+      if (/custom:homeview-hub-card/.test(JSON.stringify(c))) return d.url_path || 'lovelace'; } catch (e) { /* empty / auto-generated */ } }
   return false; }
 // wall tablets / kiosk screens: only when a kiosk mode is actually ACTIVE on this screen right now (1.31.1). Having kiosk-mode or
 // Wallpanel installed, or a hidden sidebar, does not count.
@@ -5069,9 +5072,19 @@ const hvSetupFlag = { read: async hass => { try { const r = await hass.callWS({ 
     try { await hass.callWS({ type: 'frontend/set_user_data', key: HV_SETUP_KEY, value: v }); } catch (e) {} } };
 // the bell notification (persistent_notification, id nothomeview_setup): created once, dismissed after Add or No (1.31.1)
 const HV_SETUP_NOTE = 'nothomeview_setup', HV_SETUP_Q = 'nothomeview_setup';
-const hvSetupNotify = async hass => { try { await hass.callService('persistent_notification', 'create', { notification_id: HV_SETUP_NOTE, title: 'NotHomeView is installed',
-  message: 'Would you like a ready-made **NotHomeView** dashboard, built from your own lights, climate, cameras and rooms?\n\n'
-    + `[**Add the NotHomeView dashboard**](/lovelace/0?${HV_SETUP_Q}=1) (opens the setup dialog; nothing changes until you press Add).\n\n`
+// existing: url_path of the NotHomeView dashboard that is already there (1.31.2: they get this notification too, worded for them,
+// but no dialog). The link opens a dashboard that loads NotHomeView: that one, or the dashboard open now (a fresh page load of
+// /lovelace/0 can land on Home Assistant's own Home panel, which does not load dashboard resources)
+const hvSetupLinkUrl = (hass, existing) => { let seg = existing;
+  if (!seg) { const c = (location.pathname || '').split('/')[1], pn = c && hass.panels && hass.panels[c]; if (pn && pn.component_name === 'lovelace') seg = c; }
+  return `/${encodeURI(seg || 'lovelace')}/0?${HV_SETUP_Q}=1`; };
+const hvSetupNotify = async (hass, existing) => { const link = hvSetupLinkUrl(hass, existing); try { await hass.callService('persistent_notification', 'create', { notification_id: HV_SETUP_NOTE,
+  title: existing ? 'Build a fresh NotHomeView dashboard?' : 'NotHomeView is installed',
+  message: (existing
+    ? 'Want a fresh **NotHomeView** dashboard built from your devices? It\'s added as a new dashboard; your current dashboards aren\'t changed.\n\n'
+      + `[**Build a new NotHomeView dashboard**](${link}) (opens the setup dialog; nothing changes until you press Add).\n\n`
+    : 'Would you like a ready-made **NotHomeView** dashboard, built from your own lights, climate, cameras and rooms?\n\n'
+      + `[**Add the NotHomeView dashboard**](${link}) (opens the setup dialog; nothing changes until you press Add).\n\n`)
     + 'You can also do it later: edit a NotHomeView Home Screen card and press **Create NotHomeView dashboard**, or run `NotHomeView.setup()` in the browser console.' });
   await hvSetupFlag.set(hass, '', { notified: new Date().toISOString() }); } catch (e) {} };
 const hvSetupUnnotify = hass => { try { hass.callService('persistent_notification', 'dismiss', { notification_id: HV_SETUP_NOTE }); } catch (e) {} };
@@ -5123,8 +5136,12 @@ function hvSetupDialog(hass, opts = {}) {
 async function hvSetupMaybe(hass) {
   if (!hass || !hass.user || hass.user.is_admin !== true) return 'not admin';
   if (await hvSetupFlag.get(hass)) return 'asked before';
-  if (await hvSetupHasDash(hass)) return 'exists'; // not remembered: deleting that dashboard brings the offer back
-  if (!(await hvSetupFlag.read(hass)).notified) hvSetupNotify(hass); // also on kiosk screens (the bell works there)
+  const has = await hvSetupHasDash(hass); if (has === null) return 'unknown'; // could not list the dashboards: don't ask
+  const notified = !!(await hvSetupFlag.read(hass)).notified; // the notification is offered once per user
+  // 1.31.2: existing users (a Home Screen dashboard is there) get the notification once, but never the dialog.
+  // "exists" itself is not remembered: deleting that dashboard brings the dialog back (unless they said No / Add)
+  if (has) { if (!notified) await hvSetupNotify(hass, has); return notified ? 'exists' : 'exists, notified'; }
+  if (!notified) hvSetupNotify(hass); // also on kiosk screens (the bell works there)
   if (hvSetupKiosk(hass)) return 'kiosk';
   hvSetupDialog(hass); return 'shown'; }
 const hvHaHass = () => { const ha = document.querySelector('home-assistant'); return ha && ha.hass; };
