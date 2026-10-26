@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.31.2 – unreleased
+## 1.31.2 – 2026-10-26
 
 ### New features
 * Existing users get the setup notification too: an administrator who already has a dashboard with the NotHomeView Home
