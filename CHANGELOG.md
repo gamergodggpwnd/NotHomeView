@@ -1,12 +1,24 @@
 # Changelog
 
-## 1.31.0 – unreleased (staged)
+## 1.32.0 – unreleased (staged)
 
 ### New features
 * Weather popup: animated sky header (sunny, partly cloudy, cloudy, rain, snow; night sky after sunset; lightning / fog details). Opt-in: `weather_sky_header: true`.
 * Assistant popup (voice through the device microphone or typed) for any Assist pipeline; pipeline picker, mic button, Day / Night look. Opt-in: `assistant_enabled: true`.
 * Browser timers: spoken or typed timer requests open a full-screen countdown with pause / cancel / +1 min and an alert; no voice satellite needed.
 * New app type for the Home Screen: *Assistant (voice / typed)*.
+
+## 1.31.0 – unreleased
+
+### New features
+* First-run setup: an administrator opening a dashboard is asked once whether to add a ready-made "NotHomeView" dashboard.
+  **Add** creates it (storage dashboard `nothome-view`, or the next free address) with a Home Screen plus Home, Lights, Climate,
+  Security, Media, Garage / covers, Locks, Calendar and Rooms pages, built from the entities, devices and areas of that
+  Home Assistant (hidden, disabled, unavailable and config / diagnostic entities skipped; empty pages left out), then offers
+  to open it. **No** is remembered per browser and per user. Never shown to non-admins, on kiosk / wall-panel screens, or when
+  a NotHomeView dashboard already exists.
+* "Create NotHomeView dashboard" button in the Home Screen card editor; `NotHomeView.setup()`, `NotHomeView.dryRun()` and
+  `NotHomeView.resetSetup()` in the browser console.
 
 ## 1.30.7 – 2026-10-25
 
