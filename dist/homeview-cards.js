@@ -4236,7 +4236,9 @@ function hvAssist(hub) {
       else if (ev.type === 'stt-vad-end') finish();
       else if (ev.type === 'stt-end') { clearTimeout(safety); finish(); rec = null; endRun(); const t = ((d.stt_output || {}).text || '').trim();
         if (!t) { st('idle'); drop(); say("Sorry, I didn't catch that."); return; } typeIn(lm, t); ask(t, lm); }
-      else if (ev.type === 'error') fail(d.code === 'stt-no-text-recognized' ? "Sorry, I didn't catch that. Try again or type below." : (d.message || d.code || 'Speech recognition failed.'));
+      else if (ev.type === 'error') fail(d.code === 'stt-no-text-recognized' ? "Sorry, I didn't catch that. Try again or type below."
+        : d.code === 'stt-stream-failed' ? `The speech-to-text service of “${(pinfoCache || {}).name || 'this assistant'}” failed. Try again, type below, or choose a pipeline with another speech-to-text engine (Settings → Voice assistants).`
+        : (d.message || d.code || 'Speech recognition failed.'));
       else if (ev.type === 'run-end') { if (rec && rec.finish === finish) { finish(); rec = null; } } }, msg);
       if (unsub && unsub.catch) unsub.catch(e => { if (tok !== runTok) return; const m = (e && e.message) || ''; fail(/speech.to.text|stt/i.test(m) && pinfoCache ? noStt(pinfoCache) : m || 'The assistant is not available.'); }); }
     catch (e) { fail(String(e && e.message || e)); } };
