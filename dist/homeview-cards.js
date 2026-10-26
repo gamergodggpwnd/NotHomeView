@@ -3,7 +3,7 @@
  *         homeview-group-card, homeview-scene-card, homeview-music-card, homeview-nav-card, homeview-edit-button-card
  *  Every card has a visual editor (ha-form). Look = HomeView glass tiles; colours come from the
  *  HomeView CSS variables (--hv-*) set by the HomeView theme / style helper, with glass fall-backs. */
-const HV_VERSION = '1.30.7';
+const HV_VERSION = '1.31.0';
 // Registered colour properties so a scene background written as linear-gradient(var(--hv-bg-top), var(--hv-bg-bottom))
 // can fade smoothly between scenes (plain gradients can't transition). Unused unless a dashboard style sets them.
 try { if (window.CSS && CSS.registerProperty) for (const n of ['--hv-bg-top', '--hv-bg-bottom'])
@@ -4232,7 +4232,7 @@ class HVHubEditor extends HTMLElement {
         this._config = cfg; fire(this, 'config-changed', { config: cfg }); });
       this.appendChild(f); this._stackEd(); }
     this._form.hass = this._hass; this._form.schema = HUB_SCHEMA; this._form.data = data;
-    hvWpHint(this, true); // the Home Screen's screensaver features (swipe away, hold, Photos) need Wallpanel
+    hvWpHint(this, true); hvSetupEditorBtn(this); // 1.31.0: first-run setup, on demand // the Home Screen's screensaver features (swipe away, hold, Photos) need Wallpanel
     if (this._stack) { this._stack.hass = this._hass; const js = JSON.stringify(this._config.side_cards || []); if (js !== this._lastSide) { this._lastSide = js; this._stack.setConfig({ type: 'vertical-stack', cards: this._config.side_cards || [] }); } }
   }
 }
@@ -4287,3 +4287,183 @@ for (const [tag, cls, name, description] of CARDS) {
   if (!window.customCards.some(c => c.type === tag)) window.customCards.push({ type: tag, name, description, preview: true });
 }
 console.info(`%c HOMEVIEW-CARDS %c ${HV_VERSION} `, 'color:#fff;background:#6e5ad2;font-weight:700;border-radius:4px 0 0 4px', 'color:#6e5ad2;background:#ece8ff;border-radius:0 4px 4px 0');
+/* ---------------- first-run setup: "Add the NotHomeView dashboard?" ----------------
+   Once NotHomeView is installed, an admin opening a dashboard is asked (once) whether to add a ready-made "NotHomeView"
+   dashboard. Add: a new storage dashboard is created and filled with a Home Screen plus app pages, built from this Home
+   Assistant's own entities (states + entity / device / area registries; hidden, disabled, unavailable and config/diagnostic
+   entities are skipped; pages with nothing on them are left out). Uses NotHomeView cards and core cards only, so
+   browser_mod, Wallpanel, card-mod, button-card ... are not needed. No: remembered (this browser + the user's profile).
+   Never shown to non-admins, on kiosk / wall-panel screens, or when a NotHomeView dashboard already exists.
+   Bring it back: the "Create NotHomeView dashboard" button in the Home Screen card editor, or NotHomeView.setup() in the
+   browser console. NotHomeView.dryRun() returns the generated dashboard config without saving anything. */
+const HV_SETUP_KEY = 'nothomeview_setup', HV_SETUP_LS = 'nothomeview-setup';
+const HV_SETUP_BG = 'radial-gradient(120% 90% at 20% 10%, #33305a 0%, #17172b 55%, #0c0d16 100%) fixed';
+const HV_SETUP_APPS = { // page -> look of its Home Screen app icon
+  lights: ['Lights', 'mdi:lightbulb-group', '#ffd36b', '#ff9f0a'], climate: ['Climate', 'mdi:thermostat', '#ffb37a', '#ff6a3d'],
+  security: ['Security', 'mdi:shield-home', '#5b8cff', '#2b3fd6'], media: ['Media', 'mdi:speaker', '#ff6b81', '#f5163d'],
+  garage: ['Garage', 'mdi:garage-variant', '#9aa7b8', '#4d5a6b'], locks: ['Locks', 'mdi:lock', '#6be0a8', '#16a36a'],
+  calendar: ['Calendar', 'mdi:calendar', '#ff8a80', '#e53935'], rooms: ['Rooms', 'mdi:sofa-outline', '#c5a3ff', '#7c4dff'] };
+const hvSlug = s => String(s || '').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'x';
+// pure: data = { states, entities, devices, areas } -> { config, summary }. url = the dashboard's url_path.
+function hvSetupBuild(data, url) {
+  const st = data.states || {}, P = p => `/${url}/${p}`;
+  const reg = new Map((data.entities || []).map(e => [e.entity_id, e])), dev = new Map((data.devices || []).map(x => [x.id, x]));
+  const areas = new Map((data.areas || []).map(a => [a.area_id || a.id, a]));
+  const ok = id => { const s = st[id]; if (!s || s.state === 'unavailable') return false; const r = reg.get(id);
+    if (r && (r.hidden_by || r.disabled_by || r.hidden === true || r.entity_category)) return false; return !(s.attributes && s.attributes.hidden === true); };
+  const areaOf = id => { const r = reg.get(id); if (!r) return null; const d = r.device_id && dev.get(r.device_id); const a = r.area_id || (d && d.area_id) || null; return a && areas.has(a) ? a : null; };
+  const nm = id => { const a = (st[id] && st[id].attributes) || {}; return String(a.friendly_name || id.split('.')[1].replace(/_/g, ' ')); };
+  const aName = a => (areas.get(a) || {}).name || '';
+  const all = Object.keys(st).filter(ok).sort((x, y) => (aName(areaOf(x)) || '\uffff').localeCompare(aName(areaOf(y)) || '\uffff') || nm(x).localeCompare(nm(y)));
+  const dom = (d, f) => all.filter(i => i.startsWith(d + '.') && (!f || f(st[i].attributes || {}, i)));
+  const dc = a => a.device_class || '';
+  const G = (c, cols, rows) => Object.assign(c, { grid_options: { columns: cols || 3, rows: rows || 2 } });
+  const tile = id => { const d = id.split('.')[0], a = st[id].attributes || {}, name = nm(id);
+    if (d === 'light') return G({ type: 'custom:homeview-light-card', entity: id, name });
+    if (d === 'climate') return G({ type: 'custom:homeview-thermostat-card', entity: id, name });
+    if (d === 'cover' && /garage|gate/.test(dc(a))) return G({ type: 'custom:homeview-garage-card', entity: id, name, confirm: true });
+    if (d === 'camera') return G({ type: 'custom:homeview-camera-card', entity: id }, 6, 2);
+    if (d === 'media_player') return G({ type: 'custom:homeview-music-card', entity: id, name });
+    if (d === 'scene' || d === 'script') return G({ type: 'custom:homeview-scene-card', entity: id, name });
+    if (d === 'person') return G({ type: 'custom:homeview-person-card', entity: id });
+    return G({ type: 'custom:homeview-entity-card', entity: id, name }); };
+  const SEC_BS = ['door', 'window', 'garage_door', 'opening', 'motion', 'occupancy', 'presence', 'smoke', 'gas', 'carbon_monoxide', 'moisture', 'tamper', 'safety', 'lock', 'vibration'];
+  const lights = dom('light'), climate = dom('climate'), covers = dom('cover'), locks = dom('lock'), cams = dom('camera'), alarms = dom('alarm_control_panel');
+  const players = dom('media_player'), scenes = dom('scene'), people = dom('person'), cals = dom('calendar');
+  const sensors = dom('binary_sensor', a => SEC_BS.includes(dc(a))).slice(0, 24);
+  const weather = (dom('weather').find(i => /forecast_home|^weather\.home$/.test(i)) || dom('weather')[0]) || '';
+  const ROOM_D = /^(light|switch|fan|climate|cover|lock|media_player|camera|humidifier|vacuum|valve|water_heater)\./;
+  const rooms = []; for (const [aid, a] of areas) { const ids = all.filter(i => ROOM_D.test(i) && areaOf(i) === aid); if (ids.length) rooms.push({ aid, name: a.name || aid, icon: a.icon || 'mdi:sofa-outline', ids, path: 'room-' + hvSlug(aid) }); }
+  rooms.sort((x, y) => x.name.localeCompare(y.name));
+  // pages that have something on them
+  const pages = [];
+  if (lights.length) pages.push({ key: 'lights', cards: lights.slice(0, 60).map(tile) });
+  if (climate.length) pages.push({ key: 'climate', cards: climate.map(tile) });
+  if (alarms.length || cams.length || sensors.length) pages.push({ key: 'security', cards: [...alarms, ...cams, ...sensors].map(tile) });
+  if (players.length) pages.push({ key: 'media', cards: players.slice(0, 24).map(tile) });
+  if (covers.length) pages.push({ key: 'garage', cards: covers.map(tile) });
+  if (locks.length) pages.push({ key: 'locks', cards: locks.map(tile) });
+  if (cals.length) pages.push({ key: 'calendar', cards: [G({ type: 'custom:homeview-calendar-card', entities: cals.slice(0, 8), title: 'Calendar' }, 12, 8)] });
+  if (rooms.length) pages.push({ key: 'rooms', cards: rooms.map(r => G({ type: 'custom:homeview-nav-card', name: r.name, icon: r.icon, navigation_path: P(r.path) })) });
+  const chips = here => { const c = [{ name: 'Hub', icon: 'mdi:apps', tap_action: { action: 'navigate', navigation_path: P('main') } }];
+    if (here !== 'home') c.push({ name: 'Home', icon: 'mdi:home-outline', tap_action: { action: 'navigate', navigation_path: P('home') } });
+    if (rooms.length) c.push({ name: 'Rooms', icon: 'mdi:sofa-outline', room_picker: true, picker_title: 'Rooms', rooms: rooms.map(r => ({ name: r.name, icon: r.icon, navigation_path: P(r.path) })) });
+    for (const p of pages) if (p.key !== here && p.key !== 'rooms') c.push({ name: HV_SETUP_APPS[p.key][0], icon: HV_SETUP_APPS[p.key][1], tap_action: { action: 'navigate', navigation_path: P(p.key) } });
+    return { type: 'custom:homeview-chips-card', chips: c, grid_options: { columns: 'full', rows: 'auto' } }; };
+  const view = (path, title, icon, cards) => ({ type: 'sections', max_columns: 1, dense_section_placement: true, title, path, icon, subview: true, back_path: P('main'), background: HV_SETUP_BG,
+    sections: [{ type: 'grid', cards: [chips(path), { type: 'custom:homeview-grid-card', auto_rows: true, swipe_back: true, grid_options: { columns: 'full', rows: 'auto' }, cards }] }] });
+  // Home page: a little of everything
+  const garage = covers.filter(i => /garage|gate/.test(dc(st[i].attributes || {})));
+  const lit = [...lights.filter(i => st[i].state === 'on'), ...lights.filter(i => st[i].state !== 'on')]; // lights that are on first
+  const home = [...climate.slice(0, 1), ...garage.slice(0, 1), ...lit.slice(0, 4), ...players.slice(0, 1), ...scenes.slice(0, 4), ...locks.slice(0, 2), ...people.slice(0, 3), ...cams.slice(0, 1)].map(tile);
+  if (!home.length) home.push(G({ type: 'clock', clock_style: 'analog' }));
+  const apps = [{ name: 'Home', icon: 'hv:home', color_from: '#ffffff', color_to: '#ededf2', kind: 'navigate', navigation_path: 'home' }];
+  for (const p of pages) { const [name, icon, a, b] = HV_SETUP_APPS[p.key];
+    if (p.key === 'media') apps.push({ name: 'Music', icon: 'mdi:music-note', color_from: a, color_to: b, kind: 'now_playing', entity: players[0], entities: players.slice(1, 6) });
+    else apps.push({ name, icon, color_from: a, color_to: b, kind: 'navigate', navigation_path: p.key }); }
+  if (weather) apps.push({ name: 'Weather', icon: 'mdi:weather-partly-cloudy', color_from: '#5ec8ff', color_to: '#1a73e8', kind: 'weather', weather_entity: weather });
+  const hub = { type: 'custom:homeview-hub-card', theme: 'auto', apps, photo_size: 'square', side_sizes: 'S, S', side_tiles: [{ size: 'square' }, { size: 'square' }], grid_options: { columns: 'full', rows: 'auto' } };
+  if (weather) hub.weather_entity = weather; if (people.length) hub.fallback_person = people[0];
+  if (cals.length) hub.calendar_entities = cals.slice(0, 4); else hub.show_calendar = false;
+  hub.side_cards = players.length ? [{ type: 'custom:homeview-now-playing-card', entity: players[0], entities: players.slice(1, 6), height: '100%' }, { type: 'clock', clock_style: 'analog', clock_size: 'medium' }]
+    : [{ type: 'clock', clock_style: 'analog', clock_size: 'medium' }];
+  const views = [{ type: 'sections', max_columns: 1, title: 'Home Screen', path: 'main', icon: 'mdi:apps',
+      sections: [{ type: 'grid', cards: [hub, { type: 'custom:homeview-edit-button-card', position: 'top-right', admin_only: true, grid_options: { columns: 'full', rows: 'auto' } }] }] },
+    Object.assign(view('home', 'Home', 'mdi:home-outline', home), { subview: false })];
+  for (const p of pages) { const [name, icon] = HV_SETUP_APPS[p.key]; views.push(view(p.key, name, icon, p.cards)); }
+  for (const r of rooms) views.push(view(r.path, r.name, r.icon, r.ids.slice(0, 48).map(tile)));
+  const n = views.reduce((s, v) => s + ((v.sections[0].cards[1] || {}).cards || []).length, 0);
+  return { config: { title: 'NotHomeView', views }, summary: { pages: views.length, buttons: n, rooms: rooms.length, weather: !!weather, calendars: cals.length, people: people.length } };
+}
+const hvSetupData = async hass => { const ws = async type => { try { return await hass.callWS({ type }); } catch (e) { return null; } };
+  const [e, d, a] = await Promise.all([ws('config/entity_registry/list'), ws('config/device_registry/list'), ws('config/area_registry/list')]);
+  return { states: hass.states, entities: e || Object.values(hass.entities || {}), devices: d || Object.values(hass.devices || {}), areas: a || Object.values(hass.areas || {}) }; };
+// a NotHomeView dashboard is already there (by name, or any dashboard using the Home Screen / page grid cards)
+async function hvSetupHasDash(hass) {
+  let list = []; try { list = await hass.callWS({ type: 'lovelace/dashboards/list' }); } catch (e) { return true; } // can't tell: don't ask
+  if (list.some(d => /nothome/i.test((d.url_path || '') + ' ' + (d.title || '')))) return true;
+  for (const d of [{ url_path: null, mode: 'storage' }, ...list].slice(0, 25)) { if (d.mode && d.mode !== 'storage') continue;
+    try { const m = { type: 'lovelace/config' }; if (d.url_path) m.url_path = d.url_path; const c = await hass.callWS(m);
+      if (/custom:homeview-(hub|grid)-card/.test(JSON.stringify(c))) return true; } catch (e) { /* empty / auto-generated */ } }
+  return false; }
+// wall tablets / kiosk screens: never
+const hvSetupKiosk = hass => { const q = location.search || '';
+  if (/[?&](kiosk|hide_header|hide_sidebar|wp_enabled)\b/.test(q) || window.fully || /Fully|WallPanel/i.test(navigator.userAgent)) return true;
+  if (hass.dockedSidebar === 'always_hidden') return true;
+  if (document.querySelector('wallpanel-view')) return true;
+  try { const r = hvFindRootDeep(), c = r && r.lovelace && r.lovelace.config, k = c && c.kiosk_mode; if (k && (k.kiosk || k.hide_header || k.hide_sidebar)) return true; } catch (e) {}
+  return false; };
+const hvFindRootDeep = () => { const w = (r, d) => { if (!r || d > 9) return null; for (const n of r.querySelectorAll('*')) { if (n.tagName === 'HUI-ROOT') return n; if (n.shadowRoot) { const x = w(n.shadowRoot, d + 1); if (x) return x; } } return null; };
+  return w(document, 0); };
+const hvSetupFlag = { get: async hass => { try { if (localStorage.getItem(HV_SETUP_LS)) return localStorage.getItem(HV_SETUP_LS); } catch (e) {}
+    try { const r = await hass.callWS({ type: 'frontend/get_user_data', key: HV_SETUP_KEY }); return r && r.value && r.value.state || ''; } catch (e) { return ''; } },
+  set: async (hass, state) => { try { localStorage.setItem(HV_SETUP_LS, state); } catch (e) {}
+    try { await hass.callWS({ type: 'frontend/set_user_data', key: HV_SETUP_KEY, value: { state, at: new Date().toISOString() } }); } catch (e) {} } };
+async function hvSetupCreate(hass, onStep) {
+  const list = await hass.callWS({ type: 'lovelace/dashboards/list' }).catch(() => []);
+  // Home Assistant needs a hyphen in a dashboard url
+  let url = 'nothome-view', n = 2; const used = new Set((list || []).map(d => d.url_path)); while (used.has(url)) url = `nothome-view-${n++}`;
+  if (onStep) onStep('Reading your devices and rooms…'); const { config, summary } = hvSetupBuild(await hvSetupData(hass), url);
+  if (onStep) onStep('Creating the dashboard…');
+  await hass.callWS({ type: 'lovelace/dashboards/create', url_path: url, title: 'NotHomeView', icon: 'mdi:home-variant', show_in_sidebar: true, require_admin: false, mode: 'storage' });
+  if (onStep) onStep('Adding pages…'); await hass.callWS({ type: 'lovelace/config/save', url_path: url, config });
+  return { url, summary }; }
+const SETUP_CSS = `:host{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;font-family:${FONT};-webkit-tap-highlight-color:transparent;
+ --fg:#fff;--fg2:rgba(235,235,245,.66);--card:linear-gradient(150deg,rgba(66,60,120,.62) 0%,rgba(26,26,58,.74) 100%);--bd:rgba(255,255,255,.22);--btn:rgba(255,255,255,.14);--sh:0 30px 80px rgba(0,0,30,.5)}
+:host([day]){--fg:#1c1c1e;--fg2:rgba(60,60,67,.7);--card:linear-gradient(150deg,rgba(255,255,255,.88) 0%,rgba(236,242,255,.78) 100%);--bd:rgba(255,255,255,.7);--btn:rgba(120,120,128,.14);--sh:0 30px 80px rgba(40,60,120,.28)}
+.scr{position:absolute;inset:0;background:rgba(6,8,24,.42);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);opacity:0;transition:opacity .25s ease} :host(.in) .scr{opacity:1}
+.cd{position:relative;box-sizing:border-box;width:min(440px,calc(100vw - 32px));padding:30px 26px 22px;border-radius:30px;color:var(--fg);text-align:center;background:var(--card);border:1px solid var(--bd);
+ backdrop-filter:blur(34px) saturate(170%);-webkit-backdrop-filter:blur(34px) saturate(170%);box-shadow:var(--sh);transform:translateY(14px) scale(.97);opacity:0;transition:transform .35s cubic-bezier(.2,.9,.3,1),opacity .25s ease}
+:host(.in) .cd{transform:none;opacity:1}
+.ic{width:72px;height:72px;margin:0 auto 16px;border-radius:20px;display:flex;align-items:center;justify-content:center;background:linear-gradient(150deg,#8f7bff,#4d3ad6);box-shadow:0 10px 26px rgba(77,58,214,.45);color:#fff}
+.ic ha-icon{--mdc-icon-size:40px;display:flex}
+h2{margin:0 0 8px;font-size:21px;font-weight:700;letter-spacing:-.01em;line-height:1.25} p{margin:0 0 6px;font-size:15px;line-height:1.4;color:var(--fg2)}
+.st{min-height:20px;margin:10px 0 0;font-size:14px;color:var(--fg2)} .st.err{color:#ff6b6b}
+.bt{display:flex;gap:10px;margin-top:20px} .bt button{all:unset;cursor:pointer;flex:1;height:48px;border-radius:15px;font-size:16px;font-weight:650;display:flex;align-items:center;justify-content:center;background:var(--btn);color:var(--fg);transition:transform .12s ease,opacity .2s}
+.bt button:active{transform:scale(.97)} .bt .pr{background:linear-gradient(150deg,#7f6bff,#4d3ad6);color:#fff;box-shadow:0 8px 20px rgba(77,58,214,.35)} .bt button[disabled]{opacity:.5;pointer-events:none}
+.sp{display:inline-block;width:14px;height:14px;margin-right:8px;vertical-align:-2px;border-radius:50%;border:2px solid currentColor;border-top-color:transparent;animation:s .8s linear infinite} @keyframes s{to{transform:rotate(360deg)}}`;
+// the dialog. opts.force: ignore the "asked already" flag (editor button / NotHomeView.setup()); opts.day: force the look
+function hvSetupDialog(hass, opts = {}) {
+  if (document.querySelector('homeview-setup')) return null;
+  const host = document.createElement('homeview-setup'), sr = host.attachShadow({ mode: 'open' });
+  const day = opts.day != null ? opts.day : !(hass.themes && hass.themes.darkMode); host.toggleAttribute('day', !!day);
+  sr.innerHTML = `<style>${SETUP_CSS}</style><div class="scr"></div><div class="cd" role="dialog" aria-modal="true" aria-labelledby="t"><div class="ic"><ha-icon icon="mdi:home-variant"></ha-icon></div>
+    <h2 id="t">Add NotHomeView?</h2><p>Would you like to add new dashboard "NotHomeView" to your dashboard list?</p>
+    <p style="font-size:13px">It is built from your own lights, climate, cameras, rooms and more. Nothing else changes, and you can edit or delete it any time.</p>
+    <div class="st" aria-live="polite"></div><div class="bt"><button class="no">No</button><button class="pr add">Add</button></div></div>`;
+  const $ = s => sr.querySelector(s), stEl = $('.st'), no = $('.no'), add = $('.add');
+  const close = () => { host.classList.remove('in'); setTimeout(() => host.remove(), 260); };
+  const step = (t, err) => { stEl.classList.toggle('err', !!err); stEl.innerHTML = err ? esc(t) : `<span class="sp"></span>${esc(t)}`; };
+  no.addEventListener('click', () => { if (opts.onNo) opts.onNo(); else hvSetupFlag.set(hass, 'dismissed'); close(); });
+  add.addEventListener('click', async () => { if (opts.onAdd) { opts.onAdd(); return; } add.disabled = no.disabled = true;
+    try { const r = await hvSetupCreate(hass, t => step(t)); await hvSetupFlag.set(hass, 'created');
+      $('h2').textContent = 'NotHomeView is ready'; sr.querySelectorAll('p').forEach(x => x.remove());
+      stEl.classList.remove('err'); stEl.textContent = `${r.summary.pages} pages and ${r.summary.buttons} buttons, made from your devices. It is in the sidebar too.`;
+      no.textContent = 'Not now'; add.textContent = 'Open it'; no.disabled = add.disabled = false;
+      const n2 = no.cloneNode(true), a2 = add.cloneNode(true); no.replaceWith(n2); add.replaceWith(a2);
+      n2.addEventListener('click', close); a2.addEventListener('click', () => { close(); hvNavigate(`/${r.url}/main`); });
+    } catch (e) { step('Could not create the dashboard: ' + ((e && (e.message || e.code)) || e), true); no.disabled = false; no.textContent = 'Close'; add.disabled = false; add.textContent = 'Try again'; } });
+  document.body.appendChild(host); requestAnimationFrame(() => requestAnimationFrame(() => host.classList.add('in'))); return host; }
+async function hvSetupMaybe(hass) {
+  if (!hass || !hass.user || hass.user.is_admin !== true) return 'not admin';
+  if (await hvSetupFlag.get(hass)) return 'asked before';
+  if (hvSetupKiosk(hass)) return 'kiosk';
+  if (await hvSetupHasDash(hass)) { hvSetupFlag.set(hass, 'exists'); return 'exists'; }
+  hvSetupDialog(hass); return 'shown'; }
+const hvHaHass = () => { const ha = document.querySelector('home-assistant'); return ha && ha.hass; };
+window.NotHomeView = Object.assign(window.NotHomeView || {}, {
+  setup: opts => { const h = hvHaHass(); return h ? hvSetupDialog(h, Object.assign({ force: true }, opts)) : null; },
+  dryRun: async (url = 'nothome-view') => { const h = hvHaHass(); return hvSetupBuild(await hvSetupData(h), url); }, // returns the config, saves nothing
+  build: hvSetupBuild,
+  check: () => hvSetupMaybe(hvHaHass()), // the first-run check now (shows the dialog only when it would show by itself); returns why not
+  resetSetup: async () => { const h = hvHaHass(); try { localStorage.removeItem(HV_SETUP_LS); } catch (e) {} if (h) try { await h.callWS({ type: 'frontend/set_user_data', key: HV_SETUP_KEY, value: null }); } catch (e) {} } });
+// boot: once per page load, after a dashboard is showing
+(() => { if (window.__hvSetupBoot || window.__hvNoSetup || typeof document === 'undefined' || !document.body) return; window.__hvSetupBoot = true; let tries = 0;
+  const tick = () => { const h = hvHaHass(); if (!h || !h.user || !h.connection || !hvFindRootDeep()) { if (++tries < 90) setTimeout(tick, 2000); return; }
+    if (h.user.is_admin !== true) return; hvSetupMaybe(h).catch(() => {}); };
+  setTimeout(tick, 5000); })();
+// "Create NotHomeView dashboard" under the Home Screen card editor
+function hvSetupEditorBtn(ed) { if (ed.querySelector('.hv-setup-btn')) return; const w = document.createElement('div'); w.className = 'hv-setup-btn';
+  w.style.cssText = 'margin:18px 0 4px;padding:12px 14px;border-radius:12px;border:1px solid var(--divider-color,rgba(127,127,127,.3));display:flex;align-items:center;gap:12px;justify-content:space-between';
+  w.innerHTML = '<span style="font-size:14px;color:var(--secondary-text-color)">Make a new NotHomeView dashboard from your own devices (adds a dashboard; this one is not changed).</span><button style="all:unset;cursor:pointer;white-space:nowrap;padding:9px 14px;border-radius:10px;background:var(--primary-color,#4d3ad6);color:var(--text-primary-color,#fff);font-weight:600;font-size:14px">Create NotHomeView dashboard</button>';
+  w.querySelector('button').addEventListener('click', () => { if (ed._hass) hvSetupDialog(ed._hass, { force: true }); }); ed.appendChild(w); }

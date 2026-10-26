@@ -54,6 +54,43 @@ asks for the screensaver but Wallpanel is missing.
 Tested with Home Assistant 2026.10, card-mod 4.2.1, layout-card 2.4.7, button-card 7.0.1, browser_mod 3.3.0, kiosk-mode 15.0.0
 and Wallpanel 4.67.2.
 
+## What's new in v1.31.0: first-run setup
+
+| Asked once (Day) | Asked once (Night) | Done |
+|---|---|---|
+| ![Setup dialog, Day](docs/images/v1.31.0/setup_dialog_day.png) | ![Setup dialog, Night](docs/images/v1.31.0/setup_dialog_night.png) | ![Dashboard created](docs/images/v1.31.0/setup_done_night.png) |
+
+After you install NotHomeView and open any dashboard as an **administrator**, a small glass dialog asks:
+*Would you like to add new dashboard "NotHomeView" to your dashboard list?*
+
+* **Add** creates a new dashboard called **NotHomeView** (sidebar and *Settings › Dashboards*, address `/nothome-view`,
+  or `/nothome-view-2` … when that one is taken) and fills it for you:
+  * a **Home Screen** with an app for every page, your weather, your calendars and a person;
+  * a **Home** page with a bit of everything, and app pages for **Lights, Climate, Security** (alarm, cameras, door / window /
+    motion sensors), **Media, Garage / covers, Locks, Calendar** and **Rooms** (one page per area);
+  * the buttons come from your own entities, grouped by type and area. Hidden, disabled, unavailable and
+    configuration / diagnostic entities are left out, and a page with nothing on it is not added;
+  * it only uses NotHomeView cards and Home Assistant's own cards, so it works without browser_mod, Wallpanel, card-mod or
+    button-card (install them later for the popups and the screensaver).
+
+  When it is done you can open it straight away. Your other dashboards are not changed. Edit or delete it like any dashboard.
+* **No** is remembered (in this browser and in your Home Assistant user profile), so you are not asked again.
+
+The dialog is **never** shown to non-admin users, on wall tablets / kiosk screens (kiosk-mode, `?kiosk`, hidden sidebar,
+Fully Kiosk, Wallpanel running), or when a NotHomeView dashboard already exists (any dashboard named NotHomeView, or any
+dashboard that already uses the Home Screen or Page Grid card).
+
+**Changed your mind?** Edit a *NotHomeView Hub* (Home Screen) card and press **Create NotHomeView dashboard** at the bottom
+of its editor, or open the browser console (F12) on any dashboard and run `NotHomeView.setup()`.
+`NotHomeView.dryRun()` returns the dashboard it would create (as JSON) without saving anything, and
+`NotHomeView.resetSetup()` forgets your earlier answer.
+
+| Generated Home Screen | Generated Home page | Generated Lights page |
+|---|---|---|
+| ![Home Screen](docs/images/v1.31.0/generated_main.png) | ![Home page](docs/images/v1.31.0/generated_home.png) | ![Lights page](docs/images/v1.31.0/generated_lights.png) |
+
+*(Screenshots made with sample data.)*
+
 ## What's new in v1.30.7
 
 ![Day and Night device pages](docs/images/v1.30.7/hero_daynight.png)
