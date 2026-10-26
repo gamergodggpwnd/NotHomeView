@@ -7,6 +7,12 @@
 * Assistant popup (voice through the device microphone or typed) for any Assist pipeline; pipeline picker, mic button, Day / Night look. Opt-in: `assistant_enabled: true`.
 * Browser timers: spoken or typed timer requests open a full-screen countdown with pause / cancel / +1 min and an alert; no voice satellite needed.
 * New app type for the Home Screen: *Assistant (voice / typed)*.
+* Assistant: suggestion chips under "How can I help?"; replies stream in as the agent writes them; timer screen closes with a swipe down (the timer keeps running) and its orange line shows the minutes left.
+
+### Bug fixes (staged builds)
+* Assistant: pipelines without text-to-speech now answer (silently) instead of failing with "the pipeline does not support text-to-speech".
+* Assistant: pipelines without speech-to-text no longer show a raw error when the popup opens; the mic is dimmed and explains on a tap.
+* Assistant: a conversation agent that fails (for example an expired API key) shows a clear note on what to check instead of only a generic apology.
 * Includes everything from 1.31.1 (setup popup fix + notification, full-height popups now on by default, tap-to-edit tiles) and 1.31.2 (setup notification for existing users, notification link fix).
 
 ## 1.31.2 – 2026-10-26

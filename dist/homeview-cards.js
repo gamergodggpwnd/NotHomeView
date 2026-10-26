@@ -3964,7 +3964,8 @@ function hvTimerScreen(T) {
   const layout = () => { W = innerWidth; H = innerHeight; svg.setAttribute('viewBox', `0 0 ${W} ${H}`); host.style.setProperty('--tw', Math.max(3, Math.min(W, H) * 0.008).toFixed(1) + 'px');
     svg.innerHTML = hvTicks(W, H, N).map(p => `<line x1="${p[0].toFixed(1)}" y1="${p[1].toFixed(1)}" x2="${p[2].toFixed(1)}" y2="${p[3].toFixed(1)}"/>`).join(''); lines = [...svg.querySelectorAll('line')]; lastOn = -1; host.paint(); };
   host.paint = () => { const s = T.st; if (!s) return; const left = T.left(), on = s.done ? N : Math.ceil(left / (s.total * 1000) * N);
-    tEl.textContent = s.done ? '0:00' : hvFmtLeft(left); lEl.textContent = (s.label ? s.label + ' · ' : '') + hvFmtTotal(s.total);
+    tEl.textContent = s.done ? '0:00' : hvFmtLeft(left); const ls = Math.max(0, Math.ceil(left / 1000)); // the orange line: minutes left (seconds in the last minute)
+    lEl.textContent = (s.label ? s.label + ' · ' : '') + (s.done ? hvFmtTotal(s.total) + ' timer' : (ls >= 60 ? Math.ceil(ls / 60) + ' MIN' : ls + ' SEC') + (s.paused != null ? ' left · paused' : ' left'));
     if (on !== lastOn) { lastOn = on; lines.forEach((l, i) => l.classList.toggle('off', i >= on)); }
     host.toggleAttribute('paused', s.paused != null); host.toggleAttribute('done', !!s.done);
     pp.innerHTML = `<ha-icon icon="mdi:${s.paused != null ? 'play' : 'pause'}"></ha-icon>`; pp.setAttribute('aria-label', s.paused != null ? 'Resume' : 'Pause'); };
@@ -3973,6 +3974,7 @@ function hvTimerScreen(T) {
   host.addEventListener('click', e => { const b = e.composedPath().find(n => n.tagName === 'BUTTON'); hvAudio();
     if (T.st && T.st.done) { T.cancel(); return; } // finished: a tap anywhere dismisses it
     if (!b) return; if (b.classList.contains('cx')) T.cancel(); else if (b.classList.contains('pp')) (T.st.paused != null ? T.resume() : T.pause()); else if (b.classList.contains('add')) T.add(60); else if (b.classList.contains('mn')) host.close(); });
+  hvSwipeClose({ el: host, alive: () => host.isConnected && !(T.st && T.st.done), close: () => host.close() }); // swipe down: minimise (keeps running)
   addEventListener('resize', layout); addEventListener('keydown', key); document.body.appendChild(host); layout(); requestAnimationFrame(() => host.classList.add('in'));
   return host; }
 
@@ -4010,6 +4012,9 @@ const ASSIST_CSS = `:host{position:fixed;inset:0;z-index:11;font-family:${FONT};
 .in input{all:unset;flex:1;min-width:0;font-size:16px;color:var(--fg)} .in input::placeholder{color:var(--fg2)}
 .snd{all:unset;cursor:pointer;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#0a84ff} .snd ha-icon{--mdc-icon-size:22px;display:flex}
 .pl{font-size:12px;color:var(--fg2);text-align:center;padding:0 0 10px;margin-top:-8px}
+.sug{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 6px} .sug[hidden]{display:none}
+.sug button{all:unset;cursor:pointer;padding:9px 14px;border-radius:999px;font-size:14px;font-weight:600;background:var(--inp);color:var(--fg)} .sug button:active{opacity:.6}
+.mic.nostt{opacity:.45;box-shadow:none}
 @media (prefers-reduced-motion:reduce){.orb::before,.orb{animation:none !important}}`;
 // response text -> intro + rows (markdown lists, "Day:" headings, times, all-day items)
 function hvAssistRows(text) {
@@ -4024,17 +4029,22 @@ function hvAssist(hub) {
   const c = hub._config, h0 = hub._hass; const theme = c.assistant_theme && c.assistant_theme !== 'same' ? c.assistant_theme : c.theme;
   const host = document.createElement('homeview-assist'), sr = host.attachShadow({ mode: 'open' }); host.toggleAttribute('night', hvMode(theme, h0) !== 'day');
   sr.innerHTML = `<style>${ASSIST_CSS}</style><div class="scr"></div><div class="cd" role="dialog" aria-modal="true" aria-label="Assistant"><div class="hd"><div class="orb" aria-hidden="true"></div><button class="x" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button></div>
-    <div class="bd"><div class="you"></div><div class="re" aria-live="polite"></div><div class="rows"></div><div class="err" role="alert"></div></div>
+    <div class="bd"><div class="you"></div><div class="re" aria-live="polite"></div><div class="rows"></div><div class="err" role="alert"></div><div class="sug"><button>What time is it?</button><button>Set a timer for 10 minutes</button><button>What's the weather like?</button></div></div>
     <div class="ft"><button class="mic" aria-label="Speak"><ha-icon icon="mdi:microphone"></ha-icon></button><form class="in"><input type="text" enterkeyhint="send" autocomplete="off" placeholder="Type to Assist…" aria-label="Type a request"><button class="snd" type="submit" aria-label="Send"><ha-icon icon="mdi:arrow-up-circle"></ha-icon></button></form></div><div class="pl"></div></div>`;
-  const $ = s => sr.querySelector(s), you = $('.you'), re = $('.re'), rowsEl = $('.rows'), err = $('.err'), mic = $('.mic'), inp = $('input'), orb = $('.orb');
+  const $ = s => sr.querySelector(s), sugEl = $('.sug'), you = $('.you'), re = $('.re'), rowsEl = $('.rows'), err = $('.err'), mic = $('.mic'), inp = $('input'), orb = $('.orb');
   const pipe = c.assistant_pipeline && c.assistant_pipeline !== 'preferred' ? c.assistant_pipeline : null; let convId = null, rec = null, unsub = null, closed = false, audioEl = null, runTok = 0;
   const st = s => host.setAttribute('st', s);
   const showErr = m => { err.textContent = m || ''; err.classList.toggle('on', !!m); };
   const say = (text, extra) => { const r = hvAssistRows(text); re.textContent = r.intro || (r.rows.length ? '' : text || '');
     rowsEl.innerHTML = (extra || []).concat(r.rows).map(x => x.h ? `<div class="sec">${esc(x.h)}</div>` : `<div class="row ${x.c || 'p'}"><ha-icon icon="${esc(x.i || 'mdi:circle-small')}"></ha-icon><span class="tx">${esc(x.t)}</span>${x.r ? `<span class="rt">${esc(x.r)}</span>` : ''}</div>`).join(''); };
-  // pipeline name under the card
-  (async () => { try { const r = await h0.callWS({ type: 'assist_pipeline/pipeline/list' }); const id = pipe || r.preferred_pipeline, p = (r.pipelines || []).find(x => x.id === id);
-    if (p && !closed) $('.pl').textContent = p.name; } catch (e) {} })();
+  // the pipeline (name under the card; which stages it has: no speech-to-text = typing only, no text-to-speech = silent replies)
+  const pinfoP = (async () => { try { const r = await h0.callWS({ type: 'assist_pipeline/pipeline/list' }); const id = pipe || r.preferred_pipeline, p = (r.pipelines || []).find(x => x.id === id);
+    if (p && !closed) $('.pl').textContent = p.name; if (!p && pipe && !closed) showErr('The assistant chosen for this Home Screen no longer exists. Pick another one in the Home Screen settings (Assistant & timer).');
+    if (p && !p.stt_engine) mic.classList.add('nostt'); return p || null; } catch (e) { return null; } })();
+  let pinfoCache = null; pinfoP.then(p => { pinfoCache = p; });
+  const noStt = p => `“${p.name}” has no speech-to-text set up, so it can only read what you type. Type below, or choose a pipeline with speech-to-text (Settings → Voice assistants).`;
+  // conversation agents that fail (an expired or wrong API key, the service is down) often answer with a generic apology instead of an error
+  const agentErr = (sp, rt) => rt === 'error' || /unexpected error|problem (talking|communicating)|(invalid|incorrect|wrong) api key|unauthori[sz]ed|authenticat(ion|e) (error|failed)|quota|rate limit/i.test(sp || '');
   const stopRec = () => { if (!rec) return; const r = rec; rec = null; try { r.stop(); } catch (e) {} orb.style.removeProperty('--lv'); };
   const endRun = () => { if (unsub) { const u = unsub; unsub = null; Promise.resolve(u).then(f => f && f()).catch(() => {}); } };
   const close = () => { if (closed) return; closed = true; runTok++; stopRec(); endRun(); if (audioEl) { try { audioEl.pause(); } catch (e) {} }
@@ -4044,7 +4054,7 @@ function hvAssist(hub) {
   // a local timer command? (works with every pipeline, no satellite needed)
   let wantDur = false;
   const timerCmd = text => { let ti = hvTimerIntent(text); if (!ti && wantDur && hvDuration(text) > 0) ti = { cmd: 'start', secs: Math.min(hvDuration(text), 86400), label: '' }; wantDur = false; if (!ti) return false;
-    if (ti.cmd === 'ask') { wantDur = true; say('For how long?'); st('idle'); if (c.assistant_auto_listen !== false) setTimeout(() => { if (!closed && !rec) listen(); }, 700); return true; } HVTM.opts.sound = c.timer_sound !== false; const s = HVTM.st;
+    if (ti.cmd === 'ask') { wantDur = true; say('For how long?'); st('idle'); if (c.assistant_auto_listen !== false) setTimeout(() => { if (!closed && !rec) listen(true); }, 700); return true; } HVTM.opts.sound = c.timer_sound !== false; const s = HVTM.st;
     if (ti.cmd === 'start') { say(`Timer set for ${hvSayLeft(ti.secs * 1000)}.`, [{ c: 'o', i: 'mdi:timer-outline', t: (ti.label ? ti.label.replace(/^./, x => x.toUpperCase()) + ' timer' : 'Timer'), r: hvFmtTotal(ti.secs) }]); st('idle');
       setTimeout(() => { if (!closed) close(); HVTM.start(ti.secs, ti.label); }, 900); return true; }
     if (!s) { say("There's no timer running."); st('idle'); return true; }
@@ -4053,31 +4063,37 @@ function hvAssist(hub) {
     else if (ti.cmd === 'resume') { HVTM.resume(); say(`Timer resumed: ${hvSayLeft(HVTM.left())} left.`); setTimeout(() => { if (!closed) close(); HVTM.show(); }, 900); }
     else say(s.done ? 'Your timer is done.' : `${hvSayLeft(HVTM.left())} left${s.paused != null ? ' (paused)' : ''}.`);
     st('idle'); return true; };
-  const ask = text => { const tok = ++runTok; you.textContent = '“' + text + '”'; showErr(''); if (timerCmd(text)) return;
-    st('thinking'); re.textContent = '…'; rowsEl.innerHTML = ''; endRun(); const speak = c.assistant_speak !== false;
+  const ask = text => { const tok = ++runTok; you.textContent = '“' + text + '”'; showErr(''); sugEl.hidden = true; if (timerCmd(text)) return;
+    st('thinking'); re.textContent = '…'; rowsEl.innerHTML = ''; sugEl.hidden = true; endRun(); run(text, tok, true); };
+  const run = async (text, tok, tts) => { const pi = await pinfoP; if (tok !== runTok) return; const speak = tts && c.assistant_speak !== false && !(pi && !pi.tts_engine);
     const msg = { type: 'assist_pipeline/run', start_stage: 'intent', end_stage: speak ? 'tts' : 'intent', input: { text }, conversation_id: convId };
-    if (pipe) msg.pipeline = pipe;
+    if (pipe) msg.pipeline = pipe; let streamed = '', answered = false;
+    const failed = m => { if (tok !== runTok) return; if (speak && !answered && /text.to.speech|tts/i.test(m || '')) { endRun(); run(text, tok, false); return; } // no voice for the reply: answer silently
+      showErr(m || 'The assistant could not answer.'); st('idle'); if (re.textContent === '…' || re.textContent === streamed) re.textContent = ''; };
     try { unsub = hub._hass.connection.subscribeMessage(ev => { if (tok !== runTok) return; const d = ev.data || {};
-      if (ev.type === 'intent-end') { const o = d.intent_output || {}, r = o.response || {}; convId = o.conversation_id || convId;
+      if (ev.type === 'intent-progress') { const dl = d.chat_log_delta; if (dl && typeof dl.content === 'string') { streamed += dl.content; re.textContent = streamed; } }
+      else if (ev.type === 'intent-end') { answered = true; const o = d.intent_output || {}, r = o.response || {}; convId = o.conversation_id || convId;
         const sp = (r.speech && r.speech.plain && r.speech.plain.speech) || ''; const ex = [];
         if (r.response_type === 'action_done' && r.data) { for (const t of (r.data.success || []).slice(0, 8)) { const s0 = t.id && hub._hass.states[t.id];
           ex.push({ c: 'g', i: 'mdi:check-circle', t: t.name || t.id, r: s0 ? fmtState(hub._hass, s0) : '' }); }
           for (const t of (r.data.failed || []).slice(0, 4)) ex.push({ c: 'o', i: 'mdi:alert-circle-outline', t: t.name || t.id, r: 'failed' }); }
         say(sp || (r.response_type === 'error' ? 'Sorry, something went wrong.' : 'Done.'), ex); st(speak ? 'thinking' : 'idle');
+        if (agentErr(sp, r.response_type) && !/timer/i.test(text)) showErr(`“${(pinfoCache || {}).name || 'This assistant'}” couldn't answer: its conversation agent reported an error. Check that integration (for example its API key) in Settings → Devices & services, or pick another assistant in the Home Screen settings.`);
         // the agent itself may have tried a timer (HassStartTimer needs a satellite): fall back to ours
         if (r.response_type === 'error' && /timer/i.test(text)) timerCmd(text); }
       else if (ev.type === 'tts-end') { const u = d.tts_output && d.tts_output.url; if (u && !closed) { try { audioEl = new Audio(u); st('speaking'); audioEl.onended = () => st('idle'); audioEl.play().catch(() => st('idle')); } catch (e) { st('idle'); } } else st('idle'); }
-      else if (ev.type === 'error') { showErr(d.message || d.code || 'The assistant could not answer.'); st('idle'); if (re.textContent === '…') re.textContent = ''; }
+      else if (ev.type === 'error') failed(d.message || d.code);
       else if (ev.type === 'run-end') { endRun(); if (host.getAttribute('st') === 'thinking') st('idle'); } }, msg);
-      if (unsub && unsub.catch) unsub.catch(e => { if (tok === runTok) { showErr((e && e.message) || 'The assistant is not available.'); st('idle'); } }); }
-    catch (e) { showErr(String(e && e.message || e)); st('idle'); } };
+      if (unsub && unsub.catch) unsub.catch(e => failed((e && e.message) || 'The assistant is not available.')); }
+    catch (e) { failed(String(e && e.message || e)); } };
   // --- voice: mic -> 16 kHz PCM -> stt stage; the transcript then goes through ask()
-  const listen = async () => {
+  const listen = async auto => {
     if (rec) { rec.finish(); return; } // second tap: done speaking
     showErr(''); if (audioEl) { try { audioEl.pause(); } catch (e) {} }
+    const pi = await pinfoP; if (closed) return; if (pi && !pi.stt_engine) { if (!auto) showErr(noStt(pi)); st('idle'); return; } // opened by itself: no error, the dimmed mic explains on a tap
     const md = navigator.mediaDevices; if (!window.isSecureContext || !md || !md.getUserMedia) {
       showErr("This browser can't use the microphone here (it needs HTTPS and microphone support). Type your request below instead."); mic.disabled = true; return; }
-    const ac = hvAudio(); let stream; st('listening'); you.textContent = 'Listening…'; re.textContent = ''; rowsEl.innerHTML = '';
+    const ac = hvAudio(); let stream; st('listening'); you.textContent = 'Listening…'; re.textContent = ''; rowsEl.innerHTML = ''; sugEl.hidden = true;
     try { stream = await md.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } }); }
     catch (e) { st('idle'); you.textContent = ''; const n = e && e.name;
       showErr(n === 'NotAllowedError' || n === 'SecurityError' ? 'Microphone access was blocked. Allow the microphone for this site (browser or app settings), or type your request below.'
@@ -4110,9 +4126,11 @@ function hvAssist(hub) {
       else if (ev.type === 'error') { clearTimeout(safety); finish(); rec = null; endRun(); st('idle'); you.textContent = '';
         showErr(d.code === 'stt-no-text-recognized' ? "Sorry, I didn't catch that. Try again or type below." : (d.message || d.code || 'Speech recognition failed.')); }
       else if (ev.type === 'run-end') { if (rec && rec.finish === finish) { finish(); rec = null; } } }, msg);
-      if (unsub && unsub.catch) unsub.catch(e => { clearTimeout(safety); finish(); rec = null; st('idle'); showErr((e && e.message) || 'The assistant is not available.'); }); }
-    catch (e) { clearTimeout(safety); finish(); rec = null; st('idle'); showErr(String(e && e.message || e)); } };
+      if (unsub && unsub.catch) unsub.catch(e => { if (tok !== runTok) return; clearTimeout(safety); finish(); rec = null; st('idle'); you.textContent = ''; const m = (e && e.message) || '';
+        showErr(/speech.to.text|stt/i.test(m) && pinfoCache ? noStt(pinfoCache) : m || 'The assistant is not available.'); }); }
+    catch (e) { clearTimeout(safety); finish(); rec = null; st('idle'); you.textContent = ''; showErr(String(e && e.message || e)); } };
   host.addEventListener('click', e => { const p = e.composedPath(); if (p[0] && p[0].classList && p[0].classList.contains('scr')) close(); });
+  sugEl.addEventListener('click', e => { const b = e.composedPath().find(n => n.tagName === 'BUTTON'); if (b) { stopRec(); ask(b.textContent.replace(/\?$/, '')); } });
   $('.x').addEventListener('click', close); mic.addEventListener('click', () => { hvAudio(); listen(); });
   $('form').addEventListener('submit', e => { e.preventDefault(); const t = inp.value.trim(); if (!t) return; stopRec(); inp.value = ''; ask(t); });
   addEventListener('keydown', key); st('idle'); re.textContent = 'How can I help?';
@@ -4158,7 +4176,7 @@ class HVHubCard extends HTMLElement {
   _tpillPaint() { const p = this._tpill; if (!p) return; const s = HVTM.st, on = !!s && this._config.assistant_enabled === true && !(HVTM.scr && HVTM.scr.isConnected); p.hidden = !on;
     if (on) { const t = s.done ? 'Done' : hvFmtLeft(HVTM.left()) + (s.paused != null ? ' ❚❚' : ''); const sp = p.querySelector('span'); if (sp.textContent !== t) sp.textContent = t; } }
   _openAssist() { if (this._assistO || !this._hass) return; hvAudio(); HVTM.opts.sound = this._config.timer_sound !== false; this._assistO = hvAssist(this);
-    if (this._config.assistant_auto_listen !== false) this._assistO.listen(); }
+    if (this._config.assistant_auto_listen !== false) this._assistO.listen(true); }
   disconnectedCallback() { hvTimerPills.delete(this._tpf); if (this._assistO) this._assistO.close(); clearInterval(this._ssHoldIv); this._ssHoldIv = null; this._edgeBind(false); hvPTR.set(this, false); this._ssBind(false); if (this._galO) this._galO.close(); if (this._sheetO) this._sheetO.close(); this._ssPause(false); clearInterval(this._tick); clearTimeout(this._timer); this._timer = null;
     removeEventListener('resize', this._bound); removeEventListener('orientationchange', this._bound); removeEventListener('hv-layout', this._bound); if (window.visualViewport) visualViewport.removeEventListener('resize', this._bound);
     document.removeEventListener('visibilitychange', this._vis); }
