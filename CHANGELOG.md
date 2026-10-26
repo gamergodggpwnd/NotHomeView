@@ -9,6 +9,14 @@
 * New app type for the Home Screen: *Assistant (voice / typed)*.
 * Assistant: suggestion chips under "How can I help?"; replies stream in as the agent writes them; timer screen closes with a swipe down (the timer keeps running) and its orange line shows the minutes left.
 
+* Assistant screen (round 2): fills the whole display (edge to edge, inside the safe areas), swipe down from the top (or with the chat scrolled to the top) to close.
+  Siri-like glowing edge that follows the state (soft when idle, brighter and moving while listening, fast while thinking, pulsing while speaking; still with reduced motion).
+* Assistant chat: the whole conversation stays on screen (your words, replies, cards) and scrolls; it follows new messages unless you scrolled back ("Newest" button). Follow-up questions keep the same conversation; closing the screen clears it.
+* Live voice line: shows that it hears you (level bars, "Hearing you…") and writes your words in as soon as speech-to-text returns them (Home Assistant's pipelines don't send partial words).
+* Answer cards: weather questions show a weather card (now, high / low, next hours) and calendar questions a list of upcoming events, read from this Home Assistant (no actions).
+* Timer: the countdown opens over the chat (the chat stays); the tick ring stays clear of the notch / status bar.
+* Home Screen: in landscape, 5 to 8 apps sit in 2 rows (3 or 4 columns) when there is room, so they line up with the tiles beside them.
+
 ### Bug fixes (staged builds)
 * Assistant: pipelines without text-to-speech now answer (silently) instead of failing with "the pipeline does not support text-to-speech".
 * Assistant: pipelines without speech-to-text no longer show a raw error when the popup opens; the mic is dimmed and explains on a tap.

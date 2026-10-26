@@ -3623,7 +3623,7 @@ const HUB_CSS = `:host{display:block;position:relative;font-family:${FONT};color
 .tpill{all:unset;cursor:pointer;display:flex;align-items:center;gap:6px;height:calc(var(--av,64px) * .6);padding:0 14px;border-radius:999px;background:rgba(255,159,10,.22);color:#ffb340;font-weight:700;font-variant-numeric:tabular-nums;font-size:calc(var(--av,64px) * .28);border:1px solid rgba(255,159,10,.35);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)} .tpill[hidden]{display:none} .tpill ha-icon{--mdc-icon-size:calc(var(--av,64px) * .32);display:flex}
 .av .pic{width:100%;height:100%;border-radius:50%;background:#2a2a40 center/cover no-repeat;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:calc(var(--av,64px) * .4)}
 .mid{display:flex;gap:var(--cg2,40px);align-items:flex-start;flex:none}
-.apps{display:grid;grid-template-columns:repeat(2,var(--I,110px));column-gap:var(--cg,40px);row-gap:var(--rg,22px)}
+.apps{display:grid;grid-template-columns:repeat(var(--ac,2),var(--I,110px));column-gap:var(--cg,40px);row-gap:var(--rg,22px)}
 .app{all:unset;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:var(--lg,9px);width:var(--I,110px)}
 .ico{width:var(--I,110px);height:var(--I,110px);border-radius:22.5%;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;
  box-shadow:0 calc(var(--I) * .06) calc(var(--I) * .16) rgba(0,0,0,.28);transition:transform .14s ease,filter .14s ease}
@@ -3937,7 +3937,7 @@ svg.ring line.off{stroke:#5a3a12;opacity:.55}
 .ctl button,.mn{all:unset;cursor:pointer;width:min(15vw,72px);height:min(15vw,72px);border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.12);color:#fff}
 .ctl button ha-icon,.mn ha-icon{--mdc-icon-size:min(7vw,32px);display:flex}
 .ctl button.pp{background:rgba(255,159,10,.24);color:#ff9f0a} .ctl button.add{font-size:min(4vw,18px);font-weight:700}
-.mn{position:absolute;top:max(3vh,calc(14px + env(safe-area-inset-top)));left:max(3vw,16px);width:46px;height:46px} .mn ha-icon{--mdc-icon-size:26px}
+.mn{position:absolute;top:calc(${HV_FH_SAFE} + max(40px,7vmin));left:calc(env(safe-area-inset-left,0px) + max(40px,7vmin));width:46px;height:46px} .mn ha-icon{--mdc-icon-size:26px}
 :host([paused]) .t{opacity:.55} :host([paused]) svg.ring line{opacity:.7}
 :host([done]) .ctl,:host([done]) .mn{opacity:0;pointer-events:none}
 :host([done]){animation:hvtf 1.6s ease-in-out infinite} :host([done]) .t{animation:hvtp 1.6s ease-in-out infinite}
@@ -3962,7 +3962,11 @@ function hvTimerScreen(T) {
     <div class="ctl"><button class="cx" aria-label="Cancel timer"><ha-icon icon="mdi:close"></ha-icon></button><button class="pp" aria-label="Pause"><ha-icon icon="mdi:pause"></ha-icon></button><button class="add" aria-label="Add one minute">+1</button></div>`;
   const svg = sr.querySelector('svg'), tEl = sr.querySelector('.t'), lEl = sr.querySelector('.l'), pp = sr.querySelector('.pp'); let lines = [], lastOn = -1, W = 0, H = 0;
   const layout = () => { W = innerWidth; H = innerHeight; svg.setAttribute('viewBox', `0 0 ${W} ${H}`); host.style.setProperty('--tw', Math.max(3, Math.min(W, H) * 0.008).toFixed(1) + 'px');
-    svg.innerHTML = hvTicks(W, H, N).map(p => `<line x1="${p[0].toFixed(1)}" y1="${p[1].toFixed(1)}" x2="${p[2].toFixed(1)}" y2="${p[3].toFixed(1)}"/>`).join(''); lines = [...svg.querySelectorAll('line')]; lastOn = -1; host.paint(); };
+    // keep the ring clear of the notch / status bar / home indicator: inside the safe area
+    const ins = (() => { const pr = document.createElement('div'); pr.style.cssText = `position:fixed;visibility:hidden;pointer-events:none;top:0;left:0;padding:${HV_FH_SAFE} env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)`;
+      sr.appendChild(pr); const cs = getComputedStyle(pr), r = ['paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft'].map(k => parseFloat(cs[k]) || 0); pr.remove(); return r; })();
+    const [it, ir, ib, il] = ins;
+    svg.innerHTML = hvTicks(W - il - ir, H - it - ib, N).map(p => [p[0] + il, p[1] + it, p[2] + il, p[3] + it]).map(p => `<line x1="${p[0].toFixed(1)}" y1="${p[1].toFixed(1)}" x2="${p[2].toFixed(1)}" y2="${p[3].toFixed(1)}"/>`).join(''); lines = [...svg.querySelectorAll('line')]; lastOn = -1; host.paint(); };
   host.paint = () => { const s = T.st; if (!s) return; const left = T.left(), on = s.done ? N : Math.ceil(left / (s.total * 1000) * N);
     tEl.textContent = s.done ? '0:00' : hvFmtLeft(left); const ls = Math.max(0, Math.ceil(left / 1000)); // the orange line: minutes left (seconds in the last minute)
     lEl.textContent = (s.label ? s.label + ' · ' : '') + (s.done ? hvFmtTotal(s.total) + ' timer' : (ls >= 60 ? Math.ceil(ls / 60) + ' MIN' : ls + ' SEC') + (s.paused != null ? ' left · paused' : ' left'));
@@ -3979,43 +3983,79 @@ function hvTimerScreen(T) {
   return host; }
 
 // ---- the assistant popup
-const ASSIST_CSS = `:host{position:fixed;inset:0;z-index:11;font-family:${FONT};-webkit-tap-highlight-color:transparent;--fg:#1c1c1e;--fg2:rgba(60,60,67,.62);--card:#fff;--inp:rgba(118,118,128,.12);--sep:rgba(60,60,67,.12);color:var(--fg)}
-:host([night]){--fg:#fff;--fg2:rgba(235,235,245,.6);--card:rgba(28,28,32,.90);--inp:rgba(118,118,128,.24);--sep:rgba(255,255,255,.10)}
-.scr{position:absolute;inset:0;background:rgba(0,0,0,.28);opacity:0;transition:opacity .3s ease} :host(.in) .scr{opacity:1}
-.cd{position:absolute;left:50%;top:max(4vh,calc(12px + env(safe-area-inset-top)));width:min(calc(100vw - 24px),640px);max-height:calc(100dvh - max(8vh,40px));box-sizing:border-box;display:flex;flex-direction:column;
- border-radius:34px;background:var(--card);box-shadow:0 20px 60px rgba(0,0,0,.28);backdrop-filter:blur(30px) saturate(150%);-webkit-backdrop-filter:blur(30px) saturate(150%);
- transform:translate(-50%,-14px) scale(.97);opacity:0;transition:transform .38s cubic-bezier(.2,.9,.3,1),opacity .25s ease;overflow:hidden}
-:host([night]) .cd{border:1px solid rgba(255,255,255,.08)} :host(.in) .cd{transform:translate(-50%,0);opacity:1}
-.hd{display:flex;justify-content:center;padding:18px 0 4px;position:relative}
-.orb{width:58px;height:58px;border-radius:50%;position:relative;transform:scale(var(--lv,1));transition:transform .08s linear}
-.orb::before{content:'';position:absolute;inset:-6px;border-radius:50%;background:conic-gradient(from var(--a,0deg),#ff5fd2,#a259ff,#3b82ff,#2fe0d0,#ffd25e,#ff7a59,#ff5fd2);filter:blur(9px);opacity:.75;animation:hvos 6s linear infinite}
-.orb::after{content:'';position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle at 50% 35%,#4a4a5e 0,#1d1d28 55%,#0b0b12 100%);
- box-shadow:inset 0 0 0 2px rgba(255,255,255,.18),inset 0 -6px 14px rgba(160,110,255,.45),inset 0 6px 12px rgba(80,200,255,.35)}
-:host([st=listening]) .orb::before{opacity:1;animation-duration:2.2s} :host([st=thinking]) .orb::before{opacity:1;animation-duration:.9s} :host([st=speaking]) .orb{animation:hvop 1s ease-in-out infinite}
-@keyframes hvos{to{transform:rotate(360deg)}} @keyframes hvop{50%{transform:scale(1.08)}}
-.x{all:unset;cursor:pointer;position:absolute;right:16px;top:16px;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--inp);color:var(--fg2)}
-.x ha-icon{--mdc-icon-size:20px;display:flex}
-.bd{overflow-y:auto;padding:8px 28px 6px;min-height:60px;overscroll-behavior:contain}
-.you{font-size:15px;color:var(--fg2);margin:4px 0 6px;min-height:20px}
-.re{font-size:clamp(22px,3.4vmin,28px);font-weight:600;line-height:1.25;letter-spacing:-.01em;white-space:pre-wrap;overflow-wrap:anywhere}
-.rows{display:flex;flex-direction:column;gap:8px;margin:14px 0 6px}
-.sec{font-size:15px;font-weight:700;margin:10px 4px 0}
-.row{display:flex;align-items:center;gap:10px;padding:12px 16px;border-radius:16px;font-size:15px;font-weight:600;background:var(--pb,rgba(120,120,128,.12));color:var(--pc,var(--fg))}
+const ASSIST_CSS = `:host{position:fixed;inset:0;z-index:11;font-family:${FONT};-webkit-tap-highlight-color:transparent;--fg:#1c1c1e;--fg2:rgba(60,60,67,.62);--bub:#fff;--ubub:#0a84ff;--inp:rgba(118,118,128,.12);--sep:rgba(60,60,67,.12);--crd:rgba(255,255,255,.92);color:var(--fg);
+ --st:${HV_FH_SAFE};--sb:env(safe-area-inset-bottom,0px);--sl:env(safe-area-inset-left,0px);--sr:env(safe-area-inset-right,0px)}
+:host([night]){--fg:#fff;--fg2:rgba(235,235,245,.6);--bub:rgba(255,255,255,.10);--inp:rgba(118,118,128,.26);--sep:rgba(255,255,255,.10);--crd:rgba(255,255,255,.08)}
+.wrap{position:absolute;inset:0;opacity:0;transform:translate3d(0,24px,0);transition:opacity .28s ease,transform .38s cubic-bezier(.2,.9,.3,1)} :host(.in) .wrap{opacity:1;transform:none}
+.bg{position:absolute;inset:0;background:rgba(242,242,247,.94);backdrop-filter:blur(34px) saturate(150%);-webkit-backdrop-filter:blur(34px) saturate(150%)}
+:host([night]) .bg{background:rgba(8,8,12,.93)}
+/* Siri-like glowing edge: a spinning conic gradient, shown only near the screen edges (two soft layers) */
+.edge{position:absolute;inset:0;pointer-events:none;opacity:var(--eo,.3);transition:opacity .45s ease}
+.edge i{position:absolute;inset:0;overflow:hidden;--ew:28px;
+ -webkit-mask-image:linear-gradient(90deg,#000,transparent var(--ew),transparent calc(100% - var(--ew)),#000),linear-gradient(180deg,#000,transparent var(--ew),transparent calc(100% - var(--ew)),#000);
+ mask-image:linear-gradient(90deg,#000,transparent var(--ew),transparent calc(100% - var(--ew)),#000),linear-gradient(180deg,#000,transparent var(--ew),transparent calc(100% - var(--ew)),#000);transition:--ew .4s}
+.edge i.g1{--ew:7px} .edge i.g2{--ew:calc(var(--gw,34px) * var(--lvs,1));opacity:.75}
+.edge b{position:absolute;left:50%;top:50%;width:max(160vw,160vh);height:max(160vw,160vh);margin:calc(max(160vw,160vh) / -2) 0 0 calc(max(160vw,160vh) / -2);
+ background:conic-gradient(#ff5fd2,#a259ff,#3b82ff,#2fe0d0,#ffd25e,#ff7a59,#ff5fd2);animation:hvsp var(--sp,14s) linear infinite;will-change:transform}
+@keyframes hvsp{to{transform:rotate(360deg)}}
+:host([st=idle]) .edge{--eo:.28} :host([st=idle]) .edge i.g2{--gw:26px}
+:host([st=listening]) .edge{--eo:calc(.7 + var(--lv0,0) * .3);--sp:5s} :host([st=listening]) .edge i.g2{--gw:70px}
+:host([st=thinking]) .edge{--eo:.9;--sp:1.6s} :host([st=thinking]) .edge i.g2{--gw:56px}
+:host([st=speaking]) .edge{--eo:1;--sp:3.5s;animation:hvep 1.1s ease-in-out infinite} :host([st=speaking]) .edge i.g2{--gw:84px}
+@keyframes hvep{50%{opacity:.62}}
+.cd{position:absolute;inset:0;display:flex;flex-direction:column;box-sizing:border-box;
+ padding:calc(var(--st) + 6px) max(14px,var(--sr)) max(12px,var(--sb)) max(14px,var(--sl))}
+.col{width:100%;max-width:780px;margin:0 auto;min-height:0;display:flex;flex-direction:column}
+.hd{flex:none;display:flex;align-items:center;gap:12px;padding:16px 4px 10px;position:relative}
+.grab{position:absolute;left:50%;top:2px;width:38px;height:5px;margin-left:-19px;border-radius:3px;background:rgba(127,127,135,.5)}
+.orb{flex:none;width:38px;height:38px;border-radius:50%;position:relative;transform:scale(var(--lv,1));transition:transform .08s linear}
+.orb::before{content:'';position:absolute;inset:-4px;border-radius:50%;background:conic-gradient(#ff5fd2,#a259ff,#3b82ff,#2fe0d0,#ffd25e,#ff7a59,#ff5fd2);filter:blur(6px);opacity:.75;animation:hvsp 6s linear infinite}
+.orb::after{content:'';position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle at 50% 35%,#4a4a5e 0,#1d1d28 55%,#0b0b12 100%);box-shadow:inset 0 0 0 2px rgba(255,255,255,.18),inset 0 -5px 10px rgba(160,110,255,.45),inset 0 5px 9px rgba(80,200,255,.35)}
+:host([st=listening]) .orb::before{opacity:1;animation-duration:2.2s} :host([st=thinking]) .orb::before{opacity:1;animation-duration:.9s}
+.ti{flex:1;min-width:0} .ti b{display:block;font-size:17px;font-weight:700} .ti span{display:block;font-size:12.5px;color:var(--fg2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.x{all:unset;cursor:pointer;flex:none;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--inp);color:var(--fg2)} .x ha-icon{--mdc-icon-size:20px;display:flex}
+.bd{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:6px 4px 14px;scrollbar-width:none} .bd::-webkit-scrollbar{display:none}
+.log{display:flex;flex-direction:column;gap:12px}
+.m{max-width:min(88%,640px);animation:hvmi .28s ease both} @keyframes hvmi{from{opacity:0;transform:translate3d(0,8px,0)}}
+.m.u{align-self:flex-end;background:var(--ubub);color:#fff;padding:10px 15px;border-radius:20px 20px 6px 20px;font-size:16px;line-height:1.35;white-space:pre-wrap;overflow-wrap:anywhere}
+.m.u.live{background:transparent;color:var(--fg2);border:1.5px dashed var(--sep);font-style:italic}
+.m.u .w{opacity:0;animation:hvwi .25s ease forwards}  @keyframes hvwi{to{opacity:1}}
+.wave{display:inline-flex;gap:3px;align-items:center;height:16px;margin-left:8px;vertical-align:middle} .wave i{width:3px;border-radius:2px;background:currentColor;height:calc(4px + var(--lv0,0) * var(--k) * 12px);transition:height .08s linear}
+.m.a{align-self:flex-start;width:min(88%,640px)}
+.m.a .re{font-size:clamp(19px,2.6vmin,24px);font-weight:600;line-height:1.3;letter-spacing:-.01em;white-space:pre-wrap;overflow-wrap:anywhere}
+.m.a.hi .re{font-size:clamp(24px,3.6vmin,32px)}
+.dots{display:inline-flex;gap:5px;padding:6px 0} .dots i{width:8px;height:8px;border-radius:50%;background:var(--fg2);animation:hvdt 1.2s ease-in-out infinite} .dots i:nth-child(2){animation-delay:.15s} .dots i:nth-child(3){animation-delay:.3s}
+@keyframes hvdt{0%,80%,100%{opacity:.25;transform:scale(.8)}40%{opacity:1;transform:none}}
+.rows{display:flex;flex-direction:column;gap:8px;margin:10px 0 2px} .rows:empty{display:none}
+.sec{font-size:15px;font-weight:700;margin:8px 4px 0}
+.row{display:flex;align-items:center;gap:10px;padding:11px 15px;border-radius:16px;font-size:15px;font-weight:600;background:var(--pb,rgba(120,120,128,.12));color:var(--pc,var(--fg))}
 .row ha-icon{--mdc-icon-size:20px;display:flex;color:var(--pi,currentColor);flex:none} .row .tx{flex:1;min-width:0} .row .rt{font-weight:500;font-size:13px;opacity:.75;flex:none}
-.row.o{--pb:#fdebd3;--pc:#7a4a00;--pi:#f08c00} .row.b{--pb:#dceafc;--pc:#0b3d7a;--pi:#0a84ff;border-left:4px solid #0a84ff;padding-left:12px} .row.g{--pb:#dcf5e3;--pc:#14532d;--pi:#30a14e} .row.p{--pb:#ece6fd;--pc:#3f2a8c;--pi:#7a5af8}
+.row.o{--pb:#fdebd3;--pc:#7a4a00;--pi:#f08c00} .row.b{--pb:#dceafc;--pc:#0b3d7a;--pi:#0a84ff;border-left:4px solid #0a84ff;padding-left:11px} .row.g{--pb:#dcf5e3;--pc:#14532d;--pi:#30a14e} .row.p{--pb:#ece6fd;--pc:#3f2a8c;--pi:#7a5af8}
 :host([night]) .row.o{--pb:rgba(255,159,10,.18);--pc:#ffd29a} :host([night]) .row.b{--pb:rgba(10,132,255,.20);--pc:#b9dbff} :host([night]) .row.g{--pb:rgba(48,209,88,.18);--pc:#b4f0c4} :host([night]) .row.p{--pb:rgba(150,120,255,.20);--pc:#d8cdff}
-.err{margin:10px 0 2px;padding:10px 14px;border-radius:14px;font-size:14px;line-height:1.4;background:rgba(255,59,48,.10);color:#c4271c;display:none} :host([night]) .err{color:#ff8a80;background:rgba(255,69,58,.16)} .err.on{display:block}
-.ft{display:flex;align-items:center;gap:10px;padding:12px 16px 16px;border-top:1px solid var(--sep)}
-.mic{all:unset;cursor:pointer;flex:none;width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#7a5af8,#0a84ff);color:#fff;box-shadow:0 4px 14px rgba(90,90,250,.35)}
-.mic ha-icon{--mdc-icon-size:24px;display:flex} :host([st=listening]) .mic{background:#ff3b30;box-shadow:0 0 0 6px rgba(255,59,48,.18)} .mic[disabled]{opacity:.35;cursor:default;box-shadow:none}
-.in{flex:1;min-width:0;height:44px;border-radius:22px;background:var(--inp);display:flex;align-items:center;padding:0 6px 0 16px}
-.in input{all:unset;flex:1;min-width:0;font-size:16px;color:var(--fg)} .in input::placeholder{color:var(--fg2)}
-.snd{all:unset;cursor:pointer;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#0a84ff} .snd ha-icon{--mdc-icon-size:22px;display:flex}
-.pl{font-size:12px;color:var(--fg2);text-align:center;padding:0 0 10px;margin-top:-8px}
-.sug{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 6px} .sug[hidden]{display:none}
+.err{margin-top:10px;padding:10px 14px;border-radius:14px;font-size:14px;line-height:1.4;background:rgba(255,59,48,.10);color:#c4271c} :host([night]) .err{color:#ff8a80;background:rgba(255,69,58,.16)}
+/* answer cards */
+.card{margin-top:12px;border-radius:22px;padding:16px 18px;background:var(--crd);box-shadow:0 6px 24px rgba(20,30,60,.08);border:1px solid var(--sep)}
+.card .ct{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:var(--fg2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px} .card .ct ha-icon{--mdc-icon-size:18px;display:flex}
+.wx{color:#fff;border:none;background:var(--wxbg,linear-gradient(180deg,#2468c8,#6aa8e8))}
+.wx .ct{color:rgba(255,255,255,.75)} .wx .now{display:flex;align-items:center;gap:14px} .wx .now ha-icon{--mdc-icon-size:54px;display:flex}
+.wx .tmp{font-size:46px;font-weight:300;line-height:1} .wx .cnd{font-size:16px;font-weight:600} .wx .hl{font-size:14px;opacity:.85}
+.wx .hrs{display:flex;gap:4px;margin-top:14px;overflow-x:auto;scrollbar-width:none} .wx .hrs::-webkit-scrollbar{display:none}
+.wx .h{flex:1 0 52px;display:flex;flex-direction:column;align-items:center;gap:6px;font-size:13px;font-weight:600} .wx .h ha-icon{--mdc-icon-size:22px;display:flex} .wx .h .t{opacity:.8;font-weight:500}
+.cal .day{font-size:14px;font-weight:700;margin:10px 2px 6px} .cal .day:first-of-type{margin-top:0}
+.cal .ev{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:14px;background:var(--inp);margin-bottom:6px;font-size:15px;font-weight:600}
+.cal .ev i{flex:none;width:4px;align-self:stretch;border-radius:2px;background:var(--cc,#7a5af8)} .cal .ev .s{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap} .cal .ev .tm{flex:none;font-size:13px;font-weight:500;color:var(--fg2)}
+.cal .none{font-size:15px;color:var(--fg2);padding:4px 2px}
+.sug{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 2px} .sug[hidden]{display:none}
 .sug button{all:unset;cursor:pointer;padding:9px 14px;border-radius:999px;font-size:14px;font-weight:600;background:var(--inp);color:var(--fg)} .sug button:active{opacity:.6}
-.mic.nostt{opacity:.45;box-shadow:none}
-@media (prefers-reduced-motion:reduce){.orb::before,.orb{animation:none !important}}`;
+.ft{flex:none;display:flex;align-items:center;gap:10px;padding:10px 0 0}
+.mic{all:unset;cursor:pointer;flex:none;width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#7a5af8,#0a84ff);color:#fff;box-shadow:0 4px 14px rgba(90,90,250,.35)}
+.mic ha-icon{--mdc-icon-size:26px;display:flex} :host([st=listening]) .mic{background:#ff3b30;box-shadow:0 0 0 6px rgba(255,59,48,.18)} .mic[disabled],.mic.nostt{opacity:.45;box-shadow:none}
+.in{flex:1;min-width:0;height:46px;border-radius:23px;background:var(--inp);display:flex;align-items:center;padding:0 6px 0 16px}
+.in input{all:unset;flex:1;min-width:0;font-size:16px;color:var(--fg)} .in input::placeholder{color:var(--fg2)}
+.snd{all:unset;cursor:pointer;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#0a84ff} .snd ha-icon{--mdc-icon-size:24px;display:flex}
+.jump{all:unset;cursor:pointer;position:absolute;left:50%;transform:translateX(-50%);bottom:calc(max(12px,var(--sb)) + 70px);padding:6px 12px;border-radius:999px;background:var(--fg);color:var(--bub);font-size:13px;font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,.2);display:none}
+:host([night]) .jump{color:#000} .jump.on{display:block}
+@media (prefers-reduced-motion:reduce){.edge b,.orb::before,.dots i,.m,.m.u .w,.edge{animation:none !important} .wrap{transition:opacity .2s}}`;
 // response text -> intro + rows (markdown lists, "Day:" headings, times, all-day items)
 function hvAssistRows(text) {
   const lines = String(text || '').replace(/\*\*|__|`/g, '').split(/\n+/).map(x => x.trim()).filter(Boolean); let intro = [], rows = [];
@@ -4025,60 +4065,124 @@ function hvAssistRows(text) {
   const cls = t => /\b\d{1,2}(:\d{2})?\s?(am|pm)\b|\b\d{1,2}:\d{2}\b/i.test(t) && !/all[ -]day/i.test(t) ? 'b' : /all[ -]day|birthday|anniversary|holiday/i.test(t) ? 'o' : 'p';
   rows = rows.map(r => r.h ? r : Object.assign(r, { c: cls(r.t), i: cls(r.t) === 'o' && /birthday/i.test(r.t) ? 'mdi:cake-variant' : cls(r.t) === 'b' ? 'mdi:clock-outline' : cls(r.t) === 'o' ? 'mdi:calendar' : 'mdi:circle-small' }));
   return { intro: intro.join('\n'), rows }; }
+// which answer card fits a request: by the entities the agent touched, else by words in the question
+const HV_WX_Q = /\b(weather|forecast|temperature|degrees|outside|rain(ing|y)?|snow(ing|y)?|sunny|cloudy|wind(y)?|umbrella|jacket|humid(ity)?|storm|frost)\b/i;
+const HV_CAL_Q = /\b(calendar|schedule|agenda|events?|appointments?|meetings?|plans|planned|busy|free tonight|what'?s on|what is on|happening|birthdays?)\b/i;
+function hvAssistCardKind(q, r) { const ids = r && r.data ? [].concat(r.data.success || [], r.data.targets || []).map(t => t && t.id || '') : [];
+  if (ids.some(i => /^weather\./.test(i)) || HV_WX_Q.test(q || '')) return 'weather';
+  if (ids.some(i => /^calendar\./.test(i)) || HV_CAL_Q.test(q || '')) return 'calendar'; return ''; }
+// weather card (reads the weather entity + a one-off forecast subscription)
+function hvAssistWeather(hub, el, keep) {
+  const h = hub._hass, c = hub._config, id = c.weather_entity || (h.states['weather.forecast_home'] ? 'weather.forecast_home' : Object.keys(h.states).find(k => k.startsWith('weather.')));
+  const s = id && h.states[id]; if (!s) return false; const a = s.attributes, sun = h.states['sun.sun'], night = sun ? sun.state === 'below_horizon' : false, u = a.temperature_unit || '°';
+  const lang = (h.locale && h.locale.language) || navigator.language, tf = h.locale && h.locale.time_format;
+  const ic = (cnd, nt) => (nt && cnd === 'partlycloudy') ? 'mdi:weather-night-partly-cloudy' : (WX_ICON[cnd] || 'mdi:weather-partly-cloudy');
+  const card = document.createElement('div'); card.className = 'card wx'; card.style.setProperty('--wxbg', hubWeatherBg(s.state, night)); el.appendChild(card);
+  let hrs = [], days = []; const paint = () => { const today = days[0];
+    card.innerHTML = `<div class="ct"><ha-icon icon="mdi:map-marker-outline"></ha-icon>${esc(c.location_name || (h.config && h.config.location_name) || a.friendly_name || 'Weather')}</div>
+      <div class="now"><ha-icon icon="${ic(s.state, night)}" style="color:${HUB_WX_COLOR[s.state] || '#fff'}"></ha-icon><div><div class="tmp">${a.temperature != null ? Math.round(a.temperature) + '°' : '—'}</div>
+      <div class="cnd">${esc(fmtState(h, s))}</div><div class="hl">${today ? `H:${Math.round(today.temperature)}°  L:${Math.round(today.templow ?? today.temperature)}°` : esc(a.humidity != null ? `Humidity ${a.humidity}%` : '')}</div></div></div>
+      ${hrs.length ? `<div class="hrs">${hrs.slice(0, 8).map((f, i) => { const d = new Date(f.datetime), hh = d.getHours(); const o = { hour: 'numeric' }; if (tf === '24') o.hour12 = false; else if (tf === '12') o.hour12 = true;
+        return `<div class="h"><span class="t">${i ? esc(d.toLocaleTimeString(lang, o)) : 'Now'}</span><ha-icon icon="${ic(f.condition, hh < 6 || hh >= 20)}" style="color:${HUB_WX_COLOR[f.condition] || '#fff'}"></ha-icon><span>${Math.round(f.temperature)}°</span></div>`; }).join('')}</div>` : ''}`; keep(); };
+  const sub = (type, cb) => { try { const p = h.connection.subscribeMessage(m => { cb(m.forecast || []); paint(); p.then(f => f && f()).catch(() => {}); }, { type: 'weather/subscribe_forecast', forecast_type: type, entity_id: id }); if (p.catch) p.catch(() => {}); } catch (e) {} };
+  paint(); sub('hourly', f => { hrs = f.filter(x => new Date(x.datetime) > Date.now() - 36e5); }); sub('daily', f => { days = f; }); return true; }
+// calendar card (calendar events API: read only), range from the question: today / tomorrow / this week (default: next 7 days)
+const HV_CAL_COLS = ['#7a5af8', '#0a84ff', '#30a14e', '#f08c00', '#ff375f', '#5ac8fa'];
+async function hvAssistCalendar(hub, el, q, keep) {
+  const h = hub._hass, c = hub._config, all = Object.keys(h.states).filter(k => k.startsWith('calendar.'));
+  const ids = (Array.isArray(c.calendar_entities) && c.calendar_entities.length ? c.calendar_entities : all).filter(k => h.states[k]).slice(0, 8); if (!ids.length) return false;
+  const now = new Date(), d0 = new Date(now.getFullYear(), now.getMonth(), now.getDate()); let from = now, to = new Date(d0.getTime() + 7 * 864e5), title = 'Next 7 days';
+  if (/\btomorrow\b/i.test(q)) { from = new Date(d0.getTime() + 864e5); to = new Date(d0.getTime() + 2 * 864e5); title = 'Tomorrow'; }
+  else if (/\b(today|tonight)\b/i.test(q)) { to = new Date(d0.getTime() + 864e5); title = 'Today'; }
+  const card = document.createElement('div'); card.className = 'card cal'; card.innerHTML = `<div class="ct"><ha-icon icon="mdi:calendar-month-outline"></ha-icon>${title}</div><div class="none">Loading…</div>`; el.appendChild(card); keep();
+  const lang = (h.locale && h.locale.language) || navigator.language, tf = h.locale && h.locale.time_format, to12 = tf === '24' ? false : tf === '12' ? true : undefined;
+  const evs = []; await Promise.all(ids.map(async (id, k) => { try { const r = await h.callApi('GET', `calendars/${id}?start=${encodeURIComponent(from.toISOString())}&end=${encodeURIComponent(to.toISOString())}`);
+    for (const e of r || []) { const ad = !!(e.start && e.start.date && !e.start.dateTime), st = ad ? new Date(e.start.date + 'T00:00:00') : new Date(e.start.dateTime || e.start);
+      evs.push({ st, ad, s: e.summary || '(No title)', col: HV_CAL_COLS[k % HV_CAL_COLS.length] }); } } catch (e) {} }));
+  evs.sort((a, b) => a.st - b.st || (b.ad - a.ad)); const list = evs.slice(0, 10); let html = `<div class="ct"><ha-icon icon="mdi:calendar-month-outline"></ha-icon>${title}</div>`, day = '';
+  if (!list.length) html += `<div class="none">Nothing planned.</div>`;
+  for (const e of list) { const dk = e.st.toDateString(); if (dk !== day) { day = dk; const dd = Math.round((new Date(e.st.getFullYear(), e.st.getMonth(), e.st.getDate()) - d0) / 864e5);
+      html += `<div class="day">${dd <= 0 ? 'Today' : dd === 1 ? 'Tomorrow' : esc(e.st.toLocaleDateString(lang, { weekday: 'long', month: 'short', day: 'numeric' }))}</div>`; }
+    html += `<div class="ev" style="--cc:${e.col}"><i></i><span class="s">${esc(e.s)}</span><span class="tm">${e.ad ? 'All day' : esc(e.st.toLocaleTimeString(lang, { hour: 'numeric', minute: '2-digit', hour12: to12 }))}</span></div>`; }
+  if (evs.length > list.length) html += `<div class="none">+${evs.length - list.length} more</div>`;
+  card.innerHTML = html; keep(); return true; }
 function hvAssist(hub) {
   const c = hub._config, h0 = hub._hass; const theme = c.assistant_theme && c.assistant_theme !== 'same' ? c.assistant_theme : c.theme;
   const host = document.createElement('homeview-assist'), sr = host.attachShadow({ mode: 'open' }); host.toggleAttribute('night', hvMode(theme, h0) !== 'day');
-  sr.innerHTML = `<style>${ASSIST_CSS}</style><div class="scr"></div><div class="cd" role="dialog" aria-modal="true" aria-label="Assistant"><div class="hd"><div class="orb" aria-hidden="true"></div><button class="x" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button></div>
-    <div class="bd"><div class="you"></div><div class="re" aria-live="polite"></div><div class="rows"></div><div class="err" role="alert"></div><div class="sug"><button>What time is it?</button><button>Set a timer for 10 minutes</button><button>What's the weather like?</button></div></div>
-    <div class="ft"><button class="mic" aria-label="Speak"><ha-icon icon="mdi:microphone"></ha-icon></button><form class="in"><input type="text" enterkeyhint="send" autocomplete="off" placeholder="Type to Assist…" aria-label="Type a request"><button class="snd" type="submit" aria-label="Send"><ha-icon icon="mdi:arrow-up-circle"></ha-icon></button></form></div><div class="pl"></div></div>`;
-  const $ = s => sr.querySelector(s), sugEl = $('.sug'), you = $('.you'), re = $('.re'), rowsEl = $('.rows'), err = $('.err'), mic = $('.mic'), inp = $('input'), orb = $('.orb');
+  sr.innerHTML = `<style>${ASSIST_CSS}</style><div class="wrap"><div class="bg"></div><div class="edge" aria-hidden="true"><i class="g2"><b></b></i><i class="g1"><b></b></i></div>
+    <div class="cd" role="dialog" aria-modal="true" aria-label="Assistant"><div class="col" style="flex:1 1 auto">
+    <div class="hd"><div class="grab" aria-hidden="true"></div><div class="orb" aria-hidden="true"></div><div class="ti"><b>Assistant</b><span class="pl"></span></div><button class="x" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button></div>
+    <div class="bd"><div class="log" aria-live="polite"></div></div>
+    <div class="ft"><button class="mic" aria-label="Speak"><ha-icon icon="mdi:microphone"></ha-icon></button><form class="in"><input type="text" enterkeyhint="send" autocomplete="off" placeholder="Type to Assist…" aria-label="Type a request"><button class="snd" type="submit" aria-label="Send"><ha-icon icon="mdi:arrow-up-circle"></ha-icon></button></form></div>
+    </div></div><button class="jump" aria-label="Show the newest message">Newest ↓</button></div>`;
+  const $ = s => sr.querySelector(s), wrap = $('.wrap'), bd = $('.bd'), log = $('.log'), mic = $('.mic'), inp = $('input'), orb = $('.orb'), jump = $('.jump');
   const pipe = c.assistant_pipeline && c.assistant_pipeline !== 'preferred' ? c.assistant_pipeline : null; let convId = null, rec = null, unsub = null, closed = false, audioEl = null, runTok = 0;
   const st = s => host.setAttribute('st', s);
-  const showErr = m => { err.textContent = m || ''; err.classList.toggle('on', !!m); };
-  const say = (text, extra) => { const r = hvAssistRows(text); re.textContent = r.intro || (r.rows.length ? '' : text || '');
-    rowsEl.innerHTML = (extra || []).concat(r.rows).map(x => x.h ? `<div class="sec">${esc(x.h)}</div>` : `<div class="row ${x.c || 'p'}"><ha-icon icon="${esc(x.i || 'mdi:circle-small')}"></ha-icon><span class="tx">${esc(x.t)}</span>${x.r ? `<span class="rt">${esc(x.r)}</span>` : ''}</div>`).join(''); };
-  // the pipeline (name under the card; which stages it has: no speech-to-text = typing only, no text-to-speech = silent replies)
+  // --- the chat: newest at the bottom; follows new content only while the user is at the bottom
+  let stick = true; const atEnd = () => bd.scrollHeight - bd.scrollTop - bd.clientHeight < 48;
+  const keep = () => { if (stick) requestAnimationFrame(() => { bd.scrollTop = bd.scrollHeight; }); else jump.classList.add('on'); };
+  bd.addEventListener('scroll', () => { stick = atEnd(); if (stick) jump.classList.remove('on'); }, { passive: true });
+  jump.addEventListener('click', () => { stick = true; jump.classList.remove('on'); bd.scrollTo({ top: bd.scrollHeight, behavior: 'smooth' }); });
+  const add = (cls, html) => { const m = document.createElement('div'); m.className = 'm ' + cls; if (html != null) m.innerHTML = html; log.appendChild(m); keep(); return m; };
+  const userMsg = text => add('u', esc(text));
+  const rowsHtml = list => list.map(x => x.h ? `<div class="sec">${esc(x.h)}</div>` : `<div class="row ${x.c || 'p'}"><ha-icon icon="${esc(x.i || 'mdi:circle-small')}"></ha-icon><span class="tx">${esc(x.t)}</span>${x.r ? `<span class="rt">${esc(x.r)}</span>` : ''}</div>`).join('');
+  const botMsg = () => add('a', '<div class="re"><span class="dots"><i></i><i></i><i></i></span></div><div class="rows"></div>');
+  const fill = (m, text, extra) => { const r = hvAssistRows(text), re = m.querySelector('.re'); re.textContent = r.intro || (r.rows.length ? '' : text || '');
+    m.classList.toggle('hi', !r.rows.length && !(extra || []).length && re.textContent.length < 40); m.querySelector('.rows').innerHTML = rowsHtml((extra || []).concat(r.rows)); keep(); };
+  const say = (text, extra) => { const m = botMsg(); fill(m, text, extra); return m; };
+  const note = (m, msg) => { if (!msg) return; const e = document.createElement('div'); e.className = 'err'; e.setAttribute('role', 'alert'); e.textContent = msg; (m || add('a', '')).appendChild(e); keep(); };
+  // first message + suggestions (they go away with the first request)
+  const hello = say('How can I help?'); const sugEl = document.createElement('div'); sugEl.className = 'sug';
+  sugEl.innerHTML = "<button>What time is it?</button><button>What's the weather like?</button><button>What's on my calendar?</button><button>Set a timer for 10 minutes</button>"; hello.appendChild(sugEl);
+  // the pipeline (name in the header; which stages it has: no speech-to-text = typing only, no text-to-speech = silent replies)
   const pinfoP = (async () => { try { const r = await h0.callWS({ type: 'assist_pipeline/pipeline/list' }); const id = pipe || r.preferred_pipeline, p = (r.pipelines || []).find(x => x.id === id);
-    if (p && !closed) $('.pl').textContent = p.name; if (!p && pipe && !closed) showErr('The assistant chosen for this Home Screen no longer exists. Pick another one in the Home Screen settings (Assistant & timer).');
+    if (p && !closed) $('.pl').textContent = p.name; if (!p && pipe && !closed) note(null, 'The assistant chosen for this Home Screen no longer exists. Pick another one in the Home Screen settings (Assistant & timer).');
     if (p && !p.stt_engine) mic.classList.add('nostt'); return p || null; } catch (e) { return null; } })();
   let pinfoCache = null; pinfoP.then(p => { pinfoCache = p; });
   const noStt = p => `“${p.name}” has no speech-to-text set up, so it can only read what you type. Type below, or choose a pipeline with speech-to-text (Settings → Voice assistants).`;
   // conversation agents that fail (an expired or wrong API key, the service is down) often answer with a generic apology instead of an error
-  const agentErr = (sp, rt) => rt === 'error' || /unexpected error|problem (talking|communicating)|(invalid|incorrect|wrong) api key|unauthori[sz]ed|authenticat(ion|e) (error|failed)|quota|rate limit/i.test(sp || '');
-  const stopRec = () => { if (!rec) return; const r = rec; rec = null; try { r.stop(); } catch (e) {} orb.style.removeProperty('--lv'); };
+  const agentErr = (sp, rt) => (rt === 'error' && !sp) || /unexpected error|problem (talking|communicating)|(invalid|incorrect|wrong) api key|unauthori[sz]ed|authenticat(ion|e) (error|failed)|quota|rate limit/i.test(sp || '');
+  const stopRec = () => { if (!rec) return; const r = rec; rec = null; try { r.stop(); } catch (e) {} orb.style.removeProperty('--lv'); host.style.removeProperty('--lv0'); };
   const endRun = () => { if (unsub) { const u = unsub; unsub = null; Promise.resolve(u).then(f => f && f()).catch(() => {}); } };
-  const close = () => { if (closed) return; closed = true; runTok++; stopRec(); endRun(); if (audioEl) { try { audioEl.pause(); } catch (e) {} }
-    removeEventListener('keydown', key); host.classList.remove('in'); setTimeout(() => host.remove(), 320); hub._assistO = null; };
-  const key = e => { if (e.key === 'Escape') close(); };
-  if (c.full_height_popups === true) hvFhCard(host, sr, $('.cd'), close, '640px', ':host([hv-full]) .bd{flex:1 1 auto}');
-  // a local timer command? (works with every pipeline, no satellite needed)
+  // closing clears the chat and the conversation (a new popup starts fresh)
+  const close = () => { if (closed) return; closed = true; runTok++; stopRec(); endRun(); convId = null; if (audioEl) { try { audioEl.pause(); } catch (e) {} }
+    removeEventListener('keydown', key); host.classList.remove('in'); setTimeout(() => host.remove(), 320); hub._assistO = null; hvFhOpen.delete(host); };
+  const key = e => { if (e.key === 'Escape' && !(HVTM.scr && HVTM.scr.isConnected)) close(); };
+  // swipe down to close: from the header (always) or anywhere once the chat is scrolled to the top (hvSwipeClose leaves a scrolled list alone)
+  hvFhOpen.add(host);
+  hvSwipeClose({ el: wrap, alive: () => host.isConnected && !closed, close, grab: (path, y) => y < $('.hd').getBoundingClientRect().bottom,
+    dragOk: path => !path.some(n => n === $('.ft') || n === jump) });
+  // a local timer command? (works with every pipeline, no satellite needed). The countdown opens over the chat; the chat stays.
   let wantDur = false;
   const timerCmd = text => { let ti = hvTimerIntent(text); if (!ti && wantDur && hvDuration(text) > 0) ti = { cmd: 'start', secs: Math.min(hvDuration(text), 86400), label: '' }; wantDur = false; if (!ti) return false;
     if (ti.cmd === 'ask') { wantDur = true; say('For how long?'); st('idle'); if (c.assistant_auto_listen !== false) setTimeout(() => { if (!closed && !rec) listen(true); }, 700); return true; } HVTM.opts.sound = c.timer_sound !== false; const s = HVTM.st;
     if (ti.cmd === 'start') { say(`Timer set for ${hvSayLeft(ti.secs * 1000)}.`, [{ c: 'o', i: 'mdi:timer-outline', t: (ti.label ? ti.label.replace(/^./, x => x.toUpperCase()) + ' timer' : 'Timer'), r: hvFmtTotal(ti.secs) }]); st('idle');
-      setTimeout(() => { if (!closed) close(); HVTM.start(ti.secs, ti.label); }, 900); return true; }
+      setTimeout(() => { if (!closed) HVTM.start(ti.secs, ti.label); }, 900); return true; }
     if (!s) { say("There's no timer running."); st('idle'); return true; }
     if (ti.cmd === 'cancel') { HVTM.cancel(); say('Timer cancelled.'); }
     else if (ti.cmd === 'pause') { HVTM.pause(); say(`Timer paused with ${hvSayLeft(HVTM.left())} left.`); }
-    else if (ti.cmd === 'resume') { HVTM.resume(); say(`Timer resumed: ${hvSayLeft(HVTM.left())} left.`); setTimeout(() => { if (!closed) close(); HVTM.show(); }, 900); }
+    else if (ti.cmd === 'resume') { HVTM.resume(); say(`Timer resumed: ${hvSayLeft(HVTM.left())} left.`); setTimeout(() => { if (!closed) HVTM.show(); }, 900); }
     else say(s.done ? 'Your timer is done.' : `${hvSayLeft(HVTM.left())} left${s.paused != null ? ' (paused)' : ''}.`);
     st('idle'); return true; };
-  const ask = text => { const tok = ++runTok; you.textContent = '“' + text + '”'; showErr(''); sugEl.hidden = true; if (timerCmd(text)) return;
-    st('thinking'); re.textContent = '…'; rowsEl.innerHTML = ''; sugEl.hidden = true; endRun(); run(text, tok, true); };
-  const run = async (text, tok, tts) => { const pi = await pinfoP; if (tok !== runTok) return; const speak = tts && c.assistant_speak !== false && !(pi && !pi.tts_engine);
+  const ask = (text, um) => { const tok = ++runTok; sugEl.hidden = true; stick = true; if (!um) userMsg(text); if (timerCmd(text)) return;
+    st('thinking'); endRun(); run(text, tok, true, botMsg()); };
+  const run = async (text, tok, tts, m) => { const pi = await pinfoP; if (tok !== runTok) return; const speak = tts && c.assistant_speak !== false && !(pi && !pi.tts_engine);
     const msg = { type: 'assist_pipeline/run', start_stage: 'intent', end_stage: speak ? 'tts' : 'intent', input: { text }, conversation_id: convId };
-    if (pipe) msg.pipeline = pipe; let streamed = '', answered = false;
-    const failed = m => { if (tok !== runTok) return; if (speak && !answered && /text.to.speech|tts/i.test(m || '')) { endRun(); run(text, tok, false); return; } // no voice for the reply: answer silently
-      showErr(m || 'The assistant could not answer.'); st('idle'); if (re.textContent === '…' || re.textContent === streamed) re.textContent = ''; };
+    if (pipe) msg.pipeline = pipe; let streamed = '', answered = false; const re = m.querySelector('.re');
+    const failed = er => { if (tok !== runTok) return; if (speak && !answered && /text.to.speech|tts/i.test(er || '')) { endRun(); run(text, tok, false, m); return; } // no voice for the reply: answer silently
+      if (!answered) re.textContent = ''; note(m, er || 'The assistant could not answer.'); st('idle'); };
     try { unsub = hub._hass.connection.subscribeMessage(ev => { if (tok !== runTok) return; const d = ev.data || {};
-      if (ev.type === 'intent-progress') { const dl = d.chat_log_delta; if (dl && typeof dl.content === 'string') { streamed += dl.content; re.textContent = streamed; } }
+      if (ev.type === 'intent-progress') { const dl = d.chat_log_delta; if (dl && typeof dl.content === 'string') { streamed += dl.content; re.textContent = streamed; keep(); } }
       else if (ev.type === 'intent-end') { answered = true; const o = d.intent_output || {}, r = o.response || {}; convId = o.conversation_id || convId;
         const sp = (r.speech && r.speech.plain && r.speech.plain.speech) || ''; const ex = [];
-        if (r.response_type === 'action_done' && r.data) { for (const t of (r.data.success || []).slice(0, 8)) { const s0 = t.id && hub._hass.states[t.id];
+        if (r.response_type === 'action_done' && r.data) { for (const t of (r.data.success || []).slice(0, 8)) { if (/^(weather|calendar)\./.test(t.id || '')) continue; const s0 = t.id && hub._hass.states[t.id];
           ex.push({ c: 'g', i: 'mdi:check-circle', t: t.name || t.id, r: s0 ? fmtState(hub._hass, s0) : '' }); }
           for (const t of (r.data.failed || []).slice(0, 4)) ex.push({ c: 'o', i: 'mdi:alert-circle-outline', t: t.name || t.id, r: 'failed' }); }
-        say(sp || (r.response_type === 'error' ? 'Sorry, something went wrong.' : 'Done.'), ex); st(speak ? 'thinking' : 'idle');
-        if (agentErr(sp, r.response_type) && !/timer/i.test(text)) showErr(`“${(pinfoCache || {}).name || 'This assistant'}” couldn't answer: its conversation agent reported an error. Check that integration (for example its API key) in Settings → Devices & services, or pick another assistant in the Home Screen settings.`);
+        fill(m, sp || (r.response_type === 'error' ? 'Sorry, something went wrong.' : 'Done.'), ex); st(speak ? 'thinking' : 'idle');
+        const bad = agentErr(sp, r.response_type);
+        if (bad && !/timer/i.test(text)) note(m, `“${(pinfoCache || {}).name || 'This assistant'}” couldn't answer: its conversation agent reported an error. Check that integration (for example its API key) in Settings → Devices & services, or pick another assistant in the Home Screen settings.`);
+        // answer cards: weather / calendar, from this Home Assistant's own states (read only)
+        const kind = hvAssistCardKind(text, r); if (kind === 'weather') hvAssistWeather(hub, m, keep); else if (kind === 'calendar') hvAssistCalendar(hub, m, text, keep);
         // the agent itself may have tried a timer (HassStartTimer needs a satellite): fall back to ours
         if (r.response_type === 'error' && /timer/i.test(text)) timerCmd(text); }
       else if (ev.type === 'tts-end') { const u = d.tts_output && d.tts_output.url; if (u && !closed) { try { audioEl = new Audio(u); st('speaking'); audioEl.onended = () => st('idle'); audioEl.play().catch(() => st('idle')); } catch (e) { st('idle'); } } else st('idle'); }
@@ -4086,55 +4190,61 @@ function hvAssist(hub) {
       else if (ev.type === 'run-end') { endRun(); if (host.getAttribute('st') === 'thinking') st('idle'); } }, msg);
       if (unsub && unsub.catch) unsub.catch(e => failed((e && e.message) || 'The assistant is not available.')); }
     catch (e) { failed(String(e && e.message || e)); } };
+  // live line while speaking: Home Assistant's pipelines send the words only when speech-to-text is done (no partial text), so the
+  // bubble shows that it hears you (level bars, "Hearing you…") and then writes the transcript in word by word
+  const liveMsg = () => { const m = add('u live', '<span class="lt">Listening…</span><span class="wave" aria-hidden="true"><i style="--k:.5"></i><i style="--k:1"></i><i style="--k:.7"></i><i style="--k:.9"></i><i style="--k:.4"></i></span>'); return m; };
+  const typeIn = (m, text) => { m.classList.remove('live'); m.innerHTML = text.split(/(\s+)/).map((w, i) => /^\s+$/.test(w) ? w : `<span class="w" style="animation-delay:${Math.min(i * 30, 900)}ms">${esc(w)}</span>`).join(''); keep(); };
   // --- voice: mic -> 16 kHz PCM -> stt stage; the transcript then goes through ask()
   const listen = async auto => {
     if (rec) { rec.finish(); return; } // second tap: done speaking
-    showErr(''); if (audioEl) { try { audioEl.pause(); } catch (e) {} }
-    const pi = await pinfoP; if (closed) return; if (pi && !pi.stt_engine) { if (!auto) showErr(noStt(pi)); st('idle'); return; } // opened by itself: no error, the dimmed mic explains on a tap
+    if (audioEl) { try { audioEl.pause(); } catch (e) {} }
+    const pi = await pinfoP; if (closed) return; if (pi && !pi.stt_engine) { if (!auto) note(null, noStt(pi)); st('idle'); return; } // opened by itself: no error, the dimmed mic explains on a tap
     const md = navigator.mediaDevices; if (!window.isSecureContext || !md || !md.getUserMedia) {
-      showErr("This browser can't use the microphone here (it needs HTTPS and microphone support). Type your request below instead."); mic.disabled = true; return; }
-    const ac = hvAudio(); let stream; st('listening'); you.textContent = 'Listening…'; re.textContent = ''; rowsEl.innerHTML = ''; sugEl.hidden = true;
+      note(null, "This browser can't use the microphone here (it needs HTTPS and microphone support). Type your request below instead."); mic.disabled = true; return; }
+    const ac = hvAudio(); let stream; st('listening'); sugEl.hidden = true; stick = true; const lm = liveMsg(), lt = lm.querySelector('.lt');
+    const drop = () => { if (lm.isConnected) lm.remove(); };
     try { stream = await md.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } }); }
-    catch (e) { st('idle'); you.textContent = ''; const n = e && e.name;
-      showErr(n === 'NotAllowedError' || n === 'SecurityError' ? 'Microphone access was blocked. Allow the microphone for this site (browser or app settings), or type your request below.'
+    catch (e) { st('idle'); drop(); const n = e && e.name;
+      note(null, n === 'NotAllowedError' || n === 'SecurityError' ? 'Microphone access was blocked. Allow the microphone for this site (browser or app settings), or type your request below.'
         : n === 'NotFoundError' || n === 'OverconstrainedError' ? 'No microphone was found on this device. Type your request below.' : "The microphone couldn't start (" + (e && e.message || n) + '). Type your request below.'); return; }
     if (closed) { stream.getTracks().forEach(t => t.stop()); return; }
-    const tok = ++runTok; let hid = null, q = [], sent = 0, ended = false, sentEnd = false, srcN = null, proc = null; const RATE = ac ? ac.sampleRate : 48000;
+    const tok = ++runTok; let hid = null, q = [], ended = false, sentEnd = false, srcN = null, proc = null; const RATE = ac ? ac.sampleRate : 48000;
     const sendBin = buf => { const sock = hub._hass.connection.socket; if (!sock || sock.readyState !== 1) return; const b = new Uint8Array(1 + buf.byteLength); b[0] = hid; b.set(new Uint8Array(buf.buffer || buf), 1); sock.send(b); };
     let ratio = RATE / 16000, carry = new Float32Array(0), acc = [], accN = 0;
-    const onPcm = f32 => { if (ended) return; let lv = 0; for (let i = 0; i < f32.length; i += 8) lv = Math.max(lv, Math.abs(f32[i])); orb.style.setProperty('--lv', (1 + Math.min(0.35, lv * 1.6)).toFixed(3));
+    const onPcm = f32 => { if (ended) return; let lv = 0; for (let i = 0; i < f32.length; i += 8) lv = Math.max(lv, Math.abs(f32[i])); const l0 = Math.min(1, lv * 4);
+      orb.style.setProperty('--lv', (1 + Math.min(0.35, lv * 1.6)).toFixed(3)); host.style.setProperty('--lv0', l0.toFixed(2));
       const all = new Float32Array(carry.length + f32.length); all.set(carry); all.set(f32, carry.length); const n = Math.floor(all.length / ratio), out = new Int16Array(n);
       for (let i = 0; i < n; i++) { const p = i * ratio, k = Math.floor(p), fr = p - k, a = all[k], b = all[Math.min(k + 1, all.length - 1)], v = a + (b - a) * fr; out[i] = Math.max(-1, Math.min(1, v)) * 0x7fff; }
       carry = all.slice(Math.floor(n * ratio)); acc.push(out); accN += n;
       if (accN >= 1600) { const m = new Int16Array(accN); let o = 0; for (const x of acc) { m.set(x, o); o += x.length; } acc = []; accN = 0; if (hid != null) sendBin(m); else q.push(m); } };
     const stopAudio = () => { try { proc && proc.disconnect(); srcN && srcN.disconnect(); } catch (e) {} stream.getTracks().forEach(t => t.stop()); };
-    const finish = () => { if (ended) return; ended = true; stopAudio(); orb.style.removeProperty('--lv'); if (hid != null && !sentEnd) { sentEnd = true; const sock = hub._hass.connection.socket; if (sock && sock.readyState === 1) sock.send(new Uint8Array([hid])); } if (tok === runTok) { st('thinking'); you.textContent = '…'; } };
-    rec = { finish, stop: () => { finish(); runTok++; endRun(); } };
+    const finish = () => { if (ended) return; ended = true; stopAudio(); orb.style.removeProperty('--lv'); host.style.removeProperty('--lv0'); if (hid != null && !sentEnd) { sentEnd = true; const sock = hub._hass.connection.socket; if (sock && sock.readyState === 1) sock.send(new Uint8Array([hid])); }
+      if (tok === runTok) { st('thinking'); if (lt) lt.textContent = 'Got it…'; } };
+    rec = { finish, stop: () => { finish(); runTok++; endRun(); drop(); } };
     try { srcN = ac.createMediaStreamSource(stream);
       if (ac.audioWorklet && window.AudioWorkletNode) {
         if (!window.__hvWorklet) window.__hvWorklet = ac.audioWorklet.addModule(URL.createObjectURL(new Blob([`registerProcessor('hv-rec',class extends AudioWorkletProcessor{process(i){const c=i[0]&&i[0][0];if(c)this.port.postMessage(c.slice(0));return true}})`], { type: 'text/javascript' })));
         await window.__hvWorklet; proc = new AudioWorkletNode(ac, 'hv-rec'); proc.port.onmessage = e => onPcm(e.data); srcN.connect(proc); }
       else { proc = ac.createScriptProcessor(4096, 1, 1); proc.onaudioprocess = e => onPcm(e.inputBuffer.getChannelData(0)); srcN.connect(proc); proc.connect(ac.destination); } }
-    catch (e) { stopAudio(); rec = null; st('idle'); showErr("The microphone couldn't start (" + (e && e.message || e) + '). Type your request below.'); return; }
+    catch (e) { stopAudio(); rec = null; st('idle'); drop(); note(null, "The microphone couldn't start (" + (e && e.message || e) + '). Type your request below.'); return; }
     endRun(); const msg = { type: 'assist_pipeline/run', start_stage: 'stt', end_stage: 'stt', input: { sample_rate: 16000 }, timeout: 60 }; if (pipe) msg.pipeline = pipe;
     const safety = setTimeout(() => { if (rec && rec.finish === finish) finish(); }, 15000); // never listen for more than 15 s
+    const fail = m => { clearTimeout(safety); finish(); rec = null; endRun(); st('idle'); drop(); note(null, m); };
     try { unsub = hub._hass.connection.subscribeMessage(ev => { if (tok !== runTok) return; const d = ev.data || {};
       if (ev.type === 'run-start') { hid = d.runner_data && d.runner_data.stt_binary_handler_id; if (hid == null) return; for (const m of q) sendBin(m); q = []; if (ended && !sentEnd) { sentEnd = true; hub._hass.connection.socket.send(new Uint8Array([hid])); } }
+      else if (ev.type === 'stt-vad-start') { if (lt) lt.textContent = 'Hearing you…'; }
       else if (ev.type === 'stt-vad-end') finish();
       else if (ev.type === 'stt-end') { clearTimeout(safety); finish(); rec = null; endRun(); const t = ((d.stt_output || {}).text || '').trim();
-        if (!t) { st('idle'); you.textContent = ''; re.textContent = "Sorry, I didn't catch that."; return; } ask(t); }
-      else if (ev.type === 'error') { clearTimeout(safety); finish(); rec = null; endRun(); st('idle'); you.textContent = '';
-        showErr(d.code === 'stt-no-text-recognized' ? "Sorry, I didn't catch that. Try again or type below." : (d.message || d.code || 'Speech recognition failed.')); }
+        if (!t) { st('idle'); drop(); say("Sorry, I didn't catch that."); return; } typeIn(lm, t); ask(t, lm); }
+      else if (ev.type === 'error') fail(d.code === 'stt-no-text-recognized' ? "Sorry, I didn't catch that. Try again or type below." : (d.message || d.code || 'Speech recognition failed.'));
       else if (ev.type === 'run-end') { if (rec && rec.finish === finish) { finish(); rec = null; } } }, msg);
-      if (unsub && unsub.catch) unsub.catch(e => { if (tok !== runTok) return; clearTimeout(safety); finish(); rec = null; st('idle'); you.textContent = ''; const m = (e && e.message) || '';
-        showErr(/speech.to.text|stt/i.test(m) && pinfoCache ? noStt(pinfoCache) : m || 'The assistant is not available.'); }); }
-    catch (e) { clearTimeout(safety); finish(); rec = null; st('idle'); you.textContent = ''; showErr(String(e && e.message || e)); } };
-  host.addEventListener('click', e => { const p = e.composedPath(); if (p[0] && p[0].classList && p[0].classList.contains('scr')) close(); });
+      if (unsub && unsub.catch) unsub.catch(e => { if (tok !== runTok) return; const m = (e && e.message) || ''; fail(/speech.to.text|stt/i.test(m) && pinfoCache ? noStt(pinfoCache) : m || 'The assistant is not available.'); }); }
+    catch (e) { fail(String(e && e.message || e)); } };
   sugEl.addEventListener('click', e => { const b = e.composedPath().find(n => n.tagName === 'BUTTON'); if (b) { stopRec(); ask(b.textContent.replace(/\?$/, '')); } });
   $('.x').addEventListener('click', close); mic.addEventListener('click', () => { hvAudio(); listen(); });
   $('form').addEventListener('submit', e => { e.preventDefault(); const t = inp.value.trim(); if (!t) return; stopRec(); inp.value = ''; ask(t); });
-  addEventListener('keydown', key); st('idle'); re.textContent = 'How can I help?';
-  (hub.shadowRoot || document.body).appendChild(host); requestAnimationFrame(() => host.classList.add('in'));
+  addEventListener('keydown', key); st('idle');
+  (hub.shadowRoot || document.body).appendChild(host); requestAnimationFrame(() => requestAnimationFrame(() => host.classList.add('in')));
   return { close, listen, ask, host }; }
 
 try { if (typeof localStorage !== 'undefined' && localStorage.getItem(HVTM.KEY)) setTimeout(() => HVTM.load(), 0); } catch (e) { /* no storage */ }
@@ -4416,12 +4526,15 @@ class HVHubCard extends HTMLElement {
     // icon size: the 2 x 2 apps + Photos (= 2 icons tall) fit the width, and leave room for the calendar below
     let I = Math.min(Wc / 5.2, (H - pt - pb - greetH - gap * 2 - calMin) / 2.75, Number(c.max_icon) || 140);
     // landscape with extra tiles: size everything so the wanted units (Photos + extras, up to row_units) fit beside the apps
+    const nA = (c.apps || []).length; let ac = !portrait && nA > 4 ? Math.min(4, Math.ceil(nA / 2)) : 2; // 1.32.0: landscape keeps the apps in 2 rows (5-8 apps) when they fit
     const xs0 = this._sideEls || [];
     if (!portrait && xs0.length) { const sz = hubTileSizes(c), want = Math.min(Number(c.row_units) || 3, (c.photo_size === 'square' ? 1 : 2) + xs0.reduce((a, _, i) => a + (sz[i] === 2 ? 2 : 1), 0));
-      I = Math.min(I, (Wc - want * 22) / (2.72 + want * 2.26 + (want - 1) * 0.36) - 1); }
+      const fI = a => (Wc - want * 22) / (a * 1.36 + want * 2.26 + (want - 1) * 0.36) - 1; if (ac > 2 && fI(ac) < 72) ac = 2; // too narrow for wider apps: classic 2 columns
+      I = Math.min(I, fI(ac)); }
+    if (ac > 2) I = Math.min(I, Wc / (ac * 1.36 + 2.4));
     I = Math.max(portrait && W < 600 ? 60 : 72, Math.floor(I));
     const lfs = Math.round(Math.max(13, Math.min(19, I * 0.155))), lh = Math.round(lfs * 1.3), lg = Math.round(I * 0.08), rg = Math.round(I * 0.18), cg = Math.round(I * 0.36);
-    const ph = 2 * I + lg + lh + rg, pwMax = Wc - 2 * I - cg - Math.round(I * 0.36), square = c.photo_size === 'square';
+    const ph = 2 * I + lg + lh + rg, pwMax = Wc - ac * I - (ac - 1) * cg - Math.round(I * 0.36), square = c.photo_size === 'square';
     // Tile row right of the apps: Photos + the extra cards, Square = 1 unit (ph x ph), Wide = 2 units. As many units as fit
     // (3 on a landscape tablet); what doesn't fit wraps to a row below (squares sized like the photo tile, or hidden).
     const tg = Math.round(I * 0.36), U = ph, fit = Math.max(1, Math.floor((pwMax + tg) / (U + tg))), xs = this._sideEls || [], sizes = hubTileSizes(c);
@@ -4434,7 +4547,7 @@ class HVHubCard extends HTMLElement {
       else { wrapped.push(w); w.style.setProperty('--tw', Math.min(Wc, u === 2 ? 2 * bw + tg : bw) + 'px'); w.style.setProperty('--th', bw + 'px'); if (w.parentNode !== this._belowEl) this._belowEl.appendChild(w); } });
     if (this._belowEl) this._belowEl.hidden = !wrapped.length || c.side_portrait === 'hide';
     xs.forEach(w => { w.classList.toggle('fit', w._fit); if (w._fit) this._fitTile(w); });
-    set('--px', px + 'px'); set('--pt', Math.max(0, pt) + 'px'); set('--pb', pb + 'px'); set('--gap', gap + 'px'); set('--I', I + 'px'); set('--lfs', lfs + 'px'); set('--lh', lh + 'px'); set('--lg', lg + 'px');
+    set('--px', px + 'px'); set('--pt', Math.max(0, pt) + 'px'); set('--pb', pb + 'px'); set('--gap', gap + 'px'); set('--I', I + 'px'); set('--ac', String(ac)); set('--lfs', lfs + 'px'); set('--lh', lh + 'px'); set('--lg', lg + 'px');
     set('--rg', rg + 'px'); set('--cg', cg + 'px'); set('--cg2', Math.round(I * 0.36) + 'px'); set('--ph', ph + 'px'); set('--pw', Math.floor(pw) + 'px');
     set('--gfs', Math.round(Math.max(15, Math.min(26, I * 0.2))) + 'px'); set('--av', Math.round(Math.max(44, Math.min(72, I * 0.56))) + 'px');
     set('--h', Math.floor(H) + 'px'); set('--calmin', calMin + 'px');
