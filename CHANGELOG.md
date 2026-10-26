@@ -9,7 +9,7 @@
 * New app type for the Home Screen: *Assistant (voice / typed)*.
 * Includes everything from 1.31.1 (setup popup fix + notification, full-height popups now on by default, tap-to-edit tiles) and 1.31.2 (setup notification for existing users, notification link fix).
 
-## 1.31.2 – unreleased
+## 1.31.2 – 2026-10-26
 
 ### New features
 * Existing users get the setup notification too: an administrator who already has a dashboard with the NotHomeView Home
