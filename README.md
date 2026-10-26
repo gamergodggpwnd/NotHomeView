@@ -86,6 +86,11 @@ and Wallpanel 4.67.2.
   "how much time is left". Timers are recognised in the card, so they work with every pipeline and need no voice satellite. A full-screen countdown
   with a ring of ticks counts down; pause, cancel, +1 minute; at zero it flashes and plays a chime until you tap the screen. The timer keeps
   running after a reload, and a small pill on the Home Screen brings it back.
+* **Album links as a photo source** (Home Screen card → *Photos & background* → *Photo source* = *Album link*; screensaver: *Photos from* =
+  *Album link*). Show a shared Google Photos, iCloud shared album or OneDrive album instead of the media folder. The editor detects the
+  provider and checks the link; the list refreshes every 6 hours, shuffles with *Order = Random* and falls back to the media folder on errors.
+  Google Photos and iCloud (and the screensaver) need the small optional helper integration in `custom_components/nothomeview_albums`;
+  OneDrive works on the Photos tile without it. Details and limits: [docs/album-links.md](docs/album-links.md).
 
 | Option | Default | Meaning |
 |---|---|---|
@@ -97,6 +102,8 @@ and Wallpanel 4.67.2.
 | `assistant_auto_listen` | `true` | Start listening as soon as it opens |
 | `assistant_speak` | `true` | Play the spoken reply (the pipeline's text-to-speech) |
 | `timer_sound` | `true` | Chime when a timer ends |
+| `photo_source_mode` | `media` | `media` (media folder, `photo_source`) or `album` (`photo_album_url`) |
+| `photo_album_url` | `''` | Shared album link (Google Photos, iCloud, OneDrive) |
 
 Microphone notes: browsers only allow the microphone on HTTPS pages. In the Home Assistant Companion app and kiosk browsers, the app itself also needs
 microphone permission (Android: app settings → Permissions → Microphone; Fully Kiosk: enable microphone access). If access is blocked, the popup
@@ -426,7 +433,8 @@ Tap it to open the **Screensaver** popup for this dashboard. Close it with **✕
 
 * **General** – *Screensaver on*, *Start after (idle)* in seconds, *Fade in*, and which views it runs on (none ticked = all views).
 * **Photos** – *Photos from*: a **Media folder** (Home Assistant's *Media → My media*, e.g. `media-source://media_source/local/`;
-  every photo in the folder is used), a **Web address**, **Random photos** (picsum.photos), or **No photos (clock only)**.
+  every photo in the folder is used), an **Album link** (Google Photos, iCloud or OneDrive; needs the
+  [Album Links helper](docs/album-links.md)), a **Web address**, **Random photos** (picsum.photos), or **No photos (clock only)**.
   Then *Switch photo every*, *Crossfade*, *Order* (random / in order / random folder), how landscape and portrait photos fit,
   *Skip videos*, *Progress bar* and *Show photo info*.
 * **Clock** – show or hide the clock, *12‑hour* or *24‑hour*, and seconds.
@@ -852,6 +860,8 @@ Remove it once the theme is installed.
 | `button_card_templates/homeview_thermostat.yaml` | optional button‑card thermostat template |
 | `examples/homeview-example-sections.yaml` | the NotHomeView example dashboard, native sections (recommended) |
 | `examples/homeview-example.yaml` | example dashboard, layout‑card full‑height band |
+| `custom_components/nothomeview_albums/` | optional helper integration for album links ([docs/album-links.md](docs/album-links.md)) |
+| `docs/album-links.md` | album links: setup, how each provider is read, limits |
 | `docs/images/` | the pictures in this README (taken from a demo dashboard with made‑up entities and generated placeholder photos) |
 
 ## License

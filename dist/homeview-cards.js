@@ -2006,6 +2006,43 @@ const SS_PLAIN = Object.keys(SS_DEF);
 const ssWallpanel = () => { const d = document.querySelector('wallpanel-view'); if (d) return d; const ha = document.querySelector('home-assistant'), m = ha && ha.shadowRoot && ha.shadowRoot.querySelector('home-assistant-main');
   return (m && m.shadowRoot && m.shadowRoot.querySelector('wallpanel-view')) || null; };
 const ssDash = () => { const seg = decodeURIComponent(location.pathname.split('/')[1] || ''); return seg && seg !== 'lovelace' ? seg : null; };
+// 1.32.0: shared album links as a photo source (Google Photos, iCloud shared albums, OneDrive). Google and iCloud don't let browsers read their
+// album pages / API (no CORS), so those go through the optional NotHomeView Album Links helper (custom_components/nothomeview_albums: it reads the
+// album on the Home Assistant server and offers it as media-source://nothomeview_albums/<album>). OneDrive works in the browser too (its API allows it).
+const HV_ALB_MS = 'media-source://nothomeview_albums/';
+const HV_ALB_NAME = { google: 'Google Photos album', icloud: 'iCloud shared album', onedrive: 'OneDrive folder / album' };
+const hvAlbumProv = u => { u = String(u || '').trim(); return /^https?:\/\/(photos\.app\.goo\.gl|goo\.gl\/photos|photos\.google\.com\/(u\/\d+\/)?share\/)/i.test(u) ? 'google'
+  : /^https?:\/\/(www\.)?icloud\.com\/sharedalbum\//i.test(u) ? 'icloud' : /^https?:\/\/(1drv\.ms|onedrive\.live\.com|photos\.onedrive\.com)\//i.test(u) ? 'onedrive' : null; };
+const hvB64u = s => btoa(unescape(encodeURIComponent(s))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const hvUnB64u = s => { try { const t = s.replace(/-/g, '+').replace(/_/g, '/'); return decodeURIComponent(escape(atob(t + '='.repeat((4 - t.length % 4) % 4)))); } catch (e) { return ''; } };
+// OneDrive in the browser: guest token + the "shares" API (both allow cross-origin reads); 1920 px thumbnails, links valid a few hours
+async function hvOneDrive(url) { const W = window.__hvOD || (window.__hvOD = {});
+  if (!W.t || W.exp < Date.now() + 6e5) { const r = await fetch('https://api-badgerp.svc.ms/v1.0/token', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ appId: '5cbed6ac-a083-4e14-b191-b4ba07653de2' }) });
+    if (!r.ok) throw new Error('OneDrive guest access failed (' + r.status + ')'); const b = await r.json(); W.t = (b.authScheme || 'Badger') + ' ' + b.token; W.exp = Date.now() + 6 * 36e5; }
+  const H = { Authorization: W.t, Prefer: 'autoredeem' }, sid = 'u!' + btoa(unescape(encodeURIComponent(url.trim()))).replace(/=+$/, '').replace(/\//g, '_').replace(/\+/g, '-');
+  const base = `https://api.onedrive.com/v1.0/shares/${sid}/driveItem`, r0 = await fetch(base, { headers: H });
+  if (!r0.ok) throw new Error(r0.status === 401 || r0.status === 403 || r0.status === 404 ? 'OneDrive couldn\'t open this link (is it shared with "Anyone with the link"?)' : 'OneDrive answered ' + r0.status);
+  const root = await r0.json(), ids = [], folders = [[base + '/children', 0]]; let exp = Date.now() + 3 * 36e5;
+  while (folders.length && ids.length < 2000) { const [f, depth] = folders.shift(); let next = f + '?$expand=thumbnails($select=c1920x1920)&$top=200';
+    while (next && ids.length < 2000) { const r = await fetch(next, { headers: H }); if (!r.ok) break; const b = await r.json();
+      for (const c of b.value || []) { if (c.folder && depth < 2) { const pr = c.parentReference || {}; folders.push([`https://api.onedrive.com/v1.0/drives/${pr.driveId}/items/${c.id}/children`, depth + 1]); continue; }
+        if (!(c.image || /^image\//.test((c.file || {}).mimeType || ''))) continue; const th = (((c.thumbnails || [])[0] || {}).c1920x1920 || {}).url, u = th || c['@content.downloadUrl']; if (!u) continue; ids.push(u);
+        const m = decodeURIComponent(decodeURIComponent(u)).match(/tempauth=v1e?\.([A-Za-z0-9_-]+)/); if (m) { try { const j = JSON.parse(atob(m[1].replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - m[1].length % 4) % 4))); if (j.exp) exp = Math.min(exp, j.exp * 1000); } catch (e) {} } }
+      next = b['@odata.nextLink']; } }
+  if (!ids.length) throw new Error('No photos found in this OneDrive folder');
+  return { title: root.name || 'OneDrive folder', count: ids.length, ids, expires: exp }; }
+// check / load an album link: { ok, provider, title, count, via: 'helper' | 'browser', media_id | ids, error, noHelper }
+async function hvAlbumLoad(hass, url) { url = String(url || '').trim(); const prov = hvAlbumProv(url);
+  if (!prov) return { ok: false, error: 'Not a Google Photos, iCloud shared album or OneDrive link' };
+  try { const r = await hass.callWS({ type: 'nothomeview_albums/check', url }); return Object.assign({ via: 'helper' }, r); }
+  catch (e) { if (!(e && e.code === 'unknown_command')) return { ok: false, provider: prov, error: (e && e.message) || String(e) }; }
+  if (prov === 'onedrive') { try { return Object.assign({ ok: true, provider: prov, via: 'browser', noHelper: true }, await hvOneDrive(url)); } catch (e) { return { ok: false, provider: prov, noHelper: true, error: (e && e.message) || String(e) }; } }
+  return { ok: false, provider: prov, noHelper: true, error: `${prov === 'google' ? 'Google Photos' : 'iCloud'} doesn't let a browser read its albums, so this link needs the NotHomeView Album Links helper on Home Assistant (see the NotHomeView docs: "Album links").` }; }
+const hvAlbumStatus = (st, url) => { const prov = hvAlbumProv(url); if (!String(url || '').trim()) return 'Paste a shared album link: Google Photos (photos.app.goo.gl/…), iCloud shared album with Public Website on (icloud.com/sharedalbum/#…) or OneDrive (1drv.ms/…, "Anyone with the link").';
+  if (!prov) return '⚠ Not a Google Photos, iCloud shared album or OneDrive link.';
+  if (!st || st.url !== String(url).trim()) return `Detected: ${HV_ALB_NAME[prov]}. Checking…`;
+  if (!st.ok) return `⚠ ${HV_ALB_NAME[prov]}: ${st.error} Until it works, the photos come from the media folder.`;
+  return `✓ ${HV_ALB_NAME[prov]} “${st.title}”: ${st.count} photo${st.count === 1 ? '' : 's'}${st.via === 'browser' ? ' (read by the browser)' : ' (via the Album Links helper)'}. The list refreshes every 6 hours; Order = Random shuffles it.`; };
 function hvOpenScreensaverSettings(from) {
   const content = { type: 'custom:homeview-screensaver-card', dashboard: ssDash(), large: true, height: SS_POPUP_HEIGHT };
   if (window.browser_mod) { fire(from, 'll-custom', { action: 'fire-dom-event', browser_mod: { service: 'browser_mod.popup',
@@ -2105,7 +2142,8 @@ class HVScreensaverCard extends HTMLElement {
     d.exclude_videos = Array.isArray(wp.exclude_media_types) && wp.exclude_media_types.includes('video');
     const { c } = ssClock(wp);
     d.clock_show = !!c && !ssClockHidden(c); d.clock_format = c && String(c.time_format) === '24' ? '24' : '12'; d.clock_seconds = !!(c && c.show_seconds);
-    d.source = !d.show_images ? 'none' : /^media-source:\/\//.test(d.image_url) ? 'media' : /picsum\.photos/.test(d.image_url) ? 'picsum' : 'url';
+    d.source = !d.show_images ? 'none' : String(d.image_url || '').startsWith(HV_ALB_MS) ? 'album' : /^media-source:\/\//.test(d.image_url) ? 'media' : /picsum\.photos/.test(d.image_url) ? 'picsum' : 'url';
+    d.album_url = d.source === 'album' ? hvUnB64u(String(d.image_url).slice(HV_ALB_MS.length).split('/')[0]) : '';
     d.media_folder = d.source === 'media' ? d.image_url : 'media-source://media_source/local/';
     d.web_url = d.source === 'url' ? d.image_url : '';
     return d;
@@ -2115,9 +2153,10 @@ class HVScreensaverCard extends HTMLElement {
     const sel = (name, opts) => ({ name, selector: { select: { mode: 'dropdown', options: opts } } });
     const b = name => ({ name, selector: { boolean: {} } });
     const src = this._data.source;
-    const photos = [sel('source', [{ value: 'media', label: 'Media folder (Home Assistant media)' }, { value: 'url', label: 'Web address (URL)' }, { value: 'picsum', label: 'Random photos (picsum.photos)' }, { value: 'none', label: 'No photos (clock only)' }])];
+    const photos = [sel('source', [{ value: 'media', label: 'Media folder (Home Assistant media)' }, { value: 'album', label: 'Album link (Google Photos, iCloud, OneDrive)' }, { value: 'url', label: 'Web address (URL)' }, { value: 'picsum', label: 'Random photos (picsum.photos)' }, { value: 'none', label: 'No photos (clock only)' }])];
     if (src === 'media') photos.push({ name: 'media_folder', selector: { text: {} } });
     if (src === 'url') photos.push({ name: 'web_url', selector: { text: { type: 'url' } } });
+    if (src === 'album') { photos.push({ name: 'album_url', selector: { text: { type: 'url' } } }); this._albCheck(); }
     if (src !== 'none') photos.push(n('display_time', 5, 600, 5, 's'), n('crossfade_time', 0, 10, 0.5, 's'), sel('media_order', [{ value: 'random', label: 'Random' }, { value: 'sorted', label: 'In order (by name)' }, { value: 'random_path', label: 'Random folder, then in order' }]),
       { type: 'grid', name: '', schema: [sel('image_fit_landscape', [{ value: 'cover', label: 'Fill the screen (crop)' }, { value: 'contain', label: 'Whole photo (bars)' }, { value: 'fill', label: 'Stretch' }]),
         sel('image_fit_portrait', [{ value: 'cover', label: 'Fill the screen (crop)' }, { value: 'contain', label: 'Whole photo (bars)' }, { value: 'fill', label: 'Stretch' }])] },
@@ -2133,13 +2172,19 @@ class HVScreensaverCard extends HTMLElement {
         { type: 'grid', name: '', schema: [b('fullscreen'), b('hide_toolbar')] }, { type: 'grid', name: '', schema: [b('hide_sidebar'), b('disable_screensaver_on_browser_mod_popup')] },
         { type: 'grid', name: '', schema: [b('stop_screensaver_on_mouse_move'), b('stop_screensaver_on_mouse_click')] }] }];
   }
+  // album link (1.32.0): Wallpanel reads it through the Album Links helper's media source, so the helper is needed here (checked before saving)
+  _albCheck() { const u = String((this._data || {}).album_url || '').trim(); if (!u || !hvAlbumProv(u) || (this._albSt && this._albSt.url === u) || this._albQ === u) return;
+    this._albQ = u; clearTimeout(this._albT); this._albT = setTimeout(() => hvAlbumLoad(this._hass, u).then(r => { if (this._albQ !== u) return; this._albQ = null;
+      this._albSt = Object.assign({ url: u }, r); delete this._albSt.ids; if (r.ok && r.via === 'browser') Object.assign(this._albSt, { ok: false, error: 'The screensaver needs the NotHomeView Album Links helper for album links (the Home Screen\'s Photos tile can show OneDrive links without it).' });
+      if (this._form) this._form.schema = this._schema(); }), 600); }
+  _albTxt() { return hvAlbumStatus(this._albSt, (this._data || {}).album_url).replace(' Until it works, the photos come from the media folder.', ' Saving is blocked until it works.'); }
   _renderForm() {
     if (!this._form) {
       this._bd.innerHTML = ''; const f = document.createElement('ha-form'); this._form = f;
-      f.computeLabel = s => SS_LABELS[s.name] || s.name; f.computeHelper = s => SS_HELPERS[s.name];
+      f.computeLabel = s => SS_LABELS[s.name] || s.name; f.computeHelper = s => s.name === 'album_url' ? this._albTxt() : SS_HELPERS[s.name];
       f.addEventListener('value-changed', ev => { ev.stopPropagation(); const v = Object.assign({}, ev.detail.value);
-        for (const k of Object.keys(this._data)) if ((v[k] === undefined || v[k] === '' || v[k] === null) && k !== 'web_url' && k !== 'media_folder') v[k] = this._data[k]; // a cleared (x) dropdown keeps its value
-        const srcCh = v.source !== this._data.source; this._data = Object.assign({}, this._data, v);
+        for (const k of Object.keys(this._data)) if ((v[k] === undefined || v[k] === '' || v[k] === null) && k !== 'web_url' && k !== 'media_folder' && k !== 'album_url') v[k] = this._data[k]; // a cleared (x) dropdown keeps its value
+        const srcCh = v.source !== this._data.source || v.album_url !== this._data.album_url; this._data = Object.assign({}, this._data, v);
         if (srcCh) this._renderForm(); this._status(this._changes().length ? 'Unsaved changes' : ''); });
       this._bd.appendChild(f);
     }
@@ -2151,10 +2196,10 @@ class HVScreensaverCard extends HTMLElement {
     const d = this._data, set = (k, v) => { wp[k] = v; };
     for (const k of SS_PLAIN) if (ch.includes(k) && k !== 'image_url' && k !== 'show_images') set(k, d[k]);
     if (ch.includes('enabled_on_views')) { if (d.enabled_on_views && d.enabled_on_views.length) wp.enabled_on_views = d.enabled_on_views.slice(); else delete wp.enabled_on_views; }
-    if (['source', 'media_folder', 'web_url'].some(k => ch.includes(k))) {
+    if (['source', 'media_folder', 'web_url', 'album_url'].some(k => ch.includes(k))) {
       if (d.source === 'none') wp.show_images = false;
       else { if (wp.show_images === false) wp.show_images = true;
-        wp.image_url = d.source === 'media' ? (String(d.media_folder || '').trim() || 'media-source://media_source/local/') : d.source === 'picsum' ? SS_DEF.image_url : String(d.web_url || '').trim(); }
+        wp.image_url = d.source === 'album' ? HV_ALB_MS + hvB64u(String(d.album_url || '').trim()) : d.source === 'media' ? (String(d.media_folder || '').trim() || 'media-source://media_source/local/') : d.source === 'picsum' ? SS_DEF.image_url : String(d.web_url || '').trim(); }
     }
     if (ch.includes('exclude_videos')) { const l = Array.isArray(wp.exclude_media_types) ? wp.exclude_media_types.filter(x => x !== 'video') : []; if (d.exclude_videos) l.push('video'); if (l.length || 'exclude_media_types' in wp) wp.exclude_media_types = l; }
     if (['clock_show', 'clock_format', 'clock_seconds'].some(k => ch.includes(k))) {
@@ -2172,6 +2217,8 @@ class HVScreensaverCard extends HTMLElement {
   }
   async _save() {
     const btn = this.shadowRoot.querySelector('.save'); btn.disabled = true; this._status('Saving…');
+    if (this._data && this._data.source === 'album' && this._changes().some(k => k === 'source' || k === 'album_url')) { const u = String(this._data.album_url || '').trim(), r = u ? await hvAlbumLoad(this._hass, u) : { ok: false, error: 'Paste an album link first.' };
+      if (!r.ok || r.via !== 'helper') { this._status('Not saved: ' + (!r.ok ? r.error : 'the screensaver needs the NotHomeView Album Links helper for album links.'), 'err'); btn.disabled = false; return; } }
     try {
       const cfg = await this._fetch(), wp = this._apply(JSON.parse(JSON.stringify(cfg.wallpanel || {})), this._changes());
       const out = Object.assign({}, cfg, { wallpanel: wp }); const m = { type: 'lovelace/config/save', config: out }; if (this._dash) m.url_path = this._dash;
@@ -2229,7 +2276,7 @@ class HVScreensaverCard extends HTMLElement {
 }
 for (const k of ['_popupHost', '_swipeAttr', '_resetDrag', '_bindSwipe', '_snapBack', '_dismiss']) HVScreensaverCard.prototype[k] = HVNowPlayingCard.prototype[k];
 const SS_LABELS = { enabled: 'Screensaver on', idle_time: 'Start after (idle)', fade_in_time: 'Fade in', enabled_on_views: 'Only on these views (none ticked = all views)',
-  source: 'Photos from', media_folder: 'Media folder', web_url: 'Photo URL', display_time: 'Switch photo every', crossfade_time: 'Crossfade between photos', media_order: 'Order',
+  source: 'Photos from', media_folder: 'Media folder', web_url: 'Photo URL', album_url: 'Album link', display_time: 'Switch photo every', crossfade_time: 'Crossfade between photos', media_order: 'Order',
   image_fit_landscape: 'Landscape photos', image_fit_portrait: 'Portrait photos', exclude_videos: 'Skip videos', show_progress_bar: 'Progress bar', show_image_info: 'Show photo info',
   clock_show: 'Show the clock', clock_format: 'Time format', clock_seconds: 'Seconds',
   black_screen_after_time: 'Turn the screen black after (0 = never)', keep_screen_on_time: 'Keep the screen on for (0 = off)', fullscreen: 'Full screen', hide_toolbar: 'Hide the top bar',
@@ -3787,7 +3834,7 @@ const HVL = (() => {
   const idle = f => { try { if (window.requestIdleCallback) return requestIdleCallback(f, { timeout: 4000 }); } catch (e) { /* fall through */ } return setTimeout(f, 600); };
   const makeThumb = (id, im) => new Promise(ok => { try { if (!id || TH.has(id)) return ok(TH.get(id) || null); const w = im.naturalWidth, h = im.naturalHeight; if (!w || !h) return ok(null);
     const k = Math.min(1, 360 / Math.max(w, h)), cw = Math.max(1, Math.round(w * k)), ch = Math.max(1, Math.round(h * k)), c = document.createElement('canvas'); c.width = cw; c.height = ch;
-    const fin = () => c.toBlob(bl => { if (!bl) return ok(null); const u = URL.createObjectURL(bl); TH.set(id, u); idb('readwrite', s => s.put({ blob: bl, t: Date.now() }, id)); ok(u); }, 'image/jpeg', 0.72);
+    const fin = () => { try { c.toBlob(bl => { if (!bl) return ok(null); const u = URL.createObjectURL(bl); TH.set(id, u); idb('readwrite', s => s.put({ blob: bl, t: Date.now() }, id)); ok(u); }, 'image/jpeg', 0.72); } catch (e) { ok(null); } }; // a photo from another site (album link) can't be copied: no cached thumbnail
     const plain = () => { c.getContext('2d').drawImage(im, 0, 0, cw, ch); fin(); };
     if (window.createImageBitmap) createImageBitmap(im, { resizeWidth: cw, resizeHeight: ch, resizeQuality: 'medium' }).then(bm => { c.getContext('2d').drawImage(bm, 0, 0); if (bm.close) bm.close(); fin(); }, plain); else plain(); } catch (e) { ok(null); } });
   const keep = (url, im) => { lru.delete(url); lru.set(url, im); while (lru.size > LRU_MAX) lru.delete(lru.keys().next().value); };
@@ -4257,7 +4304,7 @@ try { if (typeof localStorage !== 'undefined' && localStorage.getItem(HVTM.KEY))
 class HVHubCard extends HTMLElement {
   constructor() { super(); this.attachShadow({ mode: 'open' }); this._layer = 0; }
   static get defaults() { return { theme: 'night', person: '', morning_start: 5, afternoon_start: 12, evening_start: 17, greeting_morning: 'Good morning', greeting_afternoon: 'Good afternoon',
-    greeting_evening: 'Good evening', photo_source: '', photo_interval: 25, photo_order: 'random', blur: 32, dim: 0.32, bg_transparency: 60, photo_backdrop: true, bg_freeze: true, photo_tap: 'viewer', photo_viewer_nav: true, photo_viewer_swipe: true, photo_viewer_add: true, photo_gallery_upload: true, photo_viewer_pause: true, photo_label: 'Photos', photo_max_aspect: 2.6,
+    greeting_evening: 'Good evening', photo_source_mode: 'media', photo_album_url: '', photo_source: '', photo_interval: 25, photo_order: 'random', blur: 32, dim: 0.32, bg_transparency: 60, photo_backdrop: true, bg_freeze: true, photo_tap: 'viewer', photo_viewer_nav: true, photo_viewer_swipe: true, photo_viewer_add: true, photo_gallery_upload: true, photo_viewer_pause: true, photo_label: 'Photos', photo_max_aspect: 2.6,
     show_calendar: true, calendar_layout: 'wide', calendar_columns: 3, calendar_days: 7, calendar_title: 'Calendar', calendar_min_height: 240, max_icon: 140, edge_sidebar: true, ss_hold: true, weather_entity: '', photo_size: 'wide', side_portrait: 'below', side_sizes: '', row_units: 3, block_pull_refresh: true, calendar_rows: 'auto', swipe_screensaver: 'auto', full_height_popups: true, assistant_enabled: false, assistant_pipeline: 'preferred', assistant_theme: 'same', assistant_button: true, assistant_speak: true, assistant_auto_listen: true, timer_sound: true }; }
   static getStubConfig(hass) { return { apps: HUB_APPS.map(a => Object.assign({}, a)), calendar_entities: Object.keys((hass && hass.states) || {}).filter(k => k.startsWith('calendar.')).slice(0, 3) }; }
   static getConfigElement() { return document.createElement('homeview-hub-card-editor'); }
@@ -4269,7 +4316,7 @@ class HVHubCard extends HTMLElement {
     if (old && this._w && rest(old) === rest(nc)) { // only the background options changed (slider drag): update in place, no rebuild
       this._config = nc; this.style.setProperty('--blur', (Number(nc.blur) || 0) + 'px'); this.style.setProperty('--dim', String(Math.max(0, Math.min(0.9, Number(nc.dim) || 0)))); this._bgMode(); if (nc.bg_freeze === false) this._paintBg(true, true); return; }
     this._config = nc;
-    this._sig = null; if (old && (old.photo_source !== c.photo_source || old.photo_order !== c.photo_order)) { this._ids = null; this._loadPhotos(); }
+    this._sig = null; if (old && (old.photo_source !== c.photo_source || old.photo_order !== c.photo_order || old.photo_source_mode !== c.photo_source_mode || old.photo_album_url !== c.photo_album_url)) { this._ids = null; this._idsExp = 0; this._loadPhotos(); }
     this._calSig = null; this._render(); this._restartTimer(); if (this.isConnected) hvPTR.set(this, this._config.block_pull_refresh !== false); }
   set hass(h) { const first = !this._hass; this._hass = h; this._render(); if (this._cal) this._cal.hass = h; (this._sideEls || []).forEach(e => { e._card.hass = this._simHass(h);
       if (e._fit) { const o = hubTileOpt(this._config, this._sideEls.indexOf(e)); if (o.sky === true && hvSky(h, o.sky_entity, window.__hvSimScene).sig !== e._skySig) requestAnimationFrame(() => this._fitTile(e)); } }); if (first) { this._loadPhotos(); this._loadCfg(); } if (this._sheetO) this._sheetO.hass = h; }
@@ -4579,11 +4626,17 @@ class HVHubCard extends HTMLElement {
     const cfg = a.tap_action; if (cfg && cfg.action !== 'none') fire(this, 'hass-action', { config: { entity: a.entity, tap_action: cfg }, action: 'tap' }); }
   _personTap() { const p = this._person(); if (p) fire(this, 'hass-more-info', { entityId: p.entity_id }); }
   // --- photos (same source as the Wallpanel screensaver)
-  async _source() { const c = this._config; if (c.photo_source) return { url: c.photo_source, ex: [] };
+  async _source(noAlbum) { const c = this._config; if (!noAlbum && c.photo_source_mode === 'album' && String(c.photo_album_url || '').trim()) return { album: String(c.photo_album_url).trim(), ex: [] };
+    if (c.photo_source) return { url: c.photo_source, ex: [] };
     try { const m = { type: 'lovelace/config' }; const d = ssDash(); if (d) m.url_path = d; const cfg = await this._hass.callWS(m), wp = (cfg && cfg.wallpanel) || {};
       return { url: wp.image_url || 'media-source://media_source/local/', ex: wp.exclude_filenames || [], noVideo: true }; } catch (e) { return { url: 'media-source://media_source/local/', ex: [] }; } }
   // every photo under the source (same walk the tile and Wallpanel use: media-source folders, subfolders too, no videos), max 800
   async _scan(src) { const ids = [];
+    if (src.album) { const a = await hvAlbumLoad(this._hass, src.album), S = window.__hvAlbumSt || (window.__hvAlbumSt = {}); S[src.album] = Object.assign({ url: src.album, t: Date.now() }, a);
+      if (a.ok && a.via === 'helper' && a.media_id) { src.ttl = 6 * 36e5; return this._scan({ url: a.media_id, ex: [] }); }
+      if (a.ok && a.ids) { src.ttl = Math.max(10 * 6e4, Math.min(6 * 36e5, a.expires - Date.now() - 30 * 6e4)); return a.ids.slice(); }
+      console.warn('NotHomeView: album link not available, showing the media folder instead:', a.error); src.ttl = 10 * 6e4; // try the link again in 10 minutes
+      return this._scan(await this._source(true)); }
     if (/^media-source:\/\//.test(src.url)) { const ex = (src.ex || []).map(x => { try { return new RegExp(x); } catch (e) { return null; } }).filter(Boolean);
       const walk = async (id, depth) => { if (ids.length >= 800 || depth > 5) return; let r; try { r = await this._hass.callWS({ type: 'media_source/browse_media', media_content_id: id }); } catch (e) { return; }
         for (const ch of (r && r.children) || []) { if (ids.length >= 800) break; const nm = ch.media_content_id || '';
@@ -4595,9 +4648,10 @@ class HVHubCard extends HTMLElement {
     return ids; }
   async _loadPhotos() {
     if (!this._hass || this._loading || this._ids) return; this._loading = true;
-    try { const src = await this._source(), C = window.__hvPhotoCache || (window.__hvPhotoCache = {}), key = src.url;
-      let ids = C[key] && Date.now() - C[key].t < 36e5 ? C[key].ids : null;
-      if (!ids) { ids = await this._scan(src); C[key] = { t: Date.now(), ids }; }
+    try { const src = await this._source(), C = window.__hvPhotoCache || (window.__hvPhotoCache = {}), key = src.url || 'album:' + src.album;
+      let ids = C[key] && Date.now() - C[key].t < (C[key].ttl || 36e5) ? C[key].ids : null;
+      if (!ids) { ids = await this._scan(src); C[key] = { t: Date.now(), ids, ttl: src.ttl }; }
+      this._idsExp = src.album ? C[key].t + (C[key].ttl || 36e5) : 0; // album lists (and their links) are reloaded when they expire
       ids = ids.slice(); if (this._config.photo_order !== 'sorted') for (let i = ids.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [ids[i], ids[j]] = [ids[j], ids[i]]; }
       this._ids = ids; this._pos = -1; if (ids.length) this._next(); }
     finally { this._loading = false; } }
@@ -4617,6 +4671,7 @@ class HVHubCard extends HTMLElement {
     this._resRun = true; let i = 0, live = 3; const w = async () => { while (i < order.length && (this._pv || this._galO)) { try { await this._url(order[i++]); } catch (e) { /* later */ } } if (--live === 0) this._resRun = false; }; w(); w(); w(); }
   async _next() {
     if (!this._ids || !this._ids.length || !this.isConnected) return; clearTimeout(this._timer); this._timer = null;
+    if (this._idsExp && Date.now() > this._idsExp && !this._loading && !this._pv && !this._galO) { this._idsExp = 0; this._ids = null; this._loadPhotos(); return; }
     for (let tries = 0; tries < 4; tries++) { this._pos = (this._pos + 1) % this._ids.length;
       try { const u = await this._url(this._ids[this._pos]); await HVL.load(u, 0); // no id: the 25 s rotation makes no thumbnail
         if (this._ssHeld()) { this._pos = (this._pos + this._ids.length - 1) % this._ids.length; break; } this._curId = this._ids[this._pos]; this._cur = u; this._layer = 1 - this._layer; this._paintPhoto(); if (this._pv) this._prefetch(this._pos, 1); break; } catch (e) { /* try the next photo */ } }
@@ -4754,7 +4809,7 @@ class HVHubCard extends HTMLElement {
         grid.addEventListener('click', ev => { const t = ev.composedPath().find(n => n.dataset && n.dataset.id); if (!t) return; hub._pickId(t.dataset.id).then(() => { if (hub._galO) hub._galO.close(); }); });
         const reload = async force => { const r = await hub._listPhotos(force, src); src = r.src; ids = r.ids; };
         if (upb) { const canUp = () => folder() && admin();
-          upb.addEventListener('click', () => { if (busy) return; if (!folder()) { status('Uploads need a media folder as the photo source (media-source://…); this one is a web address.', true); return; }
+          upb.addEventListener('click', () => { if (busy) return; if (!folder()) { status(src && src.album ? 'This Home Screen shows an album link: add pictures to the album in its own app (Google Photos, Photos, OneDrive).' : 'Uploads need a media folder as the photo source (media-source://…); this one is a web address.', true); return; }
             if (!admin()) { status('Only a Home Assistant administrator can add pictures.', true); return; } file.click(); });
           file.addEventListener('change', async () => { const files = [...file.files]; file.value = ''; if (!files.length || busy || !canUp()) return; busy = true; upb.disabled = true;
             const before = new Set(ids); let done = 0; const res = await hub._upload(files, folder(), names(), (i, n) => status(`Uploading ${i} of ${n}…`));
@@ -4765,8 +4820,8 @@ class HVHubCard extends HTMLElement {
             const n1 = grid.querySelector('.gt.new'); if (n1) n1.scrollIntoView({ block: 'center', behavior: 'smooth' }); setTimeout(() => { if (!busy) status(res.fail.length ? st.textContent : ''); }, 9000); }); }
         (async () => { try { await reload(false); paint(); hub._resolveAll(Math.max(0, hub._pos)); const c1 = grid.querySelector('.gt.cur'); if (c1) c1.scrollIntoView({ block: 'center' }); } catch (e) { msg.hidden = false; msg.textContent = 'Could not load the photos: ' + (e && e.message || e); } })();
         return { set hass(v) {} }; } }); }
-  async _listPhotos(force, src0) { const src = src0 || await this._source(), C = window.__hvPhotoCache || (window.__hvPhotoCache = {}), key = src.url;
-    let ids = !force && C[key] && Date.now() - C[key].t < 36e5 ? C[key].ids : null; if (!ids) { ids = await this._scan(src); C[key] = { t: Date.now(), ids }; } return { src, ids: ids.slice() }; }
+  async _listPhotos(force, src0) { const src = src0 || await this._source(), C = window.__hvPhotoCache || (window.__hvPhotoCache = {}), key = src.url || 'album:' + src.album;
+    let ids = !force && C[key] && Date.now() - C[key].t < (C[key].ttl || 36e5) ? C[key].ids : null; if (!ids) { ids = await this._scan(src); C[key] = { t: Date.now(), ids, ttl: src.ttl }; } return { src, ids: ids.slice() }; }
   // Upload through Home Assistant's media browser API (POST /api/media_source/local_source/upload, multipart media_content_id + file; admin only, 20 MB each).
   // Never overwrites: a name that is already in the folder gets a short suffix. Returns { ok: [names], fail: [{ name, why }] }.
   async _upload(files, folder, taken, onProg) { const out = { ok: [], fail: [] }, h = this._hass, MIME = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp', avif: 'image/avif', heic: 'image/heic', heif: 'image/heif', bmp: 'image/bmp' };
@@ -4850,6 +4905,7 @@ const HUB_SCHEMA = [
     { type: 'grid', name: '', schema: [n_('morning_start', 0, 23), n_('afternoon_start', 0, 23), n_('evening_start', 0, 23), n_('night_start', 0, 23)] },
     { type: 'grid', name: '', schema: [{ name: 'greeting_morning', selector: { text: {} } }, { name: 'greeting_afternoon', selector: { text: {} } }, { name: 'greeting_evening', selector: { text: {} } }, { name: 'greeting_night', selector: { text: {} } }] }] },
   { type: 'expandable', name: '', flatten: true, title: 'Photos & background', icon: 'mdi:image-multiple-outline', schema: [
+    { name: 'photo_source_mode', selector: { select: { mode: 'dropdown', options: [{ value: 'media', label: 'Media folder (Home Assistant media)' }, { value: 'album', label: 'Album link (Google Photos, iCloud, OneDrive)' }] } } },
     { name: 'photo_source', selector: { text: {} } },
     { type: 'grid', name: '', schema: [n_('photo_interval', 5, 600, 1, 's'), { name: 'photo_order', selector: { select: { mode: 'dropdown', options: [{ value: 'random', label: 'Random' }, { value: 'sorted', label: 'In order' }] } } }] },
     { type: 'grid', name: '', schema: [{ name: 'photo_backdrop', selector: { boolean: {} } }, { name: 'bg_freeze', selector: { boolean: {} } }] },
@@ -4889,9 +4945,9 @@ const HUB_SCHEMA = [
     { type: 'grid', name: '', schema: [{ name: 'edge_sidebar', selector: { boolean: {} } }, { name: 'block_pull_refresh', selector: { boolean: {} } }] },
     { name: 'full_height_popups', selector: { boolean: {} } },
     { name: 'swipe_screensaver', selector: { select: { mode: 'dropdown', options: [{ value: 'auto', label: 'Auto (when the screensaver is on here)' }, { value: 'on', label: 'On' }, { value: 'off', label: 'Off' }] } } }, { name: 'ss_hold', selector: { boolean: {} } }] }];
-Object.assign(LABELS, { apps: 'Apps (drag to reorder, pencil to edit)', person: 'Person (empty = the logged-in user)', fallback_person: 'Fallback person (no match)', ring_color: 'Avatar ring colour / gradient',
+Object.assign(LABELS, { photo_source_mode: 'Photo source', photo_album_url: 'Album link', apps: 'Apps (drag to reorder, pencil to edit)', person: 'Person (empty = the logged-in user)', fallback_person: 'Fallback person (no match)', ring_color: 'Avatar ring colour / gradient',
   morning_start: 'Morning from (hour)', afternoon_start: 'Afternoon from', evening_start: 'Evening from', night_start: 'Night from (empty = evening until morning)', greeting_night: 'Night greeting', greeting_morning: 'Morning greeting', greeting_afternoon: 'Afternoon greeting', greeting_evening: 'Evening greeting',
-  wallpaper: 'Wallpaper when there are no photos (any CSS background, e.g. a colour or gradient)', photo_source: 'Photo source (empty = the Wallpanel screensaver\'s, e.g. media-source://media_source/local/)', photo_interval: 'Next photo every', photo_order: 'Order', blur: 'Background blur (px)', dim: 'Edge darkening for text readability (0-0.9)', photo_backdrop: 'Show the current photo, blurred, behind the page', bg_freeze: 'Freeze the blurred background while the Home Screen is showing', bg_transparency: 'Background transparency',
+  wallpaper: 'Wallpaper when there are no photos (any CSS background, e.g. a colour or gradient)', photo_source: 'Media folder (empty = the Wallpanel screensaver\'s, e.g. media-source://media_source/local/)', photo_interval: 'Next photo every', photo_order: 'Order', blur: 'Background blur (px)', dim: 'Edge darkening for text readability (0-0.9)', photo_backdrop: 'Show the current photo, blurred, behind the page', bg_freeze: 'Freeze the blurred background while the Home Screen is showing', bg_transparency: 'Background transparency',
   photo_tap: 'Tapping Photos', photo_label: 'Photos label', photo_viewer_nav: 'Viewer: Previous / Next buttons', photo_viewer_swipe: 'Viewer: swipe left / right to change picture', photo_viewer_add: 'Viewer: View Gallery button', photo_gallery_upload: 'Gallery: let people upload new pictures', photo_viewer_pause: 'Pause the screensaver while the viewer is open', show_calendar: 'Show the calendar', calendar_show_weather: 'Forecast per day', calendar_entities: 'Calendars (empty = all)', calendar_layout: 'Calendar layout',
   calendar_columns: 'Days side by side', calendar_rows: 'Rows of days (phones always stack)', calendar_days: 'Days to load', calendar_title: 'Calendar title', calendar_min_height: 'Calendar min height', max_icon: 'Largest app icon', photo_max_aspect: 'Photos widget: widest aspect (w/h)', photo_size: 'Photos tile size', side_sizes: 'Extra tiles\' sizes, in order: S = square, W = wide (e.g. S, S)', side_portrait: 'Tiles that don\'t fit beside the apps', row_units: 'Landscape: units beside the apps (icons shrink to fit)',
   full_height_popups: 'Full-height popups: every popup on this dashboard reaches the top of the screen; swipe down to close',
@@ -4904,6 +4960,8 @@ const hvHubSchemaPipes = r => { if (!r || !Array.isArray(r.pipelines)) return HU
   const opts = [{ value: 'preferred', label: 'Preferred (now: ' + ((r.pipelines.find(p => p.id === r.preferred_pipeline) || {}).name || '?') + ')' }].concat(r.pipelines.map(p => ({ value: p.id, label: p.name })));
   const fix = l => l.map(x => x.name === 'assistant_pipeline' ? Object.assign({}, x, { selector: { select: { mode: 'dropdown', options: opts } } }) : x.schema ? Object.assign({}, x, { schema: fix(x.schema) }) : x);
   return fix(HUB_SCHEMA); };
+// the Photos section shows the media folder field or the album link field, after the Photo source choice
+const hvHubSchemaAlbum = (sch, album) => { const fix = l => l.map(x => x.name === 'photo_source' && album ? { name: 'photo_album_url', selector: { text: { type: 'url' } } } : x.schema ? Object.assign({}, x, { schema: fix(x.schema) }) : x); return fix(sch); };
 class HVHubEditor extends HTMLElement {
   setConfig(c) { this._config = c; this._render(); }
   set hass(h) { this._hass = h; this._render(); }
@@ -4914,6 +4972,7 @@ class HVHubEditor extends HTMLElement {
       f.computeLabel = s => LABELS[s.name] || s.name;
       f.computeHelper = s => s.name === 'bg_transparency' ? '0 = solid gradient, 60 = default look, 100 = clear photo. The preview updates while you drag.' : s.name === 'bg_freeze' ? 'On: the background keeps the photo it had when the Home Screen opened (the Photos card still changes); it moves to the current photo only while the page is out of sight (screensaver up, another view, app in the background). Off: it follows the Photos card.' : s.name === 'ss_hold' ? 'On: the screensaver does not start by itself behind the Home Screen (and uses nothing there); swipe the page away to start it, on the photo the Photos card shows. Off: Wallpanel\'s idle timer runs as before.' : s.name === 'blur' ? 'How soft the photo behind the page is. Left at the default it eases to 0 as Background transparency goes from 60 to 100 (a clear, sharp photo); set a value to keep it fixed.' : s.name === 'dim' ? 'Darkens the top and bottom of the page so the text stays readable; also fades out as transparency goes up.' : s.name === 'photo_viewer_add' ? 'The viewer button that opens the gallery (the gallery keeps its own “Add photos” upload button).' : s.name === 'side_sizes' ? hubUnitsNote(this._config) : s.name === 'photo_source' ? 'The photo viewer, the gallery and uploads all use this folder. Empty = the screensaver\'s folder (Media → My media). Uploading needs a media-source:// folder and an administrator.' : s.name === 'apps' ? 'Each app: label, icon, gradient colours and what it does (open a view, Now Playing, Weather, photos, or any tap action).' : undefined;
       { const h1 = f.computeHelper; f.computeHelper = s => s.name === 'assistant_enabled' ? 'Talk to an Assist pipeline with this device\'s microphone (or type). Timers ("set a timer for 15 minutes", "pause / cancel the timer") run right here, full screen.' : s.name === 'assistant_pipeline' ? 'Which assistant answers (Settings → Voice assistants).' : h1(s); }
+      { const h2 = f.computeHelper; f.computeHelper = s => s.name === 'photo_album_url' ? hvAlbumStatus(this._albSt, (this._config || {}).photo_album_url) : s.name === 'photo_source_mode' ? 'Media folder: pictures in Home Assistant\'s media (Media → My media). Album link: a shared Google Photos, iCloud or OneDrive album, used for the Photos tile and its viewer (and the screensaver, if its source is set the same way).' : h2(s); }
       { const h0 = f.computeHelper; f.computeHelper = s => s.name === 'theme' ? 'The look of the device pages (the pages with the button tiles) on this dashboard: their tiles, popups and page background. The Home Screen itself always keeps its own look. Night = dark glass (default); Day = white tiles on a light grey page. A Page Grid card can choose its own.' : h0(s); }
       { const l0 = f.computeLabel; f.computeLabel = s => s.name === 'theme' ? 'Device pages theme' : l0(s); }
       f.addEventListener('input', ev => { const p = ev.composedPath(), sl = p.find(n => n.tagName === 'HA-SLIDER'), sel = p.find(n => n.tagName === 'HA-SELECTOR-NUMBER'); // live preview while dragging
@@ -4927,7 +4986,10 @@ class HVHubEditor extends HTMLElement {
         this._config = cfg; fire(this, 'config-changed', { config: cfg }); });
       this.appendChild(f); this._stackEd(); }
     if (!this._pipesP) this._pipesP = this._hass.callWS({ type: 'assist_pipeline/pipeline/list' }).then(r => { this._pipes = r; this._render(); }).catch(() => { this._pipes = null; });
-    this._form.hass = this._hass; this._form.schema = hvHubSchemaPipes(this._pipes); this._form.data = data;
+    const album = data.photo_source_mode === 'album', au = String(data.photo_album_url || '').trim();
+    if (album && au && hvAlbumProv(au) && (!this._albSt || this._albSt.url !== au) && this._albQ !== au) { // check the link (debounced while typing)
+      this._albQ = au; clearTimeout(this._albT); this._albT = setTimeout(() => hvAlbumLoad(this._hass, au).then(r => { if (this._albQ !== au) return; this._albSt = Object.assign({ url: au }, r); delete this._albSt.ids; this._albQ = null; this._render(); }), 700); }
+    this._form.hass = this._hass; this._form.schema = hvHubSchemaAlbum(hvHubSchemaPipes(this._pipes), album); this._form.data = data;
     hvWpHint(this, true); hvSetupEditorBtn(this); // 1.31.0: first-run setup, on demand // the Home Screen's screensaver features (swipe away, hold, Photos) need Wallpanel
     if (this._stack) { this._stack.hass = this._hass; const js = JSON.stringify(this._config.side_cards || []); if (js !== this._lastSide) { this._lastSide = js; this._stack.setConfig({ type: 'vertical-stack', cards: this._config.side_cards || [] }); } }
   }

@@ -1,0 +1,11 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "NotHomeView Album Links",
+        "description": "Lets the NotHomeView Home Screen card and the Wallpanel screensaver show photos from shared album links (Google Photos, iCloud shared albums, OneDrive). Paste the link in the card's Photo source setting after adding this."
+      }
+    },
+    "abort": { "single_instance_allowed": "Already added." }
+  }
+}

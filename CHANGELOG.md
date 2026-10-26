@@ -15,6 +15,7 @@
 * Live voice line: shows that it hears you (level bars, "Hearing you…") and writes your words in as soon as speech-to-text returns them (Home Assistant's pipelines don't send partial words).
 * Answer cards: weather questions show a weather card (now, high / low, next hours) and calendar questions a list of upcoming events, read from this Home Assistant (no actions).
 * Timer: the countdown opens over the chat (the chat stays); the tick ring stays clear of the notch / status bar.
+* Album links as a photo source: the Photos tile, viewer, gallery, backdrop and the screensaver can show a shared Google Photos, iCloud or OneDrive album (`photo_source_mode: album`, `photo_album_url`). Provider auto-detected and checked in the editor; list cached 6 h, shuffled, falls back to the media folder with a clear message on errors. New optional helper integration `custom_components/nothomeview_albums` (needed for Google Photos, iCloud and the screensaver; OneDrive works in the browser). See docs/album-links.md.
 * Home Screen: in landscape, 5 to 8 apps sit in 2 rows (3 or 4 columns) when there is room, so they line up with the tiles beside them.
 
 ### Bug fixes (staged builds)
@@ -23,6 +24,7 @@
 * Assistant: a conversation agent that fails (for example an expired API key) shows a clear note on what to check instead of only a generic apology.
 * Assistant: a speech-to-text service that fails names the pipeline and says what to check instead of a bare "speech-to-text failed".
 * Assistant: when an AI service returns its raw error payload (for example Google's JSON quota error), only its first sentence is shown, with a note that the service hit its usage limit (or what to check) instead of a wall of JSON.
+* Gallery: thumbnails of photos from another site no longer throw an error in the console (canvas export is skipped).
 * Includes everything from 1.31.1 (setup popup fix + notification, full-height popups now on by default, tap-to-edit tiles) and 1.31.2 (setup notification for existing users, notification link fix).
 
 ## 1.31.2 – 2026-10-26

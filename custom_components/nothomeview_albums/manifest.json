@@ -1,0 +1,14 @@
+{
+  "domain": "nothomeview_albums",
+  "name": "NotHomeView Album Links",
+  "codeowners": [],
+  "config_flow": true,
+  "dependencies": ["http", "media_source", "websocket_api"],
+  "documentation": "https://github.com/gamergodggpwnd/NotHomeView/blob/main/docs/album-links.md",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/gamergodggpwnd/NotHomeView/issues",
+  "requirements": [],
+  "single_config_entry": true,
+  "version": "1.32.0"
+}
