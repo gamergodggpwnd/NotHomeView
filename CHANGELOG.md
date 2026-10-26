@@ -7,8 +7,29 @@
 * Assistant popup (voice through the device microphone or typed) for any Assist pipeline; pipeline picker, mic button, Day / Night look. Opt-in: `assistant_enabled: true`.
 * Browser timers: spoken or typed timer requests open a full-screen countdown with pause / cancel / +1 min and an alert; no voice satellite needed.
 * New app type for the Home Screen: *Assistant (voice / typed)*.
+* Includes everything from 1.31.1 (setup popup fix + notification, full-height popups now on by default, tap-to-edit tiles).
 
-## 1.31.0 – unreleased
+## 1.31.1 – unreleased
+
+### New features
+* "NotHomeView is installed" notification (Home Assistant's notification bell, id `nothomeview_setup`) for administrators when
+  no NotHomeView dashboard exists and nobody said No: links to the setup dialog; dismissed automatically after Add or No.
+* `?nothomeview_setup=1` on any Home Assistant address opens the setup dialog for an administrator.
+
+### Bug fixes
+* The first-run setup dialog now starts as soon as Home Assistant is connected, on any page that loads the dashboard
+  resources (it no longer waits for a dashboard view).
+* Setup suppression is less eager: only a kiosk mode that is active right now (kiosk-mode / Wallpanel actually hiding the
+  header, `?kiosk`, Fully Kiosk) hides it, not a hidden sidebar or kiosk-mode / Wallpanel merely being installed; a dashboard
+  only counts as existing if the setup created it or it uses the Home Screen card; "already exists" is no longer remembered.
+* Full-height popups: on dashboards with a Home Screen card, every popup (Home Screen sheets, room picker, calendar event,
+  browser_mod popups, more-info dialogs) reaches the top of the screen, keeps its content below the safe area and closes with a
+  swipe down from the top. Home Screen card `full_height_popups: false` brings back the floating popups.
+* Device pages are editable tile by tile in the visual editor: in edit mode tapping a tile of a Page Grid opens the editor
+  on that tile's own settings (entity, name, icon, tap action, size). The Page Grid editor shows the tiles as a grid of
+  buttons (Move, Duplicate, Remove, Add tile, New page) with the page layout options folded underneath.
+
+## 1.31.0 – 2026-10-26
 
 ### New features
 * First-run setup: an administrator opening a dashboard is asked once whether to add a ready-made "NotHomeView" dashboard.

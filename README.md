@@ -12,6 +12,14 @@ dashboard with clicks instead of code.
 
 ![Glass theme on a tablet](docs/images/banner_glass.png)
 
+![Example Home Screen](docs/images/example_home_screen.png)
+
+*The example Home Screen: greeting, app icons, Photos, Now Playing, the House tile and a week of calendar (sample data).*
+
+![Screensaver](docs/images/screensaver_example.png)
+
+*The screensaver: Wallpanel photos with a big clock on top, set up from the Home Screen's screensaver button.*
+
 | Light theme | Second page: camera, people, batteries |
 |---|---|
 | ![Light theme](docs/images/banner_light.png) | ![Camera, people and battery cards](docs/images/banner_page2_camera_people_battery.png) |
@@ -254,6 +262,8 @@ See [Requirements](#requirements) above. browser_mod is an integration: after do
 under *Settings → Devices & services → Add integration → Browser Mod*.
 
 ## Install (step by step)
+
+![NotHomeView one-tap setup: install, open Home Assistant, tap Add](docs/images/install_setup.png)
 
 ### 1. Add NotHomeView to HACS
 
