@@ -215,6 +215,8 @@ under *Settings → Devices & services → Add integration → Browser Mod*.
 
 ## Install (step by step)
 
+![NotHomeView one-tap setup: install, open Home Assistant, tap Add](docs/images/install_setup.png)
+
 ### 1. Add NotHomeView to HACS
 
 One click (opens this repository in HACS):
