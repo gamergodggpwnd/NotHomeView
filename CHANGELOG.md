@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.31.0 – unreleased (staged)
+
+### New features
+* Weather popup: animated sky header (sunny, partly cloudy, cloudy, rain, snow; night sky after sunset; lightning / fog details). Opt-in: `weather_sky_header: true`.
+* Assistant popup (voice through the device microphone or typed) for any Assist pipeline; pipeline picker, mic button, Day / Night look. Opt-in: `assistant_enabled: true`.
+* Browser timers: spoken or typed timer requests open a full-screen countdown with pause / cancel / +1 min and an alert; no voice satellite needed.
+* New app type for the Home Screen: *Assistant (voice / typed)*.
+
 ## 1.30.7 – 2026-10-25
 
 From this release the GitHub version follows the card bundle's version (`HOMEVIEW-CARDS 1.30.7` in the browser console).

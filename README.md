@@ -54,6 +54,46 @@ asks for the screensaver but Wallpanel is missing.
 Tested with Home Assistant 2026.10, card-mod 4.2.1, layout-card 2.4.7, button-card 7.0.1, browser_mod 3.3.0, kiosk-mode 15.0.0
 and Wallpanel 4.67.2.
 
+## What's new in v1.31.0 (next update, staged)
+
+* **Animated weather header** (Home Screen card → *Layout & weather* → "Weather popup: animated sky header"). The Weather popup opens on an
+  illustrated sky that follows the weather entity's live state: sunny, partly cloudy, cloudy, rain or snow, with a moonlit night sky after sunset.
+  Thunderstorms add lightning flashes, fog adds haze, sleet mixes rain into the snow. CSS / SVG only, animated with transform and opacity
+  (light enough for a wall tablet); no motion when the device asks for reduced motion. With the *Day* device-pages theme the forecast panels are white.
+
+  | Home Assistant state | Sky |
+  |---|---|
+  | sunny, clear-night | Sunny (night: moon and stars) |
+  | partlycloudy, windy, windy-variant | Partly cloudy (night: moon behind clouds) |
+  | cloudy, fog, exceptional | Cloudy (fog adds haze) |
+  | rainy, pouring, lightning, lightning-rainy, hail | Rain (pouring / storms are heavier; lightning flashes) |
+  | snowy, snowy-rainy | Snow (snowy-rainy adds rain) |
+  | anything else | Partly cloudy |
+
+* **Assistant** (Home Screen card → *Assistant & timer*). A Siri-style popup with a glowing orb: tap the mic button beside the avatar (or an app
+  with *What it does: Assistant*), speak, and the request goes to the Assist pipeline you pick (or Home Assistant's preferred one). It uses the
+  microphone of the device showing the dashboard (the page must be opened over HTTPS, e.g. Home Assistant Cloud) and shows what was heard, the
+  answer, and rows for lists, calendar items and the devices that were changed. You can always type instead. Day / Night look.
+* **Timers that work in the browser**: "set a timer for 15 minutes", "set a pasta timer for 12 minutes", "pause / resume / cancel the timer",
+  "how much time is left". Timers are recognised in the card, so they work with every pipeline and need no voice satellite. A full-screen countdown
+  with a ring of ticks counts down; pause, cancel, +1 minute; at zero it flashes and plays a chime until you tap the screen. The timer keeps
+  running after a reload, and a small pill on the Home Screen brings it back.
+
+| Option | Default | Meaning |
+|---|---|---|
+| `weather_sky_header` | `false` | Animated sky header in the Weather popup |
+| `assistant_enabled` | `false` | Assistant on this Home Screen |
+| `assistant_pipeline` | `preferred` | Assist pipeline id (the editor lists your pipelines) |
+| `assistant_button` | `true` | Mic button beside the avatar |
+| `assistant_theme` | `same` | `same` (device pages theme), `day`, `night` or `auto` |
+| `assistant_auto_listen` | `true` | Start listening as soon as it opens |
+| `assistant_speak` | `true` | Play the spoken reply (the pipeline's text-to-speech) |
+| `timer_sound` | `true` | Chime when a timer ends |
+
+Microphone notes: browsers only allow the microphone on HTTPS pages. In the Home Assistant Companion app and kiosk browsers, the app itself also needs
+microphone permission (Android: app settings → Permissions → Microphone; Fully Kiosk: enable microphone access). If access is blocked, the popup
+says so and typing still works.
+
 ## What's new in v1.30.7
 
 ![Day and Night device pages](docs/images/v1.30.7/hero_daynight.png)

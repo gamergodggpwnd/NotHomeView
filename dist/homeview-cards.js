@@ -3,7 +3,7 @@
  *         homeview-group-card, homeview-scene-card, homeview-music-card, homeview-nav-card, homeview-edit-button-card
  *  Every card has a visual editor (ha-form). Look = HomeView glass tiles; colours come from the
  *  HomeView CSS variables (--hv-*) set by the HomeView theme / style helper, with glass fall-backs. */
-const HV_VERSION = '1.30.7';
+const HV_VERSION = '1.31.0';
 // Registered colour properties so a scene background written as linear-gradient(var(--hv-bg-top), var(--hv-bg-bottom))
 // can fade smoothly between scenes (plain gradients can't transition). Unused unless a dashboard style sets them.
 try { if (window.CSS && CSS.registerProperty) for (const n of ['--hv-bg-top', '--hv-bg-bottom'])
@@ -3450,6 +3450,10 @@ const HUB_CSS = `:host{display:block;position:relative;font-family:${FONT};color
 .av{all:unset;cursor:pointer;flex:none;width:var(--av,64px);height:var(--av,64px);border-radius:50%;box-sizing:border-box;padding:3px;
  background:var(--ring,linear-gradient(150deg,#c7b8ff,#8f7bf0));box-shadow:0 6px 18px rgba(0,0,0,.28);transition:transform .12s ease}
 .av:active{transform:scale(.95)}
+.tr{display:flex;align-items:center;gap:calc(var(--av,64px) * .22);flex:none}
+.amic{all:unset;cursor:pointer;flex:none;width:calc(var(--av,64px) * .78);height:calc(var(--av,64px) * .78);border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.22);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);box-shadow:0 4px 14px rgba(0,0,0,.2);transition:transform .12s ease}
+.amic:active{transform:scale(.94)} .amic ha-icon{--mdc-icon-size:calc(var(--av,64px) * .4);display:flex}
+.tpill{all:unset;cursor:pointer;display:flex;align-items:center;gap:6px;height:calc(var(--av,64px) * .6);padding:0 14px;border-radius:999px;background:rgba(255,159,10,.22);color:#ffb340;font-weight:700;font-variant-numeric:tabular-nums;font-size:calc(var(--av,64px) * .28);border:1px solid rgba(255,159,10,.35);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)} .tpill[hidden]{display:none} .tpill ha-icon{--mdc-icon-size:calc(var(--av,64px) * .32);display:flex}
 .av .pic{width:100%;height:100%;border-radius:50%;background:#2a2a40 center/cover no-repeat;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:calc(var(--av,64px) * .4)}
 .mid{display:flex;gap:var(--cg2,40px);align-items:flex-start;flex:none}
 .apps{display:grid;grid-template-columns:repeat(2,var(--I,110px));column-gap:var(--cg,40px);row-gap:var(--rg,22px)}
@@ -3497,6 +3501,84 @@ const hubWeatherBg = (cond, night) => {
   const sun = cond === 'sunny' || (cond === 'partlycloudy' && !n) ? 'radial-gradient(30% 22% at 18% 6%,rgba(255,250,220,.55),transparent 70%),' : '';
   return `${sun}${clouds}linear-gradient(180deg,${g[0]} 0%,${g[1]} 100%)`; };
 const HUB_WX_COLOR = { sunny: '#ffd60a', 'clear-night': '#f2f2f7', rainy: '#9fd8ff', pouring: '#9fd8ff', lightning: '#ffe066', 'lightning-rainy': '#ffe066' };
+
+/* 1.31.0: illustrated sky header for the weather sheet (opt-in: Home Screen card `weather_sky_header: true`).
+   The live condition picks one of five skies (sunny, partly cloudy, cloudy, rain, snow), with a night version when the sun is
+   down. Pure CSS + small inline SVG tiles; only transform / opacity are animated (cheap on a wall tablet); no motion when the
+   device asks for reduced motion. */
+const WX_SKY_KIND = c => /^(sunny|clear-night)$/.test(c) ? 'sunny' : /^(partlycloudy|windy|windy-variant)$/.test(c) ? 'partly'
+  : /^(rainy|pouring|lightning|lightning-rainy|hail)$/.test(c) ? 'rain' : /^(snowy|snowy-rainy)$/.test(c) ? 'snow' : /^(cloudy|fog|exceptional)$/.test(c) ? 'cloudy' : 'partly';
+const WX_SKY_G = { sunny: [['#1260cc', '#3b8ae4', '#8ec6f3'], ['#040b22', '#0f1d4a', '#2a3c72']], partly: [['#2468c8', '#5797e0', '#a6cbee'], ['#071030', '#16244c', '#33457a']],
+  cloudy: [['#53667e', '#7b8da4', '#b3bfcd'], ['#121824', '#252d3c', '#434c60']], rain: [['#2b384b', '#48586e', '#7a899d'], ['#0c121b', '#1b2331', '#384254']],
+  snow: [['#6f86a1', '#9cafc5', '#d8e0ea'], ['#1c2536', '#364259', '#5c6982']] };
+const WX_SKY_PN = { sunny: 'rgba(14,52,120,.26)', partly: 'rgba(16,52,116,.26)', cloudy: 'rgba(36,46,62,.26)', rain: 'rgba(14,22,34,.32)', snow: 'rgba(52,68,92,.26)', night: 'rgba(6,12,30,.36)' };
+const wxSvg = b => `url('data:image/svg+xml,${encodeURIComponent(b).replace(/'/g, '%27')}')`;
+const wxCloud = (t, b, o) => wxSvg(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 240 130'><defs><linearGradient id='g' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='${t}'/><stop offset='1' stop-color='${b}'/></linearGradient><filter id='f' x='-15%' y='-25%' width='130%' height='150%'><feGaussianBlur stdDeviation='4.6'/></filter></defs><g fill='url(#g)' filter='url(#f)' opacity='${o}'><circle cx='72' cy='74' r='34'/><circle cx='114' cy='54' r='44'/><circle cx='94' cy='40' r='26'/><circle cx='140' cy='46' r='30'/><circle cx='162' cy='70' r='33'/><circle cx='194' cy='88' r='22'/><circle cx='44' cy='92' r='22'/><circle cx='26' cy='102' r='12'/><circle cx='214' cy='100' r='12'/><rect x='44' y='78' width='152' height='34' rx='17'/></g></svg>`);
+const WX_RAIN = (h, op) => wxSvg(`<svg xmlns='http://www.w3.org/2000/svg' width='150' height='${h}'><g stroke='#dbe8ff' stroke-linecap='round' stroke-width='1.4' opacity='${op}'>` +
+  [[8, .1], [31, .55], [52, .25], [77, .7], [96, .05], [118, .45], [139, .8]].map(([x, y]) => `<line x1='${x}' y1='${Math.round(y * h * .7)}' x2='${x}' y2='${Math.round(y * h * .7 + h * .26)}'/>`).join('') + '</g></svg>');
+const WX_SNOW = (w, n, r, op) => { let k = 7, pts = ''; for (let i = 0; i < n; i++) { k = (k * 9301 + 49297) % 233280; const x = k / 233280 * w; k = (k * 9301 + 49297) % 233280; const y = k / 233280 * w; k = (k * 9301 + 49297) % 233280;
+  pts += `<circle cx='${x.toFixed(1)}' cy='${y.toFixed(1)}' r='${(r * (.6 + k / 233280 * .8)).toFixed(1)}'/>`; }
+  return wxSvg(`<svg xmlns='http://www.w3.org/2000/svg' width='${w}' height='${w}'><g fill='#fff' opacity='${op}'>${pts}</g></svg>`); };
+const WX_STARS = WX_SNOW(260, 26, 1.05, .85);
+// clouds per sky: [left %, top %, width %, drift seconds, delay, layer opacity]
+const WX_CLOUDS = { sunny: [], partly: [[54, 0, 56, 70, -20, 1], [-10, 20, 42, 90, -50, .92], [74, 34, 34, 80, -10, .8]],
+  cloudy: [[-14, -6, 64, 90, -30, 1], [36, -10, 70, 110, -70, 1], [6, 16, 58, 80, -10, .95], [56, 18, 56, 100, -40, .95], [-10, 34, 50, 120, -90, .8], [52, 38, 54, 95, -5, .8]],
+  rain: [[-14, -8, 66, 90, -30, 1], [36, -12, 72, 110, -70, 1], [4, 12, 60, 80, -10, 1], [54, 14, 58, 100, -40, 1], [-6, 30, 52, 120, -60, .9], [50, 32, 56, 95, -5, .9]],
+  snow: [[-12, -8, 64, 100, -30, 1], [38, -10, 68, 120, -70, 1], [8, 14, 56, 90, -10, .9], [58, 18, 52, 110, -40, .9]] };
+const WX_CLOUD_COL = { partly: ['#ffffff', '#dfe7f1', .95], cloudy: ['#eef2f6', '#a9b5c4', .95], rain: ['#a3adbb', '#5d6879', .97], snow: ['#f4f7fa', '#c3ccd8', .95] };
+const WX_CLOUD_NIGHT = { partly: ['#5b6888', '#2b3554', .85], cloudy: ['#4d5669', '#262d3c', .95], rain: ['#3d4556', '#1c222e', .97], snow: ['#7d889e', '#4a546a', .9] };
+function wxSkyHtml(kind, night, cond) {
+  const cl = WX_CLOUDS[kind] || [], col = (night ? WX_CLOUD_NIGHT : WX_CLOUD_COL)[kind], img = col ? wxCloud(col[0], col[1], col[2]) : '';
+  let h = '';
+  if (night) h += `<i class="stars" style="background-image:${WX_STARS}"></i>` + (kind === 'sunny' || kind === 'partly' ? '<i class="moon"></i>' : '');
+  else if (kind === 'sunny' || kind === 'partly') h += '<i class="sun"></i><i class="halo"></i>';
+  else if (kind === 'cloudy' || kind === 'snow') h += '<i class="glow"></i>';
+  h += cl.map(([l, t, w, d, dl, o], i) => `<i class="cl" style="left:${l}%;top:${t}%;width:${w}%;opacity:${o};background-image:${img};animation-duration:${d}s;animation-delay:${dl}s;animation-direction:${i % 2 ? 'alternate-reverse' : 'alternate'}"></i>`).join('');
+  if (kind === 'rain') { const heavy = /pouring|lightning|hail/.test(cond);
+    h += `<b class="pw"><i class="rn r1" style="background-image:${WX_RAIN(140, .55)}"></i><i class="rn r2" style="background-image:${WX_RAIN(90, .35)}"></i>${heavy ? `<i class="rn r3" style="background-image:${WX_RAIN(110, .5)}"></i>` : ''}</b>`;
+    if (/lightning/.test(cond)) h += '<i class="flash"></i>'; }
+  if (kind === 'snow') h += `<b class="pw sw"><i class="sn s1" style="background-image:${WX_SNOW(220, 16, 2.6, .95)}"></i><i class="sn s2" style="background-image:${WX_SNOW(140, 14, 1.6, .7)}"></i>${/rain/.test(cond) ? `<i class="rn r2" style="background-image:${WX_RAIN(90, .3)}"></i>` : ''}</b>`;
+  if (cond === 'fog') h += '<i class="haze"></i>';
+  return h + '<i class="scr"></i>'; }
+const WX_SKY_CSS = `.wxh{position:absolute;left:0;right:0;top:0;height:min(82%,720px);overflow:hidden;pointer-events:none;opacity:0;transition:opacity .5s ease;
+ -webkit-mask-image:linear-gradient(180deg,#000 62%,transparent);mask-image:linear-gradient(180deg,#000 62%,transparent)}
+:host(.in) .wxh{opacity:1}
+.wxh i,.wxh b{position:absolute;display:block}
+.wxh .sun{left:6%;top:-16%;width:min(60vmin,520px);aspect-ratio:1;border-radius:50%;background:radial-gradient(circle,#fffef6 0 7%,rgba(255,248,214,.92) 11%,rgba(255,236,170,.45) 24%,rgba(255,226,150,.16) 42%,transparent 66%);animation:wxp 7s ease-in-out infinite alternate}
+.wxh .halo{left:50%;top:44%;width:min(120vmin,1100px);aspect-ratio:1;transform:translate(-50%,-50%);border-radius:50%;background:radial-gradient(circle,transparent 52%,rgba(255,255,255,.05) 55%,rgba(255,240,220,.07) 57%,transparent 61%)}
+.wxh .glow{left:20%;top:-30%;width:min(80vmin,700px);aspect-ratio:1;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.35),transparent 65%)}
+.wxh .moon{right:12%;top:9%;width:min(11vmin,90px);aspect-ratio:1;border-radius:50%;background:radial-gradient(circle at 36% 34%,#fffdf4 0 34%,#ece7d6 70%,#d9d3c0);box-shadow:0 0 30px 6px rgba(255,250,225,.28),0 0 90px 30px rgba(190,205,255,.12)}
+.wxh .stars{inset:0 0 25% 0;background-size:260px 260px;animation:wxt 5s ease-in-out infinite alternate}
+.wxh .cl{aspect-ratio:240/130;background:center/100% 100% no-repeat;animation:wxd 80s ease-in-out infinite alternate;will-change:transform}
+.wxh .pw{inset:-10% -15% 0 -15%;transform:rotate(9deg);overflow:hidden}
+.wxh .rn{left:0;right:0;top:-140px;bottom:0;background-repeat:repeat;animation:wxr .55s linear infinite;will-change:transform}
+.wxh .rn.r1{background-size:150px 140px} .wxh .rn.r2{top:-90px;background-size:150px 90px;animation-duration:.42s;background-position:60px 0} .wxh .rn.r3{top:-110px;background-size:150px 110px;animation-duration:.48s;background-position:100px 0}
+.wxh .sw{transform:none;animation:wxs 6s ease-in-out infinite alternate}
+.wxh .sn{left:0;right:0;top:-220px;bottom:0;background-size:220px 220px;animation:wxf 9s linear infinite;will-change:transform}
+.wxh .sn.s2{top:-140px;background-size:140px 140px;animation:wxf2 6s linear infinite}
+.wxh .flash{inset:0;background:rgba(235,240,255,.55);opacity:0;animation:wxl 9s linear infinite}
+.wxh .scr{left:50%;top:6%;width:min(70vmin,620px);height:min(56vmin,480px);transform:translateX(-50%);background:radial-gradient(closest-side,rgba(10,25,55,.20),rgba(10,25,55,.08) 60%,transparent)}
+.wxh .haze{left:0;right:0;bottom:0;height:55%;background:linear-gradient(180deg,transparent,rgba(225,230,236,.55))}
+@keyframes wxd{from{transform:translate3d(-7%,0,0)}to{transform:translate3d(7%,0,0)}}
+@keyframes wxp{from{opacity:.85;transform:scale(.97)}to{opacity:1;transform:scale(1.03)}}
+@keyframes wxt{from{opacity:.55}to{opacity:1}}
+@keyframes wxr{from{transform:translate3d(0,0,0)}to{transform:translate3d(0,140px,0)}}
+.wxh .rn.r2{animation-name:wxr2} @keyframes wxr2{from{transform:translate3d(0,0,0)}to{transform:translate3d(0,90px,0)}}
+.wxh .rn.r3{animation-name:wxr3} @keyframes wxr3{from{transform:translate3d(0,0,0)}to{transform:translate3d(0,110px,0)}}
+@keyframes wxf{from{transform:translate3d(0,0,0)}to{transform:translate3d(0,220px,0)}}
+@keyframes wxf2{from{transform:translate3d(0,0,0)}to{transform:translate3d(0,140px,0)}}
+@keyframes wxs{from{transform:translate3d(-12px,0,0)}to{transform:translate3d(12px,0,0)}}
+@keyframes wxl{0%,90%,100%{opacity:0}91%{opacity:.9}92%{opacity:.1}93.5%{opacity:.7}96%{opacity:0}}
+:host([sky]) .hero{position:relative;margin:clamp(14px,7vh,80px) 0 clamp(22px,9vh,96px);text-shadow:0 1px 2px rgba(0,0,0,.12),0 2px 16px rgba(0,0,0,.26)}
+:host([sky][k=snow]:not([night])) .hero,:host([sky][k=cloudy]:not([night])) .hero{text-shadow:0 1px 3px rgba(0,0,0,.18),0 2px 18px rgba(0,0,0,.30)}
+:host([sky]) .pn{background:var(--wx-pn);border-color:rgba(255,255,255,.16)}
+:host([sky][wday]) .pn{background:rgba(255,255,255,.80);border-color:rgba(255,255,255,.7);color:#1c1c1e;box-shadow:0 6px 24px rgba(20,30,60,.10);backdrop-filter:blur(22px) saturate(140%);-webkit-backdrop-filter:blur(22px) saturate(140%)}
+:host([sky][wday]) .pt{color:rgba(60,60,67,.66);border-bottom-color:rgba(60,60,67,.14)}
+:host([sky][wday]) .dl .d{border-bottom-color:rgba(60,60,67,.10)} :host([sky][wday]) .dl .lo{color:rgba(60,60,67,.55)} :host([sky][wday]) .dl .rng{background:rgba(60,60,67,.12)}
+:host([sky][wday]) .h .p{color:#0a7ad9}
+@media (prefers-reduced-motion:reduce){.wxh *{animation:none !important}}`;
+// icon colours on the white (Day) forecast panels
+const HUB_WX_COLOR_DAY = { sunny: '#f2a900', 'clear-night': '#5e5ce6', partlycloudy: '#7c8794', cloudy: '#8e8e93', rainy: '#0a84ff', pouring: '#0a6fd6', lightning: '#e0a100', 'lightning-rainy': '#e0a100', snowy: '#64a8e0', 'snowy-rainy': '#5b9bd5', fog: '#8e8e93', hail: '#5b9bd5', windy: '#6e7c8c', 'windy-variant': '#6e7c8c' };
 const WX_CSS = `:host{position:fixed;inset:0;z-index:8;font-family:${FONT};color:#fff;-webkit-tap-highlight-color:transparent}
 .sky{position:absolute;inset:0;opacity:0;transition:opacity .3s ease} :host(.in) .sky{opacity:1}
 .sc{position:absolute;inset:0;overflow:auto;box-sizing:border-box;padding:max(18px,env(safe-area-inset-top)) max(20px,env(safe-area-inset-right)) max(20px,env(safe-area-inset-bottom)) max(20px,env(safe-area-inset-left));
@@ -3595,11 +3677,286 @@ const PV_CSS = `.pv{position:absolute;inset:0;overflow:hidden;background:#0b0b10
 :host([hv-day]) .pg{color:#1c1c1e} :host([hv-day]) .pgh{background:rgba(242,242,246,.9)} :host([hv-day]) .pgc{opacity:.75}
 :host([hv-day]) .pgs{background:rgba(60,60,67,.08)} :host([hv-day]) .pgs.err{background:rgba(255,59,48,.14)} :host([hv-day]) .gt{background:rgba(60,60,67,.08)}
 :host([hv-day]) .gt ha-icon{color:rgba(60,60,67,.45)} :host([hv-day]) .gt:focus-visible{outline-color:#5b3fc4}`;
+/* ---------------- 1.31.0: Assistant (voice or typed, any Assist pipeline) + countdown timer ----------------
+ * Home Screen card options: assistant_enabled, assistant_pipeline (empty = Home Assistant's preferred pipeline), assistant_button
+ * (mic button beside the avatar), assistant_theme, assistant_speak (play the spoken reply), assistant_auto_listen, timer_sound.
+ * Voice: the microphone of the device showing the dashboard (getUserMedia; needs HTTPS) is resampled to 16 kHz 16-bit mono and
+ * streamed to the pipeline (assist_pipeline/run, stt stage). The transcript is checked here for timer requests first ("set a timer
+ * for 15 minutes", "cancel / pause / resume the timer", "how much time is left"): those run a timer in this browser, so they work
+ * without a voice satellite. Anything else goes to the pipeline's conversation agent (intent stage, optional tts).
+ * The timer lives in this browser (localStorage), survives a reload and opens a full-screen countdown. */
+const HV_NUMS = { zero: 0, a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14,
+  fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19, twenty: 20, thirty: 30, forty: 40, fourty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90, couple: 2, few: 3 };
+// "one and a half hours" -> "1.5 hours"; "twenty five" -> "25"; "half an hour" -> "30 minutes"
+function hvWordsToNum(t) {
+  t = ' ' + String(t || '').toLowerCase().replace(/[-–]/g, ' ').replace(/[^\w.:' ]+/g, ' ').replace(/\s+/g, ' ') + ' ';
+  t = t.replace(/ (a |an |one )?half (an|a) hour /g, ' 30 minutes ').replace(/ (a |an )?quarter (of )?(an |a )?hour /g, ' 15 minutes ').replace(/ half (a|an) minute /g, ' 30 seconds ')
+    .replace(/ three quarters? (of )?(an |a )?hour /g, ' 45 minutes ').replace(/ (a )?couple (of )?/g, ' two ');
+  const w = t.trim().split(' '), out = []; let cur = null;
+  const flush = () => { if (cur != null) { out.push(String(cur)); cur = null; } };
+  for (let i = 0; i < w.length; i++) { const x = w[i];
+    if (x in HV_NUMS && !((x === 'a' || x === 'an') && !/^(minute|min|hour|hr|second|sec|half)/.test(w[i + 1] || ''))) {
+      const v = HV_NUMS[x]; if (cur != null && cur >= 20 && cur % 10 === 0 && v < 10) cur += v; else { flush(); cur = v; } continue; }
+    if (/^\d+(\.\d+)?$/.test(x)) { flush(); cur = parseFloat(x); continue; }
+    if (x === 'and' && w[i + 1] === 'a' && w[i + 2] === 'half' && cur != null) { cur += 0.5; i += 2; continue; }
+    if (x === 'half' && cur == null) { cur = 0.5; continue; }
+    flush(); out.push(x); }
+  flush(); return ' ' + out.join(' ') + ' '; }
+// seconds in a phrase ("15 minutes", "1 hour and 20 minutes", "90 seconds", "5 min timer", "1:30"), or 0
+function hvDuration(t) { const s = hvWordsToNum(t); let sec = 0, hit = false;
+  const re = /(\d+(?:\.\d+)?) ?(hours?|hrs?|h|minutes?|mins?|m|seconds?|secs?|s)\b/g; let m;
+  while ((m = re.exec(s))) { hit = true; const n = parseFloat(m[1]), u = m[2][0]; sec += n * (u === 'h' ? 3600 : u === 'm' ? 60 : 1); }
+  if (!hit) { const c = s.match(/ (\d{1,2}):(\d{2}) /); if (c) sec = +c[1] * 60 + +c[2]; }
+  return Math.round(sec); }
+const HV_TIMER_STOP = new Set(['a', 'an', 'the', 'my', 'set', 'start', 'make', 'create', 'new', 'put', 'begin', 'minute', 'minutes', 'second', 'seconds', 'hour', 'hours', 'min', 'mins', 'sec', 'secs', 'kitchen', 'one', 'another', 'and', 'half', 'up']);
+// { cmd: 'start', secs, label } | { cmd: 'cancel' | 'pause' | 'resume' | 'status' } | null
+function hvTimerIntent(text) {
+  const t = ' ' + String(text || '').toLowerCase().replace(/[^\w:' ]+/g, ' ').replace(/\s+/g, ' ') + ' ';
+  if (!/ (timers?|countdown|count down)\b/.test(t)) {
+    const d0 = / (count down|countdown) (from )?/.test(t) ? hvDuration(t) : 0; return d0 ? { cmd: 'start', secs: d0, label: '' } : null; }
+  if (/ (cancel|stop|delete|remove|clear|dismiss|end|turn off|kill)\b/.test(t)) return { cmd: 'cancel' };
+  if (/ (pause|hold|freeze)\b/.test(t)) return { cmd: 'pause' };
+  if (/ (resume|continue|unpause|restart|un pause)\b/.test(t)) return { cmd: 'resume' };
+  const secs = hvDuration(t);
+  if (secs > 0) { const lm = t.match(/ ([a-z']+) timer /); const label = lm && !HV_TIMER_STOP.has(lm[1]) && !/^\d/.test(lm[1]) ? lm[1] : '';
+    return { cmd: 'start', secs: Math.min(secs, 24 * 3600), label }; }
+  if (/ (how (much|long)|time left|remaining|status|check)\b/.test(t)) return { cmd: 'status' };
+  if (/ (set|start|create|make|new|begin)\b/.test(t)) return { cmd: 'ask' };
+  return null; }
+const hvFmtLeft = ms => { const s = Math.max(0, Math.ceil(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = s % 60;
+  return h ? `${h}:${String(m).padStart(2, '0')}:${String(x).padStart(2, '0')}` : `${m}:${String(x).padStart(2, '0')}`; };
+const hvFmtTotal = s => { const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = s % 60;
+  return [h ? h + ' HR' : '', m ? m + ' MIN' : '', x ? x + ' SEC' : ''].filter(Boolean).join(' ') || '0 SEC'; };
+const hvSayLeft = ms => { const s = Math.max(0, Math.ceil(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = s % 60, p = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
+  return [h ? p(h, 'hour') : '', m ? p(m, 'minute') : '', x && !h ? p(x, 'second') : ''].filter(Boolean).join(' and ') || 'no time'; };
+// one shared AudioContext, unlocked by a tap (the mic button / an app), so the alert can sound later without a new gesture
+const hvAudio = () => { try { if (!window.__hvAC) { const C = window.AudioContext || window.webkitAudioContext; if (!C) return null; window.__hvAC = new C(); }
+  if (window.__hvAC.state === 'suspended') window.__hvAC.resume().catch(() => {}); return window.__hvAC; } catch (e) { return null; } };
+// ---- the timer (one per browser)
+const HVTM = {
+  KEY: 'hv-timer-v1', st: null, iv: 0, scr: null, opts: { sound: true },
+  load() { try { const j = JSON.parse(localStorage.getItem(this.KEY) || 'null'); if (j && j.total > 0) this.st = j; } catch (e) {} if (this.st) this._run(); return this.st; },
+  save() { try { if (this.st) localStorage.setItem(this.KEY, JSON.stringify(this.st)); else localStorage.removeItem(this.KEY); } catch (e) {} },
+  left() { const s = this.st; if (!s) return 0; return s.paused != null ? s.paused : Math.max(0, s.end - Date.now()); },
+  start(secs, label) { this.st = { total: secs, end: Date.now() + secs * 1000, paused: null, label: label || '', done: false }; this.save(); this._run(); this.show(); },
+  pause() { const s = this.st; if (!s || s.done || s.paused != null) return; s.paused = this.left(); this.save(); this._paint(); },
+  resume() { const s = this.st; if (!s || s.done || s.paused == null) return; s.end = Date.now() + s.paused; s.paused = null; this.save(); this._run(); this._paint(); },
+  add(secs) { const s = this.st; if (!s || s.done) return; if (s.paused != null) s.paused += secs * 1000; else s.end += secs * 1000; s.total += secs; this.save(); this._paint(); },
+  cancel() { this.st = null; this.save(); this._stopAlarm(); clearInterval(this.iv); this.iv = 0; if (this.scr) this.scr.close(); this._pill(); },
+  _run() { if (this.iv) return; this.iv = setInterval(() => this._tick(), 250); this._tick(); },
+  _tick() { const s = this.st; if (!s) { clearInterval(this.iv); this.iv = 0; return; }
+    if (!s.done && s.paused == null && Date.now() >= s.end) { s.done = true; this.save(); this.show(); this._alarm(); }
+    this._paint(); this._pill(); },
+  show() { if (!this.st) return; if (!this.scr || !this.scr.isConnected) this.scr = hvTimerScreen(this); this._paint(); },
+  _paint() { if (this.scr && this.scr.isConnected) this.scr.paint(); },
+  _pill() { for (const f of hvTimerPills) try { f(); } catch (e) {} },
+  _alarm() { this._stopAlarm(); if (this.opts.sound === false) return; const ac = hvAudio(); if (!ac) return; let n = 0;
+    const ring = () => { if (!this.st || !this.st.done || n++ > 60) return this._stopAlarm(); const t0 = ac.currentTime;
+      for (let k = 0; k < 3; k++) { const o = ac.createOscillator(), g = ac.createGain(); o.type = 'sine'; o.frequency.value = k === 2 ? 1175 : 880;
+        g.gain.setValueAtTime(0, t0 + k * 0.22); g.gain.linearRampToValueAtTime(0.32, t0 + k * 0.22 + 0.02); g.gain.exponentialRampToValueAtTime(0.001, t0 + k * 0.22 + 0.2);
+        o.connect(g); g.connect(ac.destination); o.start(t0 + k * 0.22); o.stop(t0 + k * 0.22 + 0.22); } };
+    ring(); this._al = setInterval(ring, 1600); },
+  _stopAlarm() { clearInterval(this._al); this._al = 0; } };
+const hvTimerPills = new Set();
+const TIMER_CSS = `:host{position:fixed;inset:0;z-index:12;background:#000;color:#fff;font-family:${FONT};-webkit-tap-highlight-color:transparent;opacity:0;transition:opacity .35s ease;touch-action:manipulation}
+:host(.in){opacity:1}
+svg.ring{position:absolute;inset:0;width:100%;height:100%}
+svg.ring line{stroke-width:var(--tw,5px);stroke-linecap:round;stroke:#ff9f0a;transition:stroke .4s ease,opacity .4s ease}
+svg.ring line.off{stroke:#5a3a12;opacity:.55}
+.c{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none}
+.t{font-size:min(24vw,30vh);font-weight:600;letter-spacing:-.02em;line-height:1;font-variant-numeric:tabular-nums;font-family:ui-rounded,"SF Pro Rounded","Nunito",${FONT}}
+.l{margin-top:min(2.4vh,18px);font-size:min(4.6vw,4.4vh);font-weight:600;color:#ff9f0a;letter-spacing:.02em;text-transform:uppercase}
+.ctl{position:absolute;left:0;right:0;bottom:max(9vh,calc(28px + env(safe-area-inset-bottom)));display:flex;justify-content:center;gap:min(5vw,40px);transition:opacity .4s ease}
+.ctl button,.mn{all:unset;cursor:pointer;width:min(15vw,72px);height:min(15vw,72px);border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.12);color:#fff}
+.ctl button ha-icon,.mn ha-icon{--mdc-icon-size:min(7vw,32px);display:flex}
+.ctl button.pp{background:rgba(255,159,10,.24);color:#ff9f0a} .ctl button.add{font-size:min(4vw,18px);font-weight:700}
+.mn{position:absolute;top:max(3vh,calc(14px + env(safe-area-inset-top)));left:max(3vw,16px);width:46px;height:46px} .mn ha-icon{--mdc-icon-size:26px}
+:host([paused]) .t{opacity:.55} :host([paused]) svg.ring line{opacity:.7}
+:host([done]) .ctl,:host([done]) .mn{opacity:0;pointer-events:none}
+:host([done]){animation:hvtf 1.6s ease-in-out infinite} :host([done]) .t{animation:hvtp 1.6s ease-in-out infinite}
+.dn{margin-top:min(3vh,22px);font-size:min(3.6vw,3.4vh);color:rgba(255,255,255,.7);display:none} :host([done]) .dn{display:block}
+@keyframes hvtf{0%,100%{background:#000}50%{background:#4a2600}} @keyframes hvtp{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
+@media (prefers-reduced-motion:reduce){:host([done]),:host([done]) .t{animation:none} :host([done]){background:#3a1e00}}`;
+// tick positions on a rounded rectangle inset from the screen edge, clockwise from the top centre
+function hvTicks(W, H, N) { const m = Math.max(14, Math.min(W, H) * 0.05), L = Math.max(10, Math.min(W, H) * 0.035), w = W - 2 * m, h = H - 2 * m, r = Math.min(w, h) * 0.2;
+  const segs = [], add = (len, f) => segs.push({ len, f }), q = Math.PI / 2 * r;
+  add(w / 2 - r, d => [W / 2 + d, m, 0, 1]); add(q, d => { const a = -Math.PI / 2 + d / r; return [W - m - r + r * Math.cos(a), m + r + r * Math.sin(a), -Math.cos(a), -Math.sin(a)]; });
+  add(h - 2 * r, d => [W - m, m + r + d, -1, 0]); add(q, d => { const a = d / r; return [W - m - r + r * Math.cos(a), H - m - r + r * Math.sin(a), -Math.cos(a), -Math.sin(a)]; });
+  add(w - 2 * r, d => [W - m - r - d, H - m, 0, -1]); add(q, d => { const a = Math.PI / 2 + d / r; return [m + r + r * Math.cos(a), H - m - r + r * Math.sin(a), -Math.cos(a), -Math.sin(a)]; });
+  add(h - 2 * r, d => [m, H - m - r - d, 1, 0]); add(q, d => { const a = Math.PI + d / r; return [m + r + r * Math.cos(a), m + r + r * Math.sin(a), -Math.cos(a), -Math.sin(a)]; });
+  add(w / 2 - r, d => [m + r + d, m, 0, 1]);
+  const P = segs.reduce((a, s) => a + s.len, 0), out = [];
+  for (let i = 0; i < N; i++) { let d = i / N * P, k = 0; while (k < segs.length - 1 && d > segs[k].len) { d -= segs[k].len; k++; } const [x, y, nx, ny] = segs[k].f(d); out.push([x, y, x + nx * L, y + ny * L]); }
+  return out; }
+function hvTimerScreen(T) {
+  const host = document.createElement('homeview-timer'), sr = host.attachShadow({ mode: 'open' }); const N = 60;
+  sr.innerHTML = `<style>${TIMER_CSS}</style><svg class="ring" aria-hidden="true"></svg><div class="c" role="timer" aria-live="off"><div class="t"></div><div class="l"></div><div class="dn">Time's up · tap anywhere to dismiss</div></div>
+    <button class="mn" aria-label="Minimise (the timer keeps running)"><ha-icon icon="mdi:chevron-down"></ha-icon></button>
+    <div class="ctl"><button class="cx" aria-label="Cancel timer"><ha-icon icon="mdi:close"></ha-icon></button><button class="pp" aria-label="Pause"><ha-icon icon="mdi:pause"></ha-icon></button><button class="add" aria-label="Add one minute">+1</button></div>`;
+  const svg = sr.querySelector('svg'), tEl = sr.querySelector('.t'), lEl = sr.querySelector('.l'), pp = sr.querySelector('.pp'); let lines = [], lastOn = -1, W = 0, H = 0;
+  const layout = () => { W = innerWidth; H = innerHeight; svg.setAttribute('viewBox', `0 0 ${W} ${H}`); host.style.setProperty('--tw', Math.max(3, Math.min(W, H) * 0.008).toFixed(1) + 'px');
+    svg.innerHTML = hvTicks(W, H, N).map(p => `<line x1="${p[0].toFixed(1)}" y1="${p[1].toFixed(1)}" x2="${p[2].toFixed(1)}" y2="${p[3].toFixed(1)}"/>`).join(''); lines = [...svg.querySelectorAll('line')]; lastOn = -1; host.paint(); };
+  host.paint = () => { const s = T.st; if (!s) return; const left = T.left(), on = s.done ? N : Math.ceil(left / (s.total * 1000) * N);
+    tEl.textContent = s.done ? '0:00' : hvFmtLeft(left); lEl.textContent = (s.label ? s.label + ' · ' : '') + hvFmtTotal(s.total);
+    if (on !== lastOn) { lastOn = on; lines.forEach((l, i) => l.classList.toggle('off', i >= on)); }
+    host.toggleAttribute('paused', s.paused != null); host.toggleAttribute('done', !!s.done);
+    pp.innerHTML = `<ha-icon icon="mdi:${s.paused != null ? 'play' : 'pause'}"></ha-icon>`; pp.setAttribute('aria-label', s.paused != null ? 'Resume' : 'Pause'); };
+  host.close = () => { removeEventListener('resize', layout); removeEventListener('keydown', key); host.classList.remove('in'); setTimeout(() => host.remove(), 350); if (T.scr === host) T.scr = null; };
+  const key = e => { if (e.key === 'Escape') { if (T.st && T.st.done) T.cancel(); else host.close(); } };
+  host.addEventListener('click', e => { const b = e.composedPath().find(n => n.tagName === 'BUTTON'); hvAudio();
+    if (T.st && T.st.done) { T.cancel(); return; } // finished: a tap anywhere dismisses it
+    if (!b) return; if (b.classList.contains('cx')) T.cancel(); else if (b.classList.contains('pp')) (T.st.paused != null ? T.resume() : T.pause()); else if (b.classList.contains('add')) T.add(60); else if (b.classList.contains('mn')) host.close(); });
+  addEventListener('resize', layout); addEventListener('keydown', key); document.body.appendChild(host); layout(); requestAnimationFrame(() => host.classList.add('in'));
+  return host; }
+
+// ---- the assistant popup
+const ASSIST_CSS = `:host{position:fixed;inset:0;z-index:11;font-family:${FONT};-webkit-tap-highlight-color:transparent;--fg:#1c1c1e;--fg2:rgba(60,60,67,.62);--card:#fff;--inp:rgba(118,118,128,.12);--sep:rgba(60,60,67,.12);color:var(--fg)}
+:host([night]){--fg:#fff;--fg2:rgba(235,235,245,.6);--card:rgba(28,28,32,.90);--inp:rgba(118,118,128,.24);--sep:rgba(255,255,255,.10)}
+.scr{position:absolute;inset:0;background:rgba(0,0,0,.28);opacity:0;transition:opacity .3s ease} :host(.in) .scr{opacity:1}
+.cd{position:absolute;left:50%;top:max(4vh,calc(12px + env(safe-area-inset-top)));width:min(calc(100vw - 24px),640px);max-height:calc(100dvh - max(8vh,40px));box-sizing:border-box;display:flex;flex-direction:column;
+ border-radius:34px;background:var(--card);box-shadow:0 20px 60px rgba(0,0,0,.28);backdrop-filter:blur(30px) saturate(150%);-webkit-backdrop-filter:blur(30px) saturate(150%);
+ transform:translate(-50%,-14px) scale(.97);opacity:0;transition:transform .38s cubic-bezier(.2,.9,.3,1),opacity .25s ease;overflow:hidden}
+:host([night]) .cd{border:1px solid rgba(255,255,255,.08)} :host(.in) .cd{transform:translate(-50%,0);opacity:1}
+.hd{display:flex;justify-content:center;padding:18px 0 4px;position:relative}
+.orb{width:58px;height:58px;border-radius:50%;position:relative;transform:scale(var(--lv,1));transition:transform .08s linear}
+.orb::before{content:'';position:absolute;inset:-6px;border-radius:50%;background:conic-gradient(from var(--a,0deg),#ff5fd2,#a259ff,#3b82ff,#2fe0d0,#ffd25e,#ff7a59,#ff5fd2);filter:blur(9px);opacity:.75;animation:hvos 6s linear infinite}
+.orb::after{content:'';position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle at 50% 35%,#4a4a5e 0,#1d1d28 55%,#0b0b12 100%);
+ box-shadow:inset 0 0 0 2px rgba(255,255,255,.18),inset 0 -6px 14px rgba(160,110,255,.45),inset 0 6px 12px rgba(80,200,255,.35)}
+:host([st=listening]) .orb::before{opacity:1;animation-duration:2.2s} :host([st=thinking]) .orb::before{opacity:1;animation-duration:.9s} :host([st=speaking]) .orb{animation:hvop 1s ease-in-out infinite}
+@keyframes hvos{to{transform:rotate(360deg)}} @keyframes hvop{50%{transform:scale(1.08)}}
+.x{all:unset;cursor:pointer;position:absolute;right:16px;top:16px;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--inp);color:var(--fg2)}
+.x ha-icon{--mdc-icon-size:20px;display:flex}
+.bd{overflow-y:auto;padding:8px 28px 6px;min-height:60px;overscroll-behavior:contain}
+.you{font-size:15px;color:var(--fg2);margin:4px 0 6px;min-height:20px}
+.re{font-size:clamp(22px,3.4vmin,28px);font-weight:600;line-height:1.25;letter-spacing:-.01em;white-space:pre-wrap;overflow-wrap:anywhere}
+.rows{display:flex;flex-direction:column;gap:8px;margin:14px 0 6px}
+.sec{font-size:15px;font-weight:700;margin:10px 4px 0}
+.row{display:flex;align-items:center;gap:10px;padding:12px 16px;border-radius:16px;font-size:15px;font-weight:600;background:var(--pb,rgba(120,120,128,.12));color:var(--pc,var(--fg))}
+.row ha-icon{--mdc-icon-size:20px;display:flex;color:var(--pi,currentColor);flex:none} .row .tx{flex:1;min-width:0} .row .rt{font-weight:500;font-size:13px;opacity:.75;flex:none}
+.row.o{--pb:#fdebd3;--pc:#7a4a00;--pi:#f08c00} .row.b{--pb:#dceafc;--pc:#0b3d7a;--pi:#0a84ff;border-left:4px solid #0a84ff;padding-left:12px} .row.g{--pb:#dcf5e3;--pc:#14532d;--pi:#30a14e} .row.p{--pb:#ece6fd;--pc:#3f2a8c;--pi:#7a5af8}
+:host([night]) .row.o{--pb:rgba(255,159,10,.18);--pc:#ffd29a} :host([night]) .row.b{--pb:rgba(10,132,255,.20);--pc:#b9dbff} :host([night]) .row.g{--pb:rgba(48,209,88,.18);--pc:#b4f0c4} :host([night]) .row.p{--pb:rgba(150,120,255,.20);--pc:#d8cdff}
+.err{margin:10px 0 2px;padding:10px 14px;border-radius:14px;font-size:14px;line-height:1.4;background:rgba(255,59,48,.10);color:#c4271c;display:none} :host([night]) .err{color:#ff8a80;background:rgba(255,69,58,.16)} .err.on{display:block}
+.ft{display:flex;align-items:center;gap:10px;padding:12px 16px 16px;border-top:1px solid var(--sep)}
+.mic{all:unset;cursor:pointer;flex:none;width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#7a5af8,#0a84ff);color:#fff;box-shadow:0 4px 14px rgba(90,90,250,.35)}
+.mic ha-icon{--mdc-icon-size:24px;display:flex} :host([st=listening]) .mic{background:#ff3b30;box-shadow:0 0 0 6px rgba(255,59,48,.18)} .mic[disabled]{opacity:.35;cursor:default;box-shadow:none}
+.in{flex:1;min-width:0;height:44px;border-radius:22px;background:var(--inp);display:flex;align-items:center;padding:0 6px 0 16px}
+.in input{all:unset;flex:1;min-width:0;font-size:16px;color:var(--fg)} .in input::placeholder{color:var(--fg2)}
+.snd{all:unset;cursor:pointer;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#0a84ff} .snd ha-icon{--mdc-icon-size:22px;display:flex}
+.pl{font-size:12px;color:var(--fg2);text-align:center;padding:0 0 10px;margin-top:-8px}
+@media (prefers-reduced-motion:reduce){.orb::before,.orb{animation:none !important}}`;
+// response text -> intro + rows (markdown lists, "Day:" headings, times, all-day items)
+function hvAssistRows(text) {
+  const lines = String(text || '').replace(/\*\*|__|`/g, '').split(/\n+/).map(x => x.trim()).filter(Boolean); let intro = [], rows = [];
+  for (const l of lines) { const li = l.match(/^(?:[-*•]|\d+[.)])\s+(.*)$/);
+    if (li) rows.push({ t: li[1] }); else if ((rows.length || intro.length) && /:$/.test(l) && l.length < 60) rows.push({ h: l.replace(/:$/, '') }); else if (!rows.length) intro.push(l); else rows.push({ t: l }); }
+  if (!rows.length && intro.length > 1 && intro.slice(1).every(x => /:$/.test(x) || x.length < 90)) { rows = intro.slice(1).map(x => /:$/.test(x) ? { h: x.replace(/:$/, '') } : { t: x }); intro = intro.slice(0, 1); }
+  const cls = t => /\b\d{1,2}(:\d{2})?\s?(am|pm)\b|\b\d{1,2}:\d{2}\b/i.test(t) && !/all[ -]day/i.test(t) ? 'b' : /all[ -]day|birthday|anniversary|holiday/i.test(t) ? 'o' : 'p';
+  rows = rows.map(r => r.h ? r : Object.assign(r, { c: cls(r.t), i: cls(r.t) === 'o' && /birthday/i.test(r.t) ? 'mdi:cake-variant' : cls(r.t) === 'b' ? 'mdi:clock-outline' : cls(r.t) === 'o' ? 'mdi:calendar' : 'mdi:circle-small' }));
+  return { intro: intro.join('\n'), rows }; }
+function hvAssist(hub) {
+  const c = hub._config, h0 = hub._hass; const theme = c.assistant_theme && c.assistant_theme !== 'same' ? c.assistant_theme : c.theme;
+  const host = document.createElement('homeview-assist'), sr = host.attachShadow({ mode: 'open' }); host.toggleAttribute('night', hvMode(theme, h0) !== 'day');
+  sr.innerHTML = `<style>${ASSIST_CSS}</style><div class="scr"></div><div class="cd" role="dialog" aria-modal="true" aria-label="Assistant"><div class="hd"><div class="orb" aria-hidden="true"></div><button class="x" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button></div>
+    <div class="bd"><div class="you"></div><div class="re" aria-live="polite"></div><div class="rows"></div><div class="err" role="alert"></div></div>
+    <div class="ft"><button class="mic" aria-label="Speak"><ha-icon icon="mdi:microphone"></ha-icon></button><form class="in"><input type="text" enterkeyhint="send" autocomplete="off" placeholder="Type to Assist…" aria-label="Type a request"><button class="snd" type="submit" aria-label="Send"><ha-icon icon="mdi:arrow-up-circle"></ha-icon></button></form></div><div class="pl"></div></div>`;
+  const $ = s => sr.querySelector(s), you = $('.you'), re = $('.re'), rowsEl = $('.rows'), err = $('.err'), mic = $('.mic'), inp = $('input'), orb = $('.orb');
+  const pipe = c.assistant_pipeline && c.assistant_pipeline !== 'preferred' ? c.assistant_pipeline : null; let convId = null, rec = null, unsub = null, closed = false, audioEl = null, runTok = 0;
+  const st = s => host.setAttribute('st', s);
+  const showErr = m => { err.textContent = m || ''; err.classList.toggle('on', !!m); };
+  const say = (text, extra) => { const r = hvAssistRows(text); re.textContent = r.intro || (r.rows.length ? '' : text || '');
+    rowsEl.innerHTML = (extra || []).concat(r.rows).map(x => x.h ? `<div class="sec">${esc(x.h)}</div>` : `<div class="row ${x.c || 'p'}"><ha-icon icon="${esc(x.i || 'mdi:circle-small')}"></ha-icon><span class="tx">${esc(x.t)}</span>${x.r ? `<span class="rt">${esc(x.r)}</span>` : ''}</div>`).join(''); };
+  // pipeline name under the card
+  (async () => { try { const r = await h0.callWS({ type: 'assist_pipeline/pipeline/list' }); const id = pipe || r.preferred_pipeline, p = (r.pipelines || []).find(x => x.id === id);
+    if (p && !closed) $('.pl').textContent = p.name; } catch (e) {} })();
+  const stopRec = () => { if (!rec) return; const r = rec; rec = null; try { r.stop(); } catch (e) {} orb.style.removeProperty('--lv'); };
+  const endRun = () => { if (unsub) { const u = unsub; unsub = null; Promise.resolve(u).then(f => f && f()).catch(() => {}); } };
+  const close = () => { if (closed) return; closed = true; runTok++; stopRec(); endRun(); if (audioEl) { try { audioEl.pause(); } catch (e) {} }
+    removeEventListener('keydown', key); host.classList.remove('in'); setTimeout(() => host.remove(), 320); hub._assistO = null; };
+  const key = e => { if (e.key === 'Escape') close(); };
+  // a local timer command? (works with every pipeline, no satellite needed)
+  let wantDur = false;
+  const timerCmd = text => { let ti = hvTimerIntent(text); if (!ti && wantDur && hvDuration(text) > 0) ti = { cmd: 'start', secs: Math.min(hvDuration(text), 86400), label: '' }; wantDur = false; if (!ti) return false;
+    if (ti.cmd === 'ask') { wantDur = true; say('For how long?'); st('idle'); if (c.assistant_auto_listen !== false) setTimeout(() => { if (!closed && !rec) listen(); }, 700); return true; } HVTM.opts.sound = c.timer_sound !== false; const s = HVTM.st;
+    if (ti.cmd === 'start') { say(`Timer set for ${hvSayLeft(ti.secs * 1000)}.`, [{ c: 'o', i: 'mdi:timer-outline', t: (ti.label ? ti.label.replace(/^./, x => x.toUpperCase()) + ' timer' : 'Timer'), r: hvFmtTotal(ti.secs) }]); st('idle');
+      setTimeout(() => { if (!closed) close(); HVTM.start(ti.secs, ti.label); }, 900); return true; }
+    if (!s) { say("There's no timer running."); st('idle'); return true; }
+    if (ti.cmd === 'cancel') { HVTM.cancel(); say('Timer cancelled.'); }
+    else if (ti.cmd === 'pause') { HVTM.pause(); say(`Timer paused with ${hvSayLeft(HVTM.left())} left.`); }
+    else if (ti.cmd === 'resume') { HVTM.resume(); say(`Timer resumed: ${hvSayLeft(HVTM.left())} left.`); setTimeout(() => { if (!closed) close(); HVTM.show(); }, 900); }
+    else say(s.done ? 'Your timer is done.' : `${hvSayLeft(HVTM.left())} left${s.paused != null ? ' (paused)' : ''}.`);
+    st('idle'); return true; };
+  const ask = text => { const tok = ++runTok; you.textContent = '“' + text + '”'; showErr(''); if (timerCmd(text)) return;
+    st('thinking'); re.textContent = '…'; rowsEl.innerHTML = ''; endRun(); const speak = c.assistant_speak !== false;
+    const msg = { type: 'assist_pipeline/run', start_stage: 'intent', end_stage: speak ? 'tts' : 'intent', input: { text }, conversation_id: convId };
+    if (pipe) msg.pipeline = pipe;
+    try { unsub = hub._hass.connection.subscribeMessage(ev => { if (tok !== runTok) return; const d = ev.data || {};
+      if (ev.type === 'intent-end') { const o = d.intent_output || {}, r = o.response || {}; convId = o.conversation_id || convId;
+        const sp = (r.speech && r.speech.plain && r.speech.plain.speech) || ''; const ex = [];
+        if (r.response_type === 'action_done' && r.data) { for (const t of (r.data.success || []).slice(0, 8)) { const s0 = t.id && hub._hass.states[t.id];
+          ex.push({ c: 'g', i: 'mdi:check-circle', t: t.name || t.id, r: s0 ? fmtState(hub._hass, s0) : '' }); }
+          for (const t of (r.data.failed || []).slice(0, 4)) ex.push({ c: 'o', i: 'mdi:alert-circle-outline', t: t.name || t.id, r: 'failed' }); }
+        say(sp || (r.response_type === 'error' ? 'Sorry, something went wrong.' : 'Done.'), ex); st(speak ? 'thinking' : 'idle');
+        // the agent itself may have tried a timer (HassStartTimer needs a satellite): fall back to ours
+        if (r.response_type === 'error' && /timer/i.test(text)) timerCmd(text); }
+      else if (ev.type === 'tts-end') { const u = d.tts_output && d.tts_output.url; if (u && !closed) { try { audioEl = new Audio(u); st('speaking'); audioEl.onended = () => st('idle'); audioEl.play().catch(() => st('idle')); } catch (e) { st('idle'); } } else st('idle'); }
+      else if (ev.type === 'error') { showErr(d.message || d.code || 'The assistant could not answer.'); st('idle'); if (re.textContent === '…') re.textContent = ''; }
+      else if (ev.type === 'run-end') { endRun(); if (host.getAttribute('st') === 'thinking') st('idle'); } }, msg);
+      if (unsub && unsub.catch) unsub.catch(e => { if (tok === runTok) { showErr((e && e.message) || 'The assistant is not available.'); st('idle'); } }); }
+    catch (e) { showErr(String(e && e.message || e)); st('idle'); } };
+  // --- voice: mic -> 16 kHz PCM -> stt stage; the transcript then goes through ask()
+  const listen = async () => {
+    if (rec) { rec.finish(); return; } // second tap: done speaking
+    showErr(''); if (audioEl) { try { audioEl.pause(); } catch (e) {} }
+    const md = navigator.mediaDevices; if (!window.isSecureContext || !md || !md.getUserMedia) {
+      showErr("This browser can't use the microphone here (it needs HTTPS and microphone support). Type your request below instead."); mic.disabled = true; return; }
+    const ac = hvAudio(); let stream; st('listening'); you.textContent = 'Listening…'; re.textContent = ''; rowsEl.innerHTML = '';
+    try { stream = await md.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } }); }
+    catch (e) { st('idle'); you.textContent = ''; const n = e && e.name;
+      showErr(n === 'NotAllowedError' || n === 'SecurityError' ? 'Microphone access was blocked. Allow the microphone for this site (browser or app settings), or type your request below.'
+        : n === 'NotFoundError' || n === 'OverconstrainedError' ? 'No microphone was found on this device. Type your request below.' : "The microphone couldn't start (" + (e && e.message || n) + '). Type your request below.'); return; }
+    if (closed) { stream.getTracks().forEach(t => t.stop()); return; }
+    const tok = ++runTok; let hid = null, q = [], sent = 0, ended = false, sentEnd = false, srcN = null, proc = null; const RATE = ac ? ac.sampleRate : 48000;
+    const sendBin = buf => { const sock = hub._hass.connection.socket; if (!sock || sock.readyState !== 1) return; const b = new Uint8Array(1 + buf.byteLength); b[0] = hid; b.set(new Uint8Array(buf.buffer || buf), 1); sock.send(b); };
+    let ratio = RATE / 16000, carry = new Float32Array(0), acc = [], accN = 0;
+    const onPcm = f32 => { if (ended) return; let lv = 0; for (let i = 0; i < f32.length; i += 8) lv = Math.max(lv, Math.abs(f32[i])); orb.style.setProperty('--lv', (1 + Math.min(0.35, lv * 1.6)).toFixed(3));
+      const all = new Float32Array(carry.length + f32.length); all.set(carry); all.set(f32, carry.length); const n = Math.floor(all.length / ratio), out = new Int16Array(n);
+      for (let i = 0; i < n; i++) { const p = i * ratio, k = Math.floor(p), fr = p - k, a = all[k], b = all[Math.min(k + 1, all.length - 1)], v = a + (b - a) * fr; out[i] = Math.max(-1, Math.min(1, v)) * 0x7fff; }
+      carry = all.slice(Math.floor(n * ratio)); acc.push(out); accN += n;
+      if (accN >= 1600) { const m = new Int16Array(accN); let o = 0; for (const x of acc) { m.set(x, o); o += x.length; } acc = []; accN = 0; if (hid != null) sendBin(m); else q.push(m); } };
+    const stopAudio = () => { try { proc && proc.disconnect(); srcN && srcN.disconnect(); } catch (e) {} stream.getTracks().forEach(t => t.stop()); };
+    const finish = () => { if (ended) return; ended = true; stopAudio(); orb.style.removeProperty('--lv'); if (hid != null && !sentEnd) { sentEnd = true; const sock = hub._hass.connection.socket; if (sock && sock.readyState === 1) sock.send(new Uint8Array([hid])); } if (tok === runTok) { st('thinking'); you.textContent = '…'; } };
+    rec = { finish, stop: () => { finish(); runTok++; endRun(); } };
+    try { srcN = ac.createMediaStreamSource(stream);
+      if (ac.audioWorklet && window.AudioWorkletNode) {
+        if (!window.__hvWorklet) window.__hvWorklet = ac.audioWorklet.addModule(URL.createObjectURL(new Blob([`registerProcessor('hv-rec',class extends AudioWorkletProcessor{process(i){const c=i[0]&&i[0][0];if(c)this.port.postMessage(c.slice(0));return true}})`], { type: 'text/javascript' })));
+        await window.__hvWorklet; proc = new AudioWorkletNode(ac, 'hv-rec'); proc.port.onmessage = e => onPcm(e.data); srcN.connect(proc); }
+      else { proc = ac.createScriptProcessor(4096, 1, 1); proc.onaudioprocess = e => onPcm(e.inputBuffer.getChannelData(0)); srcN.connect(proc); proc.connect(ac.destination); } }
+    catch (e) { stopAudio(); rec = null; st('idle'); showErr("The microphone couldn't start (" + (e && e.message || e) + '). Type your request below.'); return; }
+    endRun(); const msg = { type: 'assist_pipeline/run', start_stage: 'stt', end_stage: 'stt', input: { sample_rate: 16000 }, timeout: 60 }; if (pipe) msg.pipeline = pipe;
+    const safety = setTimeout(() => { if (rec && rec.finish === finish) finish(); }, 15000); // never listen for more than 15 s
+    try { unsub = hub._hass.connection.subscribeMessage(ev => { if (tok !== runTok) return; const d = ev.data || {};
+      if (ev.type === 'run-start') { hid = d.runner_data && d.runner_data.stt_binary_handler_id; if (hid == null) return; for (const m of q) sendBin(m); q = []; if (ended && !sentEnd) { sentEnd = true; hub._hass.connection.socket.send(new Uint8Array([hid])); } }
+      else if (ev.type === 'stt-vad-end') finish();
+      else if (ev.type === 'stt-end') { clearTimeout(safety); finish(); rec = null; endRun(); const t = ((d.stt_output || {}).text || '').trim();
+        if (!t) { st('idle'); you.textContent = ''; re.textContent = "Sorry, I didn't catch that."; return; } ask(t); }
+      else if (ev.type === 'error') { clearTimeout(safety); finish(); rec = null; endRun(); st('idle'); you.textContent = '';
+        showErr(d.code === 'stt-no-text-recognized' ? "Sorry, I didn't catch that. Try again or type below." : (d.message || d.code || 'Speech recognition failed.')); }
+      else if (ev.type === 'run-end') { if (rec && rec.finish === finish) { finish(); rec = null; } } }, msg);
+      if (unsub && unsub.catch) unsub.catch(e => { clearTimeout(safety); finish(); rec = null; st('idle'); showErr((e && e.message) || 'The assistant is not available.'); }); }
+    catch (e) { clearTimeout(safety); finish(); rec = null; st('idle'); showErr(String(e && e.message || e)); } };
+  host.addEventListener('click', e => { const p = e.composedPath(); if (p[0] && p[0].classList && p[0].classList.contains('scr')) close(); });
+  $('.x').addEventListener('click', close); mic.addEventListener('click', () => { hvAudio(); listen(); });
+  $('form').addEventListener('submit', e => { e.preventDefault(); const t = inp.value.trim(); if (!t) return; stopRec(); inp.value = ''; ask(t); });
+  addEventListener('keydown', key); st('idle'); re.textContent = 'How can I help?';
+  (hub.shadowRoot || document.body).appendChild(host); requestAnimationFrame(() => host.classList.add('in'));
+  return { close, listen, ask, host }; }
+
+try { if (typeof localStorage !== 'undefined' && localStorage.getItem(HVTM.KEY)) setTimeout(() => HVTM.load(), 0); } catch (e) { /* no storage */ }
 class HVHubCard extends HTMLElement {
   constructor() { super(); this.attachShadow({ mode: 'open' }); this._layer = 0; }
   static get defaults() { return { theme: 'night', person: '', morning_start: 5, afternoon_start: 12, evening_start: 17, greeting_morning: 'Good morning', greeting_afternoon: 'Good afternoon',
     greeting_evening: 'Good evening', photo_source: '', photo_interval: 25, photo_order: 'random', blur: 32, dim: 0.32, bg_transparency: 60, photo_backdrop: true, bg_freeze: true, photo_tap: 'viewer', photo_viewer_nav: true, photo_viewer_swipe: true, photo_viewer_add: true, photo_gallery_upload: true, photo_viewer_pause: true, photo_label: 'Photos', photo_max_aspect: 2.6,
-    show_calendar: true, calendar_layout: 'wide', calendar_columns: 3, calendar_days: 7, calendar_title: 'Calendar', calendar_min_height: 240, max_icon: 140, edge_sidebar: true, ss_hold: true, weather_entity: '', photo_size: 'wide', side_portrait: 'below', side_sizes: '', row_units: 3, block_pull_refresh: true, calendar_rows: 'auto', swipe_screensaver: 'auto' }; }
+    show_calendar: true, calendar_layout: 'wide', calendar_columns: 3, calendar_days: 7, calendar_title: 'Calendar', calendar_min_height: 240, max_icon: 140, edge_sidebar: true, ss_hold: true, weather_entity: '', photo_size: 'wide', side_portrait: 'below', side_sizes: '', row_units: 3, block_pull_refresh: true, calendar_rows: 'auto', swipe_screensaver: 'auto', assistant_enabled: false, assistant_pipeline: 'preferred', assistant_theme: 'same', assistant_button: true, assistant_speak: true, assistant_auto_listen: true, timer_sound: true }; }
   static getStubConfig(hass) { return { apps: HUB_APPS.map(a => Object.assign({}, a)), calendar_entities: Object.keys((hass && hass.states) || {}).filter(k => k.startsWith('calendar.')).slice(0, 3) }; }
   static getConfigElement() { return document.createElement('homeview-hub-card-editor'); }
   setConfig(c) { if (!c) throw new Error('Invalid configuration'); const old = this._config, nc = Object.assign({}, HVHubCard.defaults, c);
@@ -3622,13 +3979,18 @@ class HVHubCard extends HTMLElement {
     addEventListener('resize', this._bound); addEventListener('orientationchange', this._bound); addEventListener('hv-layout', this._bound); if (window.visualViewport) visualViewport.addEventListener('resize', this._bound);
     if (window.ResizeObserver && !this._ro) { this._ro = new ResizeObserver(() => this._layout()); this._ro.observe(this); }
     this._edgeBind(true); hvPTR.set(this, (this._config || {}).block_pull_refresh !== false); this._ssBind(true); if (this._hass) this._loadCfg(true);
+    if (!this._tpf) this._tpf = () => this._tpillPaint(); hvTimerPills.add(this._tpf); this._tpillPaint();
     clearInterval(this._tick); this._tick = setInterval(() => { this._sig = null; this._render(); if (++this._tn % 4 === 0) this._loadCfg(true); else this._ssPaint(); }, 30000); this._tn = 0;
     if (!this._vis) { this._vis = () => { if (!document.hidden) this._restartTimer(); else this._paintBg(true, true); }; } document.addEventListener('visibilitychange', this._vis);
     requestAnimationFrame(() => this._layout()); setTimeout(() => this._layout(), 700); setTimeout(() => this._layout(), 1800);
     for (const t of [2500, 6000]) setTimeout(() => { this._vk = null; this._layout(); }, t); // re-measure the space below once the page has settled
     if (this._hass) this._loadPhotos(); this._restartTimer(); this._paintBg(true, true); // back on the Home Screen (from another view): one instant catch-up before it shows
   }
-  disconnectedCallback() { clearInterval(this._ssHoldIv); this._ssHoldIv = null; this._edgeBind(false); hvPTR.set(this, false); this._ssBind(false); if (this._galO) this._galO.close(); if (this._sheetO) this._sheetO.close(); this._ssPause(false); clearInterval(this._tick); clearTimeout(this._timer); this._timer = null;
+  _tpillPaint() { const p = this._tpill; if (!p) return; const s = HVTM.st, on = !!s && this._config.assistant_enabled === true && !(HVTM.scr && HVTM.scr.isConnected); p.hidden = !on;
+    if (on) { const t = s.done ? 'Done' : hvFmtLeft(HVTM.left()) + (s.paused != null ? ' ❚❚' : ''); const sp = p.querySelector('span'); if (sp.textContent !== t) sp.textContent = t; } }
+  _openAssist() { if (this._assistO || !this._hass) return; hvAudio(); HVTM.opts.sound = this._config.timer_sound !== false; this._assistO = hvAssist(this);
+    if (this._config.assistant_auto_listen !== false) this._assistO.listen(); }
+  disconnectedCallback() { hvTimerPills.delete(this._tpf); if (this._assistO) this._assistO.close(); clearInterval(this._ssHoldIv); this._ssHoldIv = null; this._edgeBind(false); hvPTR.set(this, false); this._ssBind(false); if (this._galO) this._galO.close(); if (this._sheetO) this._sheetO.close(); this._ssPause(false); clearInterval(this._tick); clearTimeout(this._timer); this._timer = null;
     removeEventListener('resize', this._bound); removeEventListener('orientationchange', this._bound); removeEventListener('hv-layout', this._bound); if (window.visualViewport) visualViewport.removeEventListener('resize', this._bound);
     document.removeEventListener('visibilitychange', this._vis); }
   // --- dashboard config (Wallpanel settings, views for the sheets), cached
@@ -3786,23 +4148,26 @@ class HVHubCard extends HTMLElement {
     const c = this._config, h = this._hass, p = this._person();
     const first = (c.name || (p && p.attributes.friendly_name) || (h.user && h.user.name) || '').trim().split(/\s+/)[0] || '';
     const pic = p && p.attributes.entity_picture;
-    const sig = JSON.stringify([first, pic, this._greeting(), c.apps, c.ring_color, c.photo_label, c.show_calendar]);
+    const amic = c.assistant_enabled === true && c.assistant_button !== false;
+    const sig = JSON.stringify([first, pic, this._greeting(), c.apps, c.ring_color, c.photo_label, c.show_calendar, amic]);
     if (sig === this._sig && this._w) return; this._sig = sig;
     if (!this._w) {
       this.shadowRoot.innerHTML = `<style>${HUB_CSS}</style><div class="bg"><div class="bgi"></div><div class="bgi"></div><div class="tint"></div><div class="dim"></div></div><div class="w"></div><div class="ssp" hidden title="Swipe down for the screensaver"></div>`;
       this._ssp = this.shadowRoot.querySelector('.ssp'); this._ssPaint();
       this._w = this.shadowRoot.querySelector('.w'); this._bgs = [...this.shadowRoot.querySelectorAll('.bgi')];
       this._w.addEventListener('click', e => { const t = e.composedPath().find(n => n.dataset && (n.dataset.app != null || n.dataset.k)); if (!t) return;
-        if (t.dataset.app != null) this._runApp(c => c, Number(t.dataset.app)); else if (t.dataset.k === 'photos') this._photoTap(); else if (t.dataset.k === 'person') this._personTap(); });
+        if (t.dataset.app != null) this._runApp(c => c, Number(t.dataset.app)); else if (t.dataset.k === 'photos') this._photoTap(); else if (t.dataset.k === 'person') this._personTap(); else if (t.dataset.k === 'assist') this._openAssist(); else if (t.dataset.k === 'timer') HVTM.show(); });
     }
     const greet = String(this._greeting() || '').trim().replace(/,?$/, ',');
     const glyph = a => a.icon === 'hv:home' ? HUB_HOME_SVG : `<ha-icon icon="${esc(a.icon || 'mdi:apps')}"></ha-icon>`;
     const apps = c.apps.map((a, i) => `<button class="app" data-app="${i}" aria-label="${esc(a.name || '')}"><span class="ico" style="background:linear-gradient(180deg,${esc(a.color_from || '#8e8e93')} 0%,${esc(a.color_to || a.color_from || '#636366')} 100%);color:${esc(a.glyph_color || '#fff')}">${glyph(a)}</span><span class="lb">${esc(a.name || '')}</span></button>`).join('');
     const keepCal = this._cal && c.show_calendar !== false ? this._cal : null;
     this._w.innerHTML = `<div class="top"><div class="gr"><div class="g1">${esc(greet)}</div><div class="g2">${esc(first)}</div></div>
-      <button class="av" data-k="person" aria-label="${esc(first)}"${c.ring_color ? ` style="--ring:${esc(c.ring_color)}"` : ''}><div class="pic"${pic ? ` style="background-image:url('${esc(pic)}')"` : ''}>${pic ? '' : esc(first.charAt(0))}</div></button></div>
+      <div class="tr"><button class="tpill" data-k="timer" hidden aria-label="Show the timer"><ha-icon icon="mdi:timer-outline"></ha-icon><span></span></button>${amic ? '<button class="amic" data-k="assist" aria-label="Assistant"><ha-icon icon="mdi:microphone"></ha-icon></button>' : ''}
+      <button class="av" data-k="person" aria-label="${esc(first)}"${c.ring_color ? ` style="--ring:${esc(c.ring_color)}"` : ''}><div class="pic"${pic ? ` style="background-image:url('${esc(pic)}')"` : ''}>${pic ? '' : esc(first.charAt(0))}</div></button></div></div>
       <div class="mid"><div class="apps">${apps}</div><div class="row"><div class="phw"><button class="pw" data-k="photos" aria-label="${esc(c.photo_label || 'Photos')}"><div class="ph0"><ha-icon icon="mdi:image-multiple-outline"></ha-icon></div><div class="pi"></div><div class="pi"></div></button>${c.photo_label ? `<span class="lb">${esc(c.photo_label)}</span>` : ''}</div></div></div>
       <div class="below" hidden></div>${c.show_calendar !== false ? '<div class="calw"></div>' : ''}`;
+    this._tpill = this._w.querySelector('.tpill'); this._tpillPaint();
     this._rowEl = this._w.querySelector('.row'); this._belowEl = this._w.querySelector('.below'); this._makeSide();
     this._pis = [...this._w.querySelectorAll('.pi')]; this._paintPhoto(true);
     if (c.show_calendar !== false) { const w = this._w.querySelector('.calw'); this._makeCal(keepCal); w.appendChild(this._cal); } else this._cal = null;
@@ -3903,6 +4268,7 @@ class HVHubCard extends HTMLElement {
       const data = HVMusicCard.prototype.nowPlayingData.call({ _config: Object.assign({}, NP_TILE_DEFAULTS, { entity: ids[0] || def, entities: ids.slice(1) }) });
       fire(this, 'll-custom', { action: 'fire-dom-event', browser_mod: { service: 'browser_mod.popup', data } }); return; }
     if (kind === 'weather') { this._openWeather(a.weather_entity); return; }
+    if (kind === 'assistant') { this._openAssist(); return; }
     if (kind === 'photos') { this._openPhoto(); return; }
     const cfg = a.tap_action; if (cfg && cfg.action !== 'none') fire(this, 'hass-action', { config: { entity: a.entity, tap_action: cfg }, action: 'tap' }); }
   _personTap() { const p = this._person(); if (p) fire(this, 'hass-more-info', { entityId: p.entity_id }); }
@@ -4114,19 +4480,25 @@ class HVHubCard extends HTMLElement {
   _openWeather(entity) {
     if (this._sheetO) return; const h = this._hass, id = entity || this._config.weather_entity || (h.states['weather.forecast_home'] ? 'weather.forecast_home' : Object.keys(h.states).find(k => k.startsWith('weather.')));
     if (!id) return; const host = document.createElement('homeview-weather-sheet'), sr = host.attachShadow({ mode: 'open' }); let fh = null, fd = null; const subs = [];
+    const skyOn = this._config.weather_sky_header === true; let skyKey = ''; host.toggleAttribute('sky', skyOn);
     const sub = (type, cb) => { try { const u = h.connection.subscribeMessage(m => { cb(m.forecast || []); paint(); }, { type: 'weather/subscribe_forecast', forecast_type: type, entity_id: id }); subs.push(u); if (u.catch) u.catch(() => {}); } catch (e) {} };
     const lang = () => (this._hass.locale && this._hass.locale.language) || navigator.language;
     const tf = d => { const o = { hour: 'numeric' }; const t = this._hass.locale && this._hass.locale.time_format; if (t === '24') o.hour12 = false; else if (t === '12') o.hour12 = true;
       const s = d.toLocaleTimeString(lang(), o); const m = s.match(/^(\d+)\s*([^\d\s]+)$/); return m ? `${m[1]}<small>${esc(m[2])}</small>` : esc(s); };
     const paint = () => { const H = this._hass, s = H.states[id]; if (!s) return; const a = s.attributes, sun = H.states['sun.sun'], night = sun ? sun.state === 'below_horizon' : false;
       const today = (fd || [])[0], u = a.temperature_unit || '°';
-      sr.querySelector('.sky').style.background = hubWeatherBg(s.state, night);
+      if (skyOn) { const k = WX_SKY_KIND(s.state), nt = night || s.state === 'clear-night', g = WX_SKY_G[k][nt ? 1 : 0], key = k + '|' + nt + '|' + s.state;
+        if (key !== skyKey) { skyKey = key; sr.querySelector('.wxh').innerHTML = wxSkyHtml(k, nt, s.state); sr.querySelector('.wxh').dataset.v = k + (nt ? '-night' : '');
+          sr.querySelector('.sky').style.background = `linear-gradient(180deg,${g[0]} 0%,${g[1]} 45%,${g[2]} 100%)`; host.setAttribute('k', k); host.toggleAttribute('night', nt);
+          host.style.setProperty('--wx-pn', nt ? WX_SKY_PN.night : WX_SKY_PN[k]); }
+        host.toggleAttribute('wday', hvMode(this._config.theme, H) === 'day'); }
+      else sr.querySelector('.sky').style.background = hubWeatherBg(s.state, night);
       sr.querySelector('.clk').textContent = new Date().toLocaleTimeString(lang(), { hour: 'numeric', minute: '2-digit' }).replace(/\s?[AP]M$/i, '');
       sr.querySelector('.loc').textContent = (this._config.location_name || (H.config && H.config.location_name) || a.friendly_name || 'Home');
       sr.querySelector('.tmp').textContent = a.temperature != null ? Math.round(a.temperature) + '°' : '—';
       sr.querySelector('.cnd').textContent = fmtState(H, s);
       sr.querySelector('.hl').textContent = today ? `H:${Math.round(today.temperature)}°  L:${Math.round(today.templow)}°` : '';
-      const ic = (cnd, nt) => `<ha-icon icon="${(nt && cnd === 'partlycloudy') ? 'mdi:weather-night-partly-cloudy' : (WX_ICON[cnd] || 'mdi:weather-partly-cloudy')}" style="color:${HUB_WX_COLOR[cnd] || '#fff'}"></ha-icon>`;
+      const wd = host.hasAttribute('wday'), ic = (cnd, nt) => `<ha-icon icon="${(nt && cnd === 'partlycloudy') ? 'mdi:weather-night-partly-cloudy' : (WX_ICON[cnd] || 'mdi:weather-partly-cloudy')}" style="color:${wd ? HUB_WX_COLOR_DAY[cnd] || '#3c3c43' : HUB_WX_COLOR[cnd] || '#fff'}"></ha-icon>`;
       const hrs = (fh || []).filter(f => new Date(f.datetime) > Date.now() - 36e5).slice(0, 24);
       sr.querySelector('.hr').innerHTML = hrs.length ? hrs.map((f, i) => { const d = new Date(f.datetime), hh = d.getHours(), nt = night ? (hh < 7 || hh >= 19) : (hh < 6 || hh >= 20);
         return `<div class="h"><div class="t">${i ? tf(d) : 'Now'}</div>${ic(f.condition, nt)}<div class="p">${f.precipitation_probability >= 20 ? Math.round(f.precipitation_probability) + '%' : ''}</div><div>${Math.round(f.temperature)}°</div></div>`; }).join('')
@@ -4135,7 +4507,7 @@ class HVHubCard extends HTMLElement {
       sr.querySelector('.dl').innerHTML = `<div class="pt"><ha-icon icon="mdi:calendar-month-outline"></ha-icon>${days.length}-day forecast</div>` + days.map((f, i) => { const d = new Date(f.datetime), l = f.templow ?? f.temperature;
         return `<div class="d"><div>${i ? esc(d.toLocaleDateString(lang(), { weekday: 'short' })) : 'Today'}</div>${ic(f.condition)}<div class="lo">${Math.round(l)}°</div><div class="rng"><i style="left:${(l - lo) / sp * 100}%;right:${(hi - f.temperature) / sp * 100}%"></i></div><div>${Math.round(f.temperature)}°</div></div>`; }).join('');
       sr.querySelector('.dl').style.display = days.length ? '' : 'none'; };
-    sr.innerHTML = `<style>${WX_CSS}</style><div class="sky"></div><div class="sc" role="dialog" aria-modal="true" aria-label="Weather"><div class="bar"><div class="clk"></div><button class="x" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button></div>
+    sr.innerHTML = `<style>${WX_CSS}${skyOn ? WX_SKY_CSS : ''}</style><div class="sky"></div>${skyOn ? '<div class="wxh" aria-hidden="true"></div>' : ''}<div class="sc" role="dialog" aria-modal="true" aria-label="Weather"><div class="bar"><div class="clk"></div><button class="x" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button></div>
       <div class="hero"><div class="loc"></div><div class="tmp"></div><div class="cnd"></div><div class="hl"></div></div>
       <div class="grid2"><div class="pn"><div class="pt"><ha-icon icon="mdi:clock-outline"></ha-icon>Hourly forecast</div><div class="hr"></div></div><div class="pn dl"></div></div></div>`;
     const st2 = document.createElement('style'); st2.textContent = ':host{position:absolute !important;inset:0 !important;z-index:auto !important} .sc{padding-top:46px !important} .grid2{width:min(100%,1100px);min-width:0} .bar .x{visibility:hidden} .bar::before{display:none}'; sr.appendChild(st2);
@@ -4150,7 +4522,7 @@ const HUB_APP_FIELDS = {
   color_to: { label: 'Gradient bottom colour', selector: { text: {} } },
   glyph_color: { label: 'Glyph colour (empty = white)', selector: { text: {} } },
   kind: { label: 'What it does', selector: { select: { mode: 'dropdown', options: [{ value: 'navigate', label: 'Open a view' }, { value: 'now_playing', label: 'Now Playing popup' },
-    { value: 'weather', label: 'Weather popup' }, { value: 'photos', label: 'Full-screen photos' }, { value: 'action', label: 'Custom tap action' }] } } },
+    { value: 'weather', label: 'Weather popup' }, { value: 'assistant', label: 'Assistant (voice / typed)' }, { value: 'photos', label: 'Full-screen photos' }, { value: 'action', label: 'Custom tap action' }] } } },
   navigation_path: { label: 'View (Open a view)', selector: { navigation: {} } },
   open_as: { label: 'Open as (Open a view / Now Playing; empty = Sheet)', selector: { select: { mode: 'dropdown', options: [{ value: 'sheet', label: 'Sheet (slides up over the launch page)' }, { value: 'page', label: 'Page / classic popup' }] } } },
   entity: { label: 'Player (Now Playing) / entity (custom action)', selector: { entity: {} } },
@@ -4188,6 +4560,11 @@ const HUB_SCHEMA = [
     { type: 'grid', name: '', schema: [{ name: 'calendar_layout', selector: { select: { mode: 'dropdown', options: [{ value: 'wide', label: 'Wide: days side by side' }, { value: 'list', label: 'List' }] } } }, n_('calendar_columns', 1, 7), n_('calendar_days', 1, 30)] },
     { name: 'calendar_rows', selector: { select: { mode: 'dropdown', options: [{ value: 'auto', label: 'Auto (2 when tall)' }, { value: '1', label: '1 row' }, { value: '2', label: '2 rows' }] } } },
     { type: 'grid', name: '', schema: [{ name: 'calendar_title', selector: { text: {} } }, n_('calendar_min_height', 120, 800, 10, 'px')] }] },
+  { type: 'expandable', name: '', flatten: true, title: 'Assistant & timer', icon: 'mdi:microphone-message', schema: [
+    { type: 'grid', name: '', schema: [{ name: 'assistant_enabled', selector: { boolean: {} } }, { name: 'assistant_button', selector: { boolean: {} } }] },
+    { name: 'assistant_pipeline', selector: { select: { mode: 'dropdown', options: [{ value: 'preferred', label: 'Preferred (Home Assistant\'s setting)' }] } } },
+    { name: 'assistant_theme', selector: { select: { mode: 'dropdown', options: [{ value: 'same', label: 'Same as the device pages theme' }].concat(HV_THEME_OPTS) } } },
+    { type: 'grid', name: '', schema: [{ name: 'assistant_auto_listen', selector: { boolean: {} } }, { name: 'assistant_speak', selector: { boolean: {} } }, { name: 'timer_sound', selector: { boolean: {} } }] }] },
   { type: 'expandable', name: '', flatten: true, title: 'Layout & weather', icon: 'mdi:view-dashboard-outline', schema: [
     { type: 'grid', name: '', schema: [{ name: 'photo_size', selector: { select: { mode: 'dropdown', options: [{ value: 'wide', label: 'Wide (2 units; alone it fills the row)' }, { value: 'square', label: 'Square (1 unit)' }] } } }, n_('photo_max_aspect', 0.8, 4, 0.1)] },
     { type: 'grid', name: '', schema: [{ name: 'side_sizes', selector: { text: {} } }, n_('row_units', 1, 6)] },
@@ -4201,6 +4578,7 @@ const HUB_SCHEMA = [
       sky_entity: { label: 'Scene sensor for the sky (empty = sensor.house_scene)', selector: { entity: { domain: 'sensor' } } } } } } },
     { type: 'grid', name: '', schema: [{ name: 'side_portrait', selector: { select: { mode: 'dropdown', options: [{ value: 'below', label: 'Wrap to a row below' }, { value: 'hide', label: 'Hide them' }] } } }, n_('max_icon', 60, 220, 2, 'px')] },
     { type: 'grid', name: '', schema: [{ name: 'weather_entity', selector: { entity: { domain: 'weather' } } }, { name: 'location_name', selector: { text: {} } }] },
+    { name: 'weather_sky_header', selector: { boolean: {} } },
     { type: 'grid', name: '', schema: [{ name: 'edge_sidebar', selector: { boolean: {} } }, { name: 'block_pull_refresh', selector: { boolean: {} } }] },
     { name: 'swipe_screensaver', selector: { select: { mode: 'dropdown', options: [{ value: 'auto', label: 'Auto (when the screensaver is on here)' }, { value: 'on', label: 'On' }, { value: 'off', label: 'Off' }] } } }, { name: 'ss_hold', selector: { boolean: {} } }] }];
 Object.assign(LABELS, { apps: 'Apps (drag to reorder, pencil to edit)', person: 'Person (empty = the logged-in user)', fallback_person: 'Fallback person (no match)', ring_color: 'Avatar ring colour / gradient',
@@ -4208,8 +4586,15 @@ Object.assign(LABELS, { apps: 'Apps (drag to reorder, pencil to edit)', person: 
   photo_source: 'Photo source (empty = the Wallpanel screensaver\'s, e.g. media-source://media_source/local/)', photo_interval: 'Next photo every', photo_order: 'Order', blur: 'Background blur (px)', dim: 'Edge darkening for text readability (0-0.9)', photo_backdrop: 'Show the current photo, blurred, behind the page', bg_freeze: 'Freeze the blurred background while the Home Screen is showing', bg_transparency: 'Background transparency',
   photo_tap: 'Tapping Photos', photo_label: 'Photos label', photo_viewer_nav: 'Viewer: Previous / Next buttons', photo_viewer_swipe: 'Viewer: swipe left / right to change picture', photo_viewer_add: 'Viewer: View Gallery button', photo_gallery_upload: 'Gallery: let people upload new pictures', photo_viewer_pause: 'Pause the screensaver while the viewer is open', show_calendar: 'Show the calendar', calendar_show_weather: 'Forecast per day', calendar_entities: 'Calendars (empty = all)', calendar_layout: 'Calendar layout',
   calendar_columns: 'Days side by side', calendar_rows: 'Rows of days (phones always stack)', calendar_days: 'Days to load', calendar_title: 'Calendar title', calendar_min_height: 'Calendar min height', max_icon: 'Largest app icon', photo_max_aspect: 'Photos widget: widest aspect (w/h)', photo_size: 'Photos tile size', side_sizes: 'Extra tiles\' sizes, in order: S = square, W = wide (e.g. S, S)', side_portrait: 'Tiles that don\'t fit beside the apps', row_units: 'Landscape: units beside the apps (icons shrink to fit)',
-  location_name: 'Weather location name (empty = Home Assistant\'s)', swipe_screensaver: 'Swipe down for screensaver (grab bar at the top)', ss_hold: 'Keep the screensaver paused while the Home Screen is showing',
+  assistant_enabled: 'Assistant on this Home Screen', assistant_button: 'Mic button beside the avatar', assistant_pipeline: 'Assist pipeline', assistant_theme: 'Assistant look',
+  assistant_auto_listen: 'Start listening when it opens', assistant_speak: 'Speak the replies', timer_sound: 'Timer alert sound',
+  location_name: 'Weather location name (empty = Home Assistant\'s)', weather_sky_header: 'Weather popup: animated sky header (sunny, partly cloudy, cloudy, rain, snow; night sky after sunset)', swipe_screensaver: 'Swipe down for screensaver (grab bar at the top)', ss_hold: 'Keep the screensaver paused while the Home Screen is showing',
   side_tiles: 'Extra tile options, in order (1st = first extra tile): size, fit, tap opens enlarged view' });
+// the Assist pipeline dropdown lists this Home Assistant's pipelines (assist_pipeline/pipeline/list); a removed one stays selectable so nothing is lost
+const hvHubSchemaPipes = r => { if (!r || !Array.isArray(r.pipelines)) return HUB_SCHEMA;
+  const opts = [{ value: 'preferred', label: 'Preferred (now: ' + ((r.pipelines.find(p => p.id === r.preferred_pipeline) || {}).name || '?') + ')' }].concat(r.pipelines.map(p => ({ value: p.id, label: p.name })));
+  const fix = l => l.map(x => x.name === 'assistant_pipeline' ? Object.assign({}, x, { selector: { select: { mode: 'dropdown', options: opts } } }) : x.schema ? Object.assign({}, x, { schema: fix(x.schema) }) : x);
+  return fix(HUB_SCHEMA); };
 class HVHubEditor extends HTMLElement {
   setConfig(c) { this._config = c; this._render(); }
   set hass(h) { this._hass = h; this._render(); }
@@ -4219,6 +4604,7 @@ class HVHubEditor extends HTMLElement {
     if (!this._form) { const f = this._form = document.createElement('ha-form');
       f.computeLabel = s => LABELS[s.name] || s.name;
       f.computeHelper = s => s.name === 'bg_transparency' ? '0 = solid gradient, 60 = default look, 100 = clear photo. The preview updates while you drag.' : s.name === 'bg_freeze' ? 'On: the background keeps the photo it had when the Home Screen opened (the Photos card still changes); it moves to the current photo only while the page is out of sight (screensaver up, another view, app in the background). Off: it follows the Photos card.' : s.name === 'ss_hold' ? 'On: the screensaver does not start by itself behind the Home Screen (and uses nothing there); swipe the page away to start it, on the photo the Photos card shows. Off: Wallpanel\'s idle timer runs as before.' : s.name === 'blur' ? 'How soft the photo behind the page is. Left at the default it eases to 0 as Background transparency goes from 60 to 100 (a clear, sharp photo); set a value to keep it fixed.' : s.name === 'dim' ? 'Darkens the top and bottom of the page so the text stays readable; also fades out as transparency goes up.' : s.name === 'photo_viewer_add' ? 'The viewer button that opens the gallery (the gallery keeps its own “Add photos” upload button).' : s.name === 'side_sizes' ? hubUnitsNote(this._config) : s.name === 'photo_source' ? 'The photo viewer, the gallery and uploads all use this folder. Empty = the screensaver\'s folder (Media → My media). Uploading needs a media-source:// folder and an administrator.' : s.name === 'apps' ? 'Each app: label, icon, gradient colours and what it does (open a view, Now Playing, Weather, photos, or any tap action).' : undefined;
+      { const h1 = f.computeHelper; f.computeHelper = s => s.name === 'assistant_enabled' ? 'Talk to an Assist pipeline with this device\'s microphone (or type). Timers ("set a timer for 15 minutes", "pause / cancel the timer") run right here, full screen.' : s.name === 'assistant_pipeline' ? 'Which assistant answers (Settings → Voice assistants).' : h1(s); }
       { const h0 = f.computeHelper; f.computeHelper = s => s.name === 'theme' ? 'The look of the device pages (the pages with the button tiles) on this dashboard: their tiles, popups and page background. The Home Screen itself always keeps its own look. Night = dark glass (default); Day = white tiles on a light grey page. A Page Grid card can choose its own.' : h0(s); }
       { const l0 = f.computeLabel; f.computeLabel = s => s.name === 'theme' ? 'Device pages theme' : l0(s); }
       f.addEventListener('input', ev => { const p = ev.composedPath(), sl = p.find(n => n.tagName === 'HA-SLIDER'), sel = p.find(n => n.tagName === 'HA-SELECTOR-NUMBER'); // live preview while dragging
@@ -4231,7 +4617,8 @@ class HVHubEditor extends HTMLElement {
         for (const k of Object.keys(this._config)) if (!(k in v) && !(k in cfg)) cfg[k] = this._config[k]; // keep keys the form doesn't show (grid_options, ...)
         this._config = cfg; fire(this, 'config-changed', { config: cfg }); });
       this.appendChild(f); this._stackEd(); }
-    this._form.hass = this._hass; this._form.schema = HUB_SCHEMA; this._form.data = data;
+    if (!this._pipesP) this._pipesP = this._hass.callWS({ type: 'assist_pipeline/pipeline/list' }).then(r => { this._pipes = r; this._render(); }).catch(() => { this._pipes = null; });
+    this._form.hass = this._hass; this._form.schema = hvHubSchemaPipes(this._pipes); this._form.data = data;
     hvWpHint(this, true); // the Home Screen's screensaver features (swipe away, hold, Photos) need Wallpanel
     if (this._stack) { this._stack.hass = this._hass; const js = JSON.stringify(this._config.side_cards || []); if (js !== this._lastSide) { this._lastSide = js; this._stack.setConfig({ type: 'vertical-stack', cards: this._config.side_cards || [] }); } }
   }
