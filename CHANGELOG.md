@@ -21,6 +21,8 @@
 * Assistant: pipelines without text-to-speech now answer (silently) instead of failing with "the pipeline does not support text-to-speech".
 * Assistant: pipelines without speech-to-text no longer show a raw error when the popup opens; the mic is dimmed and explains on a tap.
 * Assistant: a conversation agent that fails (for example an expired API key) shows a clear note on what to check instead of only a generic apology.
+* Assistant: a speech-to-text service that fails names the pipeline and says what to check instead of a bare "speech-to-text failed".
+* Assistant: when an AI service returns its raw error payload (for example Google's JSON quota error), only its first sentence is shown, with a note that the service hit its usage limit (or what to check) instead of a wall of JSON.
 * Includes everything from 1.31.1 (setup popup fix + notification, full-height popups now on by default, tap-to-edit tiles) and 1.31.2 (setup notification for existing users, notification link fix).
 
 ## 1.31.2 – 2026-10-26

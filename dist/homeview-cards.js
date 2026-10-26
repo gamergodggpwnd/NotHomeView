@@ -4178,9 +4178,13 @@ function hvAssist(hub) {
         if (r.response_type === 'action_done' && r.data) { for (const t of (r.data.success || []).slice(0, 8)) { if (/^(weather|calendar)\./.test(t.id || '')) continue; const s0 = t.id && hub._hass.states[t.id];
           ex.push({ c: 'g', i: 'mdi:check-circle', t: t.name || t.id, r: s0 ? fmtState(hub._hass, s0) : '' }); }
           for (const t of (r.data.failed || []).slice(0, 4)) ex.push({ c: 'o', i: 'mdi:alert-circle-outline', t: t.name || t.id, r: 'failed' }); }
-        fill(m, sp || (r.response_type === 'error' ? 'Sorry, something went wrong.' : 'Done.'), ex); st(speak ? 'thinking' : 'idle');
-        const bad = agentErr(sp, r.response_type);
-        if (bad && !/timer/i.test(text)) note(m, `“${(pinfoCache || {}).name || 'This assistant'}” couldn't answer: its conversation agent reported an error. Check that integration (for example its API key) in Settings → Devices & services, or pick another assistant in the Home Screen settings.`);
+        const bad = agentErr(sp, r.response_type), quota = bad && /resource.exhausted|quota|rate.limit|\b429\b|too many requests/i.test(sp);
+        // an agent error can carry the provider's raw error payload (JSON): show only its first sentence
+        const shown = bad ? ((sp.split(/\s*[{\[]|\n|\.:/)[0] || '').trim().replace(/[:\s]+$/, '') || 'Sorry, something went wrong.') : sp;
+        fill(m, shown || (r.response_type === 'error' ? 'Sorry, something went wrong.' : 'Done.'), ex); st(speak ? 'thinking' : 'idle');
+        const an = `“${(pinfoCache || {}).name || 'This assistant'}”`;
+        if (bad && !/timer/i.test(text)) note(m, quota ? `${an} couldn't answer: its AI service has hit its usage limit (quota) for now. Try again later, or pick another assistant in the Home Screen settings.`
+          : `${an} couldn't answer: its conversation agent reported an error. Check that integration (for example its API key) in Settings → Devices & services, or pick another assistant in the Home Screen settings.`);
         // answer cards: weather / calendar, from this Home Assistant's own states (read only)
         const kind = hvAssistCardKind(text, r); if (kind === 'weather') hvAssistWeather(hub, m, keep); else if (kind === 'calendar') hvAssistCalendar(hub, m, text, keep);
         // the agent itself may have tried a timer (HassStartTimer needs a satellite): fall back to ours
