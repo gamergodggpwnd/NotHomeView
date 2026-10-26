@@ -64,11 +64,15 @@ After you install NotHomeView and open any dashboard as an **administrator**, a 
 *Would you like to add new dashboard "NotHomeView" to your dashboard list?*
 
 * **Add** creates a new dashboard called **NotHomeView** (sidebar and *Settings › Dashboards*, address `/nothome-view`,
-  or `/nothome-view-2` … when that one is taken) and fills it for you:
-  * a **Home Screen** with an app for every page, your weather, your calendars and a person;
-  * a **Home** page with a bit of everything, and app pages for **Lights, Climate, Security** (alarm, cameras, door / window /
-    motion sensors), **Media, Garage / covers, Locks, Calendar** and **Rooms** (one page per area);
-  * the buttons come from your own entities, grouped by type and area. Hidden, disabled, unavailable and
+  or `/nothome-view-2` … when that one is taken) and fills it for you, laid out like the example dashboard:
+  * a **Home Screen**: greeting with your name and avatar, four app icons (Home plus Security, Music and Weather when you
+    have them), a Photos tile, Now Playing, the new **House** tile and a full-width Calendar with the weather (a soft
+    wallpaper is shown until you add photos);
+  * a **Home** page (thermostat, clock, garage, lights, music, scenes, calendar, TV, camera, people, locks, rooms) and pages
+    for **Lights, Climate** (thermostats, fans, temperature / humidity), **Security** (cameras, alarm, locks, door / window /
+    motion sensors), **Media, Garage / covers, Calendar** and **Rooms** (one page per area), each with the chips row on top
+    and big glass tiles that follow the Night / Day / Auto theme;
+  * the tiles come from your own entities, grouped by type and area. Hidden, disabled, unavailable and
     configuration / diagnostic entities are left out, and a page with nothing on it is not added;
   * it only uses NotHomeView cards and Home Assistant's own cards, so it works without browser_mod, Wallpanel, card-mod or
     button-card (install them later for the popups and the screensaver).
@@ -85,9 +89,23 @@ of its editor, or open the browser console (F12) on any dashboard and run `NotHo
 `NotHomeView.dryRun()` returns the dashboard it would create (as JSON) without saving anything, and
 `NotHomeView.resetSetup()` forgets your earlier answer.
 
-| Generated Home Screen | Generated Home page | Generated Lights page |
+| Generated Home Screen | Generated Home page (Night) | Generated Lights page (Day) |
 |---|---|---|
-| ![Home Screen](docs/images/v1.31.0/generated_main.png) | ![Home page](docs/images/v1.31.0/generated_home.png) | ![Lights page](docs/images/v1.31.0/generated_lights.png) |
+| ![Home Screen](docs/images/v1.31.0/generated_home_screen.png) | ![Home page](docs/images/v1.31.0/generated_home_night.png) | ![Lights page](docs/images/v1.31.0/generated_lights_day.png) |
+
+| Climate (Night) | Security (Day) | Home Screen on a phone |
+|---|---|---|
+| ![Climate page](docs/images/v1.31.0/generated_climate_night.png) | ![Security page](docs/images/v1.31.0/generated_security_day.png) | ![Phone](docs/images/v1.31.0/generated_home_screen_phone.png) |
+
+Also new in this release (used by the generated dashboard, available to everyone):
+
+* **NotHomeView House** card (`custom:homeview-house-card`): a drawn house with labels for `weather`, `garage`, `lights`
+  (a list; shows how many are on, `lights_path` opens a page), `climate` and `lock`. Only the labels you set are shown. The
+  windows light up when lights are on after dark and the garage door follows its state. Put it in a Home Screen tile with
+  *Sky background* on for the live sky behind it.
+* Home Screen card: `wallpaper` (any CSS background, shown when there are no photos) and `full_width: true` (also on the
+  Page Grid card): the page uses the whole window without the example's style template.
+* Chips card: `count_entities` on a chip shows how many of those entities are on (a "Lights on" chip without a helper sensor).
 
 *(Screenshots made with sample data.)*
 

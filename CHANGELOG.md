@@ -4,13 +4,16 @@
 
 ### New features
 * First-run setup: an administrator opening a dashboard is asked once whether to add a ready-made "NotHomeView" dashboard.
-  **Add** creates it (storage dashboard `nothome-view`, or the next free address) with a Home Screen plus Home, Lights, Climate,
-  Security, Media, Garage / covers, Locks, Calendar and Rooms pages, built from the entities, devices and areas of that
-  Home Assistant (hidden, disabled, unavailable and config / diagnostic entities skipped; empty pages left out), then offers
-  to open it. **No** is remembered per browser and per user. Never shown to non-admins, on kiosk / wall-panel screens, or when
-  a NotHomeView dashboard already exists.
+  **Add** creates it (storage dashboard `nothome-view`, or the next free address), laid out like the example dashboard: a Home
+  Screen (greeting, 4 apps, Photos, Now Playing, House tile, Calendar with weather, default wallpaper) plus Home, Lights,
+  Climate, Security, Media, Garage / covers, Calendar and Rooms pages with the chips row and Night / Day / Auto glass tiles,
+  built from the entities, devices and areas of that Home Assistant (hidden, disabled, unavailable and config / diagnostic
+  entities skipped; empty pages left out), then offers to open it. **No** is remembered per browser and per user. Never shown
+  to non-admins, on kiosk / wall-panel screens, or when a NotHomeView dashboard already exists.
 * "Create NotHomeView dashboard" button in the Home Screen card editor; `NotHomeView.setup()`, `NotHomeView.dryRun()` and
   `NotHomeView.resetSetup()` in the browser console.
+* New NotHomeView House card (`custom:homeview-house-card`): drawn house with weather / garage / lights-on / climate / lock labels.
+* Home Screen card `wallpaper` and `full_width`; Page Grid card `full_width`; chips `count_entities`.
 
 ## 1.30.7 – 2026-10-25
 
