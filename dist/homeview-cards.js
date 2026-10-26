@@ -3042,6 +3042,7 @@ class HVChipsCard extends HTMLElement {
       else if (d === 'climate') { const t = s.attributes.current_temperature; val = t != null ? (Math.round(t * 10) / 10) + '°' : (h.formatEntityState ? h.formatEntityState(s) : s.state); on = s.attributes.hvac_action === 'heating' || s.attributes.hvac_action === 'cooling'; }
       else { val = h.formatEntityState ? h.formatEntityState(s) : s.state; on = ['on', 'open', 'opening', 'home', 'playing', 'unlocked'].includes(s.state); }
     }
+    if (!s && Array.isArray(ch.count_entities)) { const n = ch.count_entities.filter(i => h.states[i] && ['on', 'open', 'playing', 'unlocked'].includes(h.states[i].state)).length; val = String(n); on = n > 0; } // 1.31.0
     if (ch.show_state === false || this._config.show_state === false && ch.show_state !== true) val = '';
     return { s, d, name, val, on: on && ch.highlight !== false, unavailable: !!(s && s.state === 'unavailable') };
   }
@@ -3434,7 +3435,7 @@ const HUB_APPS = [
   { name: 'Music', icon: 'mdi:music-note', color_from: '#ff6b81', color_to: '#f5163d', kind: 'now_playing' },
   { name: 'Weather', icon: 'mdi:weather-partly-cloudy', color_from: '#5ec8ff', color_to: '#1a73e8', kind: 'weather' }];
 const HUB_CSS = `:host{display:block;position:relative;font-family:${FONT};color:#fff;-webkit-tap-highlight-color:transparent}
-.bg{position:fixed;inset:0;z-index:-1;pointer-events:none;overflow:hidden;background:radial-gradient(120% 90% at 20% 10%,#4b3a66 0%,#1c1a33 55%,#0d0f1a 100%)}
+.bg{position:fixed;inset:0;z-index:-1;pointer-events:none;overflow:hidden;background:var(--hv-wall,radial-gradient(120% 90% at 20% 10%,#4b3a66 0%,#1c1a33 55%,#0d0f1a 100%))}
 :host([contained]) .bg{position:absolute;border-radius:24px;z-index:0}
 .bgi{position:absolute;inset:calc(-2 * var(--blur,32px));background-size:cover;background-position:center;filter:blur(var(--blur,32px)) saturate(1.35);transform:scale(1.08);opacity:0;transition:opacity 2.2s ease}
 .bgi.on{opacity:1}
@@ -3960,6 +3961,7 @@ class HVHubCard extends HTMLElement {
   static getStubConfig(hass) { return { apps: HUB_APPS.map(a => Object.assign({}, a)), calendar_entities: Object.keys((hass && hass.states) || {}).filter(k => k.startsWith('calendar.')).slice(0, 3) }; }
   static getConfigElement() { return document.createElement('homeview-hub-card-editor'); }
   setConfig(c) { if (!c) throw new Error('Invalid configuration'); const old = this._config, nc = Object.assign({}, HVHubCard.defaults, c);
+    if (nc.wallpaper && typeof nc.wallpaper === 'string') this.style.setProperty('--hv-wall', nc.wallpaper); else this.style.removeProperty('--hv-wall'); // 1.31.0
     this._blurX = c.blur !== undefined && c.blur !== null && c.blur !== '' && Number(c.blur) !== HVHubCard.defaults.blur; // an explicit Advanced blur (not the default value) stays exactly as set; the default one follows the transparency slider
     if (!Array.isArray(nc.apps) || !nc.apps.length) nc.apps = HUB_APPS;
     const BG = ['bg_transparency', 'blur', 'dim', 'photo_backdrop', 'bg_freeze'], rest = o => JSON.stringify(Object.keys(o).filter(k => !BG.includes(k)).sort().map(k => [k, o[k]]));
@@ -4548,6 +4550,7 @@ const HUB_SCHEMA = [
     { type: 'grid', name: '', schema: [n_('photo_interval', 5, 600, 1, 's'), { name: 'photo_order', selector: { select: { mode: 'dropdown', options: [{ value: 'random', label: 'Random' }, { value: 'sorted', label: 'In order' }] } } }] },
     { type: 'grid', name: '', schema: [{ name: 'photo_backdrop', selector: { boolean: {} } }, { name: 'bg_freeze', selector: { boolean: {} } }] },
     { name: 'bg_transparency', selector: { number: { min: 0, max: 100, step: 1, mode: 'slider', unit_of_measurement: '%' } } },
+    { name: 'wallpaper', selector: { text: {} } },
     { type: 'expandable', name: '', flatten: true, title: 'Advanced background', icon: 'mdi:tune-variant', schema: [
       { type: 'grid', name: '', schema: [n_('blur', 0, 120, 1, 'px'), n_('dim', 0, 0.9, 0.02)] }] },
     { type: 'grid', name: '', schema: [{ name: 'photo_tap', selector: { select: { mode: 'dropdown', options: [{ value: 'viewer', label: 'Photo viewer (previous / next, add pictures)' }, { value: 'screensaver', label: 'Start the screensaver' }, { value: 'fullscreen', label: 'Full-screen photo (just the picture)' }, { value: 'none', label: 'Nothing' }] } } },
@@ -4583,7 +4586,7 @@ const HUB_SCHEMA = [
     { name: 'swipe_screensaver', selector: { select: { mode: 'dropdown', options: [{ value: 'auto', label: 'Auto (when the screensaver is on here)' }, { value: 'on', label: 'On' }, { value: 'off', label: 'Off' }] } } }, { name: 'ss_hold', selector: { boolean: {} } }] }];
 Object.assign(LABELS, { apps: 'Apps (drag to reorder, pencil to edit)', person: 'Person (empty = the logged-in user)', fallback_person: 'Fallback person (no match)', ring_color: 'Avatar ring colour / gradient',
   morning_start: 'Morning from (hour)', afternoon_start: 'Afternoon from', evening_start: 'Evening from', night_start: 'Night from (empty = evening until morning)', greeting_night: 'Night greeting', greeting_morning: 'Morning greeting', greeting_afternoon: 'Afternoon greeting', greeting_evening: 'Evening greeting',
-  photo_source: 'Photo source (empty = the Wallpanel screensaver\'s, e.g. media-source://media_source/local/)', photo_interval: 'Next photo every', photo_order: 'Order', blur: 'Background blur (px)', dim: 'Edge darkening for text readability (0-0.9)', photo_backdrop: 'Show the current photo, blurred, behind the page', bg_freeze: 'Freeze the blurred background while the Home Screen is showing', bg_transparency: 'Background transparency',
+  wallpaper: 'Wallpaper when there are no photos (any CSS background, e.g. a colour or gradient)', photo_source: 'Photo source (empty = the Wallpanel screensaver\'s, e.g. media-source://media_source/local/)', photo_interval: 'Next photo every', photo_order: 'Order', blur: 'Background blur (px)', dim: 'Edge darkening for text readability (0-0.9)', photo_backdrop: 'Show the current photo, blurred, behind the page', bg_freeze: 'Freeze the blurred background while the Home Screen is showing', bg_transparency: 'Background transparency',
   photo_tap: 'Tapping Photos', photo_label: 'Photos label', photo_viewer_nav: 'Viewer: Previous / Next buttons', photo_viewer_swipe: 'Viewer: swipe left / right to change picture', photo_viewer_add: 'Viewer: View Gallery button', photo_gallery_upload: 'Gallery: let people upload new pictures', photo_viewer_pause: 'Pause the screensaver while the viewer is open', show_calendar: 'Show the calendar', calendar_show_weather: 'Forecast per day', calendar_entities: 'Calendars (empty = all)', calendar_layout: 'Calendar layout',
   calendar_columns: 'Days side by side', calendar_rows: 'Rows of days (phones always stack)', calendar_days: 'Days to load', calendar_title: 'Calendar title', calendar_min_height: 'Calendar min height', max_icon: 'Largest app icon', photo_max_aspect: 'Photos widget: widest aspect (w/h)', photo_size: 'Photos tile size', side_sizes: 'Extra tiles\' sizes, in order: S = square, W = wide (e.g. S, S)', side_portrait: 'Tiles that don\'t fit beside the apps', row_units: 'Landscape: units beside the apps (icons shrink to fit)',
   assistant_enabled: 'Assistant on this Home Screen', assistant_button: 'Mic button beside the avatar', assistant_pipeline: 'Assist pipeline', assistant_theme: 'Assistant look',
@@ -4674,6 +4677,74 @@ for (const [tag, cls, name, description] of CARDS) {
   if (!window.customCards.some(c => c.type === tag)) window.customCards.push({ type: tag, name, description, preview: true });
 }
 console.info(`%c HOMEVIEW-CARDS %c ${HV_VERSION} `, 'color:#fff;background:#6e5ad2;font-weight:700;border-radius:4px 0 0 4px', 'color:#6e5ad2;background:#ece8ff;border-radius:0 4px 4px 0');
+/* ---------------- House card (1.31.0) ----------------
+   A drawn house with corner labels (weather, garage, lights, climate, lock), for the Home Screen's picture tile. No pictures,
+   no plugins: labels only for the entities you set; the windows glow when lights are on after dark; the garage door follows
+   the cover. In a Home Screen tile with "Sky background" on it sits over the live sky. */
+const HOUSE_SVG = (garageOpen, glow, day) => { const w = glow ? '#ffd27a' : day ? '#bcd8f0' : '#3b4a63', wf = glow ? 'url(#hvg)' : w;
+  return `<svg viewBox="0 0 400 250" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMax meet"><defs>
+<linearGradient id="hvw" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${day ? '#f4efe6' : '#c9c3ba'}"/><stop offset="1" stop-color="${day ? '#ddd5c8' : '#9d978f'}"/></linearGradient>
+<linearGradient id="hvr" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5b5552"/><stop offset="1" stop-color="#3d3836"/></linearGradient>
+<radialGradient id="hvg" cx=".5" cy=".5" r=".7"><stop offset="0" stop-color="#fff1c4"/><stop offset="1" stop-color="#ffb648"/></radialGradient>
+<linearGradient id="hvd" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${day ? '#f7f7f5' : '#d7d5d0'}"/><stop offset="1" stop-color="${day ? '#e2e1dc' : '#aaa8a2'}"/></linearGradient></defs>
+<ellipse cx="200" cy="236" rx="190" ry="12" fill="rgba(0,0,0,.18)"/>
+<rect x="0" y="226" width="400" height="24" fill="${day ? '#7fae5e' : '#2f4a2c'}"/><path d="M228 250 L262 226 L352 226 L360 250Z" fill="${day ? '#b8b4ad' : '#5d5a55'}"/>
+<g><path d="M30 120 L115 52 L200 120Z" fill="url(#hvr)"/><rect x="42" y="118" width="146" height="110" fill="url(#hvw)"/>
+<rect x="56" y="132" width="34" height="30" rx="2" fill="${wf}"/><rect x="140" y="132" width="34" height="30" rx="2" fill="${wf}"/>
+<rect x="56" y="180" width="34" height="30" rx="2" fill="${wf}"/><rect x="100" y="172" width="30" height="56" rx="2" fill="#6b4a34"/><circle cx="124" cy="202" r="2" fill="#e8c27a"/>
+<rect x="140" y="180" width="34" height="30" rx="2" fill="${wf}"/><path d="M96 92 L115 76 L134 92 L134 108 L96 108Z" fill="${wf}" opacity=".9"/>
+<rect x="150" y="62" width="16" height="34" fill="#4a4442"/></g>
+<g><path d="M188 150 L274 104 L372 150Z" fill="url(#hvr)"/><rect x="198" y="148" width="164" height="80" fill="url(#hvw)"/>
+<rect x="214" y="164" width="132" height="64" rx="3" fill="${garageOpen ? '#1d1f24' : 'url(#hvd)'}"/>
+${garageOpen ? '<rect x="214" y="164" width="132" height="12" rx="2" fill="url(#hvd)"/>' : [176, 188, 200, 212].map(y => `<rect x="214" y="${y}" width="132" height="1.4" fill="rgba(0,0,0,.12)"/>`).join('')}</g>
+<g><path d="M14 228 L34 150 L54 228Z" fill="${day ? '#3f7a3d' : '#1f3a22'}"/><path d="M19 196 L34 128 L49 196Z" fill="${day ? '#4d8c49' : '#27462a'}"/><rect x="31" y="226" width="6" height="8" fill="#5a3f2b"/></g></svg>`; };
+const HOUSE_CSS = `:host{display:block;height:100%} ha-card{position:relative;height:100%;overflow:hidden;border-radius:var(--ha-card-border-radius,22px);background:none;border:none;box-shadow:none;container-type:size}
+#hroot{position:absolute;inset:0} .h{position:absolute;left:24%;right:6%;bottom:4%;top:34%;display:flex;align-items:flex-end;justify-content:center} .h svg{width:100%;height:100%;filter:drop-shadow(0 6px 10px rgba(0,0,0,.25))}
+.l{position:absolute;font-family:${FONT};color:var(--hl,#fff);text-shadow:0 1px 4px rgba(0,0,0,.45);line-height:1.15;cursor:pointer;font-size:max(8px,4cqw);white-space:nowrap}
+.l b{display:block;font-size:1.32em;font-weight:700} .l i{display:block;font-style:normal;opacity:.8} .l small{display:block;font-size:.8em;letter-spacing:.08em;text-transform:uppercase;opacity:.85}
+:host([day]) .l{--hl:#16202c;text-shadow:0 1px 3px rgba(255,255,255,.6)} .tl{left:5%;top:5%} .tr{right:5%;top:5%;text-align:right} .ml{left:5%;top:36%} .bl{left:5%;bottom:5%} .br{right:5%;top:27%;text-align:right}`;
+class HVHouseCard extends HTMLElement {
+  constructor() { super(); this.attachShadow({ mode: 'open' }); }
+  static getStubConfig(hass) { const k = Object.keys((hass && hass.states) || {}); return { weather: k.find(x => x.startsWith('weather.')) || '', garage: k.find(x => x.startsWith('cover.')) || '' }; }
+  setConfig(c) { this._config = Object.assign({}, c || {}); this._sig = null; this._paint(); }
+  set hass(h) { this._hass = h; this._paint(); }
+  getCardSize() { return 4; }
+  getGridOptions() { return { columns: 6, rows: 4 }; }
+  _paint() { const h = this._hass, c = this._config; if (!h || !c) return; const S = h.states, st = id => id && S[id], t = (id, s) => h.formatEntityState ? h.formatEntityState(S[id], s) : s;
+    const day = (S['sun.sun'] || {}).state !== 'below_horizon', lights = (c.lights || []).filter(id => st(id)), on = lights.filter(id => S[id].state === 'on').length;
+    const gar = st(c.garage), wx = st(c.weather), cl = st(c.climate), lk = st(c.lock), U = (h.config && h.config.unit_system && h.config.unit_system.temperature) || '°';
+    const lab = [];
+    if (wx) lab.push(['tl', 'Weather', wx.attributes.temperature != null ? `${Math.round(wx.attributes.temperature)}${U}` : '', t(c.weather, wx.state), c.weather]);
+    if (gar) lab.push(['tr', 'Garage', t(c.garage, gar.state), gar.attributes.friendly_name || '', c.garage]);
+    if (lights.length) lab.push(['ml', 'Home', `${on} light${on === 1 ? '' : 's'} on`, 'Lights', null, c.lights_path]);
+    if (cl) lab.push(['bl', 'Climate', cl.attributes.current_temperature != null ? `${cl.attributes.current_temperature}${U}` : t(c.climate, cl.state), cl.attributes.hvac_action ? t(c.climate, cl.attributes.hvac_action) : t(c.climate, cl.state), c.climate]);
+    if (lk) lab.push(['br', lk.attributes.friendly_name || 'Lock', t(c.lock, lk.state), '', c.lock]);
+    const sig = JSON.stringify([day, gar && gar.state, on > 0 && !day, lab]); if (sig === this._sig) return; this._sig = sig;
+    this.toggleAttribute('day', day);
+    this.shadowRoot.innerHTML = `<style>${HOUSE_CSS}</style><ha-card><div id="hroot"><div class="h">${HOUSE_SVG(gar && gar.state !== 'closed', on > 0 && !day, day)}</div>
+      ${lab.map(([p, a, b, i], k) => `<div class="l ${p}" data-k="${k}"><small>${esc(a)}</small><b>${esc(b)}</b>${i ? `<i>${esc(i)}</i>` : ''}</div>`).join('')}</div></ha-card>`;
+    this.shadowRoot.querySelectorAll('.l').forEach(n => n.addEventListener('click', e => { e.stopPropagation(); const L = lab[Number(n.dataset.k)];
+      if (L[5]) hvNavigate(L[5]); else if (L[4]) fire(this, 'hass-more-info', { entityId: L[4] }); })); }
+}
+if (!customElements.get('homeview-house-card')) customElements.define('homeview-house-card', HVHouseCard);
+(window.customCards = window.customCards || []).push({ type: 'homeview-house-card', name: 'NotHomeView House', description: 'A drawn house with weather, garage, lights, climate and lock labels (for the Home Screen picture tile).', preview: false });
+// full_width: true on the Home Screen / page grid card -> its sections view uses the whole window (one full-width column),
+// the same as the example dashboard's style template does; without the template or button-card. (1.31.0)
+function hvFullWidth(el) { let n = el; for (let i = 0; i < 60 && n; i++) { if (n.tagName === 'HUI-SECTIONS-VIEW') { if (n.style.getPropertyValue('--column-max-width') !== '100vw') n.style.setProperty('--column-max-width', '100vw'); return true; }
+  n = n.parentNode || n.host || null; if (n && n.nodeType === 11) n = n.host; } return false; }
+for (const t of ['homeview-hub-card', 'homeview-grid-card']) { const C = customElements.get(t); if (!C || C.prototype.__hvFw) continue; C.prototype.__hvFw = true; const sc = C.prototype.setConfig;
+  C.prototype.setConfig = function (c) { const r = sc.apply(this, arguments); if (c && c.full_width) { let k = 0; const go = () => { if (!(this.isConnected && hvFullWidth(this)) && ++k < 12) setTimeout(go, 400); }; setTimeout(go, 0); } return r; }; }
+// generated pages (full_width grids): the core clock tile follows the page's Night / Day look, like the NotHomeView tiles next to it
+function hvClockTint(grid) { const sr = grid.shadowRoot; if (!sr) return; const clocks = [], tiles = [];
+  const walk = r => { for (const e of r.querySelectorAll('*')) { if (e.tagName === 'HUI-CLOCK-CARD') clocks.push(e); else { if (/^HOMEVIEW-/.test(e.tagName)) tiles.push(e); if (e.shadowRoot) walk(e.shadowRoot); } } }; walk(sr);
+  if (!clocks.length) return; const day = tiles.some(t => t.hasAttribute('day') || t.hasAttribute('hv-day'));
+  const V = day ? { '--ha-card-background': '#ffffff', '--card-background-color': '#ffffff', '--ha-card-border-color': 'rgba(0,0,0,.05)', '--primary-text-color': '#14263b', '--secondary-text-color': '#4b6079' }
+    : { '--ha-card-background': 'linear-gradient(150deg,rgba(255,255,255,.15) 0%,rgba(255,255,255,.07) 100%)', '--card-background-color': '#262827', '--ha-card-border-color': 'rgba(255,255,255,.25)', '--primary-text-color': '#ffffff', '--secondary-text-color': 'rgba(255,255,255,.66)' };
+  const t0 = tiles.find(t => t.shadowRoot && t.shadowRoot.querySelector('ha-card')); if (t0) V['--ha-card-border-radius'] = getComputedStyle(t0.shadowRoot.querySelector('ha-card')).borderRadius;
+  for (const c of clocks) for (const k in V) if (c.style.getPropertyValue(k) !== V[k]) c.style.setProperty(k, V[k]); }
+{ const C = customElements.get('homeview-grid-card'), d = C && Object.getOwnPropertyDescriptor(C.prototype, 'hass');
+  if (d && d.set && !C.prototype.__hvCt) { C.prototype.__hvCt = true; Object.defineProperty(C.prototype, 'hass', { configurable: true, get: d.get, set(h) { d.set.call(this, h);
+    if (this._config && this._config.full_width) { const t = Date.now(); if (!(this.__ctT > t - 1500)) { this.__ctT = t; setTimeout(() => hvClockTint(this), 300); } } } }); } }
 /* ---------------- first-run setup: "Add the NotHomeView dashboard?" ----------------
    Once NotHomeView is installed, an admin opening a dashboard is asked (once) whether to add a ready-made "NotHomeView"
    dashboard. Add: a new storage dashboard is created and filled with a Home Screen plus app pages, built from this Home
@@ -4684,11 +4755,13 @@ console.info(`%c HOMEVIEW-CARDS %c ${HV_VERSION} `, 'color:#fff;background:#6e5a
    Bring it back: the "Create NotHomeView dashboard" button in the Home Screen card editor, or NotHomeView.setup() in the
    browser console. NotHomeView.dryRun() returns the generated dashboard config without saving anything. */
 const HV_SETUP_KEY = 'nothomeview_setup', HV_SETUP_LS = 'nothomeview-setup';
-const HV_SETUP_BG = 'radial-gradient(120% 90% at 20% 10%, #33305a 0%, #17172b 55%, #0c0d16 100%) fixed';
+const HV_SETUP_BG = 'center / cover no-repeat fixed #0d0f0e'; // pages: same as the example dashboard
+// Home Screen wallpaper until photos are added (a soft dusk gradient; no picture files needed)
+const HV_SETUP_WALL = 'radial-gradient(60% 50% at 15% 18%, #d09a6a 0%, rgba(208,154,106,0) 70%), radial-gradient(55% 50% at 85% 25%, #7f97c6 0%, rgba(127,151,198,0) 70%), radial-gradient(70% 60% at 55% 95%, #6e4a3a 0%, rgba(110,74,58,0) 70%), linear-gradient(160deg, #464a63 0%, #2b2633 100%)';
 const HV_SETUP_APPS = { // page -> look of its Home Screen app icon
   lights: ['Lights', 'mdi:lightbulb-group', '#ffd36b', '#ff9f0a'], climate: ['Climate', 'mdi:thermostat', '#ffb37a', '#ff6a3d'],
   security: ['Security', 'mdi:shield-home', '#5b8cff', '#2b3fd6'], media: ['Media', 'mdi:speaker', '#ff6b81', '#f5163d'],
-  garage: ['Garage', 'mdi:garage-variant', '#9aa7b8', '#4d5a6b'], locks: ['Locks', 'mdi:lock', '#6be0a8', '#16a36a'],
+  garage: ['Garage', 'mdi:garage-variant', '#9aa7b8', '#4d5a6b'],
   calendar: ['Calendar', 'mdi:calendar', '#ff8a80', '#e53935'], rooms: ['Rooms', 'mdi:sofa-outline', '#c5a3ff', '#7c4dff'] };
 const hvSlug = s => String(s || '').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'x';
 // pure: data = { states, entities, devices, areas } -> { config, summary }. url = the dashboard's url_path.
@@ -4704,67 +4777,96 @@ function hvSetupBuild(data, url) {
   const all = Object.keys(st).filter(ok).sort((x, y) => (aName(areaOf(x)) || '\uffff').localeCompare(aName(areaOf(y)) || '\uffff') || nm(x).localeCompare(nm(y)));
   const dom = (d, f) => all.filter(i => i.startsWith(d + '.') && (!f || f(st[i].attributes || {}, i)));
   const dc = a => a.device_class || '';
-  const G = (c, cols, rows) => Object.assign(c, { grid_options: { columns: cols || 3, rows: rows || 2 } });
-  const tile = id => { const d = id.split('.')[0], a = st[id].attributes || {}, name = nm(id);
-    if (d === 'light') return G({ type: 'custom:homeview-light-card', entity: id, name });
-    if (d === 'climate') return G({ type: 'custom:homeview-thermostat-card', entity: id, name });
+  // same card set-up as the example dashboard (examples/homeview-example-sections.yaml): 3x2 tiles, 6x4 heroes, day_light on
+  const G = (c, cols, rows) => Object.assign(c, { day_light: true, grid_options: { columns: cols || 3, rows: rows || 2 } });
+  const ICON = { temperature: 'mdi:thermometer', humidity: 'mdi:water-percent', lock: 'mdi:lock', alarm_control_panel: 'mdi:shield-home', switch: 'mdi:power-socket', fan: 'mdi:fan', vacuum: 'mdi:robot-vacuum', humidifier: 'mdi:air-humidifier', water_heater: 'mdi:water-boiler', valve: 'mdi:valve',
+    door: 'mdi:door', garage_door: 'mdi:garage', window: 'mdi:window-closed-variant', opening: 'mdi:door', motion: 'mdi:motion-sensor', occupancy: 'mdi:home-account', presence: 'mdi:home-account', smoke: 'mdi:smoke-detector',
+    gas: 'mdi:gas-cylinder', carbon_monoxide: 'mdi:molecule-co', moisture: 'mdi:water-alert', tamper: 'mdi:shield-alert', safety: 'mdi:shield-alert', vibration: 'mdi:vibrate', blind: 'mdi:blinds', shade: 'mdi:roller-shade',
+    curtain: 'mdi:curtains', shutter: 'mdi:window-shutter', awning: 'mdi:awning-outline', cover: 'mdi:window-shutter' };
+  const icon = id => { const a = st[id].attributes || {}, d = id.split('.')[0]; return a.icon || ICON[dc(a)] || ICON[d] || undefined; };
+  const roomOf = id => aName(areaOf(id));
+  const tile = (id, hero) => { const d = id.split('.')[0], a = st[id].attributes || {}, name = nm(id), room = roomOf(id);
+    if (d === 'light') return G(Object.assign({ type: 'custom:homeview-light-card', entity: id, name, show_state: true }, room && room !== name ? { room } : {}));
+    if (d === 'climate') return G({ type: 'custom:homeview-thermostat-card', entity: id, name, step: Number(a.target_temp_step) || 0.5 }, hero ? 6 : 3, hero ? 4 : 2);
     if (d === 'cover' && /garage|gate/.test(dc(a))) return G({ type: 'custom:homeview-garage-card', entity: id, name, confirm: true });
-    if (d === 'camera') return G({ type: 'custom:homeview-camera-card', entity: id }, 6, 2);
-    if (d === 'media_player') return G({ type: 'custom:homeview-music-card', entity: id, name });
-    if (d === 'scene' || d === 'script') return G({ type: 'custom:homeview-scene-card', entity: id, name });
+    if (d === 'camera') return G({ type: 'custom:homeview-camera-card', entity: id, name, size: '2x6' }, 6, 2);
+    if (d === 'media_player') return dc(a) === 'tv' ? G({ type: 'custom:homeview-tv-card', entity: id, name }) : G({ type: 'custom:homeview-music-card', entity: id, name, show_artist: true, np_show_extra: false });
+    if (d === 'scene' || d === 'script') return G({ type: 'custom:homeview-scene-card', entity: id, name, icon: a.icon || (d === 'scene' ? 'mdi:palette' : 'mdi:script-text') });
     if (d === 'person') return G({ type: 'custom:homeview-person-card', entity: id });
-    return G({ type: 'custom:homeview-entity-card', entity: id, name }); };
+    const c = { type: 'custom:homeview-entity-card', entity: id, name }; if (icon(id)) c.icon = icon(id); if (d === 'sensor') c.active = 'never'; return G(c); };
+  const clock = () => G({ type: 'clock', clock_style: 'analog', clock_size: 'small', show_seconds: true, seconds_motion: 'continuous', ticks: 'minute', face_style: 'numbers_upright', border: false });
   const SEC_BS = ['door', 'window', 'garage_door', 'opening', 'motion', 'occupancy', 'presence', 'smoke', 'gas', 'carbon_monoxide', 'moisture', 'tamper', 'safety', 'lock', 'vibration'];
   const lights = dom('light'), climate = dom('climate'), covers = dom('cover'), locks = dom('lock'), cams = dom('camera'), alarms = dom('alarm_control_panel');
   const players = dom('media_player'), scenes = dom('scene'), people = dom('person'), cals = dom('calendar');
   const sensors = dom('binary_sensor', a => SEC_BS.includes(dc(a))).slice(0, 24);
   const weather = (dom('weather').find(i => /forecast_home|^weather\.home$/.test(i)) || dom('weather')[0]) || '';
+  const garage = covers.filter(i => /garage|gate/.test(dc(st[i].attributes || {})));
+  const music = players.filter(i => dc(st[i].attributes || {}) !== 'tv'), player = music[0] || players[0];
   const ROOM_D = /^(light|switch|fan|climate|cover|lock|media_player|camera|humidifier|vacuum|valve|water_heater)\./;
   const rooms = []; for (const [aid, a] of areas) { const ids = all.filter(i => ROOM_D.test(i) && areaOf(i) === aid); if (ids.length) rooms.push({ aid, name: a.name || aid, icon: a.icon || 'mdi:sofa-outline', ids, path: 'room-' + hvSlug(aid) }); }
   rooms.sort((x, y) => x.name.localeCompare(y.name));
+  const roomTile = r => { const L = r.ids.filter(i => i.startsWith('light.'));
+    return L.length ? G({ type: 'custom:homeview-group-card', name: r.name, icon: r.icon, entities: L, label: '{count} lights on', tap_action: { action: 'navigate', navigation_path: P(r.path) } })
+      : G({ type: 'custom:homeview-nav-card', name: r.name, icon: r.icon, navigation_path: P(r.path) }); };
   // pages that have something on them
   const pages = [];
-  if (lights.length) pages.push({ key: 'lights', cards: lights.slice(0, 60).map(tile) });
-  if (climate.length) pages.push({ key: 'climate', cards: climate.map(tile) });
-  if (alarms.length || cams.length || sensors.length) pages.push({ key: 'security', cards: [...alarms, ...cams, ...sensors].map(tile) });
-  if (players.length) pages.push({ key: 'media', cards: players.slice(0, 24).map(tile) });
-  if (covers.length) pages.push({ key: 'garage', cards: covers.map(tile) });
-  if (locks.length) pages.push({ key: 'locks', cards: locks.map(tile) });
-  if (cals.length) pages.push({ key: 'calendar', cards: [G({ type: 'custom:homeview-calendar-card', entities: cals.slice(0, 8), title: 'Calendar' }, 12, 8)] });
-  if (rooms.length) pages.push({ key: 'rooms', cards: rooms.map(r => G({ type: 'custom:homeview-nav-card', name: r.name, icon: r.icon, navigation_path: P(r.path) })) });
+  if (lights.length) pages.push({ key: 'lights', cards: lights.slice(0, 60).map(i => tile(i)) });
+  const heroC = [...climate.filter(i => /heating|cooling/.test((st[i].attributes || {}).hvac_action || '')), ...climate.filter(i => !/heating|cooling/.test((st[i].attributes || {}).hvac_action || ''))]; // a working thermostat first
+  const airs = [...dom('fan'), ...dom('humidifier'), ...dom('sensor', a => /^(temperature|humidity)$/.test(dc(a)))].slice(0, 12); // climate page: thermostats, then fans / humidifiers / temperature & humidity
+  if (climate.length || airs.length) pages.push({ key: 'climate', cards: [...heroC.map((i, k) => tile(i, k === 0 || climate.length <= 2)), ...airs.map(i => tile(i))] });
+  if (alarms.length || cams.length || sensors.length || locks.length) pages.push({ key: 'security', cards: [...cams.slice(0, 1), ...alarms, ...locks, ...cams.slice(1), ...sensors].map(i => tile(i)) });
+  if (players.length) pages.push({ key: 'media', cards: [...music, ...players.filter(i => !music.includes(i))].slice(0, 24).map(i => tile(i)) });
+  if (covers.length) pages.push({ key: 'garage', cards: covers.map(i => tile(i)) });
+  if (cals.length) pages.push({ key: 'calendar', cards: [G({ type: 'custom:homeview-calendar-card', entities: cals.slice(0, 8), days: 7, max_events: 5, show_weather: !!weather, weather_entity: weather || undefined }, 12, 8)] });
+  if (rooms.length) pages.push({ key: 'rooms', cards: rooms.map(roomTile) });
+  const has = k => pages.some(p => p.key === k);
   const chips = here => { const c = [{ name: 'Hub', icon: 'mdi:apps', tap_action: { action: 'navigate', navigation_path: P('main') } }];
     if (here !== 'home') c.push({ name: 'Home', icon: 'mdi:home-outline', tap_action: { action: 'navigate', navigation_path: P('home') } });
     if (rooms.length) c.push({ name: 'Rooms', icon: 'mdi:sofa-outline', room_picker: true, picker_title: 'Rooms', rooms: rooms.map(r => ({ name: r.name, icon: r.icon, navigation_path: P(r.path) })) });
-    for (const p of pages) if (p.key !== here && p.key !== 'rooms') c.push({ name: HV_SETUP_APPS[p.key][0], icon: HV_SETUP_APPS[p.key][1], tap_action: { action: 'navigate', navigation_path: P(p.key) } });
-    return { type: 'custom:homeview-chips-card', chips: c, grid_options: { columns: 'full', rows: 'auto' } }; };
-  const view = (path, title, icon, cards) => ({ type: 'sections', max_columns: 1, dense_section_placement: true, title, path, icon, subview: true, back_path: P('main'), background: HV_SETUP_BG,
-    sections: [{ type: 'grid', cards: [chips(path), { type: 'custom:homeview-grid-card', auto_rows: true, swipe_back: true, grid_options: { columns: 'full', rows: 'auto' }, cards }] }] });
-  // Home page: a little of everything
-  const garage = covers.filter(i => /garage|gate/.test(dc(st[i].attributes || {})));
+    for (const k of ['climate', 'calendar', 'security']) if (has(k) && k !== here) c.push({ name: HV_SETUP_APPS[k][0], icon: HV_SETUP_APPS[k][1], tap_action: { action: 'navigate', navigation_path: P(k) } });
+    if (lights.length) { const on = lights.filter(i => st[i].state === 'on').length; // "Lights on" count, like the example's count chip (no helper sensor needed)
+      c.push({ name: 'Lights on', icon: 'mdi:lightbulb-group', count_entities: lights.slice(0, 60), tap_action: { action: 'navigate', navigation_path: P('lights') } }); }
+    for (const i of [...lights.filter(i => st[i].state === 'on').slice(0, 2), ...climate.slice(0, 2)]) c.push({ entity: i, name: nm(i) });
+    return { type: 'custom:homeview-chips-card', day_light: true, chips: c, grid_options: { columns: 'full', rows: 'auto' } }; };
+  const TH = (data.themes || []).includes('HomeView Glass') ? { theme: 'HomeView Glass' } : {}; // the README's theme, when it is installed
+  const view = (path, title, icon, cards) => Object.assign({}, TH, { type: 'sections', max_columns: 1, dense_section_placement: true, title, path, icon, subview: true, back_path: P('main'), background: HV_SETUP_BG,
+    sections: [{ type: 'grid', cards: [chips(path), { type: 'custom:homeview-grid-card', full_width: true, portrait_shape: 'balanced', portrait_rows: 5, auto_rows: true, swipe_back: true, grid_options: { columns: 'full', rows: 'auto' }, cards }] }] });
+  // Home page, laid out like the example: thermostat hero, clock, garage, lights, Home, music, scenes, calendar, tv, cameras, people, rooms
   const lit = [...lights.filter(i => st[i].state === 'on'), ...lights.filter(i => st[i].state !== 'on')]; // lights that are on first
-  const home = [...climate.slice(0, 1), ...garage.slice(0, 1), ...lit.slice(0, 4), ...players.slice(0, 1), ...scenes.slice(0, 4), ...locks.slice(0, 2), ...people.slice(0, 3), ...cams.slice(0, 1)].map(tile);
-  if (!home.length) home.push(G({ type: 'clock', clock_style: 'analog' }));
+  const home = [...heroC.slice(0, 1).map(i => tile(i, true)), clock(), ...garage.slice(0, 1).map(i => tile(i)), ...lit.slice(0, 2).map(i => tile(i)),
+    ...(rooms.length ? [G({ type: 'custom:homeview-nav-card', name: 'Rooms', icon: 'mdi:sofa-outline', navigation_path: P('rooms') })] : []),
+    ...(player ? [tile(player)] : []), ...scenes.slice(0, 2).map(i => tile(i)),
+    ...(cals.length ? [G({ type: 'custom:homeview-calendar-card', entities: cals.slice(0, 4), days: 7, max_events: 5, show_weather: !!weather, weather_entity: weather || undefined }, 6, 4)] : []),
+    ...players.filter(i => dc(st[i].attributes || {}) === 'tv').slice(0, 1).map(i => tile(i)), ...cams.slice(0, 1).map(i => tile(i)), ...people.slice(0, 3).map(i => tile(i)),
+    ...locks.slice(0, 2).map(i => tile(i)), ...rooms.slice(0, 4).map(roomTile),
+    ...(has('climate') ? [G({ type: 'custom:homeview-nav-card', name: 'Climate', icon: 'mdi:thermostat', navigation_path: P('climate') })] : [])];
+  const app = k => { if (k === 'weather') return weather ? { name: 'Weather', icon: 'mdi:weather-partly-cloudy', color_from: '#5ec8ff', color_to: '#1a73e8', kind: 'weather', weather_entity: weather } : null;
+    if (!has(k)) return null; const [name, icon, a, b] = HV_SETUP_APPS[k];
+    return k === 'media' ? { name: 'Music', icon: 'mdi:music-note', color_from: a, color_to: b, kind: 'now_playing', entity: player, entities: players.filter(i => i !== player).slice(0, 5) }
+      : { name, icon, color_from: a, color_to: b, kind: 'navigate', navigation_path: k }; };
   const apps = [{ name: 'Home', icon: 'hv:home', color_from: '#ffffff', color_to: '#ededf2', kind: 'navigate', navigation_path: 'home' }];
-  for (const p of pages) { const [name, icon, a, b] = HV_SETUP_APPS[p.key];
-    if (p.key === 'media') apps.push({ name: 'Music', icon: 'mdi:music-note', color_from: a, color_to: b, kind: 'now_playing', entity: players[0], entities: players.slice(1, 6) });
-    else apps.push({ name, icon, color_from: a, color_to: b, kind: 'navigate', navigation_path: p.key }); }
-  if (weather) apps.push({ name: 'Weather', icon: 'mdi:weather-partly-cloudy', color_from: '#5ec8ff', color_to: '#1a73e8', kind: 'weather', weather_entity: weather });
-  const hub = { type: 'custom:homeview-hub-card', theme: 'auto', apps, photo_size: 'square', side_sizes: 'S, S', side_tiles: [{ size: 'square' }, { size: 'square' }], grid_options: { columns: 'full', rows: 'auto' } };
+  for (const k of ['security', 'media', 'weather', 'lights', 'climate', 'garage', 'calendar', 'rooms']) { if (apps.length >= 4) break; const a = app(k); if (a) apps.push(a); }
+  // Home Screen, laid out like the NotHomeView home screen: wallpaper, greeting, apps, photos, now playing, house tile, calendar
+  const hub = { type: 'custom:homeview-hub-card', full_width: true, theme: 'auto', apps, wallpaper: HV_SETUP_WALL, bg_transparency: 80, photo_size: 'square', calendar_rows: '2', grid_options: { columns: 'full', rows: 'auto' } };
   if (weather) hub.weather_entity = weather; if (people.length) hub.fallback_person = people[0];
   if (cals.length) hub.calendar_entities = cals.slice(0, 4); else hub.show_calendar = false;
-  hub.side_cards = players.length ? [{ type: 'custom:homeview-now-playing-card', entity: players[0], entities: players.slice(1, 6), height: '100%' }, { type: 'clock', clock_style: 'analog', clock_size: 'medium' }]
-    : [{ type: 'clock', clock_style: 'analog', clock_size: 'medium' }];
+  const house = { type: 'custom:homeview-house-card' }; if (weather) house.weather = weather; if (garage[0]) house.garage = garage[0]; if (heroC[0]) house.climate = heroC[0];
+  if (lights.length) { house.lights = lights.slice(0, 60); house.lights_path = P('lights'); } if (locks[0]) house.lock = locks[0];
+  const houseTile = Object.assign({ size: 'square', fit: 'contain', sky: true }, weather ? { sky_entity: weather } : {});
+  hub.side_cards = player ? [{ type: 'custom:homeview-now-playing-card', entity: player, entities: players.filter(i => i !== player).slice(0, 5), height: '100%' }, house] : [house];
+  hub.side_tiles = player ? [{ size: 'square' }, houseTile] : [houseTile]; hub.side_sizes = player ? 'S, S' : 'S';
   const views = [{ type: 'sections', max_columns: 1, title: 'Home Screen', path: 'main', icon: 'mdi:apps',
       sections: [{ type: 'grid', cards: [hub, { type: 'custom:homeview-edit-button-card', position: 'top-right', admin_only: true, grid_options: { columns: 'full', rows: 'auto' } }] }] },
     Object.assign(view('home', 'Home', 'mdi:home-outline', home), { subview: false })];
   for (const p of pages) { const [name, icon] = HV_SETUP_APPS[p.key]; views.push(view(p.key, name, icon, p.cards)); }
-  for (const r of rooms) views.push(view(r.path, r.name, r.icon, r.ids.slice(0, 48).map(tile)));
+  const ORD = ['climate', 'light', 'media_player', 'cover', 'fan', 'switch', 'lock', 'camera'], ord = i => { const k = ORD.indexOf(i.split('.')[0]); return k < 0 ? 99 : k; };
+  for (const r of rooms) { const ids = r.ids.slice().sort((x, y) => ord(x) - ord(y)).slice(0, 48); views.push(view(r.path, r.name, r.icon, ids.map(i => tile(i, ids[0] === i && i.startsWith('climate.'))))); }
   const n = views.reduce((s, v) => s + ((v.sections[0].cards[1] || {}).cards || []).length, 0);
   return { config: { title: 'NotHomeView', views }, summary: { pages: views.length, buttons: n, rooms: rooms.length, weather: !!weather, calendars: cals.length, people: people.length } };
 }
 const hvSetupData = async hass => { const ws = async type => { try { return await hass.callWS({ type }); } catch (e) { return null; } };
   const [e, d, a] = await Promise.all([ws('config/entity_registry/list'), ws('config/device_registry/list'), ws('config/area_registry/list')]);
-  return { states: hass.states, entities: e || Object.values(hass.entities || {}), devices: d || Object.values(hass.devices || {}), areas: a || Object.values(hass.areas || {}) }; };
+  return { themes: Object.keys((hass.themes && hass.themes.themes) || {}), states: hass.states, entities: e || Object.values(hass.entities || {}), devices: d || Object.values(hass.devices || {}), areas: a || Object.values(hass.areas || {}) }; };
 // a NotHomeView dashboard is already there (by name, or any dashboard using the Home Screen / page grid cards)
 async function hvSetupHasDash(hass) {
   let list = []; try { list = await hass.callWS({ type: 'lovelace/dashboards/list' }); } catch (e) { return true; } // can't tell: don't ask
