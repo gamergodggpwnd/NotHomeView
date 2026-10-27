@@ -16,6 +16,7 @@
 * Answer cards: weather questions show a weather card (now, high / low, next hours) and calendar questions a list of upcoming events, read from this Home Assistant (no actions).
 * Timer: the countdown opens over the chat (the chat stays); the tick ring stays clear of the notch / status bar.
 * Album links as a photo source: the Photos tile, viewer, gallery, backdrop and the screensaver can show a shared Google Photos, iCloud or OneDrive album (`photo_source_mode: album`, `photo_album_url`). Provider auto-detected and checked in the editor; list cached 6 h, shuffled, falls back to the media folder with a clear message on errors. New optional helper integration `custom_components/nothomeview_albums` (needed for Google Photos, iCloud and the screensaver; OneDrive works in the browser). See docs/album-links.md.
+* Edit pencil in popups: for admins, a pencil sits next to the ✕ of the NotHomeView popups (Photos viewer and gallery, full-screen photo, Weather, Music, device pages shown as sheets, Assistant, timer, camera and people large views, Rooms popup). It closes the popup and opens the visual editor of the card the popup belongs to (a Page Grid tile opens straight on that tile); a device page opens in edit mode. Hidden for non-admins and YAML-mode dashboards; Home Screen card option `popup_edit: false` turns it off.
 * Home Screen: in landscape, 5 to 8 apps sit in 2 rows (3 or 4 columns) when there is room, so they line up with the tiles beside them.
 
 ### Bug fixes (staged builds)

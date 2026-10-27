@@ -111,6 +111,56 @@ function hvThemeOver(mode) { if (HVT.over === mode) return; HVT.over = mode;
   for (const e of HVT.els) hvThemeApply(e); }
 // Home Assistant's own toast at the bottom of the screen
 const hvToast = message => { const ha = document.querySelector('home-assistant'); if (ha) ha.dispatchEvent(new CustomEvent('hass-notification', { bubbles: true, composed: true, detail: { message } })); };
+/* 1.32.0: an edit pencil next to the ✕ of every NotHomeView popup (Home Screen sheets, photos, gallery, weather, music, device pages, assistant,
+   timer, camera / person popups, room picker). Admins only, dashboards in storage (UI) mode only, and the Home Screen card's `popup_edit: false`
+   turns it off. A tap closes the popup and opens the visual editor of the card the popup belongs to (the same card editor the dashboard's edit
+   mode opens); a device page opens that page in edit mode (like the floating pencil). */
+const HV_HUBS = new Set();
+const hvPenOK = (el, h) => { if (!el || !h || !h.user || h.user.is_admin !== true) return false; const root = hvFindRoot(el), lv = root && root.lovelace;
+  if (!lv || !lv.config || lv.mode === 'yaml') return false; const hub = hvHubCfgOf(lv.config); return !(hub && hub.popup_edit === false); };
+const hvPenPage = (dash, vp) => location.assign(dash ? `/${dash}/${vp}?disable_km&edit=1` : location.pathname.replace(/\/$/, '') + '?disable_km&edit=1');
+const hvCfgMatch = el => { const raw = el && (el._hvRaw || el._config); if (!raw || !raw.type) return () => false;
+  return o => o && o.type === raw.type && Object.keys(o).every(k => JSON.stringify(o[k]) === JSON.stringify(raw[k])); };
+function hvCardPath(cfg, match, pref) { if (!cfg || !Array.isArray(cfg.views)) return null; // the view on screen first (the same card can sit on several pages)
+  const deep = (o, d) => { if (!o || typeof o !== 'object' || d > 12) return false; if (match(o)) return true;
+    for (const k of ['cards', 'card', 'elements', 'side_cards']) { const x = o[k]; if (Array.isArray(x) ? x.some(y => deep(y, d + 1)) : x && typeof x === 'object' && deep(x, d + 1)) return true; } return false; };
+  const order = cfg.views.map((_, i) => i); if (typeof pref === 'number' && pref >= 0 && pref < order.length) { order.splice(pref, 1); order.unshift(pref); }
+  for (const v of order) { const vw = cfg.views[v] || {};
+    for (let si = 0; si < (vw.sections || []).length; si++) { const cs = (vw.sections[si] || {}).cards || []; for (let c = 0; c < cs.length; c++) if (deep(cs[c], 0)) return [v, si, c]; }
+    for (let c = 0; c < (vw.cards || []).length; c++) if (deep(vw.cards[c], 0)) return [v, c]; }
+  return null; }
+const hvDeepFind = (r, test, d = 0) => { if (!r || d > 14) return null; for (const n of r.querySelectorAll('*')) { if (test(n)) return n; if (n.shadowRoot) { const x = hvDeepFind(n.shadowRoot, test, d + 1); if (x) return x; } } return null; };
+// open Home Assistant's card editor for the card at `path` (it listens for ll-edit-card on the section / view layout); false = not on screen
+function hvOpenCardEditor(root, path) { const v = path[0];
+  const host = path.length === 3 ? hvDeepFind(root.shadowRoot, n => n.tagName === 'HUI-SECTION' && n.index === path[1] && n.viewIndex === v)
+    : hvDeepFind(root.shadowRoot, n => n.tagName === 'HUI-VIEW' && n.index === v);
+  const le = host && host._layoutElement; if (!le) return false;
+  le.dispatchEvent(new CustomEvent('ll-edit-card', { detail: { path } })); return true; }
+// target: { card: element } (its own card editor) or { view: 'path', dash } (that page in edit mode)
+function hvPopEdit(from, target) { const root = hvFindRoot((target && target.card) || from), lv = root && root.lovelace, dash = (lv && lv.urlPath) || ssDash();
+  if (target && target.view != null) { hvPenPage(target.dash || dash, target.view); return; }
+  const path = lv && hvCardPath(lv.config, hvCfgMatch(target && target.card), root._curView);
+  if (path && target && target.card) { let g = target.card; for (let i = 0; i < 30 && g && g.tagName !== 'HOMEVIEW-GRID-CARD'; i++) g = g.parentNode || g.host; // a Page Grid tile: its editor starts on that tile
+    const k = g && g._kids ? g._kids.findIndex(x => x.el === target.card) : -1; if (k >= 0) { HV_TAP.cfg = JSON.stringify((g._config && g._config.cards) || []); HV_TAP.i = k; HV_TAP.t = Date.now(); } }
+  if (path) { const cur = root._curView; if ((cur === path[0] || cur == null) && hvOpenCardEditor(root, path)) return;
+    const vw = lv.config.views[path[0]] || {}; hvPenPage(dash, vw.path != null && vw.path !== '' ? vw.path : path[0]); return; }
+  hvPenPage(null); }
+// the pencil itself: a copy of the popup's ✕ (same look, size and spot), placed just beside it; returns the button or null
+function hvPen(x, onEdit, o) { o = o || {}; if (!x || !onEdit || !x.parentNode) return null;
+  const p = x.cloneNode(false); p.classList.add('hvpen'); p.removeAttribute('id'); p.setAttribute('aria-label', 'Edit'); p.setAttribute('title', 'Edit'); if (p.tagName !== 'BUTTON') p.setAttribute('role', 'button');
+  p.innerHTML = '<ha-icon icon="mdi:pencil"></ha-icon>'; x.after(p); const gap = o.gap || 10;
+  const place = () => { if (!p.isConnected) { removeEventListener('resize', place); return; } const cs = getComputedStyle(x);
+    if (cs.position === 'absolute' || cs.position === 'fixed') { const par = x.offsetParent, W = par ? par.clientWidth : innerWidth, w = x.offsetWidth; if (!w) return;
+      if (x.offsetLeft + w / 2 > W / 2) { p.style.left = 'auto'; p.style.right = (W - x.offsetLeft + gap) + 'px'; } else { p.style.right = 'auto'; p.style.left = (x.offsetLeft + w + gap) + 'px'; } }
+    else { x.style.order = '2'; p.style.order = '1'; p.style.marginLeft = 'auto'; p.style.marginRight = gap + 'px'; } };
+  requestAnimationFrame(place); setTimeout(place, 450); addEventListener('resize', place);
+  for (const t of ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'touchstart', 'touchend']) p.addEventListener(t, e => e.stopPropagation(), { passive: true });
+  p.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); onEdit(); });
+  p.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onEdit(); } }); if (p.tagName !== 'BUTTON') p.tabIndex = 0;
+  return p; }
+// browser_mod popups show a copy of the card: remember which card opened it, so its pencil edits that card
+const hvPopFrom = el => { window.__hvPopO = { el, t: Date.now() }; };
+const hvPopTake = () => { const o = window.__hvPopO; window.__hvPopO = null; return o && Date.now() - o.t < 6000 && o.el && o.el.isConnected ? o.el : null; };
 /* 1.31.1: full-height popups (on by default; Home Screen card `full_height_popups: false` turns them off). Every sheet / popup of the dashboard
    (Home Screen sheets, room picker, assistant, calendar event, browser_mod popups, more-info) reaches the top of the screen,
    keeps its content below the status bar / notch (safe area) and can be swiped down to close: from the handle / header, or
@@ -1680,6 +1730,7 @@ class HVCameraCard extends HTMLElement {
       if (!this._config.large && this._config.tap_opens !== false) this.openLarge();
       else if (!this._config.large) fire(this, 'hass-more-info', { entityId: this._config.entity });
     });
+    if (this._config.large) { const og = this._hvOrigin || (this._hvOrigin = hvPopTake()), x = this._card.querySelector('.x'); if (og && x && hvPenOK(og, og._hass)) hvPen(x, () => { this._close(); setTimeout(() => hvPopEdit(og, { card: og }), 420); }); } // 1.32.0: edit pencil
     this._card.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target === this._card) { e.preventDefault(); if (!this._config.large) this.openLarge(); } });
     this._bindSwipe(); this._built = true;
     if (window.ResizeObserver) { this._ro = new ResizeObserver(() => this._fit()); this._ro.observe(this._card); }
@@ -1797,6 +1848,7 @@ class HVCameraCard extends HTMLElement {
   }
   openLarge() {
     if (!window.browser_mod) { fire(this, 'hass-more-info', { entityId: this._config.entity }); return; }
+    hvPopFrom(this);
     fire(this, 'll-custom', { action: 'fire-dom-event', browser_mod: { service: 'browser_mod.popup', data: this.popupData() } });
   }
   _close() { this._dismiss(this.getBoundingClientRect().height || window.innerHeight); }
@@ -1915,6 +1967,7 @@ class HVPersonCard extends HVBase {
       <div class="x" role="button" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></div><div class="grab" aria-hidden="true"></div>`;
     this._pp = this._root.querySelector('.pp');
     this._root.querySelector('.x').addEventListener('click', e => { e.stopPropagation(); this._dismiss(this.getBoundingClientRect().height); });
+    if (this._config.large) { const og = this._hvOrigin || (this._hvOrigin = hvPopTake()); if (og && hvPenOK(og, og._hass)) hvPen(this._root.querySelector('.x'), () => { this._dismiss(this.getBoundingClientRect().height); setTimeout(() => hvPopEdit(og, { card: og }), 420); }); }
     this._card.addEventListener('pointerdown', e => { if (this._config.large && e.composedPath().some(n => n.classList && n.classList.contains('x'))) e.stopPropagation(); }, true);
     this._bindSwipe();
     if (this._config.large) this._makeMap();
@@ -1931,7 +1984,7 @@ class HVPersonCard extends HVBase {
     if (this._config.large) return true;
     if (kind !== 'tap' || this._config.tap_action) return false;
     if (!window.browser_mod) { fire(this, 'hass-more-info', { entityId: this._config.entity }); return true; }
-    fire(this, 'll-custom', { action: 'fire-dom-event', browser_mod: { service: 'browser_mod.popup', data: this.popupData() } }); return true;
+    hvPopFrom(this); fire(this, 'll-custom', { action: 'fire-dom-event', browser_mod: { service: 'browser_mod.popup', data: this.popupData() } }); return true;
   }
   popupData() {
     const content = Object.assign({}, this._config, { type: 'custom:homeview-person-card', large: true, height: PER_POPUP_HEIGHT });
@@ -3322,6 +3375,7 @@ class HVChipsCard extends HTMLElement {
         return `<button class="rm${t.on ? ' on' : ''}" data-k="${k}"><ha-icon icon="${esc(rm.icon || 'mdi:door')}"></ha-icon><span class="t"><span class="n">${esc(rm.name || '')}</span>${t.text ? `<span class="s">${esc(t.text)}</span>` : ''}</span></button>`; }).join('') || '<div class="s">Add rooms to this chip in the editor</div>'}</div></div>`;
     const close = () => this._closePicker(); if (hvFullPopups()) hvFhCard(host, r, r.querySelector('.sh'), close, '600px');
     r.querySelector('.bd').addEventListener('click', close); r.querySelector('.x').addEventListener('click', close);
+    if (hvPenOK(this, this._hass)) hvPen(r.querySelector('.x'), () => { close(); setTimeout(() => hvPopEdit(this, { card: this }), 260); }, { gap: 6 });
     this._esc = e => { if (e.key === 'Escape') { e.stopPropagation(); close(); } }; addEventListener('keydown', this._esc, true); // first (capture): Escape closes only the picker
     r.querySelectorAll('.rm').forEach(b => b.addEventListener('click', () => { const rm = rooms[Number(b.dataset.k)]; close();
       if (rm && rm.navigation_path) fire(this, 'hass-action', { config: { tap_action: { action: 'navigate', navigation_path: rm.navigation_path } }, action: 'tap' }); }));
@@ -3511,6 +3565,7 @@ function hvSheet(o) { // o: { parent, launch() -> [els], label, bg, build(bd, fr
     apply(H(), true, left); setTimeout(() => { for (const el of L()) { el.style.transition = ''; el.style.transform = ''; el.style.borderRadius = ''; el.style.transformOrigin = ''; }
       host.remove(); fabs.forEach(f => { f.style.visibility = ''; }); if (o.onClose) o.onClose(); }, left * 1000 + 30); };
   sr.querySelector('.x').addEventListener('click', close); addEventListener('keydown', key);
+  if (o.edit) hvPen(sr.querySelector('.x'), o.edit); // 1.32.0: edit pencil (admins)
   // drag to dismiss: from the pill / top strip, or anywhere while the content under the finger is scrolled to the top
   let g = null;
   const scroller = path => { for (const n of path) { if (n === sh) break; if (!(n instanceof Element)) continue;
@@ -3865,7 +3920,7 @@ const PV_CSS = `.pv{position:absolute;inset:0;overflow:hidden;background:#0b0b10
 .pv.ld .pvs::after{content:'';position:absolute;left:50%;top:50%;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;border:3px solid rgba(255,255,255,.28);border-top-color:#fff;animation:pvspin .8s linear infinite}
 @keyframes pvspin{to{transform:rotate(360deg)}}
 .pvh{position:absolute;left:0;right:0;top:0;height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 62px 0 20px;pointer-events:none;font-size:17px;font-weight:600;text-shadow:0 1px 6px rgba(0,0,0,.4)}
-.pvn{font-size:14px;font-weight:500;opacity:.75;font-variant-numeric:tabular-nums}
+.pvn{font-size:14px;font-weight:500;opacity:.75;font-variant-numeric:tabular-nums} .sh:has(> .hvpen) .pvh{padding-right:108px}
 .pve{position:absolute;left:0;right:0;top:44px;bottom:96px;display:flex;align-items:center;justify-content:center;font-size:18px;opacity:.7} .pve[hidden]{display:none}
 .pvc{position:absolute;left:0;right:0;bottom:0;padding:12px max(16px,env(safe-area-inset-left)) calc(14px + var(--hv-safe-bottom, env(safe-area-inset-bottom, 0px)));display:flex;flex-wrap:wrap;gap:10px;justify-content:center;align-items:center}
 .pvk{all:unset;cursor:pointer;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:6px;height:48px;padding:0 20px;border-radius:24px;font-size:16px;font-weight:600;color:#fff;
@@ -4026,6 +4081,7 @@ function hvTimerScreen(T) {
     if (T.st && T.st.done) { T.cancel(); return; } // finished: a tap anywhere dismisses it
     if (!b) return; if (b.classList.contains('cx')) T.cancel(); else if (b.classList.contains('pp')) (T.st.paused != null ? T.resume() : T.pause()); else if (b.classList.contains('add')) T.add(60); else if (b.classList.contains('mn')) host.close(); });
   hvSwipeClose({ el: host, alive: () => host.isConnected && !(T.st && T.st.done), close: () => host.close() }); // swipe down: minimise (keeps running)
+  { const hub = [...HV_HUBS].find(x => x.isConnected); hvPen(sr.querySelector('.mn'), hub && hub._penFn()); } // 1.32.0: edit pencil (Home Screen card: Assistant & timer)
   addEventListener('resize', layout); addEventListener('keydown', key); document.body.appendChild(host); layout(); requestAnimationFrame(() => host.classList.add('in'));
   return host; }
 
@@ -4294,7 +4350,7 @@ function hvAssist(hub) {
       if (unsub && unsub.catch) unsub.catch(e => { if (tok !== runTok) return; const m = (e && e.message) || ''; fail(/speech.to.text|stt/i.test(m) && pinfoCache ? noStt(pinfoCache) : m || 'The assistant is not available.'); }); }
     catch (e) { fail(String(e && e.message || e)); } };
   sugEl.addEventListener('click', e => { const b = e.composedPath().find(n => n.tagName === 'BUTTON'); if (b) { stopRec(); ask(b.textContent.replace(/\?$/, '')); } });
-  $('.x').addEventListener('click', close); mic.addEventListener('click', () => { hvAudio(); listen(); });
+  $('.x').addEventListener('click', close); hvPen($('.x'), hub._penFn(), { gap: 8 }); mic.addEventListener('click', () => { hvAudio(); listen(); });
   $('form').addEventListener('submit', e => { e.preventDefault(); const t = inp.value.trim(); if (!t) return; stopRec(); inp.value = ''; ask(t); });
   addEventListener('keydown', key); st('idle');
   (hub.shadowRoot || document.body).appendChild(host); requestAnimationFrame(() => requestAnimationFrame(() => host.classList.add('in')));
@@ -4305,10 +4361,10 @@ class HVHubCard extends HTMLElement {
   constructor() { super(); this.attachShadow({ mode: 'open' }); this._layer = 0; }
   static get defaults() { return { theme: 'night', person: '', morning_start: 5, afternoon_start: 12, evening_start: 17, greeting_morning: 'Good morning', greeting_afternoon: 'Good afternoon',
     greeting_evening: 'Good evening', photo_source_mode: 'media', photo_album_url: '', photo_source: '', photo_interval: 25, photo_order: 'random', blur: 32, dim: 0.32, bg_transparency: 60, photo_backdrop: true, bg_freeze: true, photo_tap: 'viewer', photo_viewer_nav: true, photo_viewer_swipe: true, photo_viewer_add: true, photo_gallery_upload: true, photo_viewer_pause: true, photo_label: 'Photos', photo_max_aspect: 2.6,
-    show_calendar: true, calendar_layout: 'wide', calendar_columns: 3, calendar_days: 7, calendar_title: 'Calendar', calendar_min_height: 240, max_icon: 140, edge_sidebar: true, ss_hold: true, weather_entity: '', photo_size: 'wide', side_portrait: 'below', side_sizes: '', row_units: 3, block_pull_refresh: true, calendar_rows: 'auto', swipe_screensaver: 'auto', full_height_popups: true, assistant_enabled: false, assistant_pipeline: 'preferred', assistant_theme: 'same', assistant_button: true, assistant_speak: true, assistant_auto_listen: true, timer_sound: true }; }
+    show_calendar: true, calendar_layout: 'wide', calendar_columns: 3, calendar_days: 7, calendar_title: 'Calendar', calendar_min_height: 240, max_icon: 140, edge_sidebar: true, ss_hold: true, weather_entity: '', photo_size: 'wide', side_portrait: 'below', side_sizes: '', row_units: 3, block_pull_refresh: true, calendar_rows: 'auto', swipe_screensaver: 'auto', full_height_popups: true, popup_edit: true, assistant_enabled: false, assistant_pipeline: 'preferred', assistant_theme: 'same', assistant_button: true, assistant_speak: true, assistant_auto_listen: true, timer_sound: true }; }
   static getStubConfig(hass) { return { apps: HUB_APPS.map(a => Object.assign({}, a)), calendar_entities: Object.keys((hass && hass.states) || {}).filter(k => k.startsWith('calendar.')).slice(0, 3) }; }
   static getConfigElement() { return document.createElement('homeview-hub-card-editor'); }
-  setConfig(c) { if (!c) throw new Error('Invalid configuration'); const old = this._config, nc = Object.assign({}, HVHubCard.defaults, c);
+  setConfig(c) { if (!c) throw new Error('Invalid configuration'); this._hvRaw = c; const old = this._config, nc = Object.assign({}, HVHubCard.defaults, c);
     if (nc.wallpaper && typeof nc.wallpaper === 'string') this.style.setProperty('--hv-wall', nc.wallpaper); else this.style.removeProperty('--hv-wall'); // 1.31.0
     this._blurX = c.blur !== undefined && c.blur !== null && c.blur !== '' && Number(c.blur) !== HVHubCard.defaults.blur; // an explicit Advanced blur (not the default value) stays exactly as set; the default one follows the transparency slider
     if (!Array.isArray(nc.apps) || !nc.apps.length) nc.apps = HUB_APPS;
@@ -4324,7 +4380,7 @@ class HVHubCard extends HTMLElement {
   set editMode(v) { this._edit = v; this._layout(); this._ssPaint(); }
   getCardSize() { return 12; }
   getGridOptions() { return { columns: 'full', rows: 'auto', min_columns: 12 }; }
-  connectedCallback() {
+  connectedCallback() { HV_HUBS.add(this);
     if (!this._bound) this._bound = () => this._layout();
     addEventListener('resize', this._bound); addEventListener('orientationchange', this._bound); addEventListener('hv-layout', this._bound); if (window.visualViewport) visualViewport.addEventListener('resize', this._bound);
     if (window.ResizeObserver && !this._ro) { this._ro = new ResizeObserver(() => this._layout()); this._ro.observe(this); }
@@ -4340,7 +4396,7 @@ class HVHubCard extends HTMLElement {
     if (on) { const t = s.done ? 'Done' : hvFmtLeft(HVTM.left()) + (s.paused != null ? ' ❚❚' : ''); const sp = p.querySelector('span'); if (sp.textContent !== t) sp.textContent = t; } }
   _openAssist() { if (this._assistO || !this._hass) return; hvAudio(); HVTM.opts.sound = this._config.timer_sound !== false; this._assistO = hvAssist(this);
     if (this._config.assistant_auto_listen !== false) this._assistO.listen(true); }
-  disconnectedCallback() { hvTimerPills.delete(this._tpf); if (this._assistO) this._assistO.close(); clearInterval(this._ssHoldIv); this._ssHoldIv = null; this._edgeBind(false); hvPTR.set(this, false); this._ssBind(false); if (this._galO) this._galO.close(); if (this._sheetO) this._sheetO.close(); this._ssPause(false); clearInterval(this._tick); clearTimeout(this._timer); this._timer = null;
+  disconnectedCallback() { HV_HUBS.delete(this); hvTimerPills.delete(this._tpf); if (this._assistO) this._assistO.close(); clearInterval(this._ssHoldIv); this._ssHoldIv = null; this._edgeBind(false); hvPTR.set(this, false); this._ssBind(false); if (this._galO) this._galO.close(); if (this._sheetO) this._sheetO.close(); this._ssPause(false); clearInterval(this._tick); clearTimeout(this._timer); this._timer = null;
     removeEventListener('resize', this._bound); removeEventListener('orientationchange', this._bound); removeEventListener('hv-layout', this._bound); if (window.visualViewport) visualViewport.removeEventListener('resize', this._bound);
     document.removeEventListener('visibilitychange', this._vis); }
   // --- dashboard config (Wallpanel settings, views for the sheets), cached
@@ -4425,8 +4481,12 @@ class HVHubCard extends HTMLElement {
       // (Wallpanel sets its fade-in transition synchronously at start; the next start / stop sets its own again)
       if (quick) w.style.transition = 'opacity 320ms ease-out'; return true; } catch (e) {} } return false; }
   // --- slide-up sheets on the launch page
+  // 1.32.0: the popups' edit pencil: closes whatever is open, then the Home Screen card's editor (or a device page in edit mode)
+  _penFn(target) { return hvPenOK(this, this._hass) ? () => this._penGo(target) : null; }
+  _penGo(target) { if (this._galO) this._galO.close(); if (this._sheetO) this._sheetO.close(); if (this._assistO) this._assistO.close(); if (this._fs) this._fs.close();
+    if (HVTM.scr && HVTM.scr.close) HVTM.scr.close(); setTimeout(() => hvPopEdit(this, target || { card: this }), 380); }
   _openSheet(o) { if (this._sheetO) return null;
-    const s = hvSheet(Object.assign({ full: this._config.full_height_popups !== false }, o, { day: o.day === true, parent: this.shadowRoot, launch: () => [this.shadowRoot.querySelector('.bg'), this._w],
+    const s = hvSheet(Object.assign({ full: this._config.full_height_popups !== false }, o, { edit: 'edit' in o ? o.edit : this._penFn(), day: o.day === true, parent: this.shadowRoot, launch: () => [this.shadowRoot.querySelector('.bg'), this._w],
       onClose: () => { this._sheetO = null; if (o.onClose) o.onClose(); this._layout(); } }));
     this._sheetO = s; if (this._hass) s.hass = this._hass; return s; }
   async _openViewSheet(a) {
@@ -4440,7 +4500,7 @@ class HVHubCard extends HTMLElement {
     const live = HVT.cfg || cfg, lv = live && (live.views || []).find(x => String(x.path || '') === vp) || v;
     const mode = hvMode(hvViewTheme(live, lv), this._hass), day = mode === 'day';
     if (day) { hvThemeOver('day'); cards = cards.filter(x => !hvIsBgCard(x)); } // Day: the light grey sheet instead of the page's dark background card
-    this._openSheet({ label: v.title || a.name || vp, bg: v.background || '', day, dayBg: '#eeeef0', onClose: () => { if (HVT.over) hvThemeOver(''); }, build: (bd, frame) => {
+    this._openSheet({ label: v.title || a.name || vp, bg: v.background || '', day, dayBg: '#eeeef0', edit: this._penFn({ view: vp, dash }), onClose: () => { if (HVT.over) hvThemeOver(''); }, build: (bd, frame) => {
       bd._hvOwnTheme = true; bd._hvThemeVal = mode; // the page's cards (and Page Grid tiles) follow this, not the Home Screen
       if (day) bd.style.cssText += ';' + HV_DAY_VARS + ';--primary-text-color:#1c1c1e;--secondary-text-color:rgba(60,60,67,.72)'; // native cards styled with the --hv-* colours
       const els = cards.map(c0 => { const cfg2 = c0.type === 'custom:homeview-grid-card' ? Object.assign({}, c0, { swipe_back: false, edge_sidebar: false, block_pull_refresh: false }) : c0;
@@ -4718,7 +4778,7 @@ class HVHubCard extends HTMLElement {
     const show = u => { const bg = `url("${String(u).replace(/"/g, '%22')}")`; sr.querySelector('.b').style.backgroundImage = bg; sr.querySelector('.f').style.backgroundImage = bg; };
     const close = () => { host.classList.remove('in'); setTimeout(() => host.remove(), 300); this._fs = null; removeEventListener('keydown', key); };
     const key = k => { if (k.key === 'Escape') close(); };
-    host.addEventListener('click', close); addEventListener('keydown', key); this._fs = { show, close };
+    host.addEventListener('click', close); addEventListener('keydown', key); this._fs = { show, close }; hvPen(sr.querySelector('.x'), this._penFn());
     hvPullDown({ on: host, ok: () => true, target: () => host, done: close }).bind(true);
     if (this._cur) show(this._cur); document.body.appendChild(host); requestAnimationFrame(() => host.classList.add('in')); }
   // --- Photos viewer (1.30): tap the Photos tile -> sheet with the current photo big, Previous / Next (+ swipe), "View Gallery" -> gallery (which has the "Add photos" upload button).
@@ -4787,7 +4847,7 @@ class HVHubCard extends HTMLElement {
     let src = null, ids = [], busy = false, io = null; const names = () => new Set(ids.map(i => i.split('/').pop().toLowerCase()));
     const folder = () => src && /^media-source:\/\//.test(src.url) ? src.url : null;
     const admin = () => !h().user || h().user.is_admin !== false;
-    this._galO = hvSheet({ full: this._config.full_height_popups !== false, parent: this.shadowRoot, label: 'Photo gallery', bg: '#12121a', day: false, launch: () => [this._pvEl], dragOk: path => !path.some(n => n instanceof Element && n.tagName === 'BUTTON'),
+    this._galO = hvSheet({ full: this._config.full_height_popups !== false, edit: this._penFn(), parent: this.shadowRoot, label: 'Photo gallery', bg: '#12121a', day: false, launch: () => [this._pvEl], dragOk: path => !path.some(n => n instanceof Element && n.tagName === 'BUTTON'),
       onClose: () => { this._galO = null; if (io) io.disconnect(); HVL.dropGallery(); },
       build: bd => { bd.style.padding = '0';
         bd.innerHTML = `<style>${PV_CSS}</style><div class="pg"><div class="pgh"><div class="pgt"><b>Photo gallery</b><span class="pgc"></span></div>${c.photo_gallery_upload !== false ? '<button class="pvk pgu"><ha-icon icon="mdi:image-plus"></ha-icon><span>Add photos</span></button>' : ''}</div>
@@ -4944,6 +5004,7 @@ const HUB_SCHEMA = [
     { name: 'weather_sky_header', selector: { boolean: {} } },
     { type: 'grid', name: '', schema: [{ name: 'edge_sidebar', selector: { boolean: {} } }, { name: 'block_pull_refresh', selector: { boolean: {} } }] },
     { name: 'full_height_popups', selector: { boolean: {} } },
+    { name: 'popup_edit', selector: { boolean: {} } },
     { name: 'swipe_screensaver', selector: { select: { mode: 'dropdown', options: [{ value: 'auto', label: 'Auto (when the screensaver is on here)' }, { value: 'on', label: 'On' }, { value: 'off', label: 'Off' }] } } }, { name: 'ss_hold', selector: { boolean: {} } }] }];
 Object.assign(LABELS, { photo_source_mode: 'Photo source', photo_album_url: 'Album link', apps: 'Apps (drag to reorder, pencil to edit)', person: 'Person (empty = the logged-in user)', fallback_person: 'Fallback person (no match)', ring_color: 'Avatar ring colour / gradient',
   morning_start: 'Morning from (hour)', afternoon_start: 'Afternoon from', evening_start: 'Evening from', night_start: 'Night from (empty = evening until morning)', greeting_night: 'Night greeting', greeting_morning: 'Morning greeting', greeting_afternoon: 'Afternoon greeting', greeting_evening: 'Evening greeting',
@@ -4951,6 +5012,7 @@ Object.assign(LABELS, { photo_source_mode: 'Photo source', photo_album_url: 'Alb
   photo_tap: 'Tapping Photos', photo_label: 'Photos label', photo_viewer_nav: 'Viewer: Previous / Next buttons', photo_viewer_swipe: 'Viewer: swipe left / right to change picture', photo_viewer_add: 'Viewer: View Gallery button', photo_gallery_upload: 'Gallery: let people upload new pictures', photo_viewer_pause: 'Pause the screensaver while the viewer is open', show_calendar: 'Show the calendar', calendar_show_weather: 'Forecast per day', calendar_entities: 'Calendars (empty = all)', calendar_layout: 'Calendar layout',
   calendar_columns: 'Days side by side', calendar_rows: 'Rows of days (phones always stack)', calendar_days: 'Days to load', calendar_title: 'Calendar title', calendar_min_height: 'Calendar min height', max_icon: 'Largest app icon', photo_max_aspect: 'Photos widget: widest aspect (w/h)', photo_size: 'Photos tile size', side_sizes: 'Extra tiles\' sizes, in order: S = square, W = wide (e.g. S, S)', side_portrait: 'Tiles that don\'t fit beside the apps', row_units: 'Landscape: units beside the apps (icons shrink to fit)',
   full_height_popups: 'Full-height popups: every popup on this dashboard reaches the top of the screen; swipe down to close',
+  popup_edit: 'Edit pencil next to ✕ in popups (admins only): opens the editor of the card the popup belongs to',
   assistant_enabled: 'Assistant on this Home Screen', assistant_button: 'Mic button beside the avatar', assistant_pipeline: 'Assist pipeline', assistant_theme: 'Assistant look',
   assistant_auto_listen: 'Start listening when it opens', assistant_speak: 'Speak the replies', timer_sound: 'Timer alert sound',
   location_name: 'Weather location name (empty = Home Assistant\'s)', weather_sky_header: 'Weather popup: animated sky header (sunny, partly cloudy, cloudy, rain, snow; night sky after sunset)', swipe_screensaver: 'Swipe down for screensaver (grab bar at the top)', ss_hold: 'Keep the screensaver paused while the Home Screen is showing',

@@ -86,6 +86,10 @@ and Wallpanel 4.67.2.
   "how much time is left". Timers are recognised in the card, so they work with every pipeline and need no voice satellite. A full-screen countdown
   with a ring of ticks counts down; pause, cancel, +1 minute; at zero it flashes and plays a chime until you tap the screen. The timer keeps
   running after a reload, and a small pill on the Home Screen brings it back.
+* **Edit pencil in popups** (admins only). The NotHomeView popups (Photos viewer and gallery, Weather, Music, device pages shown as sheets,
+  Assistant, timer, camera / people large views, Rooms) show a pencil beside the ✕. It opens the visual editor of the card the popup belongs to
+  (the Home Screen card, or the Page Grid on the tile you came from); a device page opens in edit mode. Turn it off with
+  *Edit pencil next to ✕ in popups* on the Home Screen card (`popup_edit: false`).
 * **Album links as a photo source** (Home Screen card → *Photos & background* → *Photo source* = *Album link*; screensaver: *Photos from* =
   *Album link*). Show a shared Google Photos, iCloud shared album or OneDrive album instead of the media folder. The editor detects the
   provider and checks the link; the list refreshes every 6 hours, shuffles with *Order = Random* and falls back to the media folder on errors.
@@ -102,6 +106,7 @@ and Wallpanel 4.67.2.
 | `assistant_auto_listen` | `true` | Start listening as soon as it opens |
 | `assistant_speak` | `true` | Play the spoken reply (the pipeline's text-to-speech) |
 | `timer_sound` | `true` | Chime when a timer ends |
+| `popup_edit` | `true` | Edit pencil next to ✕ in popups (admins only) |
 | `photo_source_mode` | `media` | `media` (media folder, `photo_source`) or `album` (`photo_album_url`) |
 | `photo_album_url` | `''` | Shared album link (Google Photos, iCloud, OneDrive) |
 
