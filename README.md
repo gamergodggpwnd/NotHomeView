@@ -86,6 +86,9 @@ and Wallpanel 4.67.2.
   "how much time is left". Timers are recognised in the card, so they work with every pipeline and need no voice satellite. A full-screen countdown
   with a ring of ticks counts down; pause, cancel, +1 minute; at zero it flashes and plays a chime until you tap the screen. The timer keeps
   running after a reload, and a small pill on the Home Screen brings it back.
+* **Add album link from the gallery**: the gallery's *Add photos* button opens a small menu: *Upload photos* or *Add album link*. Paste a
+  Google Photos, iCloud or OneDrive link, see it checked (✓ / ⚠), tap *Save*: the Home Screen card's photo source becomes *Album link*
+  (editable afterwards in the visual editor). With an album set, the menu offers *Change album link* and *Use media folder instead*. Admins only.
 * **Edit pencil in popups** (admins only). The NotHomeView popups (Photos viewer and gallery, Weather, Music, device pages shown as sheets,
   Assistant, timer, camera / people large views, Rooms) show a pencil beside the ✕. It opens the visual editor of the card the popup belongs to
   (the Home Screen card, or the Page Grid on the tile you came from); a device page opens in edit mode. Turn it off with

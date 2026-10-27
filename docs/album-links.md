@@ -15,6 +15,9 @@ Your existing configuration keeps working unchanged: the default photo source is
 
 * **Photos tile**: edit the Home Screen card → *Photos & background* → **Photo source** = *Album link*, then paste the link into **Album link**.
   The editor detects the provider and checks the link right away (✓ with the album name and photo count, or ⚠ with what is wrong).
+* **From the gallery**: open the Photos tile → *View Gallery* → *Add photos* → **Add album link**. Paste the link, wait for the ✓, *Save*. The Home Screen
+  card's photo source is saved as *Album link* (same options as the visual editor). With an album already set, the same button offers *Change album link*
+  and *Use media folder instead*. Admin accounts only; not available on YAML-mode dashboards.
 * **Screensaver**: Screensaver popup → *Photos* → **Photos from** = *Album link (Google Photos, iCloud, OneDrive)* and paste the link.
   Save only goes through once the link works (this needs the helper, see below).
 

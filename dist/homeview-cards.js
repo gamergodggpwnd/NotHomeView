@@ -161,6 +161,18 @@ function hvPen(x, onEdit, o) { o = o || {}; if (!x || !onEdit || !x.parentNode) 
 // browser_mod popups show a copy of the card: remember which card opened it, so its pencil edits that card
 const hvPopFrom = el => { window.__hvPopO = { el, t: Date.now() }; };
 const hvPopTake = () => { const o = window.__hvPopO; window.__hvPopO = null; return o && Date.now() - o.t < 6000 && o.el && o.el.isConnected ? o.el : null; };
+// 1.32.0: change a few options of THIS Home Screen card in the saved dashboard (re-read first; keys set to null are removed), like the visual editor
+async function hvSaveHubCfg(hub, patch) { const root = hvFindRoot(hub), lv = root && root.lovelace;
+  if (!lv) throw new Error('open this from the dashboard to save'); if (lv.mode === 'yaml') throw new Error('this dashboard is in YAML mode: set it in the YAML');
+  const dash = lv.urlPath || ssDash(), q = { type: 'lovelace/config', force: true }; if (dash) q.url_path = dash;
+  const fresh = JSON.parse(JSON.stringify(await hub._hass.callWS(q))), all = [];
+  const walk = (o, d) => { if (!o || typeof o !== 'object' || d > 14) return; if (Array.isArray(o)) { o.forEach(x => walk(x, d + 1)); return; } if (o.type === 'custom:homeview-hub-card') all.push(o);
+    for (const k of ['views', 'sections', 'cards', 'card', 'elements']) if (o[k]) walk(o[k], d + 1); }; walk(fresh, 0);
+  const t = all.find(hvCfgMatch(hub)) || (all.length === 1 ? all[0] : null); if (!t) throw new Error('this Home Screen card changed since the page loaded: reload the page and try again');
+  for (const k of Object.keys(patch)) { if (patch[k] == null) delete t[k]; else t[k] = patch[k]; }
+  if (typeof lv.saveConfig === 'function' && (lv.urlPath || null) === (dash || null)) await lv.saveConfig(fresh);
+  else { const sv = { type: 'lovelace/config/save', config: fresh }; if (dash) sv.url_path = dash; await hub._hass.callWS(sv); }
+  return JSON.parse(JSON.stringify(t)); }
 /* 1.31.1: full-height popups (on by default; Home Screen card `full_height_popups: false` turns them off). Every sheet / popup of the dashboard
    (Home Screen sheets, room picker, assistant, calendar event, browser_mod popups, more-info) reaches the top of the screen,
    keeps its content below the status bar / notch (safe area) and can be swiped down to close: from the handle / header, or
@@ -3935,6 +3947,25 @@ const PV_CSS = `.pv{position:absolute;inset:0;overflow:hidden;background:#0b0b10
 .pgh .pvk{height:42px;padding:0 16px;font-size:15px;background:linear-gradient(180deg,#4f9dff,#2a6df0)} .pgh .pvk ha-icon{--mdc-icon-size:22px}
 .pgs{margin:0 0 12px;padding:10px 14px;border-radius:12px;background:rgba(255,255,255,.12);font-size:14px;line-height:1.35} .pgs.err{background:rgba(255,69,58,.22)} .pgs[hidden],.pgm[hidden]{display:none}
 .pgm{padding:40px 12px;text-align:center;opacity:.7;font-size:16px}
+.pam{position:absolute;z-index:8;box-sizing:border-box;width:max-content;min-width:250px;max-width:min(352px,calc(100% - 16px));padding:6px;border-radius:18px;background:rgba(46,46,58,.74);backdrop-filter:blur(30px) saturate(1.6);-webkit-backdrop-filter:blur(30px) saturate(1.6);
+ box-shadow:0 18px 50px rgba(0,0,0,.45),inset 0 0 0 1px rgba(255,255,255,.13);transform-origin:top right;animation:pamin .18s cubic-bezier(.2,.9,.3,1)} @keyframes pamin{from{opacity:0;transform:scale(.9)}}
+.pam .mi{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:12px;width:100%;min-height:52px;padding:8px 12px;border-radius:12px;cursor:pointer;color:#fff;-webkit-tap-highlight-color:transparent;transition:background .12s ease}
+.pam .mi:active{background:rgba(255,255,255,.16)} .pam .mi:focus-visible{outline:2px solid rgba(255,255,255,.8);outline-offset:-2px} .pam .mi[disabled]{opacity:.42;pointer-events:none}
+.pam .mi+.mi{box-shadow:0 -1px 0 rgba(255,255,255,.08)} .pam .mi ha-icon{--mdc-icon-size:24px;display:flex;flex:none}
+.pam .mt{display:flex;flex-direction:column;min-width:0;gap:1px} .pam .mt b{font-size:16px;font-weight:600} .pam .mt span{font-size:12.5px;opacity:.68;line-height:1.3}
+.pam .cur{padding:10px 12px 10px;font-size:13px;line-height:1.35;border-bottom:1px solid rgba(255,255,255,.12);margin-bottom:4px;overflow-wrap:anywhere}
+.pam .cur b{display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;opacity:.6;margin-bottom:3px} .pam .cur .u{display:block;margin-top:3px;font-size:11.5px;opacity:.55;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pam .why{padding:6px 12px 8px;font-size:12.5px;opacity:.72;line-height:1.35}
+.pal{position:absolute;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;background:rgba(0,0,12,.42);animation:pafade .2s ease;font-family:${FONT};color:#fff}
+@keyframes pafade{from{opacity:0}} .pal .bx{width:min(480px,100%);box-sizing:border-box;padding:22px 20px 18px;border-radius:24px;background:rgba(46,46,58,.8);backdrop-filter:blur(34px) saturate(1.6);-webkit-backdrop-filter:blur(34px) saturate(1.6);
+ box-shadow:0 24px 70px rgba(0,0,0,.5),inset 0 0 0 1px rgba(255,255,255,.13);animation:pamin .22s cubic-bezier(.2,.9,.3,1)}
+.pal h3{margin:0 0 6px;font-size:20px;font-weight:700} .pal p{margin:0 0 14px;font-size:13.5px;opacity:.72;line-height:1.4}
+.pal input{all:unset;box-sizing:border-box;width:100%;height:48px;padding:0 14px;border-radius:14px;background:rgba(255,255,255,.1);box-shadow:inset 0 0 0 1px rgba(255,255,255,.18);font-size:16px;color:#fff;-webkit-user-select:text;user-select:text;cursor:text}
+.pal input:focus{box-shadow:inset 0 0 0 2px #4f9dff} .pal input::placeholder{color:rgba(255,255,255,.4)}
+.pal .pr{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 0} .pal .pr span{padding:4px 10px;border-radius:999px;font-size:12px;background:rgba(255,255,255,.08);opacity:.55;transition:all .15s ease} .pal .pr span.on{opacity:1;background:rgba(79,157,255,.35)}
+.pal .st{margin:12px 0 0;font-size:13.5px;line-height:1.4;min-height:19px;opacity:.85} .pal .st.ok{color:#8be3a9;opacity:1} .pal .st.err{color:#ffb7b0;opacity:1}
+.pal .bt{display:flex;gap:10px;justify-content:flex-end;margin-top:18px} .pal .bt .pvk{height:44px;padding:0 22px;font-size:15px} .pal .bt .sv{background:linear-gradient(180deg,#4f9dff,#2a6df0)}
+@media (max-width:640px){.pal{align-items:flex-start;padding-top:max(90px,14vh)}.pal .bt .pvk{flex:1}}
 .pgg{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--gt,118px),1fr));gap:6px}
 .gt{all:unset;cursor:pointer;position:relative;aspect-ratio:1;border-radius:10px;overflow:hidden;background:rgba(255,255,255,.08);-webkit-tap-highlight-color:transparent}
 .gt img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .35s ease} .gt.ld img{opacity:1}
@@ -4869,8 +4900,66 @@ class HVHubCard extends HTMLElement {
         grid.addEventListener('click', ev => { const t = ev.composedPath().find(n => n.dataset && n.dataset.id); if (!t) return; hub._pickId(t.dataset.id).then(() => { if (hub._galO) hub._galO.close(); }); });
         const reload = async force => { const r = await hub._listPhotos(force, src); src = r.src; ids = r.ids; };
         if (upb) { const canUp = () => folder() && admin();
-          upb.addEventListener('click', () => { if (busy) return; if (!folder()) { status(src && src.album ? 'This Home Screen shows an album link: add pictures to the album in its own app (Google Photos, Photos, OneDrive).' : 'Uploads need a media folder as the photo source (media-source://…); this one is a web address.', true); return; }
-            if (!admin()) { status('Only a Home Assistant administrator can add pictures.', true); return; } file.click(); });
+          const upload = () => { if (busy) return; if (!folder()) { status(src && src.album ? 'This Home Screen shows an album link: add pictures to the album in its own app (Google Photos, Photos, OneDrive).' : 'Uploads need a media folder as the photo source (media-source://…); this one is a web address.', true); return; }
+            if (!admin()) { status('Only a Home Assistant administrator can add pictures.', true); return; } file.click(); };
+          // 1.32.0: "Add photos" opens a small menu first: Upload photos (the file picker, as before) or Add album link (Google Photos / iCloud / OneDrive)
+          upb.addEventListener('click', e => { e.stopPropagation(); if (busy) return; if (bd.parentNode.querySelector(':scope > .pam')) { closeMenu(); return; } openMenu(); });
+          const isAdm = () => !!(h().user && h().user.is_admin === true), albOn = () => hub._config.photo_source_mode === 'album' && !!String(hub._config.photo_album_url || '').trim();
+          let menuOff = null; const closeMenu = () => { const m = bd.parentNode.querySelector(':scope > .pam'); if (m) m.remove(); if (menuOff) { menuOff(); menuOff = null; } upb.setAttribute('aria-expanded', 'false'); };
+          const openMenu = () => { closeMenu(); const shE = bd.parentNode, m = document.createElement('div'); m.className = 'pam'; m.setAttribute('role', 'menu');
+            const lv = (hvFindRoot(hub) || {}).lovelace, yaml = !!(lv && lv.mode === 'yaml'), can = isAdm() && !!lv && !yaml, alb = albOn(), url = String(hub._config.photo_album_url || '').trim();
+            const why = !isAdm() ? 'Only a Home Assistant administrator can add photos or change the photo source.' : !lv ? 'Open the dashboard to change the photo source.' : yaml ? 'This dashboard is in YAML mode: set photo_source_mode / photo_album_url in its YAML.' : '';
+            const it = (k, icon, t, sub, off) => `<button class="mi" role="menuitem" data-k="${k}"${off ? ' disabled' : ''}><ha-icon icon="${icon}"></ha-icon><span class="mt"><b>${esc(t)}</b>${sub ? `<span>${esc(sub)}</span>` : ''}</span></button>`;
+            let html = '';
+            if (alb) { const st = (window.__hvAlbumSt || {})[url], pv = hvAlbumProv(url);
+              html += `<div class="cur"><b>Album link</b>${st && st.ok ? `✓ ${esc(HV_ALB_NAME[pv] || 'Album')} “${esc(st.title)}” · ${st.count} photo${st.count === 1 ? '' : 's'}` : esc(HV_ALB_NAME[pv] || 'Album')}<span class="u">${esc(url)}</span></div>`
+                + it('album', 'mdi:link-variant', 'Change album link', 'Google Photos, iCloud or OneDrive', !can) + it('media', 'mdi:folder-image', 'Use media folder instead', 'Home Assistant media (Media → My media)', !can)
+                + it('upload', 'mdi:upload', 'Upload photos', 'Not available while an album link is the source: add photos in the album\'s own app', true); }
+            else html += it('upload', 'mdi:upload', 'Upload photos', folder() ? 'From this device into the media folder' : 'Needs a media folder as the photo source', !folder() || !isAdm())
+              + it('album', 'mdi:link-variant', 'Add album link', 'Google Photos, iCloud or OneDrive', !can);
+            m.innerHTML = html + (why ? `<div class="why">${esc(why)}</div>` : '');
+            shE.appendChild(m); const place = () => { const a = upb.getBoundingClientRect(), r = shE.getBoundingClientRect(); m.style.top = Math.round(a.bottom - r.top + 8) + 'px'; m.style.right = Math.round(Math.max(8, Math.min(r.right - a.right, r.width - 8 - m.offsetWidth))) + 'px'; }; place(); // on the sheet (not the blurred header) so its frosted glass shows the photos behind
+            upb.setAttribute('aria-expanded', 'true');
+            for (const t of ['pointerdown', 'touchstart', 'touchend', 'mousedown']) m.addEventListener(t, ev => ev.stopPropagation(), { passive: true });
+            m.addEventListener('click', ev => { ev.stopPropagation(); const b = ev.composedPath().find(n => n.tagName === 'BUTTON'); if (!b || b.disabled) return; const k = b.dataset.k; closeMenu();
+              if (k === 'upload') upload(); else if (k === 'album') albumSheet(alb ? url : ''); else if (k === 'media') setSource({ photo_source_mode: null, photo_album_url: null }, 'Photos now come from the media folder ✓'); });
+            const out = ev => { if (!ev.composedPath().includes(m) && !ev.composedPath().includes(upb)) closeMenu(); }, key = ev => { if (ev.key === 'Escape') { ev.stopImmediatePropagation(); closeMenu(); } };
+            setTimeout(() => { if (!m.isConnected) return; addEventListener('pointerdown', out, true); addEventListener('keydown', key, true); }, 0);
+            const scr = () => closeMenu(); bd.addEventListener('scroll', scr, { passive: true }); addEventListener('resize', scr);
+            menuOff = () => { removeEventListener('pointerdown', out, true); removeEventListener('keydown', key, true); bd.removeEventListener('scroll', scr); removeEventListener('resize', scr); };
+            const f1 = m.querySelector('.mi:not([disabled])'); if (f1) f1.focus({ preventScroll: true }); };
+          // save the photo source on THIS Home Screen card (re-read, change only these keys, save: same as the visual editor)
+          const setSource = async (patch, okMsg) => { status('Saving…'); try { const t = await hvSaveHubCfg(hub, patch); hvToast(okMsg);
+              // the dashboard re-renders after a save and may build a new Home Screen card: open the photos again there, so you stay where you were
+              for (let i = 0; i < 15; i++) { await new Promise(r => setTimeout(r, 100)); if (!hub.isConnected || !hub._galO) break; }
+              if (!hub.isConnected || !hub._galO) { for (let i = 0; i < 40; i++) { const nh = [...HV_HUBS].find(x => x !== hub && x.isConnected && hvCfgMatch(x)(t));
+                  if (nh && nh._hass) { if (!nh._sheetO) nh._openPhotoViewer(); setTimeout(() => { if (nh._sheetO && !nh._galO) nh._openGallery(); }, 700); break; } await new Promise(r => setTimeout(r, 100)); } return; }
+              hub.setConfig(t); status(okMsg); src = null; ids = []; paint(); await reload(true); paint(); } catch (e) { status('Not saved: ' + ((e && (e.message || e.code)) || e), true); } };
+          const albumSheet = cur => { const sh = bd.parentNode; if (sh.querySelector(':scope > .pal')) return;
+            const o = document.createElement('div'); o.className = 'pal'; o.innerHTML = `<div class="bx" role="dialog" aria-modal="true" aria-label="Album link"><h3>${cur ? 'Change album link' : 'Add album link'}</h3>
+              <p>Paste the link of a shared album. The photos are shown on the Photos tile (and its viewer) instead of the media folder; the list refreshes every 6 hours.</p>
+              <input type="url" inputmode="url" enterkeyhint="done" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://photos.app.goo.gl/…" aria-label="Album link">
+              <div class="pr"><span data-p="google">Google Photos</span><span data-p="icloud">iCloud shared album</span><span data-p="onedrive">OneDrive</span></div>
+              <div class="st" aria-live="polite"></div><div class="bt"><button class="pvk cn">Cancel</button><button class="pvk sv" disabled>Save</button></div></div>`;
+            sh.appendChild(o); const inp = o.querySelector('input'), stE = o.querySelector('.st'), sv = o.querySelector('.sv'); let chk = null, q = '', tm = null;
+            for (const t of ['pointerdown', 'touchstart', 'touchmove', 'touchend', 'mousedown']) o.addEventListener(t, ev => ev.stopPropagation(), { passive: true });
+            const close = () => { o.remove(); removeEventListener('keydown', key, true); clearTimeout(tm); };
+            const key = ev => { if (ev.key === 'Escape') { ev.stopImmediatePropagation(); ev.preventDefault(); close(); } };
+            addEventListener('keydown', key, true);
+            const paintSt = () => { const u = inp.value.trim(), pv = hvAlbumProv(u); o.querySelectorAll('.pr span').forEach(x => x.classList.toggle('on', x.dataset.p === pv));
+              const ok = !!(chk && chk.url === u && chk.ok); stE.className = 'st' + (ok ? ' ok' : chk && chk.url === u && !chk.ok ? ' err' : !u || pv ? '' : ' err');
+              stE.textContent = !u ? 'Google Photos (photos.app.goo.gl/…), an iCloud shared album with Public Website on (icloud.com/sharedalbum/#…) or OneDrive (1drv.ms/…, “Anyone with the link”).'
+                : hvAlbumStatus(chk, u).replace(' Until it works, the photos come from the media folder.', '').replace(' The list refreshes every 6 hours; Order = Random shuffles it.', '');
+              sv.disabled = !ok || u === cur; };
+            const check = () => { const u = inp.value.trim(); clearTimeout(tm); paintSt(); if (!u || !hvAlbumProv(u) || (chk && chk.url === u)) return;
+              tm = setTimeout(() => { q = u; hvAlbumLoad(h(), u).then(r => { if (q !== u) return; chk = Object.assign({ url: u }, r); delete chk.ids; const S = window.__hvAlbumSt || (window.__hvAlbumSt = {}); if (r.ok) S[u] = Object.assign({ url: u, t: Date.now() }, chk); paintSt(); }); }, 600); };
+            inp.addEventListener('input', check); inp.addEventListener('change', check);
+            inp.addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); if (!sv.disabled) sv.click(); } });
+            o.querySelector('.cn').addEventListener('click', ev => { ev.stopPropagation(); close(); });
+            o.addEventListener('click', ev => { ev.stopPropagation(); if (ev.target === o) close(); });
+            sv.addEventListener('click', async ev => { ev.stopPropagation(); const u = inp.value.trim(); if (sv.disabled) return; sv.disabled = true; inp.disabled = true; stE.className = 'st'; stE.textContent = 'Saving…';
+              const ttl = chk && chk.title; close(); await setSource({ photo_source_mode: 'album', photo_album_url: u }, `Photos now come from ${HV_ALB_NAME[hvAlbumProv(u)] || 'the album'}${ttl ? ' “' + ttl + '”' : ''} ✓`); });
+            inp.value = cur || ''; if (cur) { chk = (window.__hvAlbumSt || {})[cur] ? Object.assign({}, window.__hvAlbumSt[cur], { url: cur }) : null; } paintSt(); check(); setTimeout(() => inp.focus(), 60); };
           file.addEventListener('change', async () => { const files = [...file.files]; file.value = ''; if (!files.length || busy || !canUp()) return; busy = true; upb.disabled = true;
             const before = new Set(ids); let done = 0; const res = await hub._upload(files, folder(), names(), (i, n) => status(`Uploading ${i} of ${n}…`));
             try { await reload(true); } catch (e) {} const fresh = new Set(ids.filter(i => !before.has(i)));
