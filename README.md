@@ -90,6 +90,9 @@ and Wallpanel 4.67.2.
   Google Photos, iCloud or OneDrive link, see it checked (✓ / ⚠), tap *Save*: the Home Screen card's photo source becomes *Album link*
   (editable afterwards in the visual editor). With an album set, the menu offers *Change album link* and *Use media folder instead*. Admins only.
 * **Now Playing tile opens the Music sheet**: tap the artwork or title of a Now Playing tile on the Home Screen to open the full player (the buttons on the tile still just control playback).
+* **Easy tile editing on room / device pages** (admins only). In the dashboard's edit mode every tile of a Page Grid shows a grab handle (top left) and a ⋯ button (top right).
+  The ⋯ menu offers Edit (opens that tile's own editor), Move earlier / later, Duplicate and Delete (with a confirmation). Drag the handle to move a tile onto another
+  tile's spot, also to another page (hold at the edge). Works with a finger on iPad / iPhone and with the mouse; the changes are saved to the dashboard.
 * **Edit pencil in popups** (admins only). The NotHomeView popups (Photos viewer and gallery, Weather, Music, device pages shown as sheets,
   Assistant, timer, camera / people large views, Rooms) show a pencil beside the ✕. It opens the visual editor of the card the popup belongs to
   (the Home Screen card, or the Page Grid on the tile you came from); a device page opens in edit mode. Turn it off with

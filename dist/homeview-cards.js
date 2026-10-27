@@ -3243,16 +3243,18 @@ const hvEcl = { host: null, sr: null, lay: null, ctl: new WeakMap(), timer: null
     d.mv = ev => { if (ev.pointerId === d.id) this.moveDrag(ev); }; d.up = ev => { if (ev.pointerId === d.id) this.endDrag(ev.type === 'pointerup'); };
     btn.addEventListener('pointermove', d.mv); btn.addEventListener('pointerup', d.up); btn.addEventListener('pointercancel', d.up);
     if (navigator.vibrate) try { navigator.vibrate(12); } catch (x) {}
+    d.iv = setInterval(() => this.hit(d), 120);
     const hint = document.createElement('div'); hint.className = 'hint'; hint.textContent = 'Drop on another tile to move it there'; this.lay.appendChild(hint); d.hint = hint; },
   pos(el, r) { el.style.left = r.left + 'px'; el.style.top = r.top + 'px'; el.style.width = r.width + 'px'; el.style.height = r.height + 'px'; },
-  moveDrag(e) { const d = this.drag; if (!d) return; e.preventDefault(); const x = e.clientX, y = e.clientY, dx = x - d.x0, dy = y - d.y0;
-    d.gh.style.transform = `translate(${dx}px,${dy}px) scale(1.06)`;
-    let over = -1; d.g._kids.forEach((k, i) => { if (over >= 0 || i === d.i || !k.cell || !k.cell.isConnected) return; const r = k.cell.getBoundingClientRect(); if (r.width && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) over = i; });
+  moveDrag(e) { const d = this.drag; if (!d) return; e.preventDefault(); d.x = e.clientX; d.y = e.clientY; d.gh.style.transform = `translate(${d.x - d.x0}px,${d.y - d.y0}px) scale(1.06)`; this.hit(d); },
+  hit(d) { const x = d.x, y = d.y; if (x == null) return; let over = -1;
+    d.g._kids.forEach((k, i) => { if (over >= 0 || i === d.i || !k.cell || !k.cell.isConnected) return; const r = k.cell.getBoundingClientRect(); if (r.width && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) over = i; });
     if (over !== d.over) { d.over = over; if (over >= 0) { this.pos(d.drop, d.g._kids[over].cell.getBoundingClientRect()); d.drop.style.display = ''; } else d.drop.style.display = 'none'; }
-    // hold near the left / right edge of the grid: flip to the previous / next page
+    else if (over >= 0) this.pos(d.drop, d.g._kids[over].cell.getBoundingClientRect());
+    // hold near the left / right edge of the grid: flip to the previous / next page (also while the finger rests there)
     const gr = d.g.getBoundingClientRect(), sc = d.g._sc, w = sc ? sc.clientWidth : 0, edge = x < gr.left + 36 ? -1 : x > gr.right - 36 ? 1 : 0;
     if (edge !== d.edge) { d.edge = edge; d.edgeT = Date.now(); } else if (edge && Date.now() - d.edgeT > 600 && sc) { d.edgeT = Date.now(); const p = Math.max(0, Math.min((d.g._nPages || 1) - 1, Math.round(sc.scrollLeft / w) + edge)); sc.scrollTo({ left: p * w, behavior: 'smooth' }); } },
-  endDrag(ok) { const d = this.drag; if (!d) return; this.drag = null; const { btn } = d;
+  endDrag(ok) { const d = this.drag; if (!d) return; this.drag = null; const { btn } = d; clearInterval(d.iv);
     try { btn.releasePointerCapture(d.id); } catch (x) {} btn.removeEventListener('pointermove', d.mv); btn.removeEventListener('pointerup', d.up); btn.removeEventListener('pointercancel', d.up);
     [d.dim, d.drop, d.hint].forEach(n => n && n.remove());
     if (ok && d.over >= 0 && d.over !== d.i) { d.gh.style.transition = 'all .16s ease-out'; this.pos(d.gh, d.g._kids[d.over].cell.getBoundingClientRect()); d.gh.style.transform = 'scale(1)'; d.gh.style.opacity = '.4'; setTimeout(() => d.gh.remove(), 260);
