@@ -2975,7 +2975,7 @@ class HVGridCard extends HTMLElement {
   }
   set hass(h) { this._hass = h; (this._kids || []).forEach(k => { if (k.el) k.el.hass = h; }); }
   get hass() { return this._hass; }
-  set editMode(v) { this._edit = v; (this._kids || []).forEach(k => { if (k.el) k.el.editMode = v; }); hvGridCards.add(this); this.toggleAttribute('hv-edit', !!v); } // 1.31.1: tap a tile to edit it
+  set editMode(v) { this._edit = v; (this._kids || []).forEach(k => { if (k.el) k.el.editMode = v; }); hvGridCards.add(this); this.toggleAttribute('hv-edit', !!v); if (v) hvEcl.start(); } // 1.31.1: tap a tile to edit it
   getCardSize() { return 12; }
   getGridOptions() { return { columns: 'full', rows: 'auto', min_columns: 12 }; }
   connectedCallback() {
@@ -3163,6 +3163,129 @@ const hvTapPick = e => { const x = e.clientX, y = e.clientY; if (x == null) retu
     const i = g._kids.findIndex(k => { if (!k.cell || !k.cell.isConnected) return false; const b = k.cell.getBoundingClientRect(); return b.width > 0 && x >= b.left && x <= b.right && y >= b.top && y <= b.bottom; });
     HV_TAP.cfg = JSON.stringify((g._config && g._config.cards) || []); HV_TAP.i = i; HV_TAP.t = Date.now(); return; } };
 addEventListener('pointerdown', hvTapPick, true);
+/* 1.32.0: per-tile controls in the dashboard's edit mode (room / device pages, the Page Grid). Home Assistant puts an overlay over every card while
+   editing, so these controls live in a layer above the page (positioned over each tile) and follow it while it scrolls or pages. Every tile gets
+   a grab handle (drag it with a finger or the mouse: lift, drop marker, auto page flip at the edges) and a "⋯" menu like HA's own card menu:
+   Edit (that tile's own editor), Move earlier / later, Duplicate, Delete (asks first). Changes are written to the saved dashboard exactly like
+   the visual editor does. Admins in storage (UI) mode only. */
+const hvEclOK = g => { const h = g._hass, root = hvFindRoot(g), lv = root && root.lovelace; return !!(h && h.user && h.user.is_admin === true && lv && lv.config && lv.mode !== 'yaml'); };
+function hvGridAt(cfg, grid) { const sig = JSON.stringify((grid._config && grid._config.cards) || []), out = [];
+  const walk = (o, v, d) => { if (!o || typeof o !== 'object' || d > 14) return; if (Array.isArray(o)) { o.forEach(x => walk(x, v, d + 1)); return; }
+    if (o.type === 'custom:homeview-grid-card' && JSON.stringify(o.cards || []) === sig) out.push({ node: o, v });
+    for (const k of ['sections', 'cards', 'card', 'elements']) if (o[k]) walk(o[k], v, d + 1); };
+  (cfg.views || []).forEach((vw, v) => walk(vw, v, 0)); return out; }
+// re-read the saved dashboard, let fn(cards) return this Page Grid's new tile list, save it (like the visual editor does)
+async function hvGridMutate(grid, fn) { const root = hvFindRoot(grid), lv = root && root.lovelace;
+  if (!lv) throw new Error('open this from the dashboard to save'); if (lv.mode === 'yaml') throw new Error('this dashboard is in YAML mode: edit it in the YAML');
+  const dash = lv.urlPath || ssDash(), q = { type: 'lovelace/config', force: true }; if (dash) q.url_path = dash;
+  const fresh = JSON.parse(JSON.stringify(await grid._hass.callWS(q))), hits = hvGridAt(fresh, grid), hit = hits.find(x => x.v === root._curView) || hits[0];
+  if (!hit) throw new Error('this page changed since it loaded: reload the page and try again');
+  hit.node.cards = fn((hit.node.cards || []).slice());
+  if (typeof lv.saveConfig === 'function' && (lv.urlPath || null) === (dash || null)) await lv.saveConfig(fresh);
+  else { const sv = { type: 'lovelace/config/save', config: fresh }; if (dash) sv.url_path = dash; await grid._hass.callWS(sv); } }
+const HV_ECL_CSS = `:host{all:initial}.lay{position:fixed;inset:0;pointer-events:none;z-index:6;font-family:var(--paper-font-body1_-_font-family,Roboto,sans-serif);-webkit-tap-highlight-color:transparent}
+.c{position:fixed;left:0;top:0;pointer-events:none;display:block}
+.b{position:absolute;top:0;width:var(--bs,40px);height:var(--bs,40px);display:flex;align-items:center;justify-content:center;pointer-events:auto;cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;box-sizing:border-box;border:0;padding:0;background:none;color:inherit}
+.b.h{left:0;cursor:grab}.b.m{right:0;touch-action:manipulation}
+.b i{display:flex;align-items:center;justify-content:center;width:var(--bi,30px);height:var(--bi,30px);border-radius:50%;background:var(--card-background-color,#fff);color:var(--primary-text-color,#212121);box-shadow:0 1px 5px rgba(0,0,0,.4),0 0 0 1px rgba(127,127,127,.35);transition:transform .12s,background .12s}
+.b:active i{transform:scale(.9)} .b ha-icon{--mdc-icon-size:20px;display:flex}
+.dim{position:fixed;pointer-events:none;border-radius:22px;background:rgba(127,127,127,.28);outline:2px dashed var(--primary-color,#03a9f4);outline-offset:-2px}
+.drop{position:fixed;pointer-events:none;border-radius:22px;border:3px solid var(--primary-color,#03a9f4);background:color-mix(in srgb,var(--primary-color,#03a9f4) 20%,transparent);box-sizing:border-box;transition:left .08s,top .08s,width .08s,height .08s}
+.ghost{position:fixed;pointer-events:none;border-radius:22px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;padding:8px;box-sizing:border-box;overflow:hidden;
+ background:color-mix(in srgb,var(--card-background-color,#fff) 88%,transparent);color:var(--primary-text-color,#212121);box-shadow:0 14px 34px rgba(0,0,0,.45),0 0 0 2px var(--primary-color,#03a9f4);font-size:13px;font-weight:600;transform-origin:center}
+.ghost ha-icon,.ghost ha-state-icon{--mdc-icon-size:30px;color:var(--primary-color,#03a9f4);display:flex} .ghost span{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.hint{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 18px);padding:8px 14px;border-radius:999px;background:var(--primary-color,#03a9f4);color:#fff;font-size:13px;font-weight:600;pointer-events:none;box-shadow:0 2px 10px rgba(0,0,0,.4)}
+.scrim{position:fixed;inset:0;pointer-events:auto}
+.menu{position:fixed;pointer-events:auto;min-width:212px;max-width:calc(100vw - 16px);padding:6px 0;border-radius:14px;background:var(--card-background-color,#fff);color:var(--primary-text-color,#212121);box-shadow:0 8px 30px rgba(0,0,0,.45),0 0 0 1px rgba(127,127,127,.3);overflow:hidden;animation:pop .12s ease-out;transform-origin:top right}
+@keyframes pop{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:none}}
+.menu .t{padding:8px 16px 6px;font-size:12px;opacity:.65;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.menu button{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:14px;width:100%;min-height:48px;padding:0 18px;font-size:15px;cursor:pointer;color:inherit}
+.menu button:hover,.menu button:focus-visible{background:rgba(127,127,127,.16)} .menu button[disabled]{opacity:.38;cursor:default;pointer-events:none}
+.menu button ha-icon{--mdc-icon-size:22px;opacity:.75;display:flex} .menu button.del{color:var(--error-color,#db4437)} .menu button.del ha-icon{opacity:1}
+.menu .sep{height:1px;margin:4px 0;background:rgba(127,127,127,.3)} .menu .q{padding:10px 18px 4px;font-size:15px;line-height:1.35}
+.menu .row{display:flex}.menu .row button{justify-content:center;gap:6px;font-weight:600}`;
+const hvEcl = { host: null, sr: null, lay: null, ctl: new WeakMap(), timer: null, drag: null, menu: null, busy: false,
+  label(g, i) { const c = g._kids[i] && g._kids[i].cfg, st = c && c.entity && g._hass && g._hass.states[c.entity]; if (!c) return 'Tile';
+    return c.name || c.title || (st && st.attributes.friendly_name) || c.entity || hvTileTypeName(c.type); },
+  icon(g, i) { const c = g._kids[i] && g._kids[i].cfg; return (c && c.icon) || HV_TILE_ICON[c && c.type] || 'mdi:card-outline'; },
+  ensure() { if (this.host && this.host.isConnected) return;
+    const h = this.host = document.createElement('div'); h.id = 'hv-edit-layer'; const sr = this.sr = h.attachShadow({ mode: 'open' });
+    sr.innerHTML = `<style>${HV_ECL_CSS}</style><div class="lay"></div>`; this.lay = sr.querySelector('.lay'); document.body.appendChild(h);
+    const stop = e => { if (this.drag) e.preventDefault(); }; // finger drags move the tile, never the page
+    document.addEventListener('touchmove', stop, { passive: false, capture: true }); this._stop = stop;
+    addEventListener('scroll', () => this.kick(), { capture: true, passive: true }); addEventListener('resize', () => this.kick());
+    addEventListener('keydown', e => { if (e.key === 'Escape' && (this.menu || this.drag)) { if (this.drag) this.endDrag(false); this.closeMenu(); } }, true); },
+  kick() { if (this._raf) return; this._raf = requestAnimationFrame(() => { this._raf = 0; this.tick(); }); },
+  start() { if (this.timer) return; this.timer = setInterval(() => this.tick(), 150); this.kick(); },
+  tick() { const gs = [...hvGridCards].filter(g => g.isConnected && g._edit && g._kids && hvEclOK(g));
+    if (!gs.length) { clearInterval(this.timer); this.timer = null; this.closeMenu(); if (this.drag) this.endDrag(false); if (this.host) { this.host.remove(); this.host = null; this.ctl = new WeakMap(); } return; }
+    this.ensure(); const vw = document.documentElement.clientWidth || innerWidth, vh = innerHeight, live = new Set();
+    for (const g of gs) { const root = hvFindRoot(g), hd = root && root.shadowRoot && root.shadowRoot.querySelector('.header'), top = hd ? hd.getBoundingClientRect().bottom : 0, gr = g.getBoundingClientRect();
+      const L = Math.max(0, gr.left) - 2, R = Math.min(vw, gr.right) + 2;
+      g._kids.forEach((k, i) => { if (!k.cell || !k.cell.isConnected) return; const r = k.cell.getBoundingClientRect(); let c = this.ctl.get(k);
+        if (!c) { c = document.createElement('div'); c.className = 'c'; c.innerHTML = `<button class="b h" aria-label="Move this tile (drag)" title="Drag to move"><i><ha-icon icon="mdi:drag"></ha-icon></i></button><button class="b m" aria-label="Tile options" aria-haspopup="menu" title="Edit, move, duplicate, delete"><i><ha-icon icon="mdi:dots-vertical"></ha-icon></i></button>`;
+          c.querySelector('.h').addEventListener('pointerdown', e => this.startDrag(g, k, e)); c.querySelector('.m').addEventListener('click', e => { e.stopPropagation(); this.openMenu(g, k, c.querySelector('.m')); });
+          c.querySelector('.m').addEventListener('keydown', e => e.stopPropagation()); this.lay.appendChild(c); this.ctl.set(k, c); }
+        live.add(c); const bs = Math.max(36, Math.min(44, Math.round(r.width * 0.34))), bi = Math.max(28, bs - 8), pad = 2;
+        const vis = r.width > 0 && r.left >= L && r.right <= R && r.top + pad >= top && r.top < vh - bs;
+        c.style.display = vis ? '' : 'none'; if (!vis) return; c.style.setProperty('--bs', bs + 'px'); c.style.setProperty('--bi', bi + 'px');
+        c.style.width = (r.width - pad * 2) + 'px'; c.style.height = bs + 'px'; c.style.transform = `translate(${Math.round(r.left + pad)}px,${Math.round(r.top + pad)}px)`; }); }
+    for (const c of [...this.lay.querySelectorAll('.c')]) if (!live.has(c)) c.remove(); },
+  // ---- drag ----
+  startDrag(g, k, e) { if (e.button != null && e.button > 0 || this.drag) return; e.preventDefault(); e.stopPropagation(); this.closeMenu();
+    const i = g._kids.indexOf(k), r = k.cell.getBoundingClientRect(), btn = e.currentTarget;
+    const d = this.drag = { g, k, i, id: e.pointerId, x0: e.clientX, y0: e.clientY, r, over: -1, btn, edge: 0, edgeT: 0 };
+    try { btn.setPointerCapture(e.pointerId); } catch (x) {}
+    const dim = document.createElement('div'); dim.className = 'dim'; this.pos(dim, r); const drop = document.createElement('div'); drop.className = 'drop'; drop.style.display = 'none';
+    const gh = document.createElement('div'); gh.className = 'ghost'; gh.innerHTML = '<ha-icon></ha-icon><span></span>'; { const c = g._kids[i].cfg, st = c && c.entity && g._hass.states[c.entity], ic0 = gh.querySelector('ha-icon');
+      if (st && customElements.get('ha-state-icon')) { const ic = document.createElement('ha-state-icon'); ic.hass = g._hass; ic.stateObj = st; if (c.icon) ic.icon = c.icon; ic0.replaceWith(ic); } else ic0.setAttribute('icon', this.icon(g, i)); } gh.querySelector('span').textContent = this.label(g, i);
+    this.pos(gh, r); gh.style.transform = 'scale(1.06)'; gh.style.opacity = '.96'; this.lay.append(dim, drop, gh); d.dim = dim; d.drop = drop; d.gh = gh;
+    d.mv = ev => { if (ev.pointerId === d.id) this.moveDrag(ev); }; d.up = ev => { if (ev.pointerId === d.id) this.endDrag(ev.type === 'pointerup'); };
+    btn.addEventListener('pointermove', d.mv); btn.addEventListener('pointerup', d.up); btn.addEventListener('pointercancel', d.up);
+    if (navigator.vibrate) try { navigator.vibrate(12); } catch (x) {}
+    const hint = document.createElement('div'); hint.className = 'hint'; hint.textContent = 'Drop on another tile to move it there'; this.lay.appendChild(hint); d.hint = hint; },
+  pos(el, r) { el.style.left = r.left + 'px'; el.style.top = r.top + 'px'; el.style.width = r.width + 'px'; el.style.height = r.height + 'px'; },
+  moveDrag(e) { const d = this.drag; if (!d) return; e.preventDefault(); const x = e.clientX, y = e.clientY, dx = x - d.x0, dy = y - d.y0;
+    d.gh.style.transform = `translate(${dx}px,${dy}px) scale(1.06)`;
+    let over = -1; d.g._kids.forEach((k, i) => { if (over >= 0 || i === d.i || !k.cell || !k.cell.isConnected) return; const r = k.cell.getBoundingClientRect(); if (r.width && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) over = i; });
+    if (over !== d.over) { d.over = over; if (over >= 0) { this.pos(d.drop, d.g._kids[over].cell.getBoundingClientRect()); d.drop.style.display = ''; } else d.drop.style.display = 'none'; }
+    // hold near the left / right edge of the grid: flip to the previous / next page
+    const gr = d.g.getBoundingClientRect(), sc = d.g._sc, w = sc ? sc.clientWidth : 0, edge = x < gr.left + 36 ? -1 : x > gr.right - 36 ? 1 : 0;
+    if (edge !== d.edge) { d.edge = edge; d.edgeT = Date.now(); } else if (edge && Date.now() - d.edgeT > 600 && sc) { d.edgeT = Date.now(); const p = Math.max(0, Math.min((d.g._nPages || 1) - 1, Math.round(sc.scrollLeft / w) + edge)); sc.scrollTo({ left: p * w, behavior: 'smooth' }); } },
+  endDrag(ok) { const d = this.drag; if (!d) return; this.drag = null; const { btn } = d;
+    try { btn.releasePointerCapture(d.id); } catch (x) {} btn.removeEventListener('pointermove', d.mv); btn.removeEventListener('pointerup', d.up); btn.removeEventListener('pointercancel', d.up);
+    [d.dim, d.drop, d.hint].forEach(n => n && n.remove());
+    if (ok && d.over >= 0 && d.over !== d.i) { d.gh.style.transition = 'all .16s ease-out'; this.pos(d.gh, d.g._kids[d.over].cell.getBoundingClientRect()); d.gh.style.transform = 'scale(1)'; d.gh.style.opacity = '.4'; setTimeout(() => d.gh.remove(), 260);
+      this.apply(d.g, cards => { const t = cards.splice(d.i, 1)[0]; cards.splice(d.over, 0, t); return cards; }, 'Tile moved'); }
+    else { d.gh.style.transition = 'all .16s ease-out'; this.pos(d.gh, d.r); d.gh.style.transform = 'scale(1)'; d.gh.style.opacity = '0'; setTimeout(() => d.gh.remove(), 200); } },
+  async apply(g, fn, ok) { if (this.busy) return; this.busy = true;
+    try { await hvGridMutate(g, fn); hvToast(ok); } catch (e) { hvToast('Could not save: ' + (e && e.message || e)); } this.busy = false; this.kick(); },
+  // ---- the ⋯ menu ----
+  closeMenu() { if (!this.menu) return; this.menu.remove(); this.menu = null; },
+  openMenu(g, k, anchor) { this.closeMenu(); this.ensure(); const i = g._kids.indexOf(k), n = g._kids.length;
+    const wrap = this.menu = document.createElement('div'); wrap.innerHTML = '<div class="scrim"></div><div class="menu" role="menu"></div>';
+    const m = wrap.querySelector('.menu'), close = () => this.closeMenu();
+    const item = (ic, txt, fn, cls, dis) => { const b = document.createElement('button'); b.setAttribute('role', 'menuitem'); if (cls) b.className = cls; if (dis) b.disabled = true;
+      b.innerHTML = '<ha-icon></ha-icon><span></span>'; b.querySelector('ha-icon').setAttribute('icon', ic); b.querySelector('span').textContent = txt; b.addEventListener('click', e => { e.stopPropagation(); fn(); }); m.appendChild(b); return b; };
+    const head = document.createElement('div'); head.className = 't'; head.textContent = this.label(g, i); m.appendChild(head);
+    item('mdi:pencil', 'Edit', () => { close(); this.edit(g, k, i); });
+    item('mdi:arrow-left', 'Move earlier', () => { close(); this.apply(g, c => { [c[i - 1], c[i]] = [c[i], c[i - 1]]; return c; }, 'Tile moved earlier'); }, '', i <= 0);
+    item('mdi:arrow-right', 'Move later', () => { close(); this.apply(g, c => { [c[i + 1], c[i]] = [c[i], c[i + 1]]; return c; }, 'Tile moved later'); }, '', i >= n - 1);
+    item('mdi:content-copy', 'Duplicate', () => { close(); this.apply(g, c => { c.splice(i + 1, 0, JSON.parse(JSON.stringify(c[i]))); return c; }, 'Tile duplicated'); });
+    const sep = document.createElement('div'); sep.className = 'sep'; m.appendChild(sep);
+    item('mdi:delete-outline', 'Delete', () => { m.innerHTML = ''; const q = document.createElement('div'); q.className = 'q'; q.textContent = `Delete “${this.label(g, i)}”?`; m.appendChild(q);
+      const row = document.createElement('div'); row.className = 'row'; m.appendChild(row);
+      const mk = (t, cls, fn) => { const b = document.createElement('button'); b.textContent = t; if (cls) b.className = cls; b.addEventListener('click', e => { e.stopPropagation(); fn(); }); row.appendChild(b); return b; };
+      mk('Cancel', '', close); mk('Delete', 'del', () => { close(); this.apply(g, c => { c.splice(i, 1); return c; }, 'Tile deleted'); }); this.place(m, anchor); }, 'del');
+    wrap.querySelector('.scrim').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); close(); });
+    this.lay.appendChild(wrap); this.place(m, anchor); const f = m.querySelector('button:not([disabled])'); if (f) f.focus({ preventScroll: true }); },
+  place(m, anchor) { const a = anchor.getBoundingClientRect(), vw = document.documentElement.clientWidth || innerWidth, vh = innerHeight, mw = m.offsetWidth, mh = m.offsetHeight;
+    let l = a.right - mw; l = Math.max(8, Math.min(vw - mw - 8, l)); let t = a.bottom + 4; if (t + mh > vh - 8) t = Math.max(8, a.top - mh - 4);
+    m.style.left = l + 'px'; m.style.top = t + 'px'; m.style.transformOrigin = (a.right - l > mw / 2 ? 'top right' : 'top left'); },
+  edit(g, k, i) { const root = hvFindRoot(g), lv = root && root.lovelace; if (!lv) return;
+    const sig = JSON.stringify((g._config && g._config.cards) || []), hit = hvGridAt(lv.config, g), at = hit.find(x => x.v === root._curView) || hit[0];
+    HV_TAP.cfg = sig; HV_TAP.i = i; HV_TAP.t = Date.now();
+    const path = at && hvCardPath(lv.config, o => o === at.node, root._curView); if (path && hvOpenCardEditor(root, path)) return; hvToast('Tap the tile itself to edit it'); } };
 const HV_TILE_ICON = { clock: 'mdi:clock-outline', 'custom:homeview-nav-card': 'mdi:arrow-right-circle-outline', 'custom:homeview-calendar-card': 'mdi:calendar',
   'custom:homeview-house-card': 'mdi:home-outline', 'custom:homeview-group-card': 'mdi:lightbulb-group-outline', 'custom:homeview-thermostat-card': 'mdi:thermostat',
   'custom:homeview-music-card': 'mdi:music', 'custom:homeview-tv-card': 'mdi:television', 'custom:homeview-camera-card': 'mdi:cctv', 'custom:homeview-people-card': 'mdi:account-group-outline' };
@@ -3177,7 +3300,7 @@ const HV_GE_CSS = `.hv-ge .hd{margin:4px 0 2px;font-weight:600;font-size:15px}.h
 .hv-ge .t ha-state-icon,.hv-ge .t ha-icon{--mdc-icon-size:24px;color:var(--secondary-text-color)} .hv-ge .t.sel ha-state-icon,.hv-ge .t.sel ha-icon{color:var(--primary-color)}
 .hv-ge .pb{grid-column:1/-1;all:unset;grid-column:1/-1;box-sizing:border-box;cursor:pointer;display:flex;align-items:center;gap:8px;font-size:12px;opacity:.8;padding:2px 0;color:var(--secondary-text-color)}
 .hv-ge .pb::before,.hv-ge .pb::after{content:'';flex:1;border-top:1px dashed currentColor;opacity:.6} .hv-ge .pb.sel{color:var(--primary-color);opacity:1}
-.hv-ge .bar{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}.hv-ge .bar button{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:4px;padding:6px 12px;border-radius:999px;font-size:13px;
+.hv-ge .bar{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}.hv-ge .bar button{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:4px;min-height:36px;box-sizing:border-box;padding:6px 14px;border-radius:999px;font-size:13px;
  border:1px solid var(--divider-color,rgba(127,127,127,.35));color:var(--primary-text-color)}.hv-ge .bar button:disabled{opacity:.4;cursor:default}.hv-ge .bar button ha-icon{--mdc-icon-size:18px}
 .hv-ge .bar .grow{flex:1}.hv-ge .ed{border:1px solid var(--divider-color,rgba(127,127,127,.35));border-radius:12px;padding:12px;margin-bottom:12px}
 .hv-ge .edh{display:flex;align-items:center;gap:8px;font-weight:600;margin-bottom:8px}.hv-ge .edh small{font-weight:400;opacity:.7}
