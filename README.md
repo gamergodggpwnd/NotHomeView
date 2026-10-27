@@ -89,6 +89,7 @@ and Wallpanel 4.67.2.
 * **Add album link from the gallery**: the gallery's *Add photos* button opens a small menu: *Upload photos* or *Add album link*. Paste a
   Google Photos, iCloud or OneDrive link, see it checked (✓ / ⚠), tap *Save*: the Home Screen card's photo source becomes *Album link*
   (editable afterwards in the visual editor). With an album set, the menu offers *Change album link* and *Use media folder instead*. Admins only.
+* **Now Playing tile opens the Music sheet**: tap the artwork or title of a Now Playing tile on the Home Screen to open the full player (the buttons on the tile still just control playback).
 * **Edit pencil in popups** (admins only). The NotHomeView popups (Photos viewer and gallery, Weather, Music, device pages shown as sheets,
   Assistant, timer, camera / people large views, Rooms) show a pencil beside the ✕. It opens the visual editor of the card the popup belongs to
   (the Home Screen card, or the Page Grid on the tile you came from); a device page opens in edit mode. Turn it off with

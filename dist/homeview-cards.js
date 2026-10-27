@@ -4623,7 +4623,13 @@ class HVHubCard extends HTMLElement {
       this._sideEls = list.map(cfg => { const wrap = document.createElement('div'); wrap.className = 'tile'; let el; try { el = helpers ? helpers.createCardElement(cfg) : document.createElement('div'); } catch (e) { el = document.createElement('div'); el.textContent = String(e); }
         if (this._hass) el.hass = this._hass; if (this._edit != null) el.editMode = this._edit; if (el.tagName && el.tagName.startsWith('HOMEVIEW-')) el.setAttribute('floor', ''); // readable text, like Page Grid tiles
         el.addEventListener('ll-rebuild', ev => { ev.stopPropagation(); this._sideSig = null; this._makeSide(); }); wrap.appendChild(el); wrap._card = el; wrap._cfg = cfg;
-        wrap.addEventListener('click', ev => { const o = hubTileOpt(this._config, this._sideEls.indexOf(wrap)); if (!o.enlarge || this._edit) return;
+        wrap.addEventListener('click', ev => { const o = hubTileOpt(this._config, this._sideEls.indexOf(wrap));
+          // 1.32.0: tapping the body of a Now Playing tile opens the Music sheet (like the Music app); its buttons, seek bar and volume / output popovers keep their own taps
+          if (!o.enlarge && !this._edit && !this._sheetO && wrap._cfg.type === 'custom:homeview-now-playing-card' && o.tap !== 'none') { const p0 = ev.composedPath();
+            if (!p0.some(n => n instanceof Element && (n.tagName === 'BUTTON' || n.tagName === 'INPUT' || (n.classList && (n.classList.contains('pop') || n.classList.contains('prog') || n.classList.contains('ctl'))))) && !(wrap._card && wrap._card._suppressClick)) {
+              const ids = [wrap._cfg.entity].concat(wrap._cfg.entities || []).filter(Boolean) , def = Object.keys((this._hass && this._hass.states) || {}).find(k => k.startsWith('media_player.'));
+              if (ids.length || def) { ev.stopPropagation(); const a0 = Object.assign({}, wrap._cfg); delete a0.type; delete a0.height; delete a0.entity; delete a0.entities; this._openMusicSheet(a0, ids.length ? ids : [def]); return; } } }
+          if (!o.enlarge || this._edit) return;
           const path = ev.composedPath(); for (const n of path) { if (n === wrap) break; if (n.classList && n.classList.contains('element')) return; } // labels keep their own actions
           ev.stopPropagation(); this._openTileSheet(wrap._cfg, o); });
         if (window.ResizeObserver) { wrap._ro = new ResizeObserver(() => { if (wrap._fit) requestAnimationFrame(() => this._fitTile(wrap)); }); setTimeout(() => { const r = el.shadowRoot && el.shadowRoot.querySelector('#root'); if (r) wrap._ro.observe(r); }, 400); }
