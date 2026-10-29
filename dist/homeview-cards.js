@@ -1643,9 +1643,9 @@ Object.assign(HELPERS, { entities: 'Players to switch between (the speaker pill)
 // Live camera tile in the HomeView glass style: muted live stream (or a refreshing snapshot), name / status overlay and an
 // optional row of glass buttons for any entities (show live on/off state; tap = their own tap action, default toggle or
 // more-info). Tap the picture = larger view as a browser_mod popup (window or full screen, swipe down to close).
-const HV_SIZES = { '2x3': { columns: 3, rows: 2 }, '2x6': { columns: 6, rows: 2 }, '4x6': { columns: 6, rows: 4 } };
+const HV_SIZES = { '2x3': { columns: 3, rows: 2 }, '2x6': { columns: 6, rows: 2 }, '4x6': { columns: 6, rows: 4 }, '4x3': { columns: 3, rows: 4 } };
 // the camera also has a portrait size: 4 rows × 3 columns (one tile wide, two tiles tall)
-const SIZE_OPTS_FIXED = [{ value: '2x3', label: '2 × 3 (one tile)' }, { value: '2x6', label: '2 × 6 (two tiles wide)' }, { value: '4x6', label: '4 × 6 (2 tiles wide & tall)' }];
+const SIZE_OPTS_FIXED = [{ value: '2x3', label: '2 × 3 (one tile)' }, { value: '2x6', label: '2 × 6 (two tiles wide)' }, { value: '4x6', label: '4 × 6 (2 tiles wide & tall)' }, { value: '4x3', label: '4 × 3 Tall (one tile wide, two tiles tall)' }];
 // responsive sizes (phones / portrait): a share of the section's width, height follows the width (Tile shape)
 const RESP_SIZES = { 'r3': { columns: 3, rows: 'auto' }, 'r4': { columns: 4, rows: 'auto' }, 'r6': { columns: 6, rows: 'auto' }, 'r12': { columns: 12, rows: 'auto' } };
 const RESP_OPTS = [{ value: 'r3', label: 'Responsive · 3 columns (¼ of a section)' }, { value: 'r4', label: 'Responsive · 4 columns (⅓)' },
@@ -1886,7 +1886,7 @@ for (const k of ['_popupHost', '_swipeAttr', '_resetDrag', '_bindSwipe', '_snapB
 HVCameraCard.layoutSection = false;
 HVCameraCard.editorDefaults = true;
 HVCameraCard.sizePresetsMap = CAM_SIZES;
-HVCameraCard.sizeOptionsExtra = [{ value: '4x3', label: '4 × 3 Tall (one tile wide, two tiles tall)' }];
+HVCameraCard.sizeOptionsExtra = []; // 1.32.0: 4 × 3 Tall is a standard size now
 HVCameraCard.sizeOptions = [...SIZE_OPTS_FIXED, ...HVCameraCard.sizeOptionsExtra];
 HVCameraCard.schema = [
   { name: 'entity', required: true, selector: { entity: { domain: 'camera' } } },
@@ -3043,7 +3043,7 @@ class HVGridCard extends HTMLElement {
   set hass(h) { this._hass = h; (this._kids || []).forEach(k => { if (k.el) k.el.hass = h; }); this._arrBtn(); }
   get hass() { return this._hass; }
   // 1.32.0: small "Arrange" button next to the page dots (admins, storage-mode dashboards, outside HA's edit mode)
-  _arrBtn() { const b = this._arrB; if (!b) return; hvGridCards.add(this); const now = Date.now(); if (this._arrT && now - this._arrT < 4000 && !this._arrF) return; this._arrT = now; this._arrF = false;
+  _arrBtn() { hvGridCards.add(this); const b = this._arrB; if (!b) return; const now = Date.now(); if (this._arrT && now - this._arrT < 4000 && !this._arrF) return; this._arrT = now; this._arrF = false;
     const c = this._config || {}; b.hidden = !(c.arrange !== false && c.show_dots !== false && !this._edit && !this._arr && this.isConnected && hvEclOK(this)); }
   set editMode(v) { if (!v && this._edit && this._arrDirty && !this._arr) hvEcl.flush(this, 'Saved'); if (!!v !== !!this._edit) hvEditShift(this, v); this._edit = v; (this._kids || []).forEach(k => { if (k.el) k.el.editMode = v; }); hvGridCards.add(this); this.toggleAttribute('hv-edit', !!v); if (v) { if (this._arr) hvEcl.arrange(this, false, true); hvEcl.start(); } this._arrF = true; this._arrBtn(); } // 1.31.1: tap a tile to edit it
   getCardSize() { return 12; }
@@ -3108,17 +3108,17 @@ class HVGridCard extends HTMLElement {
 .pill{position:fixed;left:50%;top:calc(var(--hv-safe-top, env(safe-area-inset-top, 0px)) + 5px);width:38px;height:5px;margin-left:-19px;border-radius:3px;background:rgba(255,255,255,.55);box-shadow:0 1px 4px rgba(0,0,30,.25);pointer-events:none;z-index:3}
 .pill[hidden]{display:none}
 .empty{padding:24px;text-align:center;color:var(--primary-text-color);opacity:.7}
-:host{position:relative} .arr{all:unset;position:absolute;right:6px;bottom:0;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;color:rgba(255,255,255,.85);background:rgba(0,0,30,.18);touch-action:manipulation;z-index:2}
+:host{position:relative} .arr{display:none !important;all:unset;position:absolute;right:6px;bottom:0;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;color:rgba(255,255,255,.85);background:rgba(0,0,30,.18);touch-action:manipulation;z-index:2}
 .arr[hidden]{display:none} .arr ha-icon{--mdc-icon-size:18px;display:flex} :host([hv-day]) .arr{color:rgba(60,60,67,.75);background:rgba(60,60,67,.1)}
-</style><div class="sc"></div><div class="dots"></div><button class="arr" hidden aria-label="Arrange tiles" title="Arrange tiles"><ha-icon icon="mdi:cursor-move"></ha-icon></button><div class="pill" hidden></div>`;
-    this._arrB = this.shadowRoot.querySelector('.arr'); this._arrB.addEventListener('click', e => { e.stopPropagation(); hvEcl.arrange(this, true); });
+</style><div class="sc"></div><div class="dots"></div><div class="pill" hidden></div>`;
+    this._arrB = null; // 1.32.0: no Arrange button any more: long-press the grid (or use HA's edit mode)
     this._sc = this.shadowRoot.querySelector('.sc'); this._dots = this.shadowRoot.querySelector('.dots');
     this._sc.addEventListener('scroll', () => { cancelAnimationFrame(this._raf); this._raf = requestAnimationFrame(() => {
       const w = this._sc.clientWidth || 1, i = Math.round(this._sc.scrollLeft / w); if (i !== this._page) { this._page = i; this._paintDots(); } }); }, { passive: true });
     // Snap safety net: native CSS snap does the paging (iOS/Android momentum); if a WebView leaves the scroller between pages
     // (no snap applied), settle on the nearest page once the finger is up and scrolling has stopped, biased to the swipe direction.
     const sc = this._sc; let down = false, from = 0, idle;
-    const settle = () => { if (down) return; const w = sc.clientWidth || 1, x = sc.scrollLeft, d = x - from * w;
+    const settle = () => { if (down || this._mSw) return; const w = sc.clientWidth || 1, x = sc.scrollLeft, d = x - from * w;
       if (Math.abs(x - Math.round(x / w) * w) < 2) { from = Math.round(x / w); return; }
       let t = Math.abs(d) > w * 0.18 ? from + Math.sign(d) * Math.max(1, Math.round(Math.abs(d) / w)) : from;
       t = Math.max(0, Math.min((this._nPages || 1) - 1, t)); from = t; sc.scrollTo({ left: t * w, behavior: 'smooth' }); };
@@ -3131,7 +3131,7 @@ class HVGridCard extends HTMLElement {
   }
   async _makeChildren() {
     this._shell(); const tok = this._tok = (this._tok || 0) + 1;
-    const own = (this._kids || []).filter(k => k.el && !k.brk).map(k => ({ j: JSON.stringify(k.cfg), el: k.el })); // reuse these first
+    const own = (this._kids || []).filter(k => k.el && !k.brk).map(k => ({ j: JSON.stringify(k.cfg), lj: hvLooseJ(k.cfg), el: k.el })); // reuse these first
     const helpers = window.loadCardHelpers ? await window.loadCardHelpers() : null; if (tok !== this._tok) return;
     const kids = (this._config.cards || []).map((cfg, i) => {
       if (!cfg || cfg.type === 'custom:homeview-page-break') return { cfg, brk: true };
@@ -3202,6 +3202,10 @@ class HVGridCard extends HTMLElement {
         p.forEach(x => { const cell = x.it.k.cell; cell.style.gridArea = `${x.r + 1} / ${x.c + 1} / span ${x.rs} / span ${x.cs}`; pg.appendChild(cell); }); frag.appendChild(pg); });
       this._sc.replaceChildren(frag); if (!this._kids.some(k => !k.brk)) this._sc.innerHTML = '<div class="empty">Add cards in the editor</div>';
       this._nPages = pages.length; this._page = Math.min(keepPage, pages.length - 1);
+      if (this._flipR) { const m = this._flipR, sw = this._sc.clientWidth || 1; this._flipR = null; // 1.32.0: resize preview: the other tiles glide to their new places
+        for (const k of this._kids) { const o = k.el && m.get(k.el); if (!o || !k.cell) continue; const n = k.cell.getBoundingClientRect(); if (!n.width || !n.height) continue;
+          const dx = o.left - n.left, dy = o.top - n.top, sx = o.width / n.width, sy = o.height / n.height; if (Math.abs(dx) > sw / 2 || (Math.abs(dx) < 1 && Math.abs(dy) < 1 && Math.abs(sx - 1) < .01 && Math.abs(sy - 1) < .01)) continue;
+          try { k.cell.animate([{ transformOrigin: '0 0', transform: `translate(${dx}px,${dy}px) scale(${sx},${sy})` }, { transformOrigin: '0 0', transform: 'none' }], { duration: 240, easing: 'cubic-bezier(.2,.8,.2,1)' }); } catch (e) {} } }
     }
     requestAnimationFrame(() => { const w = this._sc.clientWidth, x = (this._page || 0) * w; // keep the current page exactly in place after a resize
       if (!this._down && Math.abs(this._sc.scrollLeft - x) > 1) this._sc.scrollLeft = x; });
@@ -3259,7 +3263,10 @@ function hvEditShift(g, on) { if (g._shiftT || g._nTop == null) return; const y0
     if (!g._edit || !g.isConnected) return; hvHeaderCompact(g); const r = g.getBoundingClientRect(); if (!r.height) return; const dy = r.top - y0; if (Math.abs(dy) > 2) window.scrollBy(0, dy); };
   const step = () => { fix(); if (Date.now() - t0 < 2200) requestAnimationFrame(step); else { g._shiftT = null; if (!on) { g._exitT = 0; if (window.scrollY && g.getBoundingClientRect().top + window.scrollY <= y0 + 4) window.scrollTo(0, 0); g._layout && g._layout(); } } }; g._shiftT = 1; requestAnimationFrame(step);
   const r = hvFindRoot(g), v = hvHuiView(g); Promise.resolve(r && r.updateComplete).then(() => v && v.updateComplete).then(fix, () => {}); } // before the first paint
+// 1.32.0: a tile whose only change is its size (resize handle) keeps its element: it gets the new config, no remount
+const hvLooseJ = c => { if (!c || typeof c !== 'object') return JSON.stringify(c); const o = Object.assign({}, c); delete o.grid_options; delete o.size; return JSON.stringify(o); };
 function hvGridTake(own, cfg) { const j = JSON.stringify(cfg); let i = own.findIndex(x => x.j === j); if (i >= 0) return own.splice(i, 1)[0].el;
+  const lj = hvLooseJ(cfg); i = own.findIndex(x => x.lj && x.lj === lj); if (i >= 0) { const el = own.splice(i, 1)[0].el; try { if (typeof el.setConfig === 'function') el.setConfig(cfg); } catch (e) { return null; } return el; }
   const now = Date.now(); for (let n = hvGridPool.length - 1; n >= 0; n--) { const e = hvGridPool[n]; if (now - e.t > 8000 || e.g.isConnected) { hvGridPool.splice(n, 1); continue; }
     i = e.kids.findIndex(x => x.j === j); if (i >= 0) return e.kids.splice(i, 1)[0].el; } return null; }
 const hvTapPick = e => { const x = e.clientX, y = e.clientY; if (x == null) return;
@@ -3272,8 +3279,9 @@ addEventListener('pointerdown', hvTapPick, true);
 { let lp = null, eat = 0; const stopLp = () => { if (lp) { clearTimeout(lp.t); lp = null; } };
   addEventListener('pointerdown', e => { stopLp(); if (e.button > 0 || !e.isPrimary) return; const x = e.clientX, y = e.clientY;
     const g = [...hvGridCards].find(g => { if (!g.isConnected || g._edit || g._arr || (g._config && g._config.arrange === false)) return false; const b = g.getBoundingClientRect(); return b.width > 0 && x >= b.left && x <= b.right && y >= b.top && y <= b.bottom; });
-    if (!g || hvEcl.drag || e.composedPath().some(n => n && n.id === 'hv-edit-layer')) return;
-    lp = { x, y, t: setTimeout(() => { lp = null; if (!hvEclOK(g)) return; eat = Date.now(); rel = 0; hvEcl.arrange(g, true); }, 600) }; }, true);
+    const hb = g ? null : [...HV_HUBS].find(h => { if (hvHubArr.hub || !h.isConnected || h._sheetO || !h._w || (h._config && h._config.arrange === false)) return false; const b = h.getBoundingClientRect(); return b.width > 0 && x >= b.left && x <= b.right && y >= b.top && y <= b.bottom; });
+    if ((!g && !hb) || hvEcl.drag || hvHubArr.drag || e.composedPath().some(n => n && n.id === 'hv-edit-layer')) return;
+    lp = { x, y, t: setTimeout(() => { lp = null; if (g) { if (!hvEclOK(g)) return; eat = Date.now(); rel = 0; hvEcl.arrange(g, true); } else { if (!hvHubArr.ok(hb)) return; eat = Date.now(); rel = 0; hvHubArr.enter(hb); } }, 600) }; }, true);
   addEventListener('pointermove', e => { if (lp && Math.hypot(e.clientX - lp.x, e.clientY - lp.y) > 10) stopLp(); }, true);
   for (const t of ['pointerup', 'pointercancel']) addEventListener(t, stopLp, true);
   addEventListener('scroll', stopLp, { capture: true, passive: true });
@@ -3282,8 +3290,8 @@ addEventListener('pointerdown', hvTapPick, true);
   for (const t of ['pointerup', 'touchend', 'mouseup', 'click', 'contextmenu']) addEventListener(t, e => { if (!eatOn()) { eat = rel = 0; return; } e.stopImmediatePropagation(); if (e.cancelable) e.preventDefault();
     if ((t === 'touchend' || t === 'pointerup') && !rel) { rel = Date.now(); setTimeout(() => { eat = rel = 0; }, 650); } }, true); }
 /* 1.32.0: per-tile controls in the dashboard's edit mode (room / device pages, the Page Grid). Home Assistant puts an overlay over every card while
-   editing, so these controls live in a layer above the page (positioned over each tile) and follow it while it scrolls or pages. Every tile gets
-   a grab handle (drag it with a finger or the mouse: lift, drop marker, auto page flip at the edges) and a "⋯" menu like HA's own card menu:
+   editing, so these controls live in a layer above the page (positioned over each tile) and follow it while it scrolls or pages. Every tile:
+   tap = its menu, hold = lift and drag (drop marker, auto page flip at the edges), sideways slide = swipe pages, corner handle = resize; a "⋯" menu like HA's own card menu:
    Edit (that tile's own editor), Move earlier / later, Duplicate, Delete (asks first). Changes are written to the saved dashboard exactly like
    the visual editor does. Admins in storage (UI) mode only. */
 const hvEclOK = g => { const h = g._hass, root = hvFindRoot(g), lv = root && root.lovelace; return !!(h && h.user && h.user.is_admin === true && lv && lv.config && lv.mode !== 'yaml'); };
@@ -3309,32 +3317,48 @@ async function hvGridMutate(grid, fn, quiet) { const root = hvFindRoot(grid), lv
   const same = quiet && JSON.stringify(fresh) === JSON.stringify(lv.rawConfig || lv.config); hit.node.cards = fn((hit.node.cards || []).slice());
   if (typeof lv.saveConfig === 'function' && (lv.urlPath || null) === (dash || null)) { if (same) await hvQuietSave(grid, lv, fresh); else await lv.saveConfig(fresh); }
   else { const sv = { type: 'lovelace/config/save', config: fresh }; if (dash) sv.url_path = dash; await grid._hass.callWS(sv); } }
-const HV_ECL_CSS = `:host{all:initial}.lay{position:fixed;inset:0;pointer-events:none;z-index:6;font-family:var(--paper-font-body1_-_font-family,Roboto,sans-serif);-webkit-tap-highlight-color:transparent}
+const HV_ECL_CSS = `:host{all:initial;--gtx:#fff;--gbg:rgba(28,30,42,.34);--gbi:linear-gradient(180deg,rgba(255,255,255,.2),rgba(255,255,255,.07));--gbd:rgba(255,255,255,.32);--gsh:0 8px 26px rgba(0,0,20,.3),inset 0 1px 0 rgba(255,255,255,.25);--gbl:blur(22px) saturate(170%);--acc:#0a84ff}
+:host([day]){--gtx:#1c1c1e;--gbg:rgba(255,255,255,.5);--gbi:linear-gradient(180deg,rgba(255,255,255,.55),rgba(255,255,255,.3));--gbd:rgba(255,255,255,.85);--gsh:0 8px 24px rgba(30,30,60,.16),inset 0 1px 0 rgba(255,255,255,.9)}
+.lay{position:fixed;inset:0;pointer-events:none;z-index:6;font-family:var(--paper-font-body1_-_font-family,-apple-system,BlinkMacSystemFont,Roboto,sans-serif);-webkit-tap-highlight-color:transparent}
+.gl,.b i,.rz i,.menu,.abar,.szl,.hint,.ghost{background-color:var(--gbg);background-image:var(--gbi);border:1px solid var(--gbd);box-shadow:var(--gsh);color:var(--gtx);backdrop-filter:var(--gbl);-webkit-backdrop-filter:var(--gbl);box-sizing:border-box}
 .c{position:fixed;left:0;top:0;pointer-events:none;display:block}
 .b{position:absolute;top:0;width:var(--bs,40px);height:var(--bs,40px);display:flex;align-items:center;justify-content:center;pointer-events:auto;cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;box-sizing:border-box;border:0;padding:0;background:none;color:inherit}
-.cv{display:none;position:absolute;left:0;top:0;width:100%;height:var(--th,40px);border-radius:20px;pointer-events:auto;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;cursor:grab;outline:2px dashed color-mix(in srgb,var(--primary-color,#03a9f4) 75%,transparent);outline-offset:-1px;background:rgba(127,127,127,.08);animation:jig .5s ease-in-out infinite alternate}
-.c.arr .cv{display:block} @keyframes jig{from{transform:rotate(-.6deg)}to{transform:rotate(.6deg)}}
-.abar{position:fixed;z-index:2;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 14px);display:flex;align-items:center;gap:8px;padding:6px 6px 6px 16px;border-radius:999px;pointer-events:auto;background:var(--card-background-color,#fff);color:var(--primary-text-color,#212121);box-shadow:0 6px 24px rgba(0,0,0,.45),0 0 0 1px rgba(127,127,127,.3);font-size:13px;white-space:nowrap;max-width:calc(100vw - 16px);box-sizing:border-box}
-.abar span{overflow:hidden;text-overflow:ellipsis;opacity:.75} .abar button{all:unset;box-sizing:border-box;min-height:40px;padding:0 16px;border-radius:999px;font-size:15px;font-weight:600;cursor:pointer;touch-action:manipulation}
-.abar .ok{background:var(--primary-color,#03a9f4);color:#fff} .abar .no{opacity:.8}
-.b.h{left:0;cursor:grab}.b.m{right:0;touch-action:manipulation}
-.b i{display:flex;align-items:center;justify-content:center;width:var(--bi,30px);height:var(--bi,30px);border-radius:50%;background:var(--card-background-color,#fff);color:var(--primary-text-color,#212121);box-shadow:0 1px 5px rgba(0,0,0,.4),0 0 0 1px rgba(127,127,127,.35);transition:transform .12s,background .12s}
+.cv{position:absolute;inset:0;border-radius:var(--rr,22px);pointer-events:auto;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;cursor:pointer;outline:1.5px dashed rgba(255,255,255,.5);outline-offset:-1px;background:rgba(255,255,255,.035)}
+:host([day]) .cv{outline-color:rgba(60,60,67,.35)}
+.c.arr .cv{cursor:grab;animation:jig .5s ease-in-out infinite alternate} @keyframes jig{from{transform:rotate(-.6deg)}to{transform:rotate(.6deg)}}
+.c.off .cv{animation:none;opacity:0}
+.abar{position:fixed;z-index:2;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 14px);display:flex;align-items:center;gap:8px;padding:6px 6px 6px 16px;border-radius:999px;pointer-events:auto;font-size:13px;white-space:nowrap;max-width:calc(100vw - 16px)}
+.abar span{overflow:hidden;text-overflow:ellipsis;opacity:.8} .abar button{all:unset;box-sizing:border-box;min-height:40px;padding:0 18px;border-radius:999px;font-size:15px;font-weight:600;cursor:pointer;touch-action:manipulation}
+.abar .ok{background:color-mix(in srgb,var(--acc) 82%,transparent);color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.3)} .abar .no{background:rgba(127,127,127,.16)}
+.b.m{right:0;touch-action:manipulation} .c.app .b.m{top:-12px;right:-12px}
+.b i{display:flex;align-items:center;justify-content:center;width:var(--bi,30px);height:var(--bi,30px);border-radius:50%;transition:transform .12s}
 .b:active i{transform:scale(.9)} .b ha-icon{--mdc-icon-size:20px;display:flex}
-.dim{position:fixed;pointer-events:none;border-radius:22px;background:rgba(127,127,127,.28);outline:2px dashed var(--primary-color,#03a9f4);outline-offset:-2px}
-.drop{position:fixed;pointer-events:none;border-radius:22px;border:3px solid var(--primary-color,#03a9f4);background:color-mix(in srgb,var(--primary-color,#03a9f4) 20%,transparent);box-sizing:border-box;transition:left .08s,top .08s,width .08s,height .08s}
-.ghost{position:fixed;pointer-events:none;border-radius:22px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;padding:8px;box-sizing:border-box;overflow:hidden;
- background:color-mix(in srgb,var(--card-background-color,#fff) 88%,transparent);color:var(--primary-text-color,#212121);box-shadow:0 14px 34px rgba(0,0,0,.45),0 0 0 2px var(--primary-color,#03a9f4);font-size:13px;font-weight:600;transform-origin:center}
-.ghost ha-icon,.ghost ha-state-icon{--mdc-icon-size:30px;color:var(--primary-color,#03a9f4);display:flex} .ghost span{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.hint{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 18px);padding:8px 14px;border-radius:999px;background:var(--primary-color,#03a9f4);color:#fff;font-size:13px;font-weight:600;pointer-events:none;box-shadow:0 2px 10px rgba(0,0,0,.4)}
+.rz{position:absolute;right:0;bottom:0;width:var(--bs,40px);height:var(--bs,40px);pointer-events:auto;touch-action:none;cursor:nwse-resize;display:flex;align-items:center;justify-content:center;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.rz i{position:relative;display:block;width:var(--bi,30px);height:var(--bi,30px);border-radius:50%;transition:transform .12s}
+.rz i::before{content:'';position:absolute;right:28%;bottom:28%;width:38%;height:38%;border-right:3px solid currentColor;border-bottom:3px solid currentColor;border-bottom-right-radius:70%;opacity:.95}
+.rz:active i{transform:scale(1.12)} .c.nr .rz{display:none}
+.tgt{position:fixed;pointer-events:none;border-radius:var(--rr,22px);border:1.5px dashed rgba(255,255,255,.42);box-sizing:border-box;transition:left .18s,top .18s;display:flex;align-items:flex-end;justify-content:flex-end;padding:6px 10px;font-size:11px;font-weight:600;color:rgba(255,255,255,.6)}
+.tgt.on{border:2px solid rgba(255,255,255,.85);background:rgba(255,255,255,.07);color:#fff}
+:host([day]) .tgt{border-color:rgba(60,60,67,.3);color:rgba(60,60,67,.55)} :host([day]) .tgt.on{border-color:rgba(60,60,67,.7);color:#1c1c1e}
+.live{position:fixed;pointer-events:none;border-radius:var(--rr,22px);box-shadow:0 0 0 2.5px var(--acc),0 12px 30px rgba(0,0,20,.35);transition:left .2s,top .2s,width .2s,height .2s}
+.live.pulse{animation:pulse .28s ease-out} @keyframes pulse{0%{transform:scale(1)}40%{transform:scale(1.025)}100%{transform:scale(1)}}
+.szl{position:fixed;pointer-events:none;padding:7px 14px;border-radius:999px;font-size:14px;font-weight:700;white-space:nowrap;z-index:3}
+.dim{position:fixed;pointer-events:none;border-radius:var(--rr,22px);background:rgba(127,127,127,.22);outline:1.5px dashed rgba(255,255,255,.55);outline-offset:-2px}
+.drop{position:fixed;pointer-events:none;border-radius:var(--rr,22px);border:2.5px solid rgba(255,255,255,.9);background:rgba(255,255,255,.12);box-sizing:border-box;transition:left .08s,top .08s,width .08s,height .08s}
+.ghost{position:fixed;pointer-events:none;border-radius:var(--rr,22px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;padding:8px;overflow:hidden;font-size:13px;font-weight:600;transform-origin:center;box-shadow:0 18px 40px rgba(0,0,20,.45),inset 0 1px 0 rgba(255,255,255,.3)}
+.ghost ha-icon,.ghost ha-state-icon{--mdc-icon-size:30px;display:flex} .ghost span{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.hint{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 18px);padding:9px 16px;border-radius:999px;font-size:13px;font-weight:600;pointer-events:none;z-index:3}
 .scrim{position:fixed;inset:0;pointer-events:auto;z-index:3}
-.menu{position:fixed;z-index:4;pointer-events:auto;min-width:212px;max-width:calc(100vw - 16px);padding:6px 0;border-radius:14px;background:var(--card-background-color,#fff);color:var(--primary-text-color,#212121);box-shadow:0 8px 30px rgba(0,0,0,.45),0 0 0 1px rgba(127,127,127,.3);overflow:hidden;animation:pop .12s ease-out;transform-origin:top right}
+.menu{position:fixed;z-index:4;pointer-events:auto;min-width:212px;max-width:calc(100vw - 16px);padding:6px 0;border-radius:18px;overflow:hidden;animation:pop .12s ease-out;transform-origin:top right;--gbg:rgba(28,30,42,.5)}
+:host([day]) .menu{--gbg:rgba(255,255,255,.72)}
 @keyframes pop{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:none}}
-.menu .t{padding:8px 16px 6px;font-size:12px;opacity:.65;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.menu button{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:14px;width:100%;min-height:48px;padding:0 18px;font-size:15px;cursor:pointer;color:inherit}
-.menu button:hover,.menu button:focus-visible{background:rgba(127,127,127,.16)} .menu button[disabled]{opacity:.38;cursor:default;pointer-events:none}
-.menu button ha-icon{--mdc-icon-size:22px;opacity:.75;display:flex} .menu button.del{color:var(--error-color,#db4437)} .menu button.del ha-icon{opacity:1}
-.menu .sep{height:1px;margin:4px 0;background:rgba(127,127,127,.3)} .menu .q{padding:10px 18px 4px;font-size:15px;line-height:1.35}
+.menu .t{padding:8px 16px 6px;font-size:12px;opacity:.7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.menu button{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:14px;width:100%;min-height:46px;padding:0 18px;font-size:15px;cursor:pointer;color:inherit}
+.menu button:hover,.menu button:focus-visible{background:rgba(255,255,255,.14)} :host([day]) .menu button:hover,:host([day]) .menu button:focus-visible{background:rgba(60,60,67,.1)} .menu button[disabled]{opacity:.38;cursor:default;pointer-events:none}
+.menu button ha-icon{--mdc-icon-size:22px;opacity:.85;display:flex} .menu button.del{color:#ff6961} :host([day]) .menu button.del{color:#d70015} .menu button.del ha-icon{opacity:1}
+.menu .sep{height:1px;margin:4px 0;background:rgba(127,127,127,.32)} .menu .q{padding:10px 18px 4px;font-size:15px;line-height:1.35}
 .menu .row{display:flex}.menu .row button{justify-content:center;gap:6px;font-weight:600}`;
+const HV_RZ = { '2x3': [1, 1], '2x6': [2, 1], '4x6': [2, 2], '4x3': [1, 2] }, HV_RZ_N = { '2x3': 'One tile', '2x6': 'Two wide', '4x6': 'Large', '4x3': 'Tall' };
 const hvEcl = { host: null, sr: null, lay: null, ctl: new WeakMap(), timer: null, drag: null, menu: null, busy: false,
   label(g, i) { const c = g._kids[i] && g._kids[i].cfg, st = c && c.entity && g._hass && g._hass.states[c.entity]; if (!c) return 'Tile';
     return c.name || c.title || (st && st.attributes.friendly_name) || c.entity || hvTileTypeName(c.type); },
@@ -3345,24 +3369,84 @@ const hvEcl = { host: null, sr: null, lay: null, ctl: new WeakMap(), timer: null
     const stop = e => { if (this.drag) e.preventDefault(); }; // finger drags move the tile, never the page
     document.addEventListener('touchmove', stop, { passive: false, capture: true }); this._stop = stop;
     addEventListener('scroll', () => this.kick(), { capture: true, passive: true }); addEventListener('resize', () => this.kick());
-    addEventListener('keydown', e => { if (e.key === 'Escape' && (this.menu || this.drag)) { if (this.drag) this.endDrag(false); this.closeMenu(); } }, true); },
+    addEventListener('keydown', e => { if (e.key === 'Escape' && this.rs) this.endResize(); if (e.key === 'Escape' && (this.menu || this.drag)) { if (this.drag) this.endDrag(false); this.closeMenu(); } }, true); },
   kick() { if (this._raf) return; this._raf = requestAnimationFrame(() => { this._raf = 0; this.tick(); }); },
   start() { if (this.timer) return; this.timer = setInterval(() => this.tick(), 150); this.kick(); },
   tick() { for (const g of hvGridCards) if (g._arr && !g.isConnected) this.arrange(g, false, true);
     const gs = [...hvGridCards].filter(g => g.isConnected && (g._edit || g._arr) && g._kids && hvEclOK(g)); 
+    if (!gs.length && hvHubArr.hub) { clearInterval(this.timer); this.timer = null; return; }
     if (!gs.length) { clearInterval(this.timer); this.timer = null; this.closeMenu(); if (this.drag) this.endDrag(false); if (this.host) { this.host.remove(); this.host = null; this.ctl = new WeakMap(); } return; }
-    this.ensure(); this.bar(gs.find(g => g._arr && !g._edit)); const vw = document.documentElement.clientWidth || innerWidth, vh = innerHeight, live = new Set();
+    this.ensure(); this.bar(gs.find(g => g._arr && !g._edit)); { const day = gs.some(g => g.hasAttribute('hv-day')); if (this.host.hasAttribute('day') !== day) this.host.toggleAttribute('day', day); } const vw = document.documentElement.clientWidth || innerWidth, vh = innerHeight, live = new Set();
     for (const g of gs) { const root = hvFindRoot(g), hd = root && root.shadowRoot && root.shadowRoot.querySelector('.header'), top = hd ? hd.getBoundingClientRect().bottom : 0, gr = g.getBoundingClientRect();
       const L = Math.max(0, gr.left) - 2, R = Math.min(vw, gr.right) + 2;
-      g._kids.forEach((k, i) => { if (!k.cell || !k.cell.isConnected) return; const r = k.cell.getBoundingClientRect(); let c = this.ctl.get(k);
-        if (!c) { c = document.createElement('div'); c.className = 'c'; c.innerHTML = `<div class="cv"></div><button class="b h" aria-label="Move this tile (drag)" title="Drag to move"><i><ha-icon icon="mdi:drag"></ha-icon></i></button><button class="b m" aria-label="Tile options" aria-haspopup="menu" title="Edit, move, duplicate, delete"><i><ha-icon icon="mdi:dots-vertical"></ha-icon></i></button>`;
-          c.querySelector('.h').addEventListener('pointerdown', e => this.startDrag(g, k, e)); c.querySelector('.cv').addEventListener('pointerdown', e => this.startDrag(g, k, e, true)); c.querySelector('.m').addEventListener('click', e => { e.stopPropagation(); this.openMenu(g, k, c.querySelector('.m')); });
-          c.querySelector('.m').addEventListener('keydown', e => e.stopPropagation()); this.lay.appendChild(c); this.ctl.set(k, c); }
-        live.add(c); const bs = Math.max(36, Math.min(44, Math.round(r.width * 0.34))), bi = Math.max(28, bs - 8), pad = 2;
-        const vis = r.width > 0 && r.left >= L && r.right <= R && r.top + pad >= top && r.top < vh - bs;
-        c.style.display = vis ? '' : 'none'; if (!vis) return; c.style.setProperty('--bs', bs + 'px'); c.style.setProperty('--bi', bi + 'px');
-        c.style.width = (r.width - pad * 2) + 'px'; c.style.height = bs + 'px'; c.style.setProperty('--th', (r.height - pad * 2) + 'px'); c.classList.toggle('arr', !!(g._arr && !g._edit)); c.style.transform = `translate(${Math.round(r.left + pad)}px,${Math.round(r.top + pad)}px)`; }); }
-    for (const c of [...this.lay.querySelectorAll('.c')]) if (!live.has(c)) c.remove(); },
+      const rr = getComputedStyle(g).getPropertyValue('--hv-radius').trim();
+      g._kids.forEach((k, i) => { if (!k.cell || !k.cell.isConnected || k.brk) return; const r = k.cell.getBoundingClientRect(), el = k.el; let c = this.ctl.get(el);
+        if (!c) { c = document.createElement('div'); c.className = 'c'; c.innerHTML = `<div class="cv"></div><button class="b m" aria-label="Tile options" aria-haspopup="menu" title="Edit, move, resize, duplicate, delete"><i><ha-icon icon="mdi:dots-horizontal"></ha-icon></i></button><div class="rz" role="button" aria-label="Resize (drag the corner)" title="Drag to resize"><i></i></div>`;
+          const kk = () => g._kids.find(x => x.el === el);
+          c.querySelector('.cv').addEventListener('pointerdown', e => { const k2 = kk(); if (k2) this.press(g, k2, e); });
+          c.querySelector('.rz').addEventListener('pointerdown', e => { const k2 = kk(); if (k2) this.resize(g, k2, e); });
+          c.querySelector('.m').addEventListener('click', e => { e.stopPropagation(); const k2 = kk(); if (k2) this.openMenu(g, k2, c.querySelector('.m')); });
+          c.querySelector('.m').addEventListener('keydown', e => e.stopPropagation()); this.lay.appendChild(c); this.ctl.set(el, c); }
+        live.add(c); const bs = Math.max(36, Math.min(44, Math.round(r.width * 0.34))), bi = Math.max(28, bs - 10), pad = 2;
+        // 1.32.0: tiles on the next / previous page show their controls too while a swipe brings them in (clipped to the grid)
+        const vis = r.width > 0 && r.right > L + 24 && r.left < R - 24 && r.bottom > top + 24 && r.top < vh - 12;
+        c.style.display = vis ? '' : 'none'; if (!vis) return; c.style.setProperty('--bs', bs + 'px'); c.style.setProperty('--bi', bi + 'px'); if (rr) c.style.setProperty('--rr', rr);
+        const cl = Math.max(0, L - r.left), cr = Math.max(0, r.right - R), ct = Math.max(0, top - r.top); c.style.clipPath = cl || cr || ct ? `inset(${Math.round(ct)}px ${Math.round(cr)}px 0 ${Math.round(cl)}px)` : '';
+        c.style.width = (r.width - pad * 2) + 'px'; c.style.height = (r.height - pad * 2) + 'px'; c.style.setProperty('--th', (r.height - pad * 2) + 'px'); c.classList.toggle('arr', !!(g._arr && !g._edit));
+        c.classList.toggle('nr', !this.sizes(g, k).length); c.classList.toggle('off', !!(this.rs && this.rs.el === el)); c.style.transform = `translate(${Math.round(r.left + pad)}px,${Math.round(r.top + pad)}px)`; }); }
+    for (const c of [...this.lay.querySelectorAll(':scope > .c:not(.hc)')]) if (!live.has(c)) c.remove(); },
+  // ---- 1.32.0: touch a tile: tap = its menu, hold = pick it up (drag to move), slide sideways = swipe the grid's pages, slide up / down = scroll ----
+  press(g, k, e) { if ((e.button != null && e.button > 0) || this.drag || this.rs) return; e.preventDefault(); e.stopPropagation(); this.closeMenu();
+    const cv = e.currentTarget, sc = g._sc, w = (sc && sc.clientWidth) || 1, el = k.el;
+    const p = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, mode: '', sl: sc ? sc.scrollLeft : 0, sy: window.scrollY || 0, pg: sc ? Math.round(sc.scrollLeft / w) : 0 };
+    try { cv.setPointerCapture(e.pointerId); } catch (x) {}
+    const off = () => { clearTimeout(p.t); cv.removeEventListener('pointermove', mv); cv.removeEventListener('pointerup', up); cv.removeEventListener('pointercancel', up); };
+    const mv = ev => { if (ev.pointerId !== p.id) return; p.x = ev.clientX; p.y = ev.clientY; const dx = p.x - p.x0, dy = p.y - p.y0;
+      if (!p.mode && Math.hypot(dx, dy) > 8) { clearTimeout(p.t); p.mode = Math.abs(dx) > Math.abs(dy) && (g._nPages || 1) > 1 && sc ? 'swipe' : 'scroll'; if (p.mode === 'swipe') { g._mSw = true; sc.style.scrollSnapType = 'none'; } }
+      if (p.mode === 'swipe') sc.scrollLeft = Math.max(0, Math.min(sc.scrollWidth - w, p.sl - dx)); else if (p.mode === 'scroll') window.scrollTo(window.scrollX || 0, p.sy - dy); };
+    const up = ev => { if (ev.pointerId !== p.id) return; off(); try { cv.releasePointerCapture(p.id); } catch (x) {}
+      if (p.mode === 'swipe') { const d = sc.scrollLeft - p.pg * w; let t = Math.abs(d) > w * 0.18 ? p.pg + Math.sign(d) : p.pg; t = Math.max(0, Math.min((g._nPages || 1) - 1, t));
+        sc.scrollTo({ left: t * w, behavior: 'smooth' }); setTimeout(() => { sc.style.scrollSnapType = ''; g._mSw = false; if (Math.abs(sc.scrollLeft - t * w) > 1) sc.scrollLeft = t * w; this.kick(); }, 480); }
+      else if (!p.mode && ev.type === 'pointerup') { const k2 = g._kids.find(x => x.el === el), c = this.ctl.get(el); if (k2 && c) this.openMenu(g, k2, c.querySelector('.m')); } };
+    cv.addEventListener('pointermove', mv); cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+    p.t = setTimeout(() => { if (p.mode) return; p.mode = 'drag'; off(); const k2 = g._kids.find(x => x.el === el); if (!k2) return;
+      this.startDrag(g, k2, { button: 0, pointerId: p.id, clientX: p.x0, clientY: p.y0, currentTarget: cv, preventDefault() {}, stopPropagation() {} }, true);
+      if (this.drag && (p.x !== p.x0 || p.y !== p.y0)) this.moveDrag({ clientX: p.x, clientY: p.y, preventDefault() {} }); }, 260); },
+  // ---- 1.32.0: the corner handle: drag to resize; snaps only to the four tile sizes (and only the ones that card offers) ----
+  sizes(g, k) { const c = (k && k.cfg) || {}; if (!c.type || c.type === 'custom:homeview-page-break' || !g._sc) return [];
+    const cls = customElements.get(String(c.type).replace(/^custom:/, '')), o = cls && cls.sizeOptions; let ks = Object.keys(HV_RZ);
+    if (Array.isArray(o)) ks = ks.filter(x => o.some(y => y && y.value === x));
+    const C = Number(g._sc.style.getPropertyValue('--c')) || 3, R = Number(g._sc.style.getPropertyValue('--r')) || 3; ks = ks.filter(x => HV_RZ[x][0] <= C && HV_RZ[x][1] <= R); return ks.length > 1 ? ks : []; },
+  keyOf(g, cfg) { const C = Number(g._sc.style.getPropertyValue('--c')) || 3, R = Number(g._sc.style.getPropertyValue('--r')) || 3, [cs, rs] = gridSpan(cfg || {}, C, R);
+    return Object.keys(HV_RZ).find(x => HV_RZ[x][0] === cs && HV_RZ[x][1] === rs) || '2x3'; },
+  resize(g, k, e) { if ((e.button != null && e.button > 0) || this.drag || this.rs) return; const ks = this.sizes(g, k); if (!ks.length) return; e.preventDefault(); e.stopPropagation(); this.closeMenu();
+    const st = g._sc.style, cw = parseFloat(st.getPropertyValue('--cw')) || 100, ch = parseFloat(st.getPropertyValue('--ch')) || 100, gap = parseFloat(st.getPropertyValue('--g')) || 0, el = k.el, h0 = e.currentTarget;
+    const r0 = k.cell.getBoundingClientRect(), cur = this.keyOf(g, k.cfg), rr = getComputedStyle(g).getPropertyValue('--hv-radius').trim();
+    const d = this.rs = { g, el, ks, cw, ch, gap, cur, first: cur, id: e.pointerId, o0: r0, zones: [], x: e.clientX, y: e.clientY };
+    try { h0.setPointerCapture(e.pointerId); } catch (x) {}
+    const mk = cls => { const n = document.createElement('div'); n.className = cls; if (rr) n.style.setProperty('--rr', rr); this.lay.appendChild(n); return n; };
+    for (const key of ks) { const z = mk('tgt'); z.dataset.k = key; z.textContent = key.replace('x', ' × '); d.zones.push(z); }
+    d.live = mk('live'); d.lbl = mk('szl');
+    const paint = () => { const kk = g._kids.find(x => x.el === el); if (!kk || !kk.cell || !kk.cell.isConnected) return; const r = kk.cell.getBoundingClientRect(); if (!r.width) return;
+      for (const z of d.zones) { const [cs, rs] = HV_RZ[z.dataset.k]; this.pos(z, { left: r.left, top: r.top, width: cs * cw + (cs - 1) * gap, height: rs * ch + (rs - 1) * gap }); z.classList.toggle('on', z.dataset.k === d.cur); }
+      this.pos(d.live, r); d.lbl.textContent = `${d.cur.replace('x', ' × ')} · ${HV_RZ_N[d.cur]}`;
+      const lw = d.lbl.offsetWidth || 120, vw = document.documentElement.clientWidth || innerWidth; d.lbl.style.left = Math.max(8, Math.min(vw - lw - 8, d.x - lw / 2)) + 'px'; d.lbl.style.top = Math.max(8, d.y - 64) + 'px'; };
+    d.paint = paint; paint(); d.iv = setInterval(paint, 60); if (navigator.vibrate) try { navigator.vibrate(10); } catch (x) {}
+    d.mv = ev => { if (ev.pointerId !== d.id) return; ev.preventDefault(); d.x = ev.clientX; d.y = ev.clientY;
+      // size from where the finger is, measured from the tile's top-left when the drag started: past the middle of the next cell = that cell joins
+      const fx = d.x - d.o0.left, fy = d.y - d.o0.top, cs = fx > cw * 1.5 + gap ? 2 : 1, rs = fy > ch * 1.5 + gap ? 2 : 1;
+      let key = Object.keys(HV_RZ).find(x => HV_RZ[x][0] === cs && HV_RZ[x][1] === rs);
+      if (!ks.includes(key)) key = ks.slice().sort((a, b) => { const da = Math.abs(HV_RZ[a][0] - cs) + Math.abs(HV_RZ[a][1] - rs), db = Math.abs(HV_RZ[b][0] - cs) + Math.abs(HV_RZ[b][1] - rs); return da - db || (b === d.cur) - (a === d.cur); })[0];
+      if (key !== d.cur) { d.cur = key; this.setSize(g, el, key); d.live.classList.remove('pulse'); void d.live.offsetWidth; d.live.classList.add('pulse'); if (navigator.vibrate) try { navigator.vibrate(8); } catch (x) {} }
+      paint(); };
+    d.up = ev => { if (ev.pointerId !== d.id) return; this.endResize(); };
+    addEventListener('pointermove', d.mv, true); addEventListener('pointerup', d.up, true); addEventListener('pointercancel', d.up, true); d.h0 = h0; this.kick(); },
+  endResize() { const d = this.rs; if (!d) return; this.rs = null; clearInterval(d.iv); removeEventListener('pointermove', d.mv, true); removeEventListener('pointerup', d.up, true); removeEventListener('pointercancel', d.up, true);
+    try { d.h0.releasePointerCapture(d.id); } catch (x) {} [...d.zones, d.live, d.lbl].forEach(n => n && n.remove()); this.kick();
+    if (d.cur !== d.first && d.g._edit) hvToast(`Tile resized to ${d.cur.replace('x', ' × ')} · saved when you tap Done`, 'hv-arrange'); },
+  setSize(g, el, key) { const i = g._kids.findIndex(x => x.el === el); if (i < 0) return; const [cs, rs] = HV_RZ[key];
+    this.apply(g, cards => { const c = cards[i]; if (!c) return cards; c.grid_options = Object.assign({}, c.grid_options || {}, { columns: cs * 3, rows: rs * 2 }); // same keys as the Size dropdown
+      if (c.type === 'custom:homeview-camera-card') { if (key === '2x3') delete c.size; else c.size = key; } return cards; }, null, true, true); },
   // ---- drag ----
   startDrag(g, k, e, cv) { if (e.button != null && e.button > 0 || this.drag) return; e.preventDefault(); e.stopPropagation(); this.closeMenu();
     const i = g._kids.indexOf(k), r = k.cell.getBoundingClientRect(), btn = e.currentTarget;
@@ -3392,10 +3476,11 @@ const hvEcl = { host: null, sr: null, lay: null, ctl: new WeakMap(), timer: null
     if (ok && d.over >= 0 && d.over !== d.i) { d.gh.style.transition = 'all .16s ease-out'; this.pos(d.gh, d.g._kids[d.over].cell.getBoundingClientRect()); d.gh.style.transform = 'scale(1)'; d.gh.style.opacity = '.4'; setTimeout(() => d.gh.remove(), 260);
       this.apply(d.g, cards => { const t = cards.splice(d.i, 1)[0]; cards.splice(d.over, 0, t); return cards; }, 'Tile moved'); }
     else { d.gh.style.transition = 'all .16s ease-out'; this.pos(d.gh, d.r); d.gh.style.transform = 'scale(1)'; d.gh.style.opacity = '0'; setTimeout(() => d.gh.remove(), 200);
-      if (ok && d.cv && !d.moved) { const c = this.ctl.get(d.k); if (c) this.openMenu(d.g, d.k, c.querySelector('.m')); } } }, // a tap on a tile in arrange mode opens its menu
-  async apply(g, fn, ok) { if (!g._arrSig) { g._arrSig = JSON.stringify(g._config.cards || []); g._arrOrig = JSON.parse(g._arrSig); }
+      if (ok && d.cv && !d.moved) { const c = this.ctl.get(d.k.el); if (c) this.openMenu(d.g, d.k, c.querySelector('.m')); } } }, // hold and let go without moving: its menu
+  async apply(g, fn, ok, quiet, flip) { if (!g._arrSig) { g._arrSig = JSON.stringify(g._config.cards || []); g._arrOrig = JSON.parse(g._arrSig); }
+    if (flip) g._flipR = new Map(g._kids.filter(k => k.el && k.cell && k.cell.isConnected).map(k => [k.el, k.cell.getBoundingClientRect()]));
     g.setConfig(Object.assign({}, g._config, { cards: fn(JSON.parse(JSON.stringify(g._config.cards || []))) })); g._arrDirty = true; this.kick(); setTimeout(() => this.kick(), 120);
-    if (g._edit) { hvGridDirty.add(g); hvToast((ok || 'Changed') + ' · saved when you tap Done', 'hv-arrange'); } }, // HA edit mode: kept until Done / leaving the page (one quiet save, no rebuild)
+    if (g._edit) { hvGridDirty.add(g); if (!quiet) hvToast((ok || 'Changed') + ' · saved when you tap Done', 'hv-arrange'); } }, // HA edit mode: kept until Done / leaving the page (one quiet save, no rebuild)
   flush(g, ok) { clearTimeout(g._svT); g._svT = null; if (!g._arrDirty) return Promise.resolve(true); if (g._svP) return g._svP.then(() => this.flush(g, ok));
     const j = JSON.stringify(g._config.cards || []), cards = JSON.parse(j);
     return g._svP = hvGridMutate(g, () => cards, true).then(() => { g._svP = null; if (JSON.stringify(g._config.cards || []) === j) { g._arrSig = null; g._arrOrig = null; g._arrDirty = false; hvGridDirty.delete(g); } else { g._arrSig = j; this.flush(g, ok); } if (ok) hvToast(ok, 'hv-arrange'); return true; },
@@ -3410,8 +3495,8 @@ const hvEcl = { host: null, sr: null, lay: null, ctl: new WeakMap(), timer: null
     if (discard || !g._arrDirty) { if (g._arrDirty && g._arrOrig) g.setConfig(Object.assign({}, g._config, { cards: g._arrOrig })); fin(); return Promise.resolve(true); }
     if (this.busy) return Promise.resolve(false); this.busy = true; const cards = JSON.parse(JSON.stringify(g._config.cards || []));
     return hvGridMutate(g, () => cards, true).then(() => { this.busy = false; fin(); hvToast('Saved', 'hv-arrange'); return true; }, e => { this.busy = false; hvToast('Could not save: ' + (e && e.message || e), 'hv-arrange'); return false; }); },
-  bar(g) { let b = this.sr && this.sr.querySelector('.abar'); if (!g) { if (b) b.remove(); return; } if (!b) { b = document.createElement('div'); b.className = 'abar';
-      b.innerHTML = '<span>Drag tiles · tap one for options</span><button class="no">Cancel</button><button class="ok">Done</button>'; this.lay.appendChild(b); }
+  bar(g) { let b = this.sr && this.sr.querySelector('.abar:not(.hb)'); if (!g) { if (b) b.remove(); return; } if (!b) { b = document.createElement('div'); b.className = 'abar';
+      b.innerHTML = '<span>Hold to move · drag a corner to resize</span><button class="no">Cancel</button><button class="ok">Done</button>'; this.lay.appendChild(b); }
     b.querySelector('.no').onclick = e => { e.stopPropagation(); this.arrange(g, false, true); }; b.querySelector('.ok').onclick = e => { e.stopPropagation(); this.arrange(g, false); }; },
   // ---- the ⋯ menu ----
   closeMenu() { if (!this.menu) return; this.menu.remove(); this.menu = null; },
@@ -3440,6 +3525,141 @@ const hvEcl = { host: null, sr: null, lay: null, ctl: new WeakMap(), timer: null
     const sig = JSON.stringify((g._config && g._config.cards) || []), hit = hvGridAt(lv.config, g), at = hit.find(x => x.v === root._curView) || hit[0];
     HV_TAP.cfg = sig; HV_TAP.i = i; HV_TAP.t = Date.now();
     const path = at && hvCardPath(lv.config, o => o === at.node, root._curView); if (path && hvOpenCardEditor(root, path)) return; hvToast('Tap the tile itself to edit it'); } };
+/* 1.32.0: Home Screen arrange. Long-press the Home Screen (admins, UI-mode dashboards): the apps, the Photos tile and the extra tiles get the same
+   glass controls as room pages: tap = options (⋯), hold = pick up and drag (apps among apps, tiles among tiles), corner handle = resize
+   (the Home Screen row has two sizes: one tile or two wide). Everything updates in place; one quiet save on Done (no rebuild), Cancel undoes. */
+const hvInDialog = el => { for (let n = el, d = 0; n && d < 40; d++) { if (n.tagName && /DIALOG|HUI-CARD-PREVIEW/.test(n.tagName)) return true; n = n.parentNode || (n.host !== undefined ? n.host : null); } return false; };
+async function hvHubMutate(h, sig0, raw) { const root = hvFindRoot(h), lv = root && root.lovelace;
+  if (!lv) throw new Error('open this from the dashboard to save'); if (lv.mode === 'yaml') throw new Error('this dashboard is in YAML mode: edit it in the YAML');
+  const dash = lv.urlPath || ssDash(), q = { type: 'lovelace/config', force: true }; if (dash) q.url_path = dash;
+  const fresh = JSON.parse(JSON.stringify(await h._hass.callWS(q))), hubs = [];
+  const walk = (o, d) => { if (!o || typeof o !== 'object' || d > 14) return; if (!Array.isArray(o) && o.type === 'custom:homeview-hub-card') hubs.push(o); for (const v of Array.isArray(o) ? o : Object.values(o)) walk(v, d + 1); };
+  walk(fresh.views, 0); const node = hubs.find(o => JSON.stringify(o) === sig0) || (hubs.length === 1 ? hubs[0] : null);
+  if (!node) throw new Error('the Home Screen changed since it loaded: reload the page and try again');
+  const same = JSON.stringify(fresh) === JSON.stringify(lv.rawConfig || lv.config);
+  for (const k of Object.keys(node)) delete node[k]; Object.assign(node, JSON.parse(JSON.stringify(raw)));
+  if (typeof lv.saveConfig === 'function' && (lv.urlPath || null) === (dash || null)) { if (same) await hvQuietSave(h, lv, fresh); else await lv.saveConfig(fresh); }
+  else { const sv = { type: 'lovelace/config/save', config: fresh }; if (dash) sv.url_path = dash; await h._hass.callWS(sv); } }
+const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: null, rs: null, dirty: false, busy: false,
+  ok(h) { return !!(h && h._w && h.isConnected && !h._sheetO && h._config && h._config.arrange !== false && !hvInDialog(h) && hvEclOK(h)); },
+  raw() { return JSON.parse(JSON.stringify(this.hub._hvRaw || {})); },
+  enter(h) { if (this.hub || !this.ok(h)) return; this.hub = h; this.orig = JSON.stringify(h._hvRaw || {}); this.dirty = false; hvEcl.ensure(); h.toggleAttribute('hv-arr', true);
+    if (navigator.vibrate) try { navigator.vibrate(15); } catch (x) {} this.timer = setInterval(() => this.tick(), 150); this._k = () => this.tick(); addEventListener('scroll', this._k, { capture: true, passive: true }); addEventListener('resize', this._k); this.tick(); },
+  exit(save) { const h = this.hub; if (!h) return Promise.resolve(true); hvEcl.closeMenu(); this.endDrag(false); this.endResize();
+    const fin = () => { clearInterval(this.timer); this.timer = null; removeEventListener('scroll', this._k, true); removeEventListener('resize', this._k); for (const c of this.ctl.values()) c.remove(); this.ctl.clear(); this.bar(false);
+      h.toggleAttribute('hv-arr', false); this.hub = null; this.dirty = false; hvEcl.kick(); };
+    if (!save || !this.dirty) { if (this.dirty) h._arrSet(JSON.parse(this.orig)); fin(); return Promise.resolve(true); }
+    if (this.busy) return Promise.resolve(false); this.busy = true; const raw = this.raw();
+    return hvHubMutate(h, this.orig, raw).then(() => { this.busy = false; fin(); hvToast('Saved', 'hv-arrange'); return true; },
+      e => { this.busy = false; hvToast('Could not save: ' + (e && e.message || e), 'hv-arrange'); return false; }); },
+  change(fn) { const raw = this.raw(); fn(raw); this.dirty = true; this.hub._arrSet(raw); [40, 200, 450].forEach(t => setTimeout(() => this.tick(), t)); },
+  bar(on) { const lay = hvEcl.lay; let b = lay && lay.querySelector('.abar.hb'); if (!on) { if (b) b.remove(); return; } if (b || !lay) return;
+    b = document.createElement('div'); b.className = 'abar hb'; b.innerHTML = '<span>Hold to move · drag a corner to resize</span><button class="no">Cancel</button><button class="ok">Done</button>'; lay.appendChild(b);
+    b.querySelector('.no').onclick = e => { e.stopPropagation(); this.exit(false); }; b.querySelector('.ok').onclick = e => { e.stopPropagation(); this.exit(true); }; },
+  items() { const h = this.hub, w = h && h._w, out = []; if (!w) return out;
+    w.querySelectorAll('.apps .app').forEach((el, i) => out.push({ kind: 'app', i, el }));
+    const ph = w.querySelector('.phw .pw'); if (ph) out.push({ kind: 'photo', i: 0, el: ph });
+    (h._sideEls || []).forEach((el, i) => { if (el.isConnected && !(el.parentNode && el.parentNode.hidden)) out.push({ kind: 'side', i, el }); }); return out; },
+  find(el) { return this.items().find(x => x.el === el); },
+  box(it) { return (it.kind === 'app' ? (it.el.querySelector('.ico') || it.el) : it.el).getBoundingClientRect(); },
+  label(it) { const c = this.hub._config; if (it.kind === 'app') return (c.apps[it.i] && c.apps[it.i].name) || 'App'; if (it.kind === 'photo') return c.photo_label || 'Photos';
+    const s = (c.side_cards || []).filter(x => x && x.type)[it.i] || {}, st = s.entity && this.hub._hass && this.hub._hass.states[s.entity];
+    return s.name || s.title || (st && st.attributes.friendly_name) || hvTileTypeName(s.type); },
+  units(it) { const c = this.hub._config; return it.kind === 'photo' ? (c.photo_size === 'square' ? 1 : 2) : it.kind === 'side' ? (hubTileSizes(c)[it.i] === 2 ? 2 : 1) : 1; },
+  tick() { const h = this.hub; if (!h) return; if (!h.isConnected || h._sheetO) { this.exit(false); return; }
+    hvEcl.ensure(); this.bar(true); const lay = hvEcl.lay, day = h.hasAttribute('hv-day'); if (hvEcl.host.hasAttribute('day') !== day) hvEcl.host.toggleAttribute('day', day);
+    const live = new Set(), vh = innerHeight;
+    for (const it of this.items()) { let c = this.ctl.get(it.el);
+      if (!c) { c = document.createElement('div'); c.className = 'c arr hc'; const el = it.el;
+        c.innerHTML = `<div class="cv"></div><button class="b m" aria-label="Options" aria-haspopup="menu" title="Options"><i><ha-icon icon="mdi:dots-horizontal"></ha-icon></i></button>${it.kind !== 'app' ? '<div class="rz" role="button" aria-label="Resize (drag the corner)" title="Drag to resize"><i></i></div>' : ''}`;
+        c.querySelector('.cv').addEventListener('pointerdown', e => { const x = this.find(el); if (x) this.press(x, e); });
+        const rz = c.querySelector('.rz'); if (rz) rz.addEventListener('pointerdown', e => { const x = this.find(el); if (x) this.resize(x, e); });
+        c.querySelector('.m').addEventListener('click', e => { e.stopPropagation(); const x = this.find(el); if (x) this.menu(x, c.querySelector('.m')); });
+        lay.appendChild(c); this.ctl.set(el, c); }
+      live.add(c); const r = this.box(it), vis = r.width > 0 && r.bottom > 0 && r.top < vh; c.style.display = vis ? '' : 'none'; if (!vis) continue;
+      const app = it.kind === 'app', bs = app ? 30 : Math.max(30, Math.min(42, Math.round(Math.min(r.width, r.height) * 0.36))), bi = app ? 24 : Math.max(24, bs - 10); c.classList.toggle('app', app); let rr = getComputedStyle(it.kind === 'app' ? (it.el.querySelector('.ico') || it.el) : it.el).borderTopLeftRadius;
+      if (!rr || rr === '0px') rr = it.kind === 'app' ? Math.round(r.width * 0.23) + 'px' : '22px';
+      c.style.setProperty('--bs', bs + 'px'); c.style.setProperty('--bi', bi + 'px'); c.style.setProperty('--rr', rr); c.style.width = r.width + 'px'; c.style.height = r.height + 'px';
+      c.style.transform = `translate(${Math.round(r.left)}px,${Math.round(r.top)}px)`; c.classList.toggle('off', !!(this.rs && this.rs.el === it.el) || !!(this.drag && this.drag.el === it.el)); }
+    for (const [el, c] of [...this.ctl]) if (!live.has(c)) { c.remove(); this.ctl.delete(el); } },
+  // tap = menu; hold = drag (the Photos tile: its menu); slide = scroll the page
+  press(it, e) { if ((e.button != null && e.button > 0) || this.drag || this.rs) return; e.preventDefault(); e.stopPropagation(); hvEcl.closeMenu();
+    const cv = e.currentTarget, el = it.el, p = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, mode: '', sy: window.scrollY || 0 };
+    try { cv.setPointerCapture(p.id); } catch (x) {}
+    const off = () => { clearTimeout(p.t); cv.removeEventListener('pointermove', mv); cv.removeEventListener('pointerup', up); cv.removeEventListener('pointercancel', up); };
+    const mv = ev => { if (ev.pointerId !== p.id) return; p.x = ev.clientX; p.y = ev.clientY; if (!p.mode && Math.hypot(p.x - p.x0, p.y - p.y0) > 8) { clearTimeout(p.t); p.mode = 'scroll'; }
+      if (p.mode === 'scroll') window.scrollTo(window.scrollX || 0, p.sy - (p.y - p.y0)); };
+    const up = ev => { if (ev.pointerId !== p.id) return; off(); try { cv.releasePointerCapture(p.id); } catch (x) {}
+      if (!p.mode && ev.type === 'pointerup') { const x = this.find(el), c = this.ctl.get(el); if (x && c) this.menu(x, c.querySelector('.m')); } };
+    cv.addEventListener('pointermove', mv); cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+    p.t = setTimeout(() => { if (p.mode) return; p.mode = 'drag'; off(); const x = this.find(el); if (!x) return;
+      if (x.kind === 'photo' || this.items().filter(y => y.kind === x.kind).length < 2) { try { cv.releasePointerCapture(p.id); } catch (z) {} const c = this.ctl.get(el); if (c) this.menu(x, c.querySelector('.m')); return; }
+      this.startDrag(x, cv, p); }, 260); },
+  startDrag(it, cv, p) { const r = this.box(it), lay = hvEcl.lay, rr = this.ctl.get(it.el) && this.ctl.get(it.el).style.getPropertyValue('--rr');
+    const d = this.drag = { it, el: it.el, kind: it.kind, i: it.i, id: p.id, x0: p.x0, y0: p.y0, x: p.x, y: p.y, cv, over: -1 };
+    const mk = cls => { const n = document.createElement('div'); n.className = cls; if (rr) n.style.setProperty('--rr', rr); lay.appendChild(n); return n; };
+    d.dim = mk('dim'); hvEcl.pos(d.dim, r); d.drop = mk('drop'); d.drop.style.display = 'none'; d.gh = mk('ghost'); d.gh.innerHTML = '<ha-icon></ha-icon><span></span>';
+    const a = it.kind === 'app' && this.hub._config.apps[it.i]; d.gh.querySelector('ha-icon').setAttribute('icon', a ? (a.icon === 'hv:home' ? 'mdi:home' : a.icon || 'mdi:apps') : 'mdi:card-outline');
+    d.gh.querySelector('span').textContent = this.label(it); hvEcl.pos(d.gh, r); d.gh.style.transform = 'scale(1.06)'; d.r = r;
+    d.mv = ev => { if (ev.pointerId !== d.id) return; ev.preventDefault(); d.x = ev.clientX; d.y = ev.clientY; this.moveDrag(); };
+    d.up = ev => { if (ev.pointerId !== d.id) return; this.endDrag(ev.type === 'pointerup'); };
+    try { cv.setPointerCapture(p.id); } catch (x) {} cv.addEventListener('pointermove', d.mv); cv.addEventListener('pointerup', d.up); cv.addEventListener('pointercancel', d.up);
+    if (navigator.vibrate) try { navigator.vibrate(12); } catch (x) {} this.moveDrag(); this.tick(); },
+  moveDrag() { const d = this.drag; if (!d) return; d.gh.style.transform = `translate(${d.x - d.x0}px,${d.y - d.y0}px) scale(1.06)`; let over = -1, orect = null;
+    for (const it of this.items()) { if (it.kind !== d.kind || it.el === d.el) continue; const b = this.box(it); if (d.x >= b.left && d.x <= b.right && d.y >= b.top && d.y <= b.bottom) { over = it.i; orect = b; break; } }
+    d.over = over; if (orect) { hvEcl.pos(d.drop, orect); d.drop.style.display = ''; } else d.drop.style.display = 'none'; },
+  endDrag(ok) { const d = this.drag; if (!d) return; this.drag = null; try { d.cv.releasePointerCapture(d.id); } catch (x) {}
+    d.cv.removeEventListener('pointermove', d.mv); d.cv.removeEventListener('pointerup', d.up); d.cv.removeEventListener('pointercancel', d.up); [d.dim, d.drop].forEach(n => n.remove());
+    d.gh.style.transition = 'all .16s ease-out'; d.gh.style.opacity = '0'; d.gh.style.transform = 'scale(1)'; setTimeout(() => d.gh.remove(), 200);
+    if (ok && d.over >= 0 && d.over !== d.i) this.move(d.kind, d.i, d.over); this.tick(); },
+  sideRows(raw) { const cards = (raw.side_cards || []).filter(x => x && x.type), sz = String(raw.side_sizes || '').trim() ? hubSizes(raw.side_sizes) : null;
+    return cards.map((card, i) => ({ card, tile: Array.isArray(raw.side_tiles) ? raw.side_tiles[i] || null : null, sz: sz ? sz[i] || 1 : null })); },
+  sideWrite(raw, rows) { const had = Array.isArray(raw.side_tiles); raw.side_cards = rows.map(r => r.card);
+    if (had || rows.some(r => r.tile)) raw.side_tiles = rows.map(r => r.tile || {}); if (String(raw.side_sizes || '').trim()) raw.side_sizes = rows.map(r => (r.sz === 2 ? 'W' : 'S')).join(', '); },
+  edit(raw, kind, fn) { if (kind === 'app') { if (!Array.isArray(raw.apps) || !raw.apps.length) raw.apps = HUB_APPS.map(a => Object.assign({}, a)); fn(raw.apps); }
+    else { const rows = this.sideRows(raw); fn(rows); this.sideWrite(raw, rows); } },
+  move(kind, i, j) { this.change(raw => this.edit(raw, kind, a => { const t = a.splice(i, 1)[0]; a.splice(j, 0, t); })); },
+  setUnits(it, u) { if (this.units(it) === u) return; this.change(raw => { if (it.kind === 'photo') { raw.photo_size = u === 2 ? 'wide' : 'square'; return; }
+    this.edit(raw, 'side', rows => { const r = rows[it.i]; if (!r) return; r.tile = Object.assign({}, r.tile || {}, { size: u === 2 ? 'wide' : 'square' }); if (r.sz != null) r.sz = u; }); }); },
+  // corner handle: one tile / two wide (the Home Screen row's two sizes)
+  resize(it, e) { if ((e.button != null && e.button > 0) || this.drag || this.rs) return; e.preventDefault(); e.stopPropagation(); hvEcl.closeMenu();
+    const r0 = this.box(it), U = r0.height, tg = parseFloat(this.hub._w.style.getPropertyValue('--cg2')) || 16, h0 = e.currentTarget, lay = hvEcl.lay, rr = this.ctl.get(it.el) && this.ctl.get(it.el).style.getPropertyValue('--rr');
+    const d = this.rs = { it, el: it.el, u: this.units(it), first: this.units(it), id: e.pointerId, o0: r0, U, tg, x: e.clientX, y: e.clientY, zones: [] };
+    try { h0.setPointerCapture(e.pointerId); } catch (x) {}
+    const mk = cls => { const n = document.createElement('div'); n.className = cls; if (rr) n.style.setProperty('--rr', rr); lay.appendChild(n); return n; };
+    for (const u of [1, 2]) { const z = mk('tgt'); z.dataset.u = u; z.textContent = u === 2 ? '2 × 6' : '2 × 3'; d.zones.push(z); } d.live = mk('live'); d.lbl = mk('szl');
+    const paint = () => { const x = this.find(d.el); if (!x) return; const r = this.box(x); if (!r.width) return;
+      for (const z of d.zones) { const u = Number(z.dataset.u); hvEcl.pos(z, { left: r.left, top: r.top, width: u === 2 ? 2 * U + tg : U, height: U }); z.classList.toggle('on', u === d.u); }
+      hvEcl.pos(d.live, r); d.lbl.textContent = d.u === 2 ? '2 × 6 · Two wide' : '2 × 3 · One tile';
+      const lw = d.lbl.offsetWidth || 120, vw = document.documentElement.clientWidth || innerWidth; d.lbl.style.left = Math.max(8, Math.min(vw - lw - 8, d.x - lw / 2)) + 'px'; d.lbl.style.top = Math.max(8, d.y - 64) + 'px'; };
+    d.iv = setInterval(paint, 60); paint(); if (navigator.vibrate) try { navigator.vibrate(10); } catch (x) {}
+    d.mv = ev => { if (ev.pointerId !== d.id) return; ev.preventDefault(); d.x = ev.clientX; d.y = ev.clientY; const u = d.x - d.o0.left > U * 1.5 + tg ? 2 : 1;
+      if (u !== d.u) { d.u = u; const x = this.find(d.el); if (x) this.setUnits(x, u); d.live.classList.remove('pulse'); void d.live.offsetWidth; d.live.classList.add('pulse'); if (navigator.vibrate) try { navigator.vibrate(8); } catch (z) {} } paint(); };
+    d.up = ev => { if (ev.pointerId !== d.id) return; this.endResize(); }; d.h0 = h0;
+    addEventListener('pointermove', d.mv, true); addEventListener('pointerup', d.up, true); addEventListener('pointercancel', d.up, true); this.tick(); },
+  endResize() { const d = this.rs; if (!d) return; this.rs = null; clearInterval(d.iv); removeEventListener('pointermove', d.mv, true); removeEventListener('pointerup', d.up, true); removeEventListener('pointercancel', d.up, true);
+    try { d.h0.releasePointerCapture(d.id); } catch (x) {} [...d.zones, d.live, d.lbl].forEach(n => n && n.remove()); this.tick(); },
+  async openEditor() { const h = this.hub; if (!(await this.exit(true))) return; const root = hvFindRoot(h), lv = root && root.lovelace; if (!lv) return; const sig = JSON.stringify(h._hvRaw || {});
+    const path = hvCardPath(lv.config, o => o && o.type === 'custom:homeview-hub-card' && JSON.stringify(o) === sig, root._curView); if (path && hvOpenCardEditor(root, path)) return;
+    hvToast('Open the dashboard editor (pencil) and tap the Home Screen card to edit it'); },
+  menu(it, anchor) { hvEcl.closeMenu(); hvEcl.ensure(); const wrap = hvEcl.menu = document.createElement('div'); wrap.innerHTML = '<div class="scrim"></div><div class="menu" role="menu"></div>';
+    const m = wrap.querySelector('.menu'), close = () => hvEcl.closeMenu(), t0 = Date.now(), n = this.items().filter(x => x.kind === it.kind).length;
+    const item = (ic, txt, fn, cls, dis) => { const b = document.createElement('button'); b.setAttribute('role', 'menuitem'); if (cls) b.className = cls; if (dis) b.disabled = true;
+      b.innerHTML = '<ha-icon></ha-icon><span></span>'; b.querySelector('ha-icon').setAttribute('icon', ic); b.querySelector('span').textContent = txt; b.addEventListener('click', e => { e.stopPropagation(); if (Date.now() - t0 < 400) return; fn(); }); m.appendChild(b); return b; };
+    const sep = () => { const s = document.createElement('div'); s.className = 'sep'; m.appendChild(s); };
+    const head = document.createElement('div'); head.className = 't'; head.textContent = this.label(it); m.appendChild(head);
+    item('mdi:pencil', 'Edit', () => { close(); this.openEditor(); });
+    if (it.kind !== 'photo') { item('mdi:arrow-left', 'Move earlier', () => { close(); this.move(it.kind, it.i, it.i - 1); }, '', it.i <= 0);
+      item('mdi:arrow-right', 'Move later', () => { close(); this.move(it.kind, it.i, it.i + 1); }, '', it.i >= n - 1); }
+    if (it.kind !== 'app') { const u = this.units(it); item(u === 1 ? 'mdi:check' : 'mdi:square-rounded-outline', '2 × 3 · One tile', () => { close(); this.setUnits(it, 1); });
+      item(u === 2 ? 'mdi:check' : 'mdi:rectangle-outline', '2 × 6 · Two wide', () => { close(); this.setUnits(it, 2); }); }
+    if (it.kind === 'side') item('mdi:content-copy', 'Duplicate', () => { close(); this.change(raw => this.edit(raw, 'side', a => a.splice(it.i + 1, 0, JSON.parse(JSON.stringify(a[it.i]))))); });
+    if (it.kind !== 'photo') { sep(); item('mdi:delete-outline', 'Delete', () => { m.innerHTML = ''; const q = document.createElement('div'); q.className = 'q'; q.textContent = `Delete “${this.label(it)}”?`; m.appendChild(q);
+      const row = document.createElement('div'); row.className = 'row'; m.appendChild(row);
+      const mk = (t, cls, fn) => { const b = document.createElement('button'); b.textContent = t; if (cls) b.className = cls; b.addEventListener('click', e => { e.stopPropagation(); fn(); }); row.appendChild(b); };
+      mk('Cancel', '', close); mk('Delete', 'del', () => { close(); this.change(raw => this.edit(raw, it.kind, a => a.splice(it.i, 1))); }); hvEcl.place(m, anchor); }, 'del', it.kind === 'app' && n <= 1); }
+    wrap.querySelector('.scrim').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); close(); });
+    hvEcl.lay.appendChild(wrap); hvEcl.place(m, anchor); const f = m.querySelector('button:not([disabled])'); if (f) f.focus({ preventScroll: true }); } };
 const HV_TILE_ICON = { clock: 'mdi:clock-outline', 'custom:homeview-nav-card': 'mdi:arrow-right-circle-outline', 'custom:homeview-calendar-card': 'mdi:calendar',
   'custom:homeview-house-card': 'mdi:home-outline', 'custom:homeview-group-card': 'mdi:lightbulb-group-outline', 'custom:homeview-thermostat-card': 'mdi:thermostat',
   'custom:homeview-music-card': 'mdi:music', 'custom:homeview-tv-card': 'mdi:television', 'custom:homeview-camera-card': 'mdi:cctv', 'custom:homeview-people-card': 'mdi:account-group-outline' };
@@ -4861,13 +5081,22 @@ class HVHubCard extends HTMLElement {
   _dash() { return ssDash() || 'lovelace'; }
   _path(p) { if (!p) return ''; return p.startsWith('/') ? p : `/${this._dash()}/${p}`; }
   // --- render
+  _rSig() { const c = this._config, h = this._hass, p = this._person();
+    const first = (c.name || (p && p.attributes.friendly_name) || (h.user && h.user.name) || '').trim().split(/\s+/)[0] || '';
+    return JSON.stringify([first, p && p.attributes.entity_picture, this._greeting(), c.apps, c.ring_color, c.photo_label, c.show_calendar, c.assistant_enabled === true && c.assistant_button !== false]); }
+  _appsHtml(c) { const glyph = a => a.icon === 'hv:home' ? HUB_HOME_SVG : `<ha-icon icon="${esc(a.icon || 'mdi:apps')}"></ha-icon>`;
+    return c.apps.map((a, i) => `<button class="app" data-app="${i}" aria-label="${esc(a.name || '')}"><span class="ico" style="background:linear-gradient(180deg,${esc(a.color_from || '#8e8e93')} 0%,${esc(a.color_to || a.color_from || '#636366')} 100%);color:${esc(a.glyph_color || '#fff')}">${glyph(a)}</span><span class="lb">${esc(a.name || '')}</span></button>`).join(''); }
+  // 1.32.0 Home Screen arrange: a new config applied in place (apps redrawn, side tiles reordered / resized with their elements kept, no rebuild)
+  _arrSet(raw) { const old = this._config; this._hvRaw = raw; const nc = Object.assign({}, HVHubCard.defaults, raw); if (!Array.isArray(nc.apps) || !nc.apps.length) nc.apps = HUB_APPS; this._config = nc;
+    if (!this._w) return this._render(); if (JSON.stringify(old && old.apps) !== JSON.stringify(nc.apps)) { const a = this._w.querySelector('.apps'); if (a) a.innerHTML = this._appsHtml(nc); }
+    this._sig = this._rSig(); this._makeSide(); this._layout(); }
   _render() {
     if (!this._config || !this._hass) return;
     const c = this._config, h = this._hass, p = this._person();
     const first = (c.name || (p && p.attributes.friendly_name) || (h.user && h.user.name) || '').trim().split(/\s+/)[0] || '';
     const pic = p && p.attributes.entity_picture;
     const amic = c.assistant_enabled === true && c.assistant_button !== false;
-    const sig = JSON.stringify([first, pic, this._greeting(), c.apps, c.ring_color, c.photo_label, c.show_calendar, amic]);
+    const sig = this._rSig();
     if (sig === this._sig && this._w) return; this._sig = sig;
     if (!this._w) {
       this.shadowRoot.innerHTML = `<style>${HUB_CSS}</style><div class="bg"><div class="bgi"></div><div class="bgi"></div><div class="tint"></div><div class="dim"></div></div><div class="w"></div><div class="ssp" hidden title="Swipe down for the screensaver"></div>`;
@@ -4877,8 +5106,7 @@ class HVHubCard extends HTMLElement {
         if (t.dataset.app != null) this._runApp(c => c, Number(t.dataset.app)); else if (t.dataset.k === 'photos') this._photoTap(); else if (t.dataset.k === 'person') this._personTap(); else if (t.dataset.k === 'assist') this._openAssist(); else if (t.dataset.k === 'timer') HVTM.show(); });
     }
     const greet = String(this._greeting() || '').trim().replace(/,?$/, ',');
-    const glyph = a => a.icon === 'hv:home' ? HUB_HOME_SVG : `<ha-icon icon="${esc(a.icon || 'mdi:apps')}"></ha-icon>`;
-    const apps = c.apps.map((a, i) => `<button class="app" data-app="${i}" aria-label="${esc(a.name || '')}"><span class="ico" style="background:linear-gradient(180deg,${esc(a.color_from || '#8e8e93')} 0%,${esc(a.color_to || a.color_from || '#636366')} 100%);color:${esc(a.glyph_color || '#fff')}">${glyph(a)}</span><span class="lb">${esc(a.name || '')}</span></button>`).join('');
+    const apps = this._appsHtml(c);
     const keepCal = this._cal && c.show_calendar !== false ? this._cal : null;
     this._w.innerHTML = `<div class="top"><div class="gr"><div class="g1">${esc(greet)}</div><div class="g2">${esc(first)}</div></div>
       <div class="tr"><button class="tpill" data-k="timer" hidden aria-label="Show the timer"><ha-icon icon="mdi:timer-outline"></ha-icon><span></span></button>${amic ? '<button class="amic" data-k="assist" aria-label="Assistant"><ha-icon icon="mdi:microphone"></ha-icon></button>' : ''}
@@ -4896,10 +5124,12 @@ class HVHubCard extends HTMLElement {
     const c = this._config, list = Array.isArray(c.side_cards) ? c.side_cards.filter(x => x && x.type) : [], sig = JSON.stringify(list);
     if (sig !== this._sideSig || !this._sideEls) { this._sideSig = sig; const tok = this._sideTok = (this._sideTok || 0) + 1;
       const helpers = list.length && window.loadCardHelpers ? await window.loadCardHelpers() : null; if (tok !== this._sideTok) return;
-      (this._sideEls || []).forEach(w => w.remove());
-      this._sideEls = list.map(cfg => { const wrap = document.createElement('div'); wrap.className = 'tile'; let el; try { el = helpers ? helpers.createCardElement(cfg) : document.createElement('div'); } catch (e) { el = document.createElement('div'); el.textContent = String(e); }
+      const pool = (this._sideEls || []).filter(w => !w._dead).map(w => ({ j: JSON.stringify(w._cfg), w }));
+      (this._sideEls || []).forEach(w => { if (w._dead || !pool.some(x => x.w === w)) w.remove(); });
+      this._sideEls = list.map(cfg => { const j = JSON.stringify(cfg), pi = pool.findIndex(x => x.j === j); if (pi >= 0) return pool.splice(pi, 1)[0].w;
+        const wrap = document.createElement('div'); wrap.className = 'tile'; let el; try { el = helpers ? helpers.createCardElement(cfg) : document.createElement('div'); } catch (e) { el = document.createElement('div'); el.textContent = String(e); }
         if (this._hass) el.hass = this._hass; if (this._edit != null) el.editMode = this._edit; if (el.tagName && el.tagName.startsWith('HOMEVIEW-')) el.setAttribute('floor', ''); // readable text, like Page Grid tiles
-        el.addEventListener('ll-rebuild', ev => { ev.stopPropagation(); this._sideSig = null; this._makeSide(); }); wrap.appendChild(el); wrap._card = el; wrap._cfg = cfg;
+        el.addEventListener('ll-rebuild', ev => { ev.stopPropagation(); wrap._dead = true; this._sideSig = null; this._makeSide(); }); wrap.appendChild(el); wrap._card = el; wrap._cfg = cfg;
         wrap.addEventListener('click', ev => { const o = hubTileOpt(this._config, this._sideEls.indexOf(wrap));
           // 1.32.0: tapping the body of a Now Playing tile opens the Music sheet (like the Music app); its buttons, seek bar and volume / output popovers keep their own taps
           if (!o.enlarge && !this._edit && !this._sheetO && wrap._cfg.type === 'custom:homeview-now-playing-card' && o.tap !== 'none') { const p0 = ev.composedPath();
@@ -4910,7 +5140,7 @@ class HVHubCard extends HTMLElement {
           const path = ev.composedPath(); for (const n of path) { if (n === wrap) break; if (n.classList && n.classList.contains('element')) return; } // labels keep their own actions
           ev.stopPropagation(); this._openTileSheet(wrap._cfg, o); });
         if (window.ResizeObserver) { wrap._ro = new ResizeObserver(() => { if (wrap._fit) requestAnimationFrame(() => this._fitTile(wrap)); }); setTimeout(() => { const r = el.shadowRoot && el.shadowRoot.querySelector('#root'); if (r) wrap._ro.observe(r); }, 400); }
-        return wrap; }); }
+        return wrap; }); pool.forEach(x => x.w.remove()); }
     (this._sideEls || []).forEach((w, i) => { const o = hubTileOpt(c, i), t = (w._cfg && w._cfg.type) || ''; w._fit = o.fit === 'contain' || (o.fit !== 'fill' && /^picture/.test(t)); });
     if (this._rowEl) { for (const w of this._sideEls) this._rowEl.appendChild(w); this._layout(); }
   }
