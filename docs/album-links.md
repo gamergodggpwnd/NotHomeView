@@ -5,9 +5,14 @@ From 1.32.0 the Photos tile (Home Screen card), its viewer and gallery, the blur
 
 | Provider | Link | Works without the helper? |
 |---|---|---|
-| Google Photos | `https://photos.app.goo.gl/…` or `https://photos.google.com/share/…` | No – needs the helper |
-| iCloud shared album | `https://www.icloud.com/sharedalbum/#…` (Public Website must be on) | No – needs the helper |
-| OneDrive | `https://1drv.ms/…` or `https://onedrive.live.com/…` ("Anyone with the link") | Photos tile: yes. Screensaver: needs the helper |
+| Google Photos | `https://photos.app.goo.gl/…`, `https://photos.google.com/share/…?key=…` (also `/u/1/share/…`), `goo.gl/…` short links | No – needs the helper |
+| iCloud shared album (iOS 26 and later) | `https://photos.icloud.com/shared/album/…` ("Anyone with the Link" must be on) | Photos tile: yes. Screensaver: needs the helper |
+| iCloud shared album (older albums) | `https://www.icloud.com/sharedalbum/#…` (Public Website must be on) | No – needs the helper |
+| OneDrive | `https://1drv.ms/…` (`/a/`, `/f/`, `/u/` …), `https://onedrive.live.com/…`, `https://<name>.sharepoint.com/…` ("Anyone with the link") | Photos tile: yes. Screensaver: needs the helper |
+
+Links can be pasted with or without `https://`, with spaces around them or with tracking parameters (`?si=…`, `utm_…`, `fbclid`).
+Links that are recognised but can't work get their own message: a private Google Photos album (`photos.google.com/album/…`, use
+Share → Create link instead) or an iCloud Link to a few photos (`share.icloud.com/photos/…`, which is not an album).
 
 Your existing configuration keeps working unchanged: the default photo source is still the media folder.
 

@@ -2091,8 +2091,55 @@ const ssDash = () => { const seg = decodeURIComponent(location.pathname.split('/
 // album on the Home Assistant server and offers it as media-source://nothomeview_albums/<album>). OneDrive works in the browser too (its API allows it).
 const HV_ALB_MS = 'media-source://nothomeview_albums/';
 const HV_ALB_NAME = { google: 'Google Photos album', icloud: 'iCloud shared album', onedrive: 'OneDrive folder / album' };
-const hvAlbumProv = u => { u = String(u || '').trim(); return /^https?:\/\/(photos\.app\.goo\.gl|goo\.gl\/photos|photos\.google\.com\/(u\/\d+\/)?share\/)/i.test(u) ? 'google'
-  : /^https?:\/\/(www\.)?icloud\.com\/sharedalbum\//i.test(u) ? 'icloud' : /^https?:\/\/(1drv\.ms|onedrive\.live\.com|photos\.onedrive\.com)\//i.test(u) ? 'onedrive' : null; };
+// 1.32.0: recognise every current share-link format (pasted with spaces, without https://, with tracking parameters):
+//   Google Photos  photos.app.goo.gl/…, goo.gl/…, photos.google.com/(u/N/)share/…?key=…  (photos.google.com/album/… = private: needs a shared link)
+//   iCloud         photos.icloud.com/shared/album/<token> (iOS 26+), www.icloud.com/sharedalbum/#<token> (older albums);
+//                  share.icloud.com/photos/… = an "iCloud Link" to a few photos, not an album
+//   OneDrive       1drv.ms/… (/a/, /f/, /u/ …), onedrive.live.com/…, photos.onedrive.com/…, *.sharepoint.com/…
+const HV_ALB_TRACK = /^(utm_\w+|fbclid|gclid|igshid|mibextid|si|_ga|ref_src)$/i;
+function hvAlbumInfo(raw) { let u = String(raw || '').trim().replace(/^[<"'(\[]+|[>"')\].,;]+$/g, '').trim(); if (!u) return { prov: null, url: '' };
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(u)) u = 'https://' + u.replace(/^\/+/, '');
+  let x; try { x = new URL(u); } catch (e) { return { prov: null, url: u }; }
+  if (!/^https?:$/.test(x.protocol)) return { prov: null, url: u }; x.protocol = 'https:';
+  const h = x.hostname.toLowerCase().replace(/^(m|www)\./, (m0, a) => a === 'www' ? 'www.' : ''), p = x.pathname;
+  [...x.searchParams.keys()].forEach(k => { if (HV_ALB_TRACK.test(k)) x.searchParams.delete(k); });
+  let prov = null, issue = null, kind = '';
+  if (h === 'photos.app.goo.gl' || (h === 'goo.gl' && p.length > 1)) prov = 'google';
+  else if (h === 'photos.google.com') { prov = 'google'; if (!/^\/(u\/\d+\/)?share\/[^/]+/i.test(p)) issue = 'gprivate'; }
+  else if (/^(www\.)?icloud\.com(\.cn)?$/.test(h)) { prov = 'icloud'; if (/^\/sharedalbum\b/i.test(p)) kind = 'legacy'; else if (/^\/photos\b/i.test(p)) issue = 'iclink'; else issue = 'icother'; }
+  else if (/^photos\.icloud\.com(\.cn)?$/.test(h)) { prov = 'icloud'; kind = 'ck'; if (!/^\/shared\/album\/[^/]+/i.test(p)) issue = 'icother'; }
+  else if (/^share\.icloud\.com(\.cn)?$/.test(h)) { prov = 'icloud'; issue = 'iclink'; }
+  else if (h === '1drv.ms' || h === 'onedrive.live.com' || h === 'photos.onedrive.com' || h === 'onedrive.com' || /(^|\.)sharepoint\.com$/.test(h)) prov = 'onedrive';
+  return { prov, kind, issue, url: x.toString(), host: h }; }
+const hvAlbumProv = u => hvAlbumInfo(u).prov;
+const HV_ALB_ISSUE = { gprivate: 'this is a private album link (photos.google.com/album/…). Open the album, tap Share → Create link, and paste that link (photos.app.goo.gl/…).',
+  iclink: 'this is an "iCloud Link" to a few photos, not a shared album. In Photos make a Shared Album, turn on "Anyone with the Link" (older albums: "Public Website") and paste the album link (photos.icloud.com/shared/album/…).',
+  icother: 'this iCloud link isn\'t a shared album. Paste the album link from Photos → the shared album → People → "Anyone with the Link" → Share Link (photos.icloud.com/shared/album/…).' };
+// iCloud shared albums of iOS 26+ (photos.icloud.com/shared/album/<token>): CloudKit Web Services; anyone-with-the-link albums resolve without
+// an account and the API allows cross-origin reads, so the browser reads them directly (no helper needed). Photo links last about an hour.
+const HV_CK = 'https://ckdatabasews.icloud.com', HV_CKQ = 'clientBuildNumber=2640BuildBeta21&clientMasteringNumber=2640BuildBeta21';
+function hvCkPick(f, target = 2048) { let best = null, bw = -1, fb = null, fw = -1, jpg = false;
+  for (const k of Object.keys(f || {})) { if (!/^res.*Res$/.test(k) || /Vid/.test(k)) continue; const v = f[k] && f[k].value, dl = v && v.downloadURL; if (!dl) continue;
+    const w = Number((f[k.replace(/Res$/, 'Width')] || {}).value || 0), isJ = /JPEG/i.test(k) || /jpe?g/i.test(String((f[k.replace(/Res$/, 'FileType')] || {}).value || ''));
+    const u = String(dl).replace('${f}', 'photo.jpg');
+    if ((isJ || !jpg) && w >= target && (bw < 0 || w < bw || (isJ && !jpg))) { best = u; bw = w; jpg = isJ; }
+    if (w > fw && (isJ || !fb)) { fw = w; fb = u; } }
+  return best || fb; }
+async function hvICloudCK(url) { const tok = (String(url).match(/shared\/album\/([^/?#]+)/i) || [])[1]; if (!tok) throw new Error('no album token in this iCloud link');
+  const post = async (u, b) => { const r = await fetch(u, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(b) }); if (!r.ok) throw new Error('iCloud answered ' + r.status); return r.json(); };
+  const rs = await post(`${HV_CK}/database/1/com.apple.photos.cloud/production/public/records/resolve?${HV_CKQ}`, { shortGUIDs: [{ value: tok }] }), r0 = (rs.results || [])[0] || {};
+  const acc = r0.anonymousPublicAccess || {};
+  if (!r0.zoneID || !acc.token) throw new Error(r0.requireAppleLogin || (r0.zoneID && !acc.token) ? 'this album is invite-only. In Photos open it → People → turn on "Anyone with the Link".' : 'iCloud can\'t find this shared album. Check the link, and that "Anyone with the Link" is on.');
+  const z = r0.zoneID, zone = { zoneName: z.zoneName, ownerRecordName: z.ownerRecordName, zoneType: z.zoneType || 'REGULAR_CUSTOM_ZONE' }, part = String(acc.databasePartition || HV_CK).replace(/:443$/, '');
+  const title = ((((r0.share || {}).fields || {})['cloudkit.title']) || {}).value || 'iCloud shared album';
+  const qu = `${part}/database/1/com.apple.photos.cloud/production/shared/records/query?${HV_CKQ}&publicAccessAuthToken=${encodeURIComponent(acc.token)}`, ids = [];
+  let mk = null, n = 0; do { const b = { query: { recordType: 'CPLAssetAndMasterByAssetDateWithoutHiddenOrDeleted', filterBy: [{ fieldName: 'direction', comparator: 'EQUALS', fieldValue: { value: 'DESCENDING', type: 'STRING' } }] }, zoneID: zone, resultsLimit: 200 };
+    if (mk) b.continuationMarker = mk; const r = await post(qu, b);
+    for (const rec of r.records || []) { if (rec.recordType !== 'CPLMaster') continue; const f = rec.fields || {}, it = String((f.itemType || {}).value || '').toLowerCase(); if (/movie|video/.test(it)) continue;
+      const u = hvCkPick(f); if (u) ids.push(u); }
+    mk = r.continuationMarker || null; n++; } while (mk && n < 20 && ids.length < 2000);
+  if (!ids.length) throw new Error('the iCloud shared album has no photos');
+  return { title, count: ids.length, ids, expires: Date.now() + 50 * 60e3 }; }
 const hvB64u = s => btoa(unescape(encodeURIComponent(s))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const hvUnB64u = s => { try { const t = s.replace(/-/g, '+').replace(/_/g, '/'); return decodeURIComponent(escape(atob(t + '='.repeat((4 - t.length % 4) % 4)))); } catch (e) { return ''; } };
 // OneDrive in the browser: guest token + the "shares" API (both allow cross-origin reads); 1920 px thumbnails, links valid a few hours
@@ -2112,17 +2159,21 @@ async function hvOneDrive(url) { const W = window.__hvOD || (window.__hvOD = {})
   if (!ids.length) throw new Error('No photos found in this OneDrive folder');
   return { title: root.name || 'OneDrive folder', count: ids.length, ids, expires: exp }; }
 // check / load an album link: { ok, provider, title, count, via: 'helper' | 'browser', media_id | ids, error, noHelper }
-async function hvAlbumLoad(hass, url) { url = String(url || '').trim(); const prov = hvAlbumProv(url);
+async function hvAlbumLoad(hass, url) { const inf = hvAlbumInfo(url), prov = inf.prov; url = inf.url;
   if (!prov) return { ok: false, error: 'Not a Google Photos, iCloud shared album or OneDrive link' };
+  if (inf.issue) return { ok: false, provider: prov, issue: inf.issue, error: HV_ALB_ISSUE[inf.issue] };
   try { const r = await hass.callWS({ type: 'nothomeview_albums/check', url }); return Object.assign({ via: 'helper' }, r); }
   catch (e) { if (!(e && e.code === 'unknown_command')) return { ok: false, provider: prov, error: (e && e.message) || String(e) }; }
-  if (prov === 'onedrive') { try { return Object.assign({ ok: true, provider: prov, via: 'browser', noHelper: true }, await hvOneDrive(url)); } catch (e) { return { ok: false, provider: prov, noHelper: true, error: (e && e.message) || String(e) }; } }
-  return { ok: false, provider: prov, noHelper: true, error: `${prov === 'google' ? 'Google Photos' : 'iCloud'} doesn't let a browser read its albums, so this link needs the NotHomeView Album Links helper on Home Assistant (see the NotHomeView docs: "Album links").` }; }
-const hvAlbumStatus = (st, url) => { const prov = hvAlbumProv(url); if (!String(url || '').trim()) return 'Paste a shared album link: Google Photos (photos.app.goo.gl/…), iCloud shared album with Public Website on (icloud.com/sharedalbum/#…) or OneDrive (1drv.ms/…, "Anyone with the link").';
-  if (!prov) return '⚠ Not a Google Photos, iCloud shared album or OneDrive link.';
-  if (!st || st.url !== String(url).trim()) return `Detected: ${HV_ALB_NAME[prov]}. Checking…`;
-  if (!st.ok) return `⚠ ${HV_ALB_NAME[prov]}: ${st.error} Until it works, the photos come from the media folder.`;
-  return `✓ ${HV_ALB_NAME[prov]} “${st.title}”: ${st.count} photo${st.count === 1 ? '' : 's'}${st.via === 'browser' ? ' (read by the browser)' : ' (via the Album Links helper)'}. The list refreshes every 6 hours; Order = Random shuffles it.`; };
+  if (prov === 'onedrive' || inf.kind === 'ck') { try { return Object.assign({ ok: true, provider: prov, via: 'browser', noHelper: true }, prov === 'onedrive' ? await hvOneDrive(url) : await hvICloudCK(url)); } catch (e) { return { ok: false, provider: prov, noHelper: true, error: (e && e.message) || String(e) }; } }
+  return { ok: false, provider: prov, noHelper: true, needHelper: true, error: `${prov === 'google' ? 'Google Photos' : 'iCloud (for older sharedalbum links)'} doesn't let a browser read its albums, so Home Assistant needs the small NotHomeView Album Links helper for this link (a one-time setup, see the NotHomeView docs: "Album links").` }; }
+const hvAlbumStatus = (st, url) => { const inf = hvAlbumInfo(url), prov = inf.prov, nm = HV_ALB_NAME[prov];
+  if (!inf.url) return 'Paste a shared album link: Google Photos (photos.app.goo.gl/…), iCloud shared album (photos.icloud.com/shared/album/… or icloud.com/sharedalbum/#…, with "Anyone with the Link" on) or OneDrive (1drv.ms/…, "Anyone with the link").';
+  if (!prov) return `⚠ This doesn't look like a shared album link${inf.host ? ` (${inf.host})` : ''}. Supported: Google Photos (photos.app.goo.gl/…), iCloud shared albums (photos.icloud.com/shared/album/…) and OneDrive (1drv.ms/…).`;
+  if (inf.issue) return `⚠ Recognized: ${nm}, but ${HV_ALB_ISSUE[inf.issue]}`;
+  if (!st || String(st.url || '').trim() !== String(url).trim()) return `Recognized: ${nm}. Checking…`;
+  if (!st.ok && st.needHelper) return `Recognized ✓ ${nm}. ${st.error} Until then, the photos come from the media folder.`;
+  if (!st.ok) return `⚠ Recognized: ${nm}, but ${String(st.error || '').replace(/^[A-Z]/, c => c.toLowerCase())} Until it works, the photos come from the media folder.`;
+  return `✓ ${nm} “${st.title}”: ${st.count} photo${st.count === 1 ? '' : 's'}${st.via === 'browser' ? ' (read by the browser)' : ' (via the Album Links helper)'}. The list refreshes every 6 hours; Order = Random shuffles it.`; };
 function hvOpenScreensaverSettings(from) {
   const content = { type: 'custom:homeview-screensaver-card', dashboard: ssDash(), large: true, height: SS_POPUP_HEIGHT };
   if (window.browser_mod) { fire(from, 'll-custom', { action: 'fire-dom-event', browser_mod: { service: 'browser_mod.popup',
@@ -4162,7 +4213,7 @@ const PV_CSS = `.pv{position:absolute;inset:0;overflow:hidden;background:#0b0b10
 .pal input{all:unset;box-sizing:border-box;width:100%;height:48px;padding:0 14px;border-radius:14px;background:rgba(255,255,255,.1);box-shadow:inset 0 0 0 1px rgba(255,255,255,.18);font-size:16px;color:#fff;-webkit-user-select:text;user-select:text;cursor:text}
 .pal input:focus{box-shadow:inset 0 0 0 2px #4f9dff} .pal input::placeholder{color:rgba(255,255,255,.4)}
 .pal .pr{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 0} .pal .pr span{padding:4px 10px;border-radius:999px;font-size:12px;background:rgba(255,255,255,.08);opacity:.55;transition:all .15s ease} .pal .pr span.on{opacity:1;background:rgba(79,157,255,.35)}
-.pal .st{margin:12px 0 0;font-size:13.5px;line-height:1.4;min-height:19px;opacity:.85} .pal .st.ok{color:#8be3a9;opacity:1} .pal .st.err{color:#ffb7b0;opacity:1}
+.pal .st{margin:12px 0 0;font-size:13.5px;line-height:1.4;min-height:19px;opacity:.85} .pal .st.ok{color:#8be3a9;opacity:1} .pal .st.err{color:#ffb7b0;opacity:1} .pal .st.warn{color:#ffe08a;opacity:1}
 .pal .bt{display:flex;gap:10px;justify-content:flex-end;margin-top:18px} .pal .bt .pvk{height:44px;padding:0 22px;font-size:15px} .pal .bt .sv{background:linear-gradient(180deg,#4f9dff,#2a6df0)}
 @media (max-width:640px){.pal{align-items:flex-start;padding-top:max(90px,14vh)}.pal .bt .pvk{flex:1}}
 .pgg{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--gt,118px),1fr));gap:6px}
@@ -5152,18 +5203,18 @@ class HVHubCard extends HTMLElement {
             const key = ev => { if (ev.key === 'Escape') { ev.stopImmediatePropagation(); ev.preventDefault(); close(); } };
             addEventListener('keydown', key, true);
             const paintSt = () => { const u = inp.value.trim(), pv = hvAlbumProv(u); o.querySelectorAll('.pr span').forEach(x => x.classList.toggle('on', x.dataset.p === pv));
-              const ok = !!(chk && chk.url === u && chk.ok); stE.className = 'st' + (ok ? ' ok' : chk && chk.url === u && !chk.ok ? ' err' : !u || pv ? '' : ' err');
-              stE.textContent = !u ? 'Google Photos (photos.app.goo.gl/…), an iCloud shared album with Public Website on (icloud.com/sharedalbum/#…) or OneDrive (1drv.ms/…, “Anyone with the link”).'
+              const ok = !!(chk && chk.url === u && chk.ok), inf = hvAlbumInfo(u); stE.className = 'st' + (ok ? ' ok' : chk && chk.url === u && !chk.ok ? (chk.needHelper ? ' warn' : ' err') : !u || (pv && !inf.issue) ? '' : ' err');
+              stE.textContent = !u ? 'Google Photos (photos.app.goo.gl/…), an iCloud shared album with “Anyone with the Link” on (photos.icloud.com/shared/album/…, older albums icloud.com/sharedalbum/#…) or OneDrive (1drv.ms/…, “Anyone with the link”).'
                 : hvAlbumStatus(chk, u).replace(' Until it works, the photos come from the media folder.', '').replace(' The list refreshes every 6 hours; Order = Random shuffles it.', '');
               sv.disabled = !ok || u === cur; };
-            const check = () => { const u = inp.value.trim(); clearTimeout(tm); paintSt(); if (!u || !hvAlbumProv(u) || (chk && chk.url === u)) return;
+            const check = () => { const u = inp.value.trim(); clearTimeout(tm); paintSt(); if (!u || !hvAlbumProv(u) || hvAlbumInfo(u).issue || (chk && chk.url === u)) return;
               tm = setTimeout(() => { q = u; hvAlbumLoad(h(), u).then(r => { if (q !== u) return; chk = Object.assign({ url: u }, r); delete chk.ids; const S = window.__hvAlbumSt || (window.__hvAlbumSt = {}); if (r.ok) S[u] = Object.assign({ url: u, t: Date.now() }, chk); paintSt(); }); }, 600); };
             inp.addEventListener('input', check); inp.addEventListener('change', check);
             inp.addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); if (!sv.disabled) sv.click(); } });
             o.querySelector('.cn').addEventListener('click', ev => { ev.stopPropagation(); close(); });
             o.addEventListener('click', ev => { ev.stopPropagation(); if (ev.target === o) close(); });
             sv.addEventListener('click', async ev => { ev.stopPropagation(); const u = inp.value.trim(); if (sv.disabled) return; sv.disabled = true; inp.disabled = true; stE.className = 'st'; stE.textContent = 'Saving…';
-              const ttl = chk && chk.title; close(); await setSource({ photo_source_mode: 'album', photo_album_url: u }, `Photos now come from ${HV_ALB_NAME[hvAlbumProv(u)] || 'the album'}${ttl ? ' “' + ttl + '”' : ''} ✓`); });
+              const ttl = chk && chk.title; close(); await setSource({ photo_source_mode: 'album', photo_album_url: hvAlbumInfo(u).url }, `Photos now come from ${HV_ALB_NAME[hvAlbumProv(u)] || 'the album'}${ttl ? ' “' + ttl + '”' : ''} ✓`); });
             inp.value = cur || ''; if (cur) { chk = (window.__hvAlbumSt || {})[cur] ? Object.assign({}, window.__hvAlbumSt[cur], { url: cur }) : null; } paintSt(); check(); setTimeout(() => inp.focus(), 60); };
           file.addEventListener('change', async () => { const files = [...file.files]; file.value = ''; if (!files.length || busy || !canUp()) return; busy = true; upb.disabled = true;
             const before = new Set(ids); let done = 0; const res = await hub._upload(files, folder(), names(), (i, n) => status(`Uploading ${i} of ${n}…`));

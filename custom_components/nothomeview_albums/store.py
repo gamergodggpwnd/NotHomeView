@@ -70,7 +70,7 @@ class AlbumStore:
             by = {p["id"]: p for p in a["photos"]}
             if pid not in by:
                 return None
-        if a["provider"] != "icloud":
+        if a["provider"] != "icloud" or by[pid].get("url"):
             return by[pid]["url"]
         c = self.urls.get((key, pid))
         if c and c[1] - time.time() > 120:

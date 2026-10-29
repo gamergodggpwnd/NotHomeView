@@ -23,16 +23,62 @@ class AlbumError(Exception):
     """The album could not be read (message is shown to the user)."""
 
 
+_TRACK = re.compile(r"^(utm_\w+|fbclid|gclid|igshid|mibextid|si|_ga|ref_src)$", re.I)
+ISSUES = {
+    "gprivate": "this is a private album link (photos.google.com/album/…). Open the album, tap Share → Create link, and paste that link (photos.app.goo.gl/…).",
+    "iclink": "this is an \"iCloud Link\" to a few photos, not a shared album. In Photos make a Shared Album, turn on \"Anyone with the Link\" and paste the album link (photos.icloud.com/shared/album/…).",
+    "icother": "this iCloud link isn't a shared album. Paste the link from Photos → the shared album → People → \"Anyone with the Link\" → Share Link.",
+}
+
+
+def info(url: str) -> dict:
+    """Normalise a pasted share link: {prov, kind, issue, url}. Same rules as the card (hvAlbumInfo)."""
+    from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
+    u = re.sub(r"^[<\"'(\[]+|[>\"')\].,;]+$", "", (url or "").strip()).strip()
+    if not u:
+        return {"prov": None, "kind": "", "issue": None, "url": ""}
+    if not re.match(r"^[a-z][a-z0-9+.-]*://", u, re.I):
+        u = "https://" + u.lstrip("/")
+    try:
+        x = urlsplit(u)
+    except ValueError:
+        return {"prov": None, "kind": "", "issue": None, "url": u}
+    if x.scheme.lower() not in ("http", "https"):
+        return {"prov": None, "kind": "", "issue": None, "url": u}
+    h = (x.hostname or "").lower()
+    if h.startswith("m."):
+        h = h[2:]
+    q = urlencode([(k, v) for k, v in parse_qsl(x.query, keep_blank_values=True) if not _TRACK.match(k)])
+    u = urlunsplit(("https", x.netloc.lower(), x.path, q, x.fragment))
+    p = x.path or "/"
+    prov = issue = None
+    kind = ""
+    if h == "photos.app.goo.gl" or (h == "goo.gl" and len(p) > 1):
+        prov = "google"
+    elif h == "photos.google.com":
+        prov = "google"
+        if not re.match(r"^/(u/\d+/)?share/[^/]+", p, re.I):
+            issue = "gprivate"
+    elif re.match(r"^(www\.)?icloud\.com(\.cn)?$", h):
+        prov = "icloud"
+        if re.match(r"^/sharedalbum\b", p, re.I):
+            kind = "legacy"
+        else:
+            issue = "iclink" if re.match(r"^/photos\b", p, re.I) else "icother"
+    elif re.match(r"^photos\.icloud\.com(\.cn)?$", h):
+        prov, kind = "icloud", "ck"
+        if not re.match(r"^/shared/album/[^/]+", p, re.I):
+            issue = "icother"
+    elif re.match(r"^share\.icloud\.com(\.cn)?$", h):
+        prov, issue = "icloud", "iclink"
+    elif h in ("1drv.ms", "onedrive.live.com", "photos.onedrive.com", "onedrive.com") or h == "sharepoint.com" or h.endswith(".sharepoint.com"):
+        prov = "onedrive"
+    return {"prov": prov, "kind": kind, "issue": issue, "url": u}
+
+
 def detect(url: str) -> str | None:
     """Provider of a shared-album link: google, icloud, onedrive or None."""
-    u = (url or "").strip()
-    if re.match(r"^https?://(photos\.app\.goo\.gl|goo\.gl/photos|photos\.google\.com/(u/\d+/)?share/)", u, re.I):
-        return "google"
-    if re.match(r"^https?://(www\.)?icloud\.com/sharedalbum/", u, re.I):
-        return "icloud"
-    if re.match(r"^https?://(1drv\.ms|onedrive\.live\.com|photos\.onedrive\.com)/", u, re.I):
-        return "onedrive"
-    return None
+    return info(url)["prov"]
 
 
 def album_key(url: str) -> str:
@@ -152,6 +198,83 @@ async def _icloud(s: aiohttp.ClientSession, url: str) -> dict:
     return {"title": b.get("streamName") or "iCloud shared album", "photos": photos, "host": host, "token": tok, "expires": None}
 
 
+# iOS 26+ shared albums (photos.icloud.com/shared/album/<token>) live in CloudKit: an anyone-with-the-link album resolves
+# anonymously (public records/resolve -> zone + short-lived access token + partition host), then its photo records are paged
+# from the shared database. Download links come inline and last about an hour.
+_CK = "https://ckdatabasews.icloud.com"
+_CKQ = "clientBuildNumber=2640BuildBeta21&clientMasteringNumber=2640BuildBeta21"
+
+
+def ck_pick(f: dict, target: int = 2048) -> str | None:
+    best = fb = None
+    bw = fw = -1
+    jpg = False
+    for k, v in (f or {}).items():
+        if not (k.startswith("res") and k.endswith("Res")) or "Vid" in k:
+            continue
+        dl = ((v or {}).get("value") or {}).get("downloadURL")
+        if not dl:
+            continue
+        w = int(((f.get(k[:-3] + "Width") or {}).get("value")) or 0)
+        is_j = "JPEG" in k or "jpeg" in str((f.get(k[:-3] + "FileType") or {}).get("value", "")).lower()
+        u = dl.replace("${f}", "photo.jpg")
+        if (is_j or not jpg) and w >= target and (bw < 0 or w < bw or (is_j and not jpg)):
+            best, bw, jpg = u, w, is_j
+        if w > fw and (is_j or not fb):
+            fb, fw = u, w
+    return best or fb
+
+
+async def _ck_post(s, url, body):
+    async with s.post(url, data=json.dumps(body), headers={"Content-Type": "text/plain", "Origin": "https://photos.icloud.com", "User-Agent": UA}) as r:
+        if r.status != 200:
+            raise AlbumError(f"iCloud answered {r.status}")
+        return await r.json(content_type=None)
+
+
+async def _icloud_ck(s: aiohttp.ClientSession, url: str) -> dict:
+    m = re.search(r"shared/album/([^/?#]+)", url, re.I)
+    if not m:
+        raise AlbumError("Couldn't find the album token in this iCloud link (photos.icloud.com/shared/album/…)")
+    rs = await _ck_post(s, f"{_CK}/database/1/com.apple.photos.cloud/production/public/records/resolve?{_CKQ}", {"shortGUIDs": [{"value": m.group(1)}]})
+    r0 = (rs.get("results") or [{}])[0]
+    acc = r0.get("anonymousPublicAccess") or {}
+    z = r0.get("zoneID")
+    if not z or not acc.get("token"):
+        if r0.get("requireAppleLogin") or z:
+            raise AlbumError('This album is invite-only. In Photos open it → People → turn on "Anyone with the Link".')
+        raise AlbumError('iCloud can\'t find this shared album. Check the link, and that "Anyone with the Link" is on.')
+    zone = {"zoneName": z.get("zoneName"), "ownerRecordName": z.get("ownerRecordName"), "zoneType": z.get("zoneType") or "REGULAR_CUSTOM_ZONE"}
+    part = str(acc.get("databasePartition") or _CK).removesuffix(":443")
+    title = (((r0.get("share") or {}).get("fields") or {}).get("cloudkit.title") or {}).get("value") or "iCloud shared album"
+    qu = f"{part}/database/1/com.apple.photos.cloud/production/shared/records/query?{_CKQ}&publicAccessAuthToken={quote(acc['token'], safe='')}"
+    photos, mk, n = [], None, 0
+    while True:
+        body = {"query": {"recordType": "CPLAssetAndMasterByAssetDateWithoutHiddenOrDeleted",
+                          "filterBy": [{"fieldName": "direction", "comparator": "EQUALS", "fieldValue": {"value": "DESCENDING", "type": "STRING"}}]},
+                "zoneID": zone, "resultsLimit": 200}
+        if mk:
+            body["continuationMarker"] = mk
+        r = await _ck_post(s, qu, body)
+        for rec in r.get("records") or []:
+            if rec.get("recordType") != "CPLMaster":
+                continue
+            f = rec.get("fields") or {}
+            if re.search(r"movie|video", str((f.get("itemType") or {}).get("value", "")), re.I):
+                continue
+            u = ck_pick(f)
+            if u:
+                photos.append({"id": rec.get("recordName") or str(len(photos)), "url": u,
+                               "w": int((f.get("resJPEGFullWidth") or {}).get("value") or 0), "h": int((f.get("resJPEGFullHeight") or {}).get("value") or 0)})
+        mk = r.get("continuationMarker")
+        n += 1
+        if not mk or n >= 20 or len(photos) >= MAX_PHOTOS:
+            break
+    if not photos:
+        raise AlbumError("The iCloud shared album has no photos")
+    return {"title": title, "photos": photos[:MAX_PHOTOS], "expires": time.time() + 50 * 60}
+
+
 async def icloud_urls(s: aiohttp.ClientSession, album: dict, ids: list[str]) -> dict:
     """Fresh download links for some photos of an iCloud album: {photo id: (url, expiry epoch)}."""
     by = {p["id"]: p for p in album["photos"]}
@@ -241,12 +364,15 @@ async def _onedrive(s: aiohttp.ClientSession, url: str) -> dict:
 
 async def fetch_album(s: aiohttp.ClientSession, url: str) -> dict:
     """{provider, title, photos:[{id, url?, w, h}], expires} for a shared-album link."""
-    prov = detect(url)
+    inf = info(url)
+    prov = inf["prov"]
     if not prov:
         raise AlbumError("Not a Google Photos, iCloud shared album or OneDrive link")
+    if inf["issue"]:
+        raise AlbumError(ISSUES[inf["issue"]][0].upper() + ISSUES[inf["issue"]][1:])
     try:
-        fn = {"google": _google, "icloud": _icloud, "onedrive": _onedrive}[prov]
-        a = await fn(s, url.strip())
+        fn = _icloud_ck if inf["kind"] == "ck" else {"google": _google, "icloud": _icloud, "onedrive": _onedrive}[prov]
+        a = await fn(s, inf["url"])
     except AlbumError:
         raise
     except (aiohttp.ClientError, TimeoutError) as e:
