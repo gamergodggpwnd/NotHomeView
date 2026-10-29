@@ -3,6 +3,7 @@
 ## 1.32.0 – unreleased (staged)
 
 ### New features
+* **Arrange mode** for room / device pages (Page Grid), no need for the dashboard's edit mode: long-press anywhere on the page (0.6 s) or tap the small ✥ button next to the page dots (admins only). Tiles wiggle; drag any tile with a finger to move it (hold at the left/right edge to change page), tap a tile (or its ⋯) for Edit / Move earlier / later / Duplicate / Delete. **Done** saves to the dashboard, **Cancel** puts everything back. Edit saves pending moves first and opens that tile's editor. Turn off per grid with `arrange: false`.
 * Room / device page editing (Page Grid): in the dashboard's edit mode every tile gets a grab handle and its own ⋯ menu (like Home Assistant's card menu): **Edit** (that tile's own editor), **Move earlier / later**, **Duplicate**, **Delete** (asks first). Drag the handle with a finger or the mouse to move a tile: it lifts, a marker shows where it lands, holding at the left / right edge flips the page, and the page does not scroll while dragging. Large touch targets for iPad / iPhone (HA Companion app). Admins, storage-mode dashboards only; changes are saved to the dashboard like the visual editor does.
 * Weather popup: animated sky header (sunny, partly cloudy, cloudy, rain, snow; night sky after sunset; lightning / fog details). Opt-in: `weather_sky_header: true`.
 * Assistant popup (voice through the device microphone or typed) for any Assist pipeline; pipeline picker, mic button, Day / Night look. Opt-in: `assistant_enabled: true`.

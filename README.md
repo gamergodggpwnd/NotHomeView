@@ -90,6 +90,7 @@ and Wallpanel 4.67.2.
   Google Photos, iCloud or OneDrive link, see it checked (✓ / ⚠), tap *Save*: the Home Screen card's photo source becomes *Album link*
   (editable afterwards in the visual editor). With an album set, the menu offers *Change album link* and *Use media folder instead*. Admins only.
 * **Now Playing tile opens the Music sheet**: tap the artwork or title of a Now Playing tile on the Home Screen to open the full player (the buttons on the tile still just control playback).
+* **Arrange mode** (admins): long-press a room page (or tap the small ✥ button next to the page dots) to move, duplicate, delete or edit tiles right on the dashboard, without Home Assistant's edit mode. Drag tiles with a finger, tap a tile for its menu, then **Done** to save (or **Cancel**). `arrange: false` on the Page Grid turns it off.
 * **Easy tile editing on room / device pages** (admins only). In the dashboard's edit mode every tile of a Page Grid shows a grab handle (top left) and a ⋯ button (top right).
   The ⋯ menu offers Edit (opens that tile's own editor), Move earlier / later, Duplicate and Delete (with a confirmation). Drag the handle to move a tile onto another
   tile's spot, also to another page (hold at the edge). Works with a finger on iPad / iPhone and with the mouse; the changes are saved to the dashboard.
