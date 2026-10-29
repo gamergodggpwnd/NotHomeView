@@ -2973,9 +2973,12 @@ class HVGridCard extends HTMLElement {
     const old = this._config; this._config = Object.assign({}, HVGridCard.defaults, c);
     if (!old || JSON.stringify(old.cards) !== JSON.stringify(c.cards)) this._makeChildren(); else this._layout(true);
   }
-  set hass(h) { this._hass = h; (this._kids || []).forEach(k => { if (k.el) k.el.hass = h; }); }
+  set hass(h) { this._hass = h; (this._kids || []).forEach(k => { if (k.el) k.el.hass = h; }); this._arrBtn(); }
   get hass() { return this._hass; }
-  set editMode(v) { this._edit = v; (this._kids || []).forEach(k => { if (k.el) k.el.editMode = v; }); hvGridCards.add(this); this.toggleAttribute('hv-edit', !!v); if (v) hvEcl.start(); } // 1.31.1: tap a tile to edit it
+  // 1.32.0: small "Arrange" button next to the page dots (admins, storage-mode dashboards, outside HA's edit mode)
+  _arrBtn() { const b = this._arrB; if (!b) return; hvGridCards.add(this); const now = Date.now(); if (this._arrT && now - this._arrT < 4000 && !this._arrF) return; this._arrT = now; this._arrF = false;
+    const c = this._config || {}; b.hidden = !(c.arrange !== false && c.show_dots !== false && !this._edit && !this._arr && this.isConnected && hvEclOK(this)); }
+  set editMode(v) { this._edit = v; (this._kids || []).forEach(k => { if (k.el) k.el.editMode = v; }); hvGridCards.add(this); this.toggleAttribute('hv-edit', !!v); if (v) { if (this._arr) hvEcl.arrange(this, false, true); hvEcl.start(); } this._arrF = true; this._arrBtn(); } // 1.31.1: tap a tile to edit it
   getCardSize() { return 12; }
   getGridOptions() { return { columns: 'full', rows: 'auto', min_columns: 12 }; }
   connectedCallback() {
@@ -2983,6 +2986,7 @@ class HVGridCard extends HTMLElement {
     addEventListener('resize', this._bound); addEventListener('hv-layout', this._bound); addEventListener('orientationchange', this._bound); if (window.visualViewport) visualViewport.addEventListener('resize', this._bound);
     if (window.ResizeObserver && !this._ro) { this._ro = new ResizeObserver(() => this._layout()); this._ro.observe(this); }
     this._edgeBind(true); this._backBind(true);
+    [900, 3000].forEach(t => setTimeout(() => { this._arrF = true; this._arrBtn(); }, t));
     requestAnimationFrame(() => this._layout(true)); setTimeout(() => this._layout(true), 600); setTimeout(() => this._layout(), 1700); // 1700: after the edit buttons appear
   }
   // Edge swipe: a touch that starts in the left ~24 px and moves right opens Home Assistant's sidebar drawer (narrow screens,
@@ -3036,7 +3040,10 @@ class HVGridCard extends HTMLElement {
 .pill{position:fixed;left:50%;top:calc(var(--hv-safe-top, env(safe-area-inset-top, 0px)) + 5px);width:38px;height:5px;margin-left:-19px;border-radius:3px;background:rgba(255,255,255,.55);box-shadow:0 1px 4px rgba(0,0,30,.25);pointer-events:none;z-index:3}
 .pill[hidden]{display:none}
 .empty{padding:24px;text-align:center;color:var(--primary-text-color);opacity:.7}
-</style><div class="sc"></div><div class="dots"></div><div class="pill" hidden></div>`;
+:host{position:relative} .arr{all:unset;position:absolute;right:6px;bottom:0;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;color:rgba(255,255,255,.85);background:rgba(0,0,30,.18);touch-action:manipulation;z-index:2}
+.arr[hidden]{display:none} .arr ha-icon{--mdc-icon-size:18px;display:flex} :host([hv-day]) .arr{color:rgba(60,60,67,.75);background:rgba(60,60,67,.1)}
+</style><div class="sc"></div><div class="dots"></div><button class="arr" hidden aria-label="Arrange tiles" title="Arrange tiles"><ha-icon icon="mdi:cursor-move"></ha-icon></button><div class="pill" hidden></div>`;
+    this._arrB = this.shadowRoot.querySelector('.arr'); this._arrB.addEventListener('click', e => { e.stopPropagation(); hvEcl.arrange(this, true); });
     this._sc = this.shadowRoot.querySelector('.sc'); this._dots = this.shadowRoot.querySelector('.dots');
     this._sc.addEventListener('scroll', () => { cancelAnimationFrame(this._raf); this._raf = requestAnimationFrame(() => {
       const w = this._sc.clientWidth || 1, i = Math.round(this._sc.scrollLeft / w); if (i !== this._page) { this._page = i; this._paintDots(); } }); }, { passive: true });
@@ -3163,13 +3170,26 @@ const hvTapPick = e => { const x = e.clientX, y = e.clientY; if (x == null) retu
     const i = g._kids.findIndex(k => { if (!k.cell || !k.cell.isConnected) return false; const b = k.cell.getBoundingClientRect(); return b.width > 0 && x >= b.left && x <= b.right && y >= b.top && y <= b.bottom; });
     HV_TAP.cfg = JSON.stringify((g._config && g._config.cards) || []); HV_TAP.i = i; HV_TAP.t = Date.now(); return; } };
 addEventListener('pointerdown', hvTapPick, true);
+// 1.32.0: long-press (0.6 s, finger still) anywhere on a Page Grid enters arrange mode; the release that follows is swallowed so the tile's own hold / tap doesn't fire
+{ let lp = null, eat = 0; const stopLp = () => { if (lp) { clearTimeout(lp.t); lp = null; } };
+  addEventListener('pointerdown', e => { stopLp(); if (e.button > 0 || !e.isPrimary) return; const x = e.clientX, y = e.clientY;
+    const g = [...hvGridCards].find(g => { if (!g.isConnected || g._edit || g._arr || (g._config && g._config.arrange === false)) return false; const b = g.getBoundingClientRect(); return b.width > 0 && x >= b.left && x <= b.right && y >= b.top && y <= b.bottom; });
+    if (!g || hvEcl.drag || e.composedPath().some(n => n && n.id === 'hv-edit-layer')) return;
+    lp = { x, y, t: setTimeout(() => { lp = null; if (!hvEclOK(g)) return; eat = Date.now(); rel = 0; hvEcl.arrange(g, true); }, 600) }; }, true);
+  addEventListener('pointermove', e => { if (lp && Math.hypot(e.clientX - lp.x, e.clientY - lp.y) > 10) stopLp(); }, true);
+  for (const t of ['pointerup', 'pointercancel']) addEventListener(t, stopLp, true);
+  addEventListener('scroll', stopLp, { capture: true, passive: true });
+  // eat = time arrange mode was entered; after the finger lifts, keep eating the trailing mouseup / click for 0.6 s
+  let rel = 0; const eatOn = () => eat && (!rel || Date.now() - rel < 600);
+  for (const t of ['pointerup', 'touchend', 'mouseup', 'click', 'contextmenu']) addEventListener(t, e => { if (!eatOn()) { eat = rel = 0; return; } e.stopImmediatePropagation(); if (e.cancelable) e.preventDefault();
+    if ((t === 'touchend' || t === 'pointerup') && !rel) { rel = Date.now(); setTimeout(() => { eat = rel = 0; }, 650); } }, true); }
 /* 1.32.0: per-tile controls in the dashboard's edit mode (room / device pages, the Page Grid). Home Assistant puts an overlay over every card while
    editing, so these controls live in a layer above the page (positioned over each tile) and follow it while it scrolls or pages. Every tile gets
    a grab handle (drag it with a finger or the mouse: lift, drop marker, auto page flip at the edges) and a "⋯" menu like HA's own card menu:
    Edit (that tile's own editor), Move earlier / later, Duplicate, Delete (asks first). Changes are written to the saved dashboard exactly like
    the visual editor does. Admins in storage (UI) mode only. */
 const hvEclOK = g => { const h = g._hass, root = hvFindRoot(g), lv = root && root.lovelace; return !!(h && h.user && h.user.is_admin === true && lv && lv.config && lv.mode !== 'yaml'); };
-function hvGridAt(cfg, grid) { const sig = JSON.stringify((grid._config && grid._config.cards) || []), out = [];
+function hvGridAt(cfg, grid) { const sig = grid._arrSig || JSON.stringify((grid._config && grid._config.cards) || []), out = [];
   const walk = (o, v, d) => { if (!o || typeof o !== 'object' || d > 14) return; if (Array.isArray(o)) { o.forEach(x => walk(x, v, d + 1)); return; }
     if (o.type === 'custom:homeview-grid-card' && JSON.stringify(o.cards || []) === sig) out.push({ node: o, v });
     for (const k of ['sections', 'cards', 'card', 'elements']) if (o[k]) walk(o[k], v, d + 1); };
@@ -3186,6 +3206,11 @@ async function hvGridMutate(grid, fn) { const root = hvFindRoot(grid), lv = root
 const HV_ECL_CSS = `:host{all:initial}.lay{position:fixed;inset:0;pointer-events:none;z-index:6;font-family:var(--paper-font-body1_-_font-family,Roboto,sans-serif);-webkit-tap-highlight-color:transparent}
 .c{position:fixed;left:0;top:0;pointer-events:none;display:block}
 .b{position:absolute;top:0;width:var(--bs,40px);height:var(--bs,40px);display:flex;align-items:center;justify-content:center;pointer-events:auto;cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;box-sizing:border-box;border:0;padding:0;background:none;color:inherit}
+.cv{display:none;position:absolute;left:0;top:0;width:100%;height:var(--th,40px);border-radius:20px;pointer-events:auto;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;cursor:grab;outline:2px dashed color-mix(in srgb,var(--primary-color,#03a9f4) 75%,transparent);outline-offset:-1px;background:rgba(127,127,127,.08);animation:jig .5s ease-in-out infinite alternate}
+.c.arr .cv{display:block} @keyframes jig{from{transform:rotate(-.6deg)}to{transform:rotate(.6deg)}}
+.abar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 14px);display:flex;align-items:center;gap:8px;padding:6px 6px 6px 16px;border-radius:999px;pointer-events:auto;background:var(--card-background-color,#fff);color:var(--primary-text-color,#212121);box-shadow:0 6px 24px rgba(0,0,0,.45),0 0 0 1px rgba(127,127,127,.3);font-size:13px;white-space:nowrap;max-width:calc(100vw - 16px);box-sizing:border-box}
+.abar span{overflow:hidden;text-overflow:ellipsis;opacity:.75} .abar button{all:unset;box-sizing:border-box;min-height:40px;padding:0 16px;border-radius:999px;font-size:15px;font-weight:600;cursor:pointer;touch-action:manipulation}
+.abar .ok{background:var(--primary-color,#03a9f4);color:#fff} .abar .no{opacity:.8}
 .b.h{left:0;cursor:grab}.b.m{right:0;touch-action:manipulation}
 .b i{display:flex;align-items:center;justify-content:center;width:var(--bi,30px);height:var(--bi,30px);border-radius:50%;background:var(--card-background-color,#fff);color:var(--primary-text-color,#212121);box-shadow:0 1px 5px rgba(0,0,0,.4),0 0 0 1px rgba(127,127,127,.35);transition:transform .12s,background .12s}
 .b:active i{transform:scale(.9)} .b ha-icon{--mdc-icon-size:20px;display:flex}
@@ -3217,24 +3242,25 @@ const hvEcl = { host: null, sr: null, lay: null, ctl: new WeakMap(), timer: null
     addEventListener('keydown', e => { if (e.key === 'Escape' && (this.menu || this.drag)) { if (this.drag) this.endDrag(false); this.closeMenu(); } }, true); },
   kick() { if (this._raf) return; this._raf = requestAnimationFrame(() => { this._raf = 0; this.tick(); }); },
   start() { if (this.timer) return; this.timer = setInterval(() => this.tick(), 150); this.kick(); },
-  tick() { const gs = [...hvGridCards].filter(g => g.isConnected && g._edit && g._kids && hvEclOK(g));
+  tick() { for (const g of hvGridCards) if (g._arr && !g.isConnected) this.arrange(g, false, true);
+    const gs = [...hvGridCards].filter(g => g.isConnected && (g._edit || g._arr) && g._kids && hvEclOK(g)); 
     if (!gs.length) { clearInterval(this.timer); this.timer = null; this.closeMenu(); if (this.drag) this.endDrag(false); if (this.host) { this.host.remove(); this.host = null; this.ctl = new WeakMap(); } return; }
-    this.ensure(); const vw = document.documentElement.clientWidth || innerWidth, vh = innerHeight, live = new Set();
+    this.ensure(); this.bar(gs.find(g => g._arr && !g._edit)); const vw = document.documentElement.clientWidth || innerWidth, vh = innerHeight, live = new Set();
     for (const g of gs) { const root = hvFindRoot(g), hd = root && root.shadowRoot && root.shadowRoot.querySelector('.header'), top = hd ? hd.getBoundingClientRect().bottom : 0, gr = g.getBoundingClientRect();
       const L = Math.max(0, gr.left) - 2, R = Math.min(vw, gr.right) + 2;
       g._kids.forEach((k, i) => { if (!k.cell || !k.cell.isConnected) return; const r = k.cell.getBoundingClientRect(); let c = this.ctl.get(k);
-        if (!c) { c = document.createElement('div'); c.className = 'c'; c.innerHTML = `<button class="b h" aria-label="Move this tile (drag)" title="Drag to move"><i><ha-icon icon="mdi:drag"></ha-icon></i></button><button class="b m" aria-label="Tile options" aria-haspopup="menu" title="Edit, move, duplicate, delete"><i><ha-icon icon="mdi:dots-vertical"></ha-icon></i></button>`;
-          c.querySelector('.h').addEventListener('pointerdown', e => this.startDrag(g, k, e)); c.querySelector('.m').addEventListener('click', e => { e.stopPropagation(); this.openMenu(g, k, c.querySelector('.m')); });
+        if (!c) { c = document.createElement('div'); c.className = 'c'; c.innerHTML = `<div class="cv"></div><button class="b h" aria-label="Move this tile (drag)" title="Drag to move"><i><ha-icon icon="mdi:drag"></ha-icon></i></button><button class="b m" aria-label="Tile options" aria-haspopup="menu" title="Edit, move, duplicate, delete"><i><ha-icon icon="mdi:dots-vertical"></ha-icon></i></button>`;
+          c.querySelector('.h').addEventListener('pointerdown', e => this.startDrag(g, k, e)); c.querySelector('.cv').addEventListener('pointerdown', e => this.startDrag(g, k, e, true)); c.querySelector('.m').addEventListener('click', e => { e.stopPropagation(); this.openMenu(g, k, c.querySelector('.m')); });
           c.querySelector('.m').addEventListener('keydown', e => e.stopPropagation()); this.lay.appendChild(c); this.ctl.set(k, c); }
         live.add(c); const bs = Math.max(36, Math.min(44, Math.round(r.width * 0.34))), bi = Math.max(28, bs - 8), pad = 2;
         const vis = r.width > 0 && r.left >= L && r.right <= R && r.top + pad >= top && r.top < vh - bs;
         c.style.display = vis ? '' : 'none'; if (!vis) return; c.style.setProperty('--bs', bs + 'px'); c.style.setProperty('--bi', bi + 'px');
-        c.style.width = (r.width - pad * 2) + 'px'; c.style.height = bs + 'px'; c.style.transform = `translate(${Math.round(r.left + pad)}px,${Math.round(r.top + pad)}px)`; }); }
+        c.style.width = (r.width - pad * 2) + 'px'; c.style.height = bs + 'px'; c.style.setProperty('--th', (r.height - pad * 2) + 'px'); c.classList.toggle('arr', !!(g._arr && !g._edit)); c.style.transform = `translate(${Math.round(r.left + pad)}px,${Math.round(r.top + pad)}px)`; }); }
     for (const c of [...this.lay.querySelectorAll('.c')]) if (!live.has(c)) c.remove(); },
   // ---- drag ----
-  startDrag(g, k, e) { if (e.button != null && e.button > 0 || this.drag) return; e.preventDefault(); e.stopPropagation(); this.closeMenu();
+  startDrag(g, k, e, cv) { if (e.button != null && e.button > 0 || this.drag) return; e.preventDefault(); e.stopPropagation(); this.closeMenu();
     const i = g._kids.indexOf(k), r = k.cell.getBoundingClientRect(), btn = e.currentTarget;
-    const d = this.drag = { g, k, i, id: e.pointerId, x0: e.clientX, y0: e.clientY, r, over: -1, btn, edge: 0, edgeT: 0 };
+    const d = this.drag = { g, k, i, id: e.pointerId, x0: e.clientX, y0: e.clientY, r, over: -1, btn, edge: 0, edgeT: 0, cv, t0: Date.now() };
     try { btn.setPointerCapture(e.pointerId); } catch (x) {}
     const dim = document.createElement('div'); dim.className = 'dim'; this.pos(dim, r); const drop = document.createElement('div'); drop.className = 'drop'; drop.style.display = 'none';
     const gh = document.createElement('div'); gh.className = 'ghost'; gh.innerHTML = '<ha-icon></ha-icon><span></span>'; { const c = g._kids[i].cfg, st = c && c.entity && g._hass.states[c.entity], ic0 = gh.querySelector('ha-icon');
@@ -3246,7 +3272,7 @@ const hvEcl = { host: null, sr: null, lay: null, ctl: new WeakMap(), timer: null
     d.iv = setInterval(() => this.hit(d), 120);
     const hint = document.createElement('div'); hint.className = 'hint'; hint.textContent = 'Drop on another tile to move it there'; this.lay.appendChild(hint); d.hint = hint; },
   pos(el, r) { el.style.left = r.left + 'px'; el.style.top = r.top + 'px'; el.style.width = r.width + 'px'; el.style.height = r.height + 'px'; },
-  moveDrag(e) { const d = this.drag; if (!d) return; e.preventDefault(); d.x = e.clientX; d.y = e.clientY; d.gh.style.transform = `translate(${d.x - d.x0}px,${d.y - d.y0}px) scale(1.06)`; this.hit(d); },
+  moveDrag(e) { const d = this.drag; if (!d) return; e.preventDefault(); d.x = e.clientX; d.y = e.clientY; if (Math.hypot(d.x - d.x0, d.y - d.y0) > 8) d.moved = true; d.gh.style.transform = `translate(${d.x - d.x0}px,${d.y - d.y0}px) scale(1.06)`; this.hit(d); },
   hit(d) { const x = d.x, y = d.y; if (x == null) return; let over = -1;
     d.g._kids.forEach((k, i) => { if (over >= 0 || i === d.i || !k.cell || !k.cell.isConnected) return; const r = k.cell.getBoundingClientRect(); if (r.width && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) over = i; });
     if (over !== d.over) { d.over = over; if (over >= 0) { this.pos(d.drop, d.g._kids[over].cell.getBoundingClientRect()); d.drop.style.display = ''; } else d.drop.style.display = 'none'; }
@@ -3259,16 +3285,31 @@ const hvEcl = { host: null, sr: null, lay: null, ctl: new WeakMap(), timer: null
     [d.dim, d.drop, d.hint].forEach(n => n && n.remove());
     if (ok && d.over >= 0 && d.over !== d.i) { d.gh.style.transition = 'all .16s ease-out'; this.pos(d.gh, d.g._kids[d.over].cell.getBoundingClientRect()); d.gh.style.transform = 'scale(1)'; d.gh.style.opacity = '.4'; setTimeout(() => d.gh.remove(), 260);
       this.apply(d.g, cards => { const t = cards.splice(d.i, 1)[0]; cards.splice(d.over, 0, t); return cards; }, 'Tile moved'); }
-    else { d.gh.style.transition = 'all .16s ease-out'; this.pos(d.gh, d.r); d.gh.style.transform = 'scale(1)'; d.gh.style.opacity = '0'; setTimeout(() => d.gh.remove(), 200); } },
-  async apply(g, fn, ok) { if (this.busy) return; this.busy = true;
+    else { d.gh.style.transition = 'all .16s ease-out'; this.pos(d.gh, d.r); d.gh.style.transform = 'scale(1)'; d.gh.style.opacity = '0'; setTimeout(() => d.gh.remove(), 200);
+      if (ok && d.cv && !d.moved) { const c = this.ctl.get(d.k); if (c) this.openMenu(d.g, d.k, c.querySelector('.m')); } } }, // a tap on a tile in arrange mode opens its menu
+  async apply(g, fn, ok) { if (g._arr && !g._edit) { // arrange mode: change the page now, save on Done
+      if (!g._arrSig) { g._arrSig = JSON.stringify(g._config.cards || []); g._arrOrig = JSON.parse(g._arrSig); }
+      g.setConfig(Object.assign({}, g._config, { cards: fn(JSON.parse(JSON.stringify(g._config.cards || []))) })); g._arrDirty = true; this.kick(); setTimeout(() => this.kick(), 120); return; }
+    if (this.busy) return; this.busy = true;
     try { await hvGridMutate(g, fn); hvToast(ok); } catch (e) { hvToast('Could not save: ' + (e && e.message || e)); } this.busy = false; this.kick(); },
+  // ---- arrange mode (1.32.0): move / edit tiles without HA's dashboard edit mode; changes are saved on Done ----
+  arrange(g, on, discard) { if (on) { if (g._edit || g._arr || !hvEclOK(g)) return; [...hvGridCards].forEach(o => o !== g && o._arr && this.arrange(o, false, true));
+      g._arr = true; g._arrSig = null; g._arrDirty = false; g.toggleAttribute('hv-arr', true); hvGridCards.add(g); g._arrF = true; g._arrBtn(); if (navigator.vibrate) try { navigator.vibrate(15); } catch (x) {} this.start(); return Promise.resolve(true); }
+    if (!g._arr) return Promise.resolve(true); this.closeMenu(); if (this.drag) this.endDrag(false);
+    const fin = () => { g._arr = false; g._arrSig = null; g._arrOrig = null; g._arrDirty = false; g.toggleAttribute('hv-arr', false); g._arrF = true; g._arrBtn(); this.kick(); };
+    if (discard || !g._arrDirty) { if (g._arrDirty && g._arrOrig) g.setConfig(Object.assign({}, g._config, { cards: g._arrOrig })); fin(); return Promise.resolve(true); }
+    if (this.busy) return Promise.resolve(false); this.busy = true; const cards = JSON.parse(JSON.stringify(g._config.cards || []));
+    return hvGridMutate(g, () => cards).then(() => { this.busy = false; fin(); hvToast('Saved'); return true; }, e => { this.busy = false; hvToast('Could not save: ' + (e && e.message || e)); return false; }); },
+  bar(g) { let b = this.sr && this.sr.querySelector('.abar'); if (!g) { if (b) b.remove(); return; } if (!b) { b = document.createElement('div'); b.className = 'abar';
+      b.innerHTML = '<span>Drag tiles · tap one for options</span><button class="no">Cancel</button><button class="ok">Done</button>'; this.lay.appendChild(b); }
+    b.querySelector('.no').onclick = e => { e.stopPropagation(); this.arrange(g, false, true); }; b.querySelector('.ok').onclick = e => { e.stopPropagation(); this.arrange(g, false); }; },
   // ---- the ⋯ menu ----
   closeMenu() { if (!this.menu) return; this.menu.remove(); this.menu = null; },
   openMenu(g, k, anchor) { this.closeMenu(); this.ensure(); const i = g._kids.indexOf(k), n = g._kids.length;
     const wrap = this.menu = document.createElement('div'); wrap.innerHTML = '<div class="scrim"></div><div class="menu" role="menu"></div>';
-    const m = wrap.querySelector('.menu'), close = () => this.closeMenu();
+    const m = wrap.querySelector('.menu'), close = () => this.closeMenu(), t0 = Date.now();
     const item = (ic, txt, fn, cls, dis) => { const b = document.createElement('button'); b.setAttribute('role', 'menuitem'); if (cls) b.className = cls; if (dis) b.disabled = true;
-      b.innerHTML = '<ha-icon></ha-icon><span></span>'; b.querySelector('ha-icon').setAttribute('icon', ic); b.querySelector('span').textContent = txt; b.addEventListener('click', e => { e.stopPropagation(); fn(); }); m.appendChild(b); return b; };
+      b.innerHTML = '<ha-icon></ha-icon><span></span>'; b.querySelector('ha-icon').setAttribute('icon', ic); b.querySelector('span').textContent = txt; b.addEventListener('click', e => { e.stopPropagation(); if (Date.now() - t0 < 400) return; fn(); }); m.appendChild(b); return b; }; // t0: ignore the click from the tap that opened the menu
     const head = document.createElement('div'); head.className = 't'; head.textContent = this.label(g, i); m.appendChild(head);
     item('mdi:pencil', 'Edit', () => { close(); this.edit(g, k, i); });
     item('mdi:arrow-left', 'Move earlier', () => { close(); this.apply(g, c => { [c[i - 1], c[i]] = [c[i], c[i - 1]]; return c; }, 'Tile moved earlier'); }, '', i <= 0);
@@ -3284,7 +3325,8 @@ const hvEcl = { host: null, sr: null, lay: null, ctl: new WeakMap(), timer: null
   place(m, anchor) { const a = anchor.getBoundingClientRect(), vw = document.documentElement.clientWidth || innerWidth, vh = innerHeight, mw = m.offsetWidth, mh = m.offsetHeight;
     let l = a.right - mw; l = Math.max(8, Math.min(vw - mw - 8, l)); let t = a.bottom + 4; if (t + mh > vh - 8) t = Math.max(8, a.top - mh - 4);
     m.style.left = l + 'px'; m.style.top = t + 'px'; m.style.transformOrigin = (a.right - l > mw / 2 ? 'top right' : 'top left'); },
-  edit(g, k, i) { const root = hvFindRoot(g), lv = root && root.lovelace; if (!lv) return;
+  async edit(g, k, i) { if (g._arr && !g._edit) { if (!(await this.arrange(g, false))) return; }
+    const root = hvFindRoot(g), lv = root && root.lovelace; if (!lv) return;
     const sig = JSON.stringify((g._config && g._config.cards) || []), hit = hvGridAt(lv.config, g), at = hit.find(x => x.v === root._curView) || hit[0];
     HV_TAP.cfg = sig; HV_TAP.i = i; HV_TAP.t = Date.now();
     const path = at && hvCardPath(lv.config, o => o === at.node, root._curView); if (path && hvOpenCardEditor(root, path)) return; hvToast('Tap the tile itself to edit it'); } };
