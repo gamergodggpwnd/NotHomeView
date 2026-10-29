@@ -122,15 +122,18 @@ const hvPenPage = (dash, vp) => hvGoEdit(dash ? `/${dash}/${vp}?disable_km&edit=
 // 1.32.0: open a view of THIS dashboard in edit mode without reloading the app (no black flash / HA logo): switch the view like HA's own
 // navigate() does, then turn on Lovelace edit mode. Falls back to the old full page load (?disable_km&edit=1) for another dashboard, a YAML
 // dashboard, or when the header stays hidden (kiosk-mode that doesn't react to ?disable_km without a reload).
+// kiosk-mode only reads ?disable_km when the dashboard loads: switch its header / sidebar hiding styles off in place (until the next load)
+function hvKioskOff() { const walk = (r, d) => { if (!r || d > 12) return; r.querySelectorAll('style[id^="kiosk_mode"]').forEach(st => { st.media = 'not all'; });
+    r.querySelectorAll('*').forEach(n => { if (n.shadowRoot) walk(n.shadowRoot, d + 1); }); }; walk(document, 0); window.__hvKmOff = true; }
 function hvGoEdit(url) { let u; try { u = new URL(url, location.href); } catch (e) { location.assign(url); return; }
   const seg = p => decodeURIComponent((p || '').split('/')[1] || ''), ha = document.querySelector('home-assistant'), find = () => ha && hvDeepFind(ha.shadowRoot, n => n.tagName === 'HUI-ROOT');
   const root0 = find(), lv0 = root0 && root0.lovelace;
   if (u.origin !== location.origin || seg(u.pathname) !== seg(location.pathname) || !lv0 || lv0.mode === 'yaml' || typeof lv0.setEditMode !== 'function') { location.assign(url); return; }
   const q = new URLSearchParams(u.search); q.delete('edit'); const qs = q.toString(), to = u.pathname + (qs ? '?' + qs.replace(/=(&|$)/g, '$1') : '');
   if (location.pathname + location.search !== to) { history.pushState(null, '', to); window.dispatchEvent(new CustomEvent('location-changed', { detail: { replace: false } })); }
-  setTimeout(() => { const r = find(), lv = r && r.lovelace; if (!lv) { location.assign(url); return; } try { lv.setEditMode(true); } catch (e) { location.assign(url); return; }
-    setTimeout(() => { const r2 = find(), hd = r2 && r2.shadowRoot && r2.shadowRoot.querySelector('.header, app-header, .toolbar'), on = r2 && r2.lovelace && r2.lovelace.editMode;
-      if (!on || (hd && !hd.getBoundingClientRect().height)) location.assign(url); }, 1200); }, 250); }
+  setTimeout(() => { const r = find(), lv = r && r.lovelace; if (!lv) { location.assign(url); return; } if (q.has('disable_km')) hvKioskOff(); try { lv.setEditMode(true); } catch (e) { location.assign(url); return; }
+    setTimeout(() => { if (q.has('disable_km')) hvKioskOff(); const r2 = find(), hd = r2 && r2.shadowRoot && r2.shadowRoot.querySelector('.header, app-header, .toolbar'), on = r2 && r2.lovelace && r2.lovelace.editMode;
+      if (!on || (hd && !hd.getBoundingClientRect().height)) { try { sessionStorage.setItem('hvGoEditFB', JSON.stringify({ on: !!on, hd: hd ? hd.tagName + '.' + hd.className + ':' + hd.getBoundingClientRect().height : null })); } catch (e) {} location.assign(url); } }, 1200); }, 250); }
 const hvCfgMatch = el => { const raw = el && (el._hvRaw || el._config); if (!raw || !raw.type) return () => false;
   return o => o && o.type === raw.type && Object.keys(o).every(k => JSON.stringify(o[k]) === JSON.stringify(raw[k])); };
 function hvCardPath(cfg, match, pref) { if (!cfg || !Array.isArray(cfg.views)) return null; // the view on screen first (the same card can sit on several pages)
