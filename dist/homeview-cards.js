@@ -2173,7 +2173,7 @@ const hvAlbumStatus = (st, url) => { const inf = hvAlbumInfo(url), prov = inf.pr
   if (inf.issue) return `⚠ Recognized: ${nm}, but ${HV_ALB_ISSUE[inf.issue]}`;
   if (!st || String(st.url || '').trim() !== String(url).trim()) return `Recognized: ${nm}. Checking…`;
   if (!st.ok && st.needHelper) return `Recognized ✓ ${nm}. ${st.error} Until then, the photos come from the media folder.`;
-  if (!st.ok) return `⚠ Recognized: ${nm}. ${String(st.error || '').replace(/^[a-z]/, c => c.toUpperCase()).replace(/([^.!?])$/, '$1.')} Until it works, the photos come from the media folder.`;
+  if (!st.ok) return `⚠ Recognized: ${nm}. ${String(st.error || '').replace(/^[a-z](?![A-Z])/, c => c.toUpperCase()).replace(/([^.!?])$/, '$1.')} Until it works, the photos come from the media folder.`;
   return `✓ ${nm} “${st.title}”: ${st.count} photo${st.count === 1 ? '' : 's'}${st.via === 'browser' ? ' (read by the browser)' : ' (via the Album Links helper)'}. The list refreshes every 6 hours; Order = Random shuffles it.`; };
 function hvOpenScreensaverSettings(from) {
   const content = { type: 'custom:homeview-screensaver-card', dashboard: ssDash(), large: true, height: SS_POPUP_HEIGHT };
