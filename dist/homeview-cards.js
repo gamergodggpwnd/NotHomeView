@@ -118,7 +118,19 @@ const hvToast = message => { const ha = document.querySelector('home-assistant')
 const HV_HUBS = new Set();
 const hvPenOK = (el, h) => { if (!el || !h || !h.user || h.user.is_admin !== true) return false; const root = hvFindRoot(el), lv = root && root.lovelace;
   if (!lv || !lv.config || lv.mode === 'yaml') return false; const hub = hvHubCfgOf(lv.config); return !(hub && hub.popup_edit === false); };
-const hvPenPage = (dash, vp) => location.assign(dash ? `/${dash}/${vp}?disable_km&edit=1` : location.pathname.replace(/\/$/, '') + '?disable_km&edit=1');
+const hvPenPage = (dash, vp) => hvGoEdit(dash ? `/${dash}/${vp}?disable_km&edit=1` : location.pathname.replace(/\/$/, '') + '?disable_km&edit=1');
+// 1.32.0: open a view of THIS dashboard in edit mode without reloading the app (no black flash / HA logo): switch the view like HA's own
+// navigate() does, then turn on Lovelace edit mode. Falls back to the old full page load (?disable_km&edit=1) for another dashboard, a YAML
+// dashboard, or when the header stays hidden (kiosk-mode that doesn't react to ?disable_km without a reload).
+function hvGoEdit(url) { let u; try { u = new URL(url, location.href); } catch (e) { location.assign(url); return; }
+  const seg = p => decodeURIComponent((p || '').split('/')[1] || ''), ha = document.querySelector('home-assistant'), find = () => ha && hvDeepFind(ha.shadowRoot, n => n.tagName === 'HUI-ROOT');
+  const root0 = find(), lv0 = root0 && root0.lovelace;
+  if (u.origin !== location.origin || seg(u.pathname) !== seg(location.pathname) || !lv0 || lv0.mode === 'yaml' || typeof lv0.setEditMode !== 'function') { location.assign(url); return; }
+  const q = new URLSearchParams(u.search); q.delete('edit'); const qs = q.toString(), to = u.pathname + (qs ? '?' + qs.replace(/=(&|$)/g, '$1') : '');
+  if (location.pathname + location.search !== to) { history.pushState(null, '', to); window.dispatchEvent(new CustomEvent('location-changed', { detail: { replace: false } })); }
+  setTimeout(() => { const r = find(), lv = r && r.lovelace; if (!lv) { location.assign(url); return; } try { lv.setEditMode(true); } catch (e) { location.assign(url); return; }
+    setTimeout(() => { const r2 = find(), hd = r2 && r2.shadowRoot && r2.shadowRoot.querySelector('.header, app-header, .toolbar'), on = r2 && r2.lovelace && r2.lovelace.editMode;
+      if (!on || (hd && !hd.getBoundingClientRect().height)) location.assign(url); }, 1200); }, 250); }
 const hvCfgMatch = el => { const raw = el && (el._hvRaw || el._config); if (!raw || !raw.type) return () => false;
   return o => o && o.type === raw.type && Object.keys(o).every(k => JSON.stringify(o[k]) === JSON.stringify(raw[k])); };
 function hvCardPath(cfg, match, pref) { if (!cfg || !Array.isArray(cfg.views)) return null; // the view on screen first (the same card can sit on several pages)
@@ -1132,7 +1144,7 @@ class HVEditButtonCard extends HTMLElement {
   // the Wallpanel button: only when Wallpanel is installed (it defines <wallpanel-view>) and the option is on
   _ssWanted() { const c = this._config || {}; return c.show_screensaver_button !== false && !!customElements.get('wallpanel-view'); }
   _openScreensaver(e) { e.preventDefault(); e.stopPropagation(); if (this._config.preview_only) return; hvOpenScreensaverSettings(this); }
-  _go(e) { e.preventDefault(); e.stopPropagation(); if (this._config.preview_only) return; location.assign(this.url()); }
+  _go(e) { e.preventDefault(); e.stopPropagation(); if (this._config.preview_only) return; const u = this.url(); if (this._config.url) location.assign(u); else hvGoEdit(u); }
   _paint() { // in-grid placeholder: visible only in edit mode and in the card editor preview
     if (!this._config) return;
     this.shadowRoot.innerHTML = `<style>:host{display:block}.ph{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;font:500 13px ${FONT};
@@ -2978,7 +2990,7 @@ class HVGridCard extends HTMLElement {
   // 1.32.0: small "Arrange" button next to the page dots (admins, storage-mode dashboards, outside HA's edit mode)
   _arrBtn() { const b = this._arrB; if (!b) return; hvGridCards.add(this); const now = Date.now(); if (this._arrT && now - this._arrT < 4000 && !this._arrF) return; this._arrT = now; this._arrF = false;
     const c = this._config || {}; b.hidden = !(c.arrange !== false && c.show_dots !== false && !this._edit && !this._arr && this.isConnected && hvEclOK(this)); }
-  set editMode(v) { this._edit = v; (this._kids || []).forEach(k => { if (k.el) k.el.editMode = v; }); hvGridCards.add(this); this.toggleAttribute('hv-edit', !!v); if (v) { if (this._arr) hvEcl.arrange(this, false, true); hvEcl.start(); } this._arrF = true; this._arrBtn(); } // 1.31.1: tap a tile to edit it
+  set editMode(v) { if (!v && this._edit && this._arrDirty && !this._arr) hvEcl.flush(this); this._edit = v; (this._kids || []).forEach(k => { if (k.el) k.el.editMode = v; }); hvGridCards.add(this); this.toggleAttribute('hv-edit', !!v); if (v) { if (this._arr) hvEcl.arrange(this, false, true); hvEcl.start(); } this._arrF = true; this._arrBtn(); } // 1.31.1: tap a tile to edit it
   getCardSize() { return 12; }
   getGridOptions() { return { columns: 'full', rows: 'auto', min_columns: 12 }; }
   connectedCallback() {
@@ -3019,7 +3031,8 @@ class HVGridCard extends HTMLElement {
     if (!!on !== !!this._backOn) this._back.bind(!!on); this._backOn = !!on;
     const c = this._config || {}; hvPTR.set(this, !!on && !!c.swipe_back && c.block_pull_refresh !== false);
   }
-  disconnectedCallback() { this._edgeBind(false); this._backBind(false); removeEventListener('resize', this._bound); removeEventListener('hv-layout', this._bound); removeEventListener('orientationchange', this._bound); if (window.visualViewport) visualViewport.removeEventListener('resize', this._bound); }
+  disconnectedCallback() { const me = this; setTimeout(() => { if (!me.isConnected && me._kids) hvGridPool.push({ g: me, t: Date.now(), kids: me._kids.filter(k => k.el && !k.brk).map(k => ({ j: JSON.stringify(k.cfg), el: k.el })) }); }, 0);
+    this._edgeBind(false); this._backBind(false); removeEventListener('resize', this._bound); removeEventListener('hv-layout', this._bound); removeEventListener('orientationchange', this._bound); if (window.visualViewport) visualViewport.removeEventListener('resize', this._bound); }
   _shell() {
     if (this._sc) return;
     this.shadowRoot.innerHTML = `<style>
@@ -3063,15 +3076,16 @@ class HVGridCard extends HTMLElement {
   }
   async _makeChildren() {
     this._shell(); const tok = this._tok = (this._tok || 0) + 1;
+    const own = (this._kids || []).filter(k => k.el && !k.brk).map(k => ({ j: JSON.stringify(k.cfg), el: k.el })); // reuse these first
     const helpers = window.loadCardHelpers ? await window.loadCardHelpers() : null; if (tok !== this._tok) return;
     const kids = (this._config.cards || []).map((cfg, i) => {
       if (!cfg || cfg.type === 'custom:homeview-page-break') return { cfg, brk: true };
-      let el; try { el = helpers ? helpers.createCardElement(cfg) : document.createElement('div'); } catch (e) { el = document.createElement('div'); el.textContent = String(e); }
+      let el = hvGridTake(own, cfg); if (!el) try { el = helpers ? helpers.createCardElement(cfg) : document.createElement('div'); } catch (e) { el = document.createElement('div'); el.textContent = String(e); }
       if (this._hass) el.hass = this._hass; if (this._edit != null) el.editMode = this._edit;
       const cell = document.createElement('div'); cell.className = 'cell'; cell.appendChild(el);
       if (el.tagName && el.tagName.startsWith('HOMEVIEW-')) el.setAttribute('floor', '');
       const k = { cfg, el, cell };
-      el.addEventListener('ll-rebuild', ev => { ev.stopPropagation(); try { const n = helpers.createCardElement(cfg); n.hass = this._hass; if (n.tagName.startsWith('HOMEVIEW-')) n.setAttribute('floor', ''); cell.replaceChild(n, k.el); k.el = n; } catch (x) {} });
+      el._hvK = k; if (!el._hvRb) { el._hvRb = 1; el.addEventListener('ll-rebuild', ev => { ev.stopPropagation(); const kk = el._hvK; if (!kk || !helpers) return; try { const n = helpers.createCardElement(kk.cfg); n.hass = this._hass; if (n.tagName.startsWith('HOMEVIEW-')) n.setAttribute('floor', ''); n._hvK = kk; kk.cell.replaceChild(n, kk.el); kk.el = n; } catch (x) {} }); }
       return k;
     });
     this._kids = kids; this._packSig = null; this._layout(true);
@@ -3102,11 +3116,16 @@ class HVGridCard extends HTMLElement {
     if (portrait) { top = Math.max(top, safeTop + 6);
       if (!fr) for (const f of document.querySelectorAll('homeview-edit-fab')) { const fb = f.getBoundingClientRect(); if (fb.height && fb.top < vh / 3) top = Math.max(top, fb.bottom + 8); } }
     const padTop = Math.max(0, Math.round(top - rect.top));
-    const avail = vh - top - bottom - dotsH;
+    // 1.32.0: in HA's edit mode the edit toolbar / hidden helper cards push the grid down; keep the normal-view tile size (the page scrolls)
+    const nk = vw + 'x' + vh, NL = HVGridCard._norm || (HVGridCard._norm = {});
+    const nn = NL[nk + location.pathname] || {}, useN = this._edit && !fr; const topN = useN ? (nn.top != null ? nn.top : Math.min(top, Math.round(vh * 0.2))) : top;
+    const avail = vh - topN - bottom - dotsH;
     let R = Math.max(1, Number(portrait ? c.portrait_rows : c.landscape_rows) || 3);
     const autoRows = portrait && c.auto_rows === true && c.fill_height !== false;
     if (autoRows) { let best = 1e9; // the row count whose tiles come out closest to square (a touch taller than wide, like the landscape tiles)
       for (let r = 2; r <= 8; r++) { const h = (avail - (r - 1) * g) / r; if (h < 70) break; const d = Math.abs(Math.log(h / cw / 1.1)); if (d < best) { best = d; R = r; } } }
+    if (useN && autoRows && nn.R) R = nn.R; // edit mode: same row count as the normal view
+    if (!this._edit && !fr) NL[nk + location.pathname] = { top, R };
     let ch = Math.floor((avail - (R - 1) * g) / R);
     const ratio = portrait && !autoRows ? (GRID_SHAPES[c.portrait_shape] ?? GRID_SHAPES.balanced) : 0;
     if (c.fill_height === false || ch < 60) ch = Math.max(ch, Math.round(cw * (ratio || 1)));
@@ -3164,6 +3183,12 @@ Object.assign(LABELS, { portrait_rows: 'Portrait: rows per page', portrait_colum
    editor, and the page layout options folded away underneath. No YAML or layout editor needed. */
 const HV_TAP = { cfg: null, i: -1, t: 0 };
 const hvGridCards = new Set();
+// 1.32.0: tile elements of a Page Grid that just left the page (HA re-creates the view after a dashboard save): a new grid with the same
+// tiles takes them over, so saving a move doesn't blank the page while every tile is created again
+const hvGridPool = [];
+function hvGridTake(own, cfg) { const j = JSON.stringify(cfg); let i = own.findIndex(x => x.j === j); if (i >= 0) return own.splice(i, 1)[0].el;
+  const now = Date.now(); for (let n = hvGridPool.length - 1; n >= 0; n--) { const e = hvGridPool[n]; if (now - e.t > 8000 || e.g.isConnected) { hvGridPool.splice(n, 1); continue; }
+    i = e.kids.findIndex(x => x.j === j); if (i >= 0) return e.kids.splice(i, 1)[0].el; } return null; }
 const hvTapPick = e => { const x = e.clientX, y = e.clientY; if (x == null) return;
   for (const g of hvGridCards) { if (!g.isConnected) { hvGridCards.delete(g); continue; } if (!g._edit || !g._kids) continue;
     const r = g.getBoundingClientRect(); if (x < r.left || x > r.right || y < r.top || y > r.bottom) continue;
@@ -3287,10 +3312,14 @@ const hvEcl = { host: null, sr: null, lay: null, ctl: new WeakMap(), timer: null
       this.apply(d.g, cards => { const t = cards.splice(d.i, 1)[0]; cards.splice(d.over, 0, t); return cards; }, 'Tile moved'); }
     else { d.gh.style.transition = 'all .16s ease-out'; this.pos(d.gh, d.r); d.gh.style.transform = 'scale(1)'; d.gh.style.opacity = '0'; setTimeout(() => d.gh.remove(), 200);
       if (ok && d.cv && !d.moved) { const c = this.ctl.get(d.k); if (c) this.openMenu(d.g, d.k, c.querySelector('.m')); } } }, // a tap on a tile in arrange mode opens its menu
-  async apply(g, fn, ok) { if (g._arr && !g._edit) { // arrange mode: change the page now, save on Done
-      if (!g._arrSig) { g._arrSig = JSON.stringify(g._config.cards || []); g._arrOrig = JSON.parse(g._arrSig); }
-      g.setConfig(Object.assign({}, g._config, { cards: fn(JSON.parse(JSON.stringify(g._config.cards || []))) })); g._arrDirty = true; this.kick(); setTimeout(() => this.kick(), 120); return; }
-    if (this.busy) return; this.busy = true;
+  async apply(g, fn, ok) { if (!g._arrSig) { g._arrSig = JSON.stringify(g._config.cards || []); g._arrOrig = JSON.parse(g._arrSig); }
+    g.setConfig(Object.assign({}, g._config, { cards: fn(JSON.parse(JSON.stringify(g._config.cards || []))) })); g._arrDirty = true; this.kick(); setTimeout(() => this.kick(), 120);
+    if (g._edit) { clearTimeout(g._svT); g._svT = setTimeout(() => this.flush(g, ok), 900); } }, // HA edit mode: save shortly after (several quick moves = one save)
+  flush(g, ok) { clearTimeout(g._svT); g._svT = null; if (!g._arrDirty) return Promise.resolve(true); if (g._svP) return g._svP.then(() => this.flush(g, ok));
+    const j = JSON.stringify(g._config.cards || []), cards = JSON.parse(j);
+    return g._svP = hvGridMutate(g, () => cards).then(() => { g._svP = null; if (JSON.stringify(g._config.cards || []) === j) { g._arrSig = null; g._arrOrig = null; g._arrDirty = false; } else { g._arrSig = j; this.flush(g, ok); } if (ok) hvToast(ok); return true; },
+      e => { g._svP = null; hvToast('Could not save: ' + (e && e.message || e)); return false; }); },
+  async _saveNow(g, fn, ok) { if (this.busy) return; this.busy = true;
     try { await hvGridMutate(g, fn); hvToast(ok); } catch (e) { hvToast('Could not save: ' + (e && e.message || e)); } this.busy = false; this.kick(); },
   // ---- arrange mode (1.32.0): move / edit tiles without HA's dashboard edit mode; changes are saved on Done ----
   arrange(g, on, discard) { if (on) { if (g._edit || g._arr || !hvEclOK(g)) return; [...hvGridCards].forEach(o => o !== g && o._arr && this.arrange(o, false, true));
@@ -3325,7 +3354,7 @@ const hvEcl = { host: null, sr: null, lay: null, ctl: new WeakMap(), timer: null
   place(m, anchor) { const a = anchor.getBoundingClientRect(), vw = document.documentElement.clientWidth || innerWidth, vh = innerHeight, mw = m.offsetWidth, mh = m.offsetHeight;
     let l = a.right - mw; l = Math.max(8, Math.min(vw - mw - 8, l)); let t = a.bottom + 4; if (t + mh > vh - 8) t = Math.max(8, a.top - mh - 4);
     m.style.left = l + 'px'; m.style.top = t + 'px'; m.style.transformOrigin = (a.right - l > mw / 2 ? 'top right' : 'top left'); },
-  async edit(g, k, i) { if (g._arr && !g._edit) { if (!(await this.arrange(g, false))) return; }
+  async edit(g, k, i) { if (g._arr && !g._edit) { if (!(await this.arrange(g, false))) return; } else if (g._arrDirty) { if (!(await this.flush(g))) return; }
     const root = hvFindRoot(g), lv = root && root.lovelace; if (!lv) return;
     const sig = JSON.stringify((g._config && g._config.cards) || []), hit = hvGridAt(lv.config, g), at = hit.find(x => x.v === root._curView) || hit[0];
     HV_TAP.cfg = sig; HV_TAP.i = i; HV_TAP.t = Date.now();
