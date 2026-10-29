@@ -3317,6 +3317,22 @@ async function hvGridMutate(grid, fn, quiet) { const root = hvFindRoot(grid), lv
   const same = quiet && JSON.stringify(fresh) === JSON.stringify(lv.rawConfig || lv.config); hit.node.cards = fn((hit.node.cards || []).slice());
   if (typeof lv.saveConfig === 'function' && (lv.urlPath || null) === (dash || null)) { if (same) await hvQuietSave(grid, lv, fresh); else await lv.saveConfig(fresh); }
   else { const sv = { type: 'lovelace/config/save', config: fresh }; if (dash) sv.url_path = dash; await grid._hass.callWS(sv); } }
+/* 1.32.0: HA's card edit-mode wrapper (hui-card-edit-mode) greys the whole card and puts a pencil in the middle when it's touched. Over a
+   Page Grid / the Home Screen that hides the tiles and their own controls, so for these two cards only: no grey box, no centre pencil, and
+   HA's ⋮ card menu (Edit / Duplicate / Copy / Cut / Delete) stays visible as a small glass button in the bottom-right corner. */
+const HV_EDW_CSS = `.card-overlay{opacity:1!important;pointer-events:none!important;background:none!important}.card-overlay .control{display:none!important}
+.card-overlay .more{pointer-events:auto}
+.more ha-icon-button{top:auto!important;bottom:-2px!important;right:auto!important;inset-inline-end:4px!important;inset-inline-start:auto!important;color:#fff;--ha-icon-button-size:32px;
+ background:rgba(28,30,42,.34)!important;background-image:linear-gradient(180deg,rgba(255,255,255,.2),rgba(255,255,255,.07))!important;border:1px solid rgba(255,255,255,.32);box-sizing:border-box;
+ box-shadow:0 6px 18px rgba(0,0,20,.28),inset 0 1px 0 rgba(255,255,255,.25);backdrop-filter:blur(22px) saturate(170%);-webkit-backdrop-filter:blur(22px) saturate(170%)}
+:host([hv-day]) .more ha-icon-button{color:#1c1c1e;background:rgba(255,255,255,.5)!important;background-image:linear-gradient(180deg,rgba(255,255,255,.55),rgba(255,255,255,.3))!important;border-color:rgba(255,255,255,.85);box-shadow:0 6px 16px rgba(30,30,60,.16),inset 0 1px 0 rgba(255,255,255,.9)}`;
+let hvEdwSheet = null;
+function hvEditChrome(card) { if (!card || !card.isConnected) return false; let n = card, w = null;
+  for (let d = 0; n && d < 8; d++) { if (n.tagName === 'HUI-CARD-EDIT-MODE') { w = n; break; } if (n.tagName === 'HUI-SECTION' || n.tagName === 'HUI-VIEW') break; n = n.parentNode || n.host; }
+  if (!w || !w.shadowRoot) return false; const day = card.hasAttribute('hv-day'); if (w.hasAttribute('hv-day') !== day) w.toggleAttribute('hv-day', day);
+  try { if (!hvEdwSheet) { hvEdwSheet = new CSSStyleSheet(); hvEdwSheet.replaceSync(HV_EDW_CSS); } const sr = w.shadowRoot; if (!sr.adoptedStyleSheets.includes(hvEdwSheet)) sr.adoptedStyleSheets = [...sr.adoptedStyleSheets, hvEdwSheet]; } catch (e) { return false; }
+  return true; }
+const hvEditChromeSoon = card => [0, 300, 1200, 3000].forEach(t => setTimeout(() => { if (card._edit) hvEditChrome(card); }, t));
 const HV_ECL_CSS = `:host{all:initial;--gtx:#fff;--gbg:rgba(28,30,42,.34);--gbi:linear-gradient(180deg,rgba(255,255,255,.2),rgba(255,255,255,.07));--gbd:rgba(255,255,255,.32);--gsh:0 8px 26px rgba(0,0,20,.3),inset 0 1px 0 rgba(255,255,255,.25);--gbl:blur(22px) saturate(170%);--acc:#0a84ff}
 :host([day]){--gtx:#1c1c1e;--gbg:rgba(255,255,255,.5);--gbi:linear-gradient(180deg,rgba(255,255,255,.55),rgba(255,255,255,.3));--gbd:rgba(255,255,255,.85);--gsh:0 8px 24px rgba(30,30,60,.16),inset 0 1px 0 rgba(255,255,255,.9)}
 .lay{position:fixed;inset:0;pointer-events:none;z-index:6;font-family:var(--paper-font-body1_-_font-family,-apple-system,BlinkMacSystemFont,Roboto,sans-serif);-webkit-tap-highlight-color:transparent}
@@ -3377,7 +3393,7 @@ const hvEcl = { host: null, sr: null, lay: null, ctl: new WeakMap(), timer: null
     if (!gs.length && hvHubArr.hub) { clearInterval(this.timer); this.timer = null; return; }
     if (!gs.length) { clearInterval(this.timer); this.timer = null; this.closeMenu(); if (this.drag) this.endDrag(false); if (this.host) { this.host.remove(); this.host = null; this.ctl = new WeakMap(); } return; }
     this.ensure(); this.bar(gs.find(g => g._arr && !g._edit)); { const day = gs.some(g => g.hasAttribute('hv-day')); if (this.host.hasAttribute('day') !== day) this.host.toggleAttribute('day', day); } const vw = document.documentElement.clientWidth || innerWidth, vh = innerHeight, live = new Set();
-    for (const g of gs) { const root = hvFindRoot(g), hd = root && root.shadowRoot && root.shadowRoot.querySelector('.header'), top = hd ? hd.getBoundingClientRect().bottom : 0, gr = g.getBoundingClientRect();
+    for (const g of gs) { if (g._edit) hvEditChrome(g); const root = hvFindRoot(g), hd = root && root.shadowRoot && root.shadowRoot.querySelector('.header'), top = hd ? hd.getBoundingClientRect().bottom : 0, gr = g.getBoundingClientRect();
       const L = Math.max(0, gr.left) - 2, R = Math.min(vw, gr.right) + 2;
       const rr = getComputedStyle(g).getPropertyValue('--hv-radius').trim();
       g._kids.forEach((k, i) => { if (!k.cell || !k.cell.isConnected || k.brk) return; const r = k.cell.getBoundingClientRect(), el = k.el; let c = this.ctl.get(el);
@@ -4905,7 +4921,7 @@ class HVHubCard extends HTMLElement {
   set hass(h) { const first = !this._hass; this._hass = h; this._render(); if (this._cal) this._cal.hass = h; (this._sideEls || []).forEach(e => { e._card.hass = this._simHass(h);
       if (e._fit) { const o = hubTileOpt(this._config, this._sideEls.indexOf(e)); if (o.sky === true && hvSky(h, o.sky_entity, window.__hvSimScene).sig !== e._skySig) requestAnimationFrame(() => this._fitTile(e)); } }); if (first) { this._loadPhotos(); this._loadCfg(); } if (this._sheetO) this._sheetO.hass = h; }
   get hass() { return this._hass; }
-  set editMode(v) { this._edit = v; this._layout(); this._ssPaint(); }
+  set editMode(v) { this._edit = v; this._layout(); this._ssPaint(); if (v) hvEditChromeSoon(this); }
   getCardSize() { return 12; }
   getGridOptions() { return { columns: 'full', rows: 'auto', min_columns: 12 }; }
   connectedCallback() { HV_HUBS.add(this);
