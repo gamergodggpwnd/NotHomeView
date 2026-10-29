@@ -2148,6 +2148,7 @@ async function hvOneDrive(url) { const W = window.__hvOD || (window.__hvOD = {})
     if (!r.ok) throw new Error('OneDrive guest access failed (' + r.status + ')'); const b = await r.json(); W.t = (b.authScheme || 'Badger') + ' ' + b.token; W.exp = Date.now() + 6 * 36e5; }
   const H = { Authorization: W.t, Prefer: 'autoredeem' }, sid = 'u!' + btoa(unescape(encodeURIComponent(url.trim()))).replace(/=+$/, '').replace(/\//g, '_').replace(/\+/g, '-');
   const base = `https://api.onedrive.com/v1.0/shares/${sid}/driveItem`, r0 = await fetch(base, { headers: H });
+  if (!r0.ok && /sharepoint\.com/i.test(url)) throw new Error('OneDrive for work or school (SharePoint) links can\'t be opened without signing in. Share the folder from a personal OneDrive (1drv.ms/…) instead.');
   if (!r0.ok) throw new Error(r0.status === 401 || r0.status === 403 || r0.status === 404 ? 'OneDrive couldn\'t open this link (is it shared with "Anyone with the link"?)' : 'OneDrive answered ' + r0.status);
   const root = await r0.json(), ids = [], folders = [[base + '/children', 0]]; let exp = Date.now() + 3 * 36e5;
   while (folders.length && ids.length < 2000) { const [f, depth] = folders.shift(); let next = f + '?$expand=thumbnails($select=c1920x1920)&$top=200';
@@ -2172,7 +2173,7 @@ const hvAlbumStatus = (st, url) => { const inf = hvAlbumInfo(url), prov = inf.pr
   if (inf.issue) return `⚠ Recognized: ${nm}, but ${HV_ALB_ISSUE[inf.issue]}`;
   if (!st || String(st.url || '').trim() !== String(url).trim()) return `Recognized: ${nm}. Checking…`;
   if (!st.ok && st.needHelper) return `Recognized ✓ ${nm}. ${st.error} Until then, the photos come from the media folder.`;
-  if (!st.ok) return `⚠ Recognized: ${nm}, but ${String(st.error || '').replace(/^[A-Z]/, c => c.toLowerCase())} Until it works, the photos come from the media folder.`;
+  if (!st.ok) return `⚠ Recognized: ${nm}. ${String(st.error || '').replace(/^[a-z]/, c => c.toUpperCase()).replace(/([^.!?])$/, '$1.')} Until it works, the photos come from the media folder.`;
   return `✓ ${nm} “${st.title}”: ${st.count} photo${st.count === 1 ? '' : 's'}${st.via === 'browser' ? ' (read by the browser)' : ' (via the Album Links helper)'}. The list refreshes every 6 hours; Order = Random shuffles it.`; };
 function hvOpenScreensaverSettings(from) {
   const content = { type: 'custom:homeview-screensaver-card', dashboard: ssDash(), large: true, height: SS_POPUP_HEIGHT };

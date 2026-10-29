@@ -322,6 +322,8 @@ async def _onedrive(s: aiohttp.ClientSession, url: str) -> dict:
     h = {"Authorization": auth, "Prefer": "autoredeem", "User-Agent": UA}
     base = f"https://api.onedrive.com/v1.0/shares/{_share_id(url)}/driveItem"
     async with s.get(base, headers=h) as r:
+        if r.status != 200 and "sharepoint.com" in url.lower():
+            raise AlbumError("OneDrive for work or school (SharePoint) links can't be opened without signing in. Share the folder from a personal OneDrive (1drv.ms/…) instead.")
         if r.status != 200:
             raise AlbumError("OneDrive couldn't open this link (is it shared with 'Anyone with the link'?)" if r.status in (401, 403, 404) else f"OneDrive answered {r.status}")
         root = await r.json(content_type=None)
