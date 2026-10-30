@@ -113,7 +113,10 @@ and Wallpanel 4.67.2.
 | `assistant_auto_listen` | `true` | Start listening as soon as it opens |
 | `assistant_speak` | `true` | Play the spoken reply (the pipeline's text-to-speech) |
 | `assistant_orb` | `true` | The mic shows only a floating animated orb near the top (no blur over the dashboard); tap the orb for the chat |
-| `assistant_continue` | `true` | Listen again after a reply that asks something (ends with `?` or the agent keeps the conversation open); stops after ~6 s of silence |
+| `assistant_continue` | `true` | Keep listening until dismissed: after every reply the mic opens again in the same conversation |
+| `assistant_dismiss_phrases` | `thank you, thanks, …, I'm done` | Comma-separated phrases that end the conversation when they are (almost) the whole utterance; not sent to the assistant |
+| `assistant_silence_timeout` | `5` | Seconds the re-opened mic waits; nothing said = the assistant closes |
+| `assistant_history_retention` | `forever` | Chat history kept in the browser: `forever`, `1d`, `7d`, `14d`, `30d` (each device can choose its own / clear it in the assistant's settings) |
 | `assistant_quiet_volume_entity` | `''` | Quiet mode *Auto*: the device's volume sensor (percent or 0–1); quiet under `assistant_quiet_volume_below` |
 | `assistant_quiet_volume_below` | `5` | Quiet mode *Auto*: volume threshold in % |
 | `assistant_quiet_focus_entity` | `''` | Quiet mode *Auto*: a Focus / Do Not Disturb sensor; quiet while it is on |
