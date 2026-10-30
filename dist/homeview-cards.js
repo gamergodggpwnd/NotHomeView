@@ -879,6 +879,9 @@ class HVNavCard extends HVBase {
     let path = c.navigation_path;
     if (c.alt_navigation_path && here === c.navigation_path.replace(/\?.*$/, '').replace(/\/$/, '')) path = c.alt_navigation_path;
     if (c.keep_query !== false && location.search && !path.includes('?')) path += location.search;
+    else if (c.keep_query !== false && location.search) { try { const u = new URL(path, location.origin);
+      const add = location.search.replace(/^\?/, '').split('&').filter(x => x && !u.searchParams.has(decodeURIComponent(x.split('=')[0])));
+      if (add.length) path = u.pathname + (u.search ? u.search + '&' : '?') + add.join('&') + u.hash; } catch (e) {} }
     history.pushState(null, '', path); fire(window, 'location-changed', { replace: false });
     return true;
   }
@@ -1705,13 +1708,50 @@ ha-icon,ha-state-icon{display:flex;color:inherit;--mdc-icon-size:calc(var(--b) *
 @container (min-height:300px){ .row{--b:clamp(36px,min(13cqh,11cqw),50px)} }
 :host([large]) .row{--b:clamp(40px,min(9cqh,8cqw),54px);--g:12px;--p:clamp(14px,3cqmin,26px);bottom:calc(var(--p) + env(safe-area-inset-bottom,0px) * var(--hv-cam-safe,0))}
 :host([fs]){--hv-cam-safe:1}
+.bdg{flex:none;font-size:clamp(9px,4.4cqmin,11px);font-weight:750;letter-spacing:.3px;padding:2px 7px;border-radius:999px;background:rgba(255,255,255,.22);color:#fff;white-space:nowrap}
+.bdg:empty{display:none}
+@container (max-width:200px){ .bdg{display:none} }
+/* 1.32.0: last-event chips (event entities: doorbell, motion …) */
+.ev{position:absolute;left:var(--p);right:var(--p);bottom:var(--p);display:flex;flex-wrap:wrap;gap:6px;pointer-events:none;z-index:1;--p:clamp(8px,4.5cqmin,16px)}
+.ev:empty{display:none} :host(:not([large])) ha-card.hasrow .ev{display:none}
+.ev .e{display:flex;align-items:center;gap:5px;min-width:0;padding:4px 10px 4px 8px;border-radius:999px;background:rgba(20,22,28,.38);border:1px solid rgba(255,255,255,.16);
+ backdrop-filter:blur(14px) saturate(150%);-webkit-backdrop-filter:blur(14px) saturate(150%);font-size:clamp(10px,5cqmin,12px);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ev .e ha-icon{--mdc-icon-size:14px;flex:none} .ev .e span{overflow:hidden;text-overflow:ellipsis}
+@container (max-height:120px){ .ev .e:nth-child(n+2){display:none} }
+:host([large]) .ev{justify-content:center;--p:clamp(14px,3cqmin,26px);bottom:calc(var(--p) + env(safe-area-inset-bottom,0px) * var(--hv-cam-safe,0))}
+:host([large]) ha-card.hasctl .ev{bottom:calc(var(--p) + env(safe-area-inset-bottom,0px) * var(--hv-cam-safe,0) + 132px)}
+:host([large]) .ev .e{font-size:13px;padding:6px 12px 6px 10px}
+/* 1.32.0: large-view controls (History, Talk in the vendor app, Sound) */
+.ctl{display:none;position:absolute;left:0;right:0;z-index:2;justify-content:center;align-items:flex-start;gap:clamp(22px,7cqw,44px);
+ bottom:calc(clamp(14px,3cqmin,26px) + env(safe-area-inset-bottom,0px) * var(--hv-cam-safe,0))}
+:host([large]) .ctl:not(:empty){display:flex}
+.ctl .c{display:flex;flex-direction:column;align-items:center;gap:6px;font-size:12px;font-weight:600;color:rgba(255,255,255,.92);text-shadow:0 1px 4px rgba(0,0,0,.45);min-width:64px;text-align:center}
+.ctl button{width:54px;height:54px;margin-top:13px} .ctl button ha-icon{--mdc-icon-size:24px}
+.ctl .talk button{width:80px;height:80px;margin-top:0;background:rgba(120,180,255,.3);border-color:rgba(170,210,255,.8);box-shadow:0 0 0 8px rgba(120,180,255,.13),0 10px 30px rgba(0,0,0,.35)}
+.ctl .talk ha-icon{--mdc-icon-size:36px} .ctl .talk b{font-size:15px} .ctl small{font-size:11px;font-weight:500;opacity:.78;margin-top:-4px;white-space:nowrap}
+.ctl .c.on button{background:rgba(255,255,255,.9);color:#1c1c1e;border-color:rgba(255,255,255,.9)}
+:host([large]) ha-card.hasctl .row{bottom:calc(var(--p) + env(safe-area-inset-bottom,0px) * var(--hv-cam-safe,0) + 132px)}
+:host([large]) ha-card.hasctl.hasev .row{bottom:calc(var(--p) + env(safe-area-inset-bottom,0px) * var(--hv-cam-safe,0) + 176px)}
 .grab{position:absolute;z-index:6;left:50%;top:calc(env(safe-area-inset-top,0px) * var(--hv-cam-safe,0) + 7px);width:38px;height:5px;margin-left:-19px;border-radius:3px;
  background:rgba(255,255,255,.5);box-shadow:0 1px 4px rgba(0,0,0,.3);display:none;pointer-events:none}
 :host([swipe]) .grab{display:block}
 `;
+// 1.32.0: "Talk" opens the camera maker's app (Home Assistant has no two-way talk for Nest / Ring). Custom URL schemes: the iOS / Android
+// companion apps hand window.open() of these to the system (as HA's own "url" tap action does).
+const CAM_TALK = { google_home: { url: 'googlehome://', label: 'Google Home' }, ring: { url: 'ring://', label: 'Ring' } };
+const CAM_EV_ICON = { doorbell: 'mdi:doorbell', motion: 'mdi:motion-sensor', button: 'mdi:gesture-tap-button' };
+function camWhen(h, v) { // event entity state (ISO time) -> "8:42 PM" today, "Yesterday 8:42 PM", else "Oct 27"
+  const d = v && !UNAVAILABLE.includes(v) && v !== 'unknown' ? new Date(v) : null; if (!d || isNaN(d)) return 'none yet';
+  const L = (h && h.locale) || {}, lang = L.language || (h && h.language) || navigator.language, o = { hour: 'numeric', minute: '2-digit' };
+  if (L.time_format === '12') o.hour12 = true; else if (L.time_format === '24') o.hour12 = false;
+  const day = x => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime(), dd = Math.round((day(new Date()) - day(d)) / 864e5);
+  let t; try { t = d.toLocaleTimeString(lang, o); } catch (e) { t = d.toLocaleTimeString(); }
+  if (dd <= 0) return t; if (dd === 1) return 'Yesterday ' + t;
+  try { return d.toLocaleDateString(lang, { month: 'short', day: 'numeric' }); } catch (e) { return d.toLocaleDateString(); }
+}
 class HVCameraCard extends HTMLElement {
   constructor() { super(); this.attachShadow({ mode: 'open' }); }
-  static get defaults() { return { camera_view: 'live', size: '2x3', show_name: true, show_status: true, tap_opens: true, popup_style: 'fullscreen', swipe_to_close: true }; }
+  static get defaults() { return { camera_view: 'live', size: '2x3', show_name: true, show_status: true, tap_opens: true, popup_style: 'fullscreen', swipe_to_close: true, show_history: true, show_sound: true }; }
   static getStubConfig(hass) { const ids = Object.keys(hass.states).filter(k => k.startsWith('camera.')); return { entity: ids.find(k => !UNAVAILABLE.includes(hass.states[k].state)) || ids[0] || 'camera.example' }; }
   static getConfigElement() { const e = document.createElement('homeview-card-editor'); e.cardClass = this; return e; }
   // the Size dropdown writes grid_options (sections grid cells) when it is changed
@@ -1719,6 +1759,8 @@ class HVCameraCard extends HTMLElement {
     const ns = val.size || '2x3', ps = (prev && prev.size) || '2x3';
     if (ns !== ps && CAM_SIZES[ns]) cfg.grid_options = Object.assign({}, cfg.grid_options || {}, CAM_SIZES[ns]);
     if (Array.isArray(cfg.buttons)) { cfg.buttons = cfg.buttons.filter(b => b && b.entity).map(b => { const o = {}; for (const k of Object.keys(b)) if (b[k] !== '' && b[k] != null) o[k] = b[k]; return o; }); if (!cfg.buttons.length) delete cfg.buttons; }
+    if (Array.isArray(cfg.events)) { cfg.events = cfg.events.filter(b => b && b.entity).map(b => { const o = {}; for (const k of Object.keys(b)) if (b[k] !== '' && b[k] != null) o[k] = b[k]; return o; }); if (!cfg.events.length) delete cfg.events; }
+    if (!cfg.talk_app || cfg.talk_app === 'none') { delete cfg.talk_app; } if (cfg.talk_app !== 'custom') { delete cfg.talk_url; delete cfg.talk_label; }
     return cfg;
   }
   setConfig(c) {
@@ -1742,18 +1784,39 @@ class HVCameraCard extends HTMLElement {
   _timer() { clearInterval(this._iv); this._iv = setInterval(() => this._tick(), 1000); }
   get _stateObj() { return this._hass && this._config ? this._hass.states[this._config.entity] : undefined; }
   _btns() { return (this._config.buttons || []).map(b => typeof b === 'string' ? { entity: b } : b).filter(b => b && b.entity); }
+  _evs() { return (this._config.events || []).map(b => typeof b === 'string' ? { entity: b } : b).filter(b => b && b.entity); }
+  _talk() { const c = this._config, t = CAM_TALK[c.talk_app]; if (c.talk_app === 'custom') return c.talk_url ? { url: c.talk_url, label: c.talk_label || 'app' } : null; return t || null; }
+  // large view: the glass control row (only controls that work: History = HA history of the camera + its events, Talk = vendor app,
+  // Sound = unmute the live stream, shown once the stream carries an audio track)
+  _ctlItems() { const c = this._config; if (!c.large) return []; const o = [], t = this._talk();
+    if (c.show_history !== false) o.push({ k: 'hist', icon: 'mdi:history', label: 'History' });
+    if (t) o.push({ k: 'talk', icon: 'mdi:microphone', label: c.talk_name || 'Talk', cap: 'Opens ' + t.label });
+    if (c.show_sound !== false && this._hasAudio) o.push({ k: 'snd', icon: this._unmuted ? 'mdi:volume-high' : 'mdi:volume-off', label: this._unmuted ? 'Sound on' : 'Sound', on: !!this._unmuted });
+    return o; }
+  _ctl(k) { const c = this._config;
+    if (k === 'talk') { const t = this._talk(); if (t && t.url) window.open(t.url); return; }
+    if (k === 'hist') { const ids = [c.entity].concat(this._evs().map(e => e.entity)).join(','), st = new Date(Date.now() - 24 * 3600e3).toISOString();
+      const path = `/history?entity_id=${encodeURIComponent(ids)}&start_date=${encodeURIComponent(st)}`; this._close();
+      setTimeout(() => { history.pushState(null, '', path); fire(window, 'location-changed', { replace: false }); }, 380); return; }
+    if (k === 'snd') { this._unmuted = !this._unmuted; this._applyMute(); this._sig = null; this._render(); }
+  }
+  _videos() { const o = [], w = r => { for (const e of r.querySelectorAll('*')) { if (e.tagName === 'VIDEO') o.push(e); if (e.shadowRoot) w(e.shadowRoot); } }; try { if (this._streamEl) w(this._streamEl.shadowRoot || this._streamEl); } catch (e) {} return o; }
+  _applyMute() { const m = !this._unmuted; if (this._streamEl) this._streamEl.muted = m; for (const v of this._videos()) { v.muted = m; if (!m) { try { v.play(); } catch (e) {} } } }
+  _audioCheck() { if (this._hasAudio || !this._config.large || this._config.show_sound === false || !this._live) return;
+    const has = this._videos().some(v => { try { const so = v.srcObject; if (so && so.getAudioTracks && so.getAudioTracks().length) return true; if (v.audioTracks && v.audioTracks.length) return true; if (v.mozHasAudio || v.webkitAudioDecodedByteCount > 0) return true; } catch (e) {} return false; });
+    if (has) { this._hasAudio = true; this._sig = null; this._render(); } }
   _build() {
     this.shadowRoot.innerHTML = `<style>${CAM_CSS}</style><ha-card tabindex="0" role="button">
       <div class="media"><div class="ph"><ha-icon icon="mdi:cctv"></ha-icon><span class="pt"></span></div><img alt=""><img alt=""></div><div class="shade"></div>
-      <div class="ov"><div class="chip"><div class="nm"></div><div class="st"><span class="dot"></span><span class="sx"></span></div></div></div>
+      <div class="ov"><div class="chip"><div class="nm"></div><span class="bdg"></span><div class="st"><span class="dot"></span><span class="sx"></span></div></div></div>
       <button class="x glass" data-own aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button>
-      <div class="row"></div><div class="grab" aria-hidden="true"></div></ha-card>`;
+      <div class="ev"></div><div class="row"></div><div class="ctl"></div><div class="grab" aria-hidden="true"></div></ha-card>`;
     const R = this.shadowRoot; this._$ = s => R.querySelector(s);
     this._card = this._$('ha-card'); this._media = this._$('.media'); this._imgs = [...R.querySelectorAll('.media img')]; this._imgI = 0;
     this._card.addEventListener('click', e => {
       if (this._suppressClick) return;
       const b = e.composedPath().find(n => n.tagName === 'BUTTON');
-      if (b) { e.stopPropagation(); if (b.classList.contains('x')) this._close(); else if (b.dataset.i != null) this._runButton(+b.dataset.i); return; }
+      if (b) { e.stopPropagation(); if (b.classList.contains('x')) this._close(); else if (b.dataset.i != null) this._runButton(+b.dataset.i); else if (b.dataset.c) this._ctl(b.dataset.c); return; }
       if (!this._config.large && this._config.tap_opens !== false) this.openLarge();
       else if (!this._config.large) fire(this, 'hass-more-info', { entityId: this._config.entity });
     });
@@ -1768,7 +1831,9 @@ class HVCameraCard extends HTMLElement {
     if (!this._config || !this._hass) return;
     if (!this._built) this._build();
     const c = this._config, s = this._stateObj, btns = this._btns();
-    const sig = JSON.stringify([s && s.state, btns.map(b => { const x = this._hass.states[b.entity]; return x ? [x.state, x.attributes.friendly_name] : 0; }), c]);
+    const evs = this._evs(), ctl = this._ctlItems(), dayKey0 = new Date().toDateString();
+    const sig = JSON.stringify([s && s.state, btns.map(b => { const x = this._hass.states[b.entity]; return x ? [x.state, x.attributes.friendly_name] : 0; }), c,
+      evs.map(e => { const x = this._hass.states[e.entity]; return x ? [x.state, x.attributes.event_type] : 0; }), ctl, dayKey0, Math.floor(Date.now() / 60e3)]);
     this._media.classList.toggle('dead', !s || UNAVAILABLE.includes(s.state));
     this._ensureMedia();
     if (sig === this._sig) return; this._sig = sig;
@@ -1777,6 +1842,16 @@ class HVCameraCard extends HTMLElement {
     this._$('.nm').style.display = c.show_name === false ? 'none' : ''; this._$('.st').style.display = c.show_status === false ? 'none' : '';
     this._$('.pt').textContent = !s ? 'Camera not found' : UNAVAILABLE.includes(s.state) ? 'Camera unavailable' : ''; this._$('.ph').classList.toggle('t', !!this._$('.pt').textContent);
     this._card.setAttribute('aria-label', name);
+    this._$('.bdg').textContent = c.badge || '';
+    const ev = this._$('.ev'); ev.innerHTML = ''; this._card.classList.toggle('hasev', evs.length > 0);
+    for (const e of evs) { const x = this._hass.states[e.entity], dc = x && x.attributes.device_class;
+      const el = document.createElement('div'); el.className = 'e'; const ic = document.createElement('ha-icon'); ic.icon = e.icon || CAM_EV_ICON[dc] || 'mdi:bell-ring-outline';
+      const tx = document.createElement('span'); tx.textContent = (e.name || (x ? x.attributes.friendly_name : e.entity)) + ' · ' + (x ? camWhen(this._hass, x.state) : 'not found');
+      el.append(ic, tx); ev.appendChild(el); }
+    const cb = this._$('.ctl'); this._card.classList.toggle('hasctl', ctl.length > 0);
+    cb.innerHTML = ctl.map(o => `<div class="c ${o.k === 'talk' ? 'talk' : ''} ${o.on ? 'on' : ''}"><button class="glass" data-own data-c="${o.k}"><ha-icon></ha-icon></button><b></b>${o.cap ? '<small></small>' : ''}</div>`).join('');
+    ctl.forEach((o, i) => { const d = cb.children[i]; d.querySelector('ha-icon').icon = o.icon; d.querySelector('b').textContent = o.label; d.querySelector('button').setAttribute('aria-label', o.label + (o.cap ? ' – ' + o.cap : ''));
+      if (o.cap) d.querySelector('small').textContent = o.cap; });
     const row = this._$('.row'); this._card.classList.toggle('hasrow', btns.length > 0);
     row.innerHTML = btns.map((b, i) => `<button class="glass" data-own data-i="${i}"><span class="ic"></span><span class="l"></span></button>`).join('');
     btns.forEach((b, i) => {
@@ -1830,6 +1905,7 @@ class HVCameraCard extends HTMLElement {
   _tick() {
     if (!this._built || !this._config) return;
     if (this._streamEl && !this._live && this._videoReady()) this._markLive();
+    if (this._config.large && this._live) { this._audioCheck(); if (this._unmuted) this._applyMute(); }
     const every = this._config.camera_view === 'snapshot' ? (this._config.large ? 3000 : 10000) : (this._live ? 0 : 10000);
     if (every && Date.now() - this._lastSnap > every) this._snap();
     if (this._streamEl && !this._live && Date.now() - this._streamAt > 25000 && !this._failed) { this._failed = true; this._status(); }
@@ -1899,14 +1975,27 @@ HVCameraCard.schema = [
     icon: { label: 'Icon (optional)', selector: { icon: {} } },
     tap_action: { label: 'Tap action (default: toggle, or more-info if it can’t toggle)', selector: { ui_action: { default_action: 'toggle' } } } } } } },
   { type: 'grid', name: '', schema: [{ name: 'show_name', selector: { boolean: {} } }, { name: 'show_status', selector: { boolean: {} } }] },
+  { name: 'badge', selector: { text: {} } },
+  { name: 'events', selector: { object: { multiple: true, label_field: 'name', description_field: 'entity', fields: {
+    entity: { label: 'Event entity', required: true, selector: { entity: { domain: 'event' } } },
+    name: { label: 'Name (optional, e.g. Doorbell, Motion)', selector: { text: {} } },
+    icon: { label: 'Icon (optional)', selector: { icon: {} } } } } } },
   { type: 'expandable', name: '', flatten: true, title: 'Large view (tap the picture)', icon: 'mdi:arrow-expand', schema: [
     { name: 'tap_opens', selector: { boolean: {} } },
+    { name: 'talk_app', selector: { select: { mode: 'dropdown', options: [{ value: 'none', label: 'No Talk button' }, { value: 'google_home', label: 'Google Home app (Nest)' }, { value: 'ring', label: 'Ring app' }, { value: 'custom', label: 'Another app (URL below)' }] } } },
+    { type: 'grid', name: '', schema: [{ name: 'talk_url', selector: { text: {} } }, { name: 'talk_label', selector: { text: {} } }] },
+    { type: 'grid', name: '', schema: [{ name: 'show_history', selector: { boolean: {} } }, { name: 'show_sound', selector: { boolean: {} } }] },
     { name: 'popup_style', selector: { select: { mode: 'dropdown', options: [{ value: 'fullscreen', label: 'Full screen (edge to edge, swipe down to close)' }, { value: 'window', label: 'Window (rounded panel)' }] } } },
     { name: 'swipe_to_close', selector: { boolean: {} } }] }];
-Object.assign(LABELS, { show_name: 'Show name', camera_view: 'Live or snapshot', size: 'Size', buttons: 'Buttons', show_status: 'Show status (Live / Snapshot)', tap_opens: 'Open the large view on tap' });
+Object.assign(LABELS, { show_name: 'Show name', camera_view: 'Live or snapshot', size: 'Size', buttons: 'Buttons', show_status: 'Show status (Live / Snapshot)', tap_opens: 'Open the large view on tap',
+  badge: 'Label next to the name (e.g. Nest, Ring)', events: 'Last-event chips', talk_app: 'Talk button (opens the camera app)', talk_url: 'App URL (Another app)', talk_label: 'App name (Another app)',
+  show_history: 'History button', show_sound: 'Sound button (when the stream has audio)' });
 Object.assign(HELPERS, {
   buttons: 'Glass buttons along the bottom of the tile and the large view. They light up when the entity is on.',
-  tap_opens: 'Needs browser_mod. Off = tap opens the camera’s more-info.' });
+  tap_opens: 'Needs browser_mod. Off = tap opens the camera’s more-info.',
+  events: 'Event entities (doorbell press, motion …): each shows a chip with the time of its last event.',
+  talk_app: 'Home Assistant can’t do two-way talk for Nest or Ring: the large view’s Talk button opens the maker’s app, where you talk.',
+  talk_url: 'A URL scheme, e.g. myapp:// or shortcuts://run-shortcut?name=…' });
 
 /* ---------------- person (Find My style) ---------------- */
 // Round avatar (entity_picture, else initials) on a warm tan disc, optional status badge (e.g. a Focus sensor), bold name and the
@@ -3012,11 +3101,11 @@ const gridSpan = (cfg, C, R) => { const g = cfg.grid_options || {};
   const cs = g.columns === 'full' ? C : Math.max(1, Math.min(C, Math.round((Number(g.columns) || 3) / 3)));
   const rs = Math.max(1, Math.min(R, Math.round((typeof g.rows === 'number' ? g.rows : 2) / 2))); return [cs, rs]; };
 function gridPack(items, C, R, dense = true) { // first fit in order; dense: a tile that fits a hole on an earlier page goes there
-  const pages = [], occs = []; let minPage = 0;           // (no back-filling across a Page Break)
+  const pages = [], occs = [], names = []; let minPage = 0;           // (no back-filling across a Page Break)
   const newPage = () => { occs.push(Array.from({ length: R }, () => Array(C).fill(false))); pages.push([]); };
   newPage();
   for (const it of items) {
-    if (it.brk) { if (pages[pages.length - 1].length) newPage(); minPage = pages.length - 1; continue; }
+    if (it.brk) { if (pages[pages.length - 1].length) newPage(); minPage = pages.length - 1; if (it.name) names[pages.length - 1] = String(it.name); continue; }
     const [cs, rs] = it.span; let spot = null, pi = -1;
     const fits = (occ, r, c) => { if (r + rs > R || c + cs > C) return false; for (let i = r; i < r + rs; i++) for (let j = c; j < c + cs; j++) if (occ[i][j]) return false; return true; };
     const tryPage = k => { for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) if (fits(occs[k], r, c)) { spot = [r, c]; pi = k; return true; } return false; };
@@ -3028,11 +3117,11 @@ function gridPack(items, C, R, dense = true) { // first fit in order; dense: a t
     if (pages.length > 30) break;
   }
   if (pages.length > 1 && !pages[pages.length - 1].length) pages.pop();
-  return pages;
+  pages.names = names.slice(0, pages.length); return pages;
 }
 class HVGridCard extends HTMLElement {
   constructor() { super(); this.attachShadow({ mode: 'open' }); this._page = 0; }
-  static get defaults() { return { theme: 'inherit', portrait_rows: 3, portrait_columns: 3, landscape_rows: 3, landscape_columns: 4, portrait_shape: 'balanced', gap: 12, show_dots: true, fill_height: true, auto_rows: false, full_bleed: true, dense: true, edge_sidebar: true, swipe_back: false, swipe_back_path: '', block_pull_refresh: true }; }
+  static get defaults() { return { theme: 'inherit', portrait_rows: 3, portrait_columns: 3, landscape_rows: 3, landscape_columns: 4, portrait_shape: 'balanced', gap: 12, first_page_name: '', show_dots: true, fill_height: true, auto_rows: false, full_bleed: true, dense: true, edge_sidebar: true, swipe_back: false, swipe_back_path: '', block_pull_refresh: true }; }
   static getStubConfig() { return { cards: [{ type: 'clock', clock_style: 'analog', grid_options: { columns: 3, rows: 2 } }, { type: 'custom:homeview-nav-card', name: 'Home', icon: 'mdi:home-outline', navigation_path: '/lovelace/0' }] }; }
   static getConfigElement() { return document.createElement('homeview-grid-card-editor'); }
   setConfig(c) {
@@ -3104,6 +3193,11 @@ class HVGridCard extends HTMLElement {
 .dots button{all:unset;cursor:pointer;width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.38);box-shadow:0 1px 3px rgba(0,0,30,.25);transition:all .25s ease}
 .dots button.on{width:22px;border-radius:4px;background:rgba(255,255,255,.95)}
 .dots.hide{display:none}
+.dots.tabs{gap:8px;height:28px;margin-top:4px}
+.dots button.tab{width:auto;height:26px;padding:0 13px;border-radius:13px;font:600 12.5px/26px ${FONT};color:rgba(255,255,255,.9);background:rgba(255,255,255,.14);box-shadow:inset 0 0 0 1px rgba(255,255,255,.24),0 1px 3px rgba(0,0,30,.2);
+ backdrop-filter:blur(14px) saturate(150%);-webkit-backdrop-filter:blur(14px) saturate(150%);white-space:nowrap}
+.dots button.tab.on{width:auto;border-radius:13px;background:rgba(255,255,255,.92);color:#1c1c1e}
+:host([hv-day]) .dots button.tab{color:rgba(30,30,40,.85);background:rgba(255,255,255,.45);box-shadow:inset 0 0 0 1px rgba(60,60,67,.18)} :host([hv-day]) .dots button.tab.on{background:rgba(60,60,67,.72);color:#fff}
 :host([hv-day]) .dots button{background:rgba(60,60,67,.22);box-shadow:none} :host([hv-day]) .dots button.on{background:rgba(60,60,67,.62)}
 .pill{position:fixed;left:50%;top:calc(var(--hv-safe-top, env(safe-area-inset-top, 0px)) + 5px);width:38px;height:5px;margin-left:-19px;border-radius:3px;background:rgba(255,255,255,.55);box-shadow:0 1px 4px rgba(0,0,30,.25);pointer-events:none;z-index:3}
 .pill[hidden]{display:none}
@@ -3191,7 +3285,7 @@ class HVGridCard extends HTMLElement {
     this.style.paddingTop = padTop ? padTop + 'px' : '';
     const S0 = this._sc.style; S0.setProperty('--bl', (bleed ? L : 0) + 'px'); S0.setProperty('--br', (bleed ? Rm : 0) + 'px');
     S0.setProperty('--pl', pl + 'px'); S0.setProperty('--pr', pr + 'px');
-    const items = this._kids.map(k => k.brk ? { brk: true } : { k, span: gridSpan(k.cfg, C, R) });
+    const items = this._kids.map(k => k.brk ? { brk: true, name: k.cfg && k.cfg.name } : { k, span: gridSpan(k.cfg, C, R) });
     const pages = gridPack(items, C, R, c.dense !== false);
     const sig = `${C}x${R}|` + pages.map(p => p.map(x => `${this._kids.indexOf(x.it.k)}@${x.r},${x.c}`).join(';')).join('/');
     const S = this._sc.style; S.setProperty('--c', C); S.setProperty('--r', R); S.setProperty('--cw', cw + 'px'); S.setProperty('--ch', ch + 'px'); S.setProperty('--g', g + 'px');
@@ -3202,25 +3296,44 @@ class HVGridCard extends HTMLElement {
         p.forEach(x => { const cell = x.it.k.cell; cell.style.gridArea = `${x.r + 1} / ${x.c + 1} / span ${x.rs} / span ${x.cs}`; pg.appendChild(cell); }); frag.appendChild(pg); });
       this._sc.replaceChildren(frag); if (!this._kids.some(k => !k.brk)) this._sc.innerHTML = '<div class="empty">Add cards in the editor</div>';
       this._nPages = pages.length; this._page = Math.min(keepPage, pages.length - 1);
+      const nm = Array.from({ length: pages.length }, (_, i) => pages.names[i] || (i === 0 && c.first_page_name) || '');
+      this._names = nm.slice(1).some(Boolean) ? nm.map((n, i) => n || 'Page ' + (i + 1)) : null; this._dots.innerHTML = '';
       if (this._flipR) { const m = this._flipR, sw = this._sc.clientWidth || 1; this._flipR = null; // 1.32.0: resize preview: the other tiles glide to their new places
         for (const k of this._kids) { const o = k.el && m.get(k.el); if (!o || !k.cell) continue; const n = k.cell.getBoundingClientRect(); if (!n.width || !n.height) continue;
           const dx = o.left - n.left, dy = o.top - n.top, sx = o.width / n.width, sy = o.height / n.height; if (Math.abs(dx) > sw / 2 || (Math.abs(dx) < 1 && Math.abs(dy) < 1 && Math.abs(sx - 1) < .01 && Math.abs(sy - 1) < .01)) continue;
           try { k.cell.animate([{ transformOrigin: '0 0', transform: `translate(${dx}px,${dy}px) scale(${sx},${sy})` }, { transformOrigin: '0 0', transform: 'none' }], { duration: 240, easing: 'cubic-bezier(.2,.8,.2,1)' }); } catch (e) {} } }
     }
+    this._deepLink();
     requestAnimationFrame(() => { const w = this._sc.clientWidth, x = (this._page || 0) * w; // keep the current page exactly in place after a resize
       if (!this._down && Math.abs(this._sc.scrollLeft - x) > 1) this._sc.scrollLeft = x; });
     this._dots.classList.toggle('hide', c.show_dots === false || (this._nPages || 1) < 2); this._paintDots();
     if (this._backOn) hvPTR.set(this, !!c.swipe_back && c.block_pull_refresh !== false);
     const pill = this.shadowRoot.querySelector('.pill'); if (pill) pill.hidden = !c.swipe_back || !!this._edit || !bleed;
   }
-  _paintDots() { const n = this._nPages || 1; if (this._dots.children.length !== n) this._dots.innerHTML = Array.from({ length: n }, (_, i) => `<button data-i="${i}" aria-label="Page ${i + 1}"></button>`).join('');
+  _paintDots() { const n = this._nPages || 1, T = this._names;
+    if (this._dots.children.length !== n) { this._dots.innerHTML = Array.from({ length: n }, (_, i) => `<button data-i="${i}" aria-label="Page ${i + 1}"${T ? ' class="tab"' : ''}></button>`).join('');
+      if (T) [...this._dots.children].forEach((b, i) => { b.textContent = T[i]; b.setAttribute('aria-label', T[i]); }); }
+    this._dots.classList.toggle('tabs', !!T);
     [...this._dots.children].forEach((b, i) => b.classList.toggle('on', i === this._page)); }
+  // ?hv_page=<page name or number>: open that page (e.g. a Home Screen shortcut to Security > Cameras); the parameter is then dropped
+  _deepLink() { let q = null; try { q = new URLSearchParams(location.search).get('hv_page'); } catch (e) {} if (!q || this._edit) return;
+    const T = this._names || [], want = hvSlug(q); let i = T.findIndex(n => n && hvSlug(n) === want);
+    if (i < 0 && /^\d+$/.test(q) && (this._nPages || 1) > 1) i = Number(q) - 1;
+    if (i < 0 || i >= (this._nPages || 1)) return;
+    this._page = i; try { const q2 = location.search.replace(/^\?/, '').split('&').filter(x => x && !/^hv_page(=|$)/.test(x)).join('&'); history.replaceState(history.state, '', location.pathname + (q2 ? '?' + q2 : '') + location.hash); } catch (e) {}
+    this._paintDots(); const go = () => { if (this._sc) this._sc.scrollLeft = i * (this._sc.clientWidth || 0); }; go(); requestAnimationFrame(go); setTimeout(go, 120); }
 }
 class HVPageBreakCard extends HTMLElement {
-  setConfig(c) { this._config = c; this.style.display = 'block'; this.innerHTML = '<div style="padding:10px;text-align:center;border:1px dashed rgba(255,255,255,.4);border-radius:12px;font:600 12px sans-serif;opacity:.7">— new page —</div>'; }
+  setConfig(c) { this._config = c; this.style.display = 'block'; this.innerHTML = '<div style="padding:10px;text-align:center;border:1px dashed rgba(255,255,255,.4);border-radius:12px;font:600 12px sans-serif;opacity:.7"></div>';
+    this.firstChild.textContent = c && c.name ? '— new page: ' + c.name + ' —' : '— new page —'; }
   set hass(h) {} getCardSize() { return 1; } getGridOptions() { return { columns: 'full', rows: 1 }; }
   static getStubConfig() { return {}; }
+  static getConfigElement() { const e = document.createElement('homeview-card-editor'); e.cardClass = this; return e; }
 }
+// 1.32.0: a named page shows as a tab under the grid (instead of the dots) and can be opened with ?hv_page=<name>
+HVPageBreakCard.sizePresets = false; HVPageBreakCard.layoutSection = false;
+HVPageBreakCard.schema = [{ name: 'name', selector: { text: {} } }];
+Object.assign(LABELS, { first_page_name: 'First page name (tabs)' });
 const HV_THEME_OPTS = [{ value: 'night', label: 'Night (dark glass, default)' }, { value: 'day', label: 'Day (white)' }, { value: 'auto', label: 'Auto (follow sun)' }];
 const GRID_SCHEMA = [
   { name: 'theme', selector: { select: { mode: 'dropdown', options: [{ value: 'inherit', label: 'Same as all device pages (default)' }].concat(HV_THEME_OPTS.map(o => o.value === 'night' ? { value: 'night', label: 'Night (dark glass)' } : o)) } } },
@@ -3232,7 +3345,8 @@ const GRID_SCHEMA = [
   { type: 'grid', name: '', schema: [{ name: 'auto_rows', selector: { boolean: {} } }, { name: 'full_bleed', selector: { boolean: {} } }] },
   { type: 'grid', name: '', schema: [{ name: 'dense', selector: { boolean: {} } }, { name: 'edge_sidebar', selector: { boolean: {} } }] },
   { type: 'grid', name: '', schema: [{ name: 'swipe_back', selector: { boolean: {} } }, { name: 'swipe_back_path', selector: { navigation: {} } }] },
-  { name: 'block_pull_refresh', selector: { boolean: {} } }];
+  { name: 'block_pull_refresh', selector: { boolean: {} } },
+  { name: 'first_page_name', selector: { text: {} } }];
 Object.assign(LABELS, { portrait_rows: 'Portrait: rows per page', portrait_columns: 'Portrait: columns', landscape_rows: 'Landscape: rows per page', landscape_columns: 'Landscape: columns',
   portrait_shape: 'Portrait tile shape', gap: 'Gap between tiles', show_dots: 'Page dots', fill_height: 'Size tiles to the screen height',
   auto_rows: 'Portrait: auto rows (fill the screen with near-square tiles)', full_bleed: 'Edge-to-edge pages (gutter between pages)', dense: 'Fill gaps with later tiles', edge_sidebar: 'Edge swipe opens sidebar (from the left edge, phones)', swipe_back: 'Swipe down from the top to go back', swipe_back_path: 'Swipe down goes to (empty = /<dashboard>/main)', block_pull_refresh: 'Block pull-to-refresh (with swipe down to go back)' });
@@ -3743,7 +3857,7 @@ class HVGridEditor extends HTMLElement {
     const box = this._root.querySelector('.tiles'); box.style.setProperty('--hv-ge-cols', Math.max(2, Math.min(6, this._config.landscape_columns || 4)));
     box.innerHTML = ''; let pg = 1;
     cards.forEach((c, i) => { const sel = i === this._sel;
-      if (c && c.type === 'custom:homeview-page-break') { pg++; const b = document.createElement('button'); b.className = 'pb' + (sel ? ' sel' : ''); b.dataset.i = i; b.textContent = 'Page ' + pg; box.appendChild(b); return; }
+      if (c && c.type === 'custom:homeview-page-break') { pg++; const b = document.createElement('button'); b.className = 'pb' + (sel ? ' sel' : ''); b.dataset.i = i; b.textContent = c.name ? 'Page ' + pg + ' · ' + c.name : 'Page ' + pg; box.appendChild(b); return; }
       const b = document.createElement('button'); b.className = 't' + (sel ? ' sel' : ''); b.dataset.i = i; b.setAttribute('role', 'option'); b.setAttribute('aria-selected', sel);
       const st = c && c.entity && this._hass.states[c.entity]; let ic;
       if (st && customElements.get('ha-state-icon')) { ic = document.createElement('ha-state-icon'); ic.hass = this._hass; ic.stateObj = st; if (c.icon) ic.icon = c.icon; }
