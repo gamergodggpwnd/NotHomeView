@@ -4932,7 +4932,13 @@ const ASSIST_CSS = `:host{position:fixed;inset:0;z-index:11;font-family:${FONT};
 .seg button{all:unset;cursor:pointer;flex:1;text-align:center;padding:8px 0;border-radius:9px;font-size:15px;font-weight:600;color:var(--fg)}
 .seg button.sel{background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.14)} :host([night]) .seg button.sel{background:rgba(255,255,255,.22)}
 .qd{margin-top:9px;font-size:13px;line-height:1.4;color:var(--fg2)} .qd b{color:var(--fg);font-weight:600}
-.qp .qh2{margin-top:16px} .seg.hs button{font-size:13px;padding:8px 0} .hrow{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:9px} .hrow .qd{margin-top:0}
+.qp .qh2{margin-top:16px} .seg.hs button{font-size:13px;padding:8px 0}
+.wwr{display:flex;align-items:center;gap:12px} .wwl{flex:1;min-width:0} .wwl b{display:block;font-size:16px;font-weight:600;color:var(--fg)} .wwl span{font-size:13px;color:var(--fg2)}
+.tgl{all:unset;cursor:pointer;flex:none;position:relative;width:51px;height:31px;border-radius:16px;background:rgba(120,120,128,.32);transition:background .2s}
+.tgl i{position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,.3);transition:transform .2s} .tgl[aria-checked=true]{background:#34c759} .tgl[aria-checked=true] i{transform:translateX(20px)}
+.wws{margin-top:12px;padding-top:11px;border-top:1px solid var(--sep)} .wwst{display:flex;justify-content:space-between;gap:8px;font-size:13px;color:var(--fg2);margin-bottom:8px} .wwst span:last-child{opacity:.8;text-align:right}
+.seg.sm button{font-size:13px;padding:6px 0} .wwb.dis{opacity:.42;pointer-events:none} .wwb.dis .wwd{display:none} .wwx{color:#ff3b30} :host([night]) .wwx{color:#ff6961}
+.wwna{display:flex;gap:8px;align-items:flex-start;margin-top:10px;font-size:12.5px;line-height:1.4;color:#a05a00} :host([night]) .wwna{color:#ffcc66} .wwna[hidden]{display:none} .wwna ha-icon{--mdc-icon-size:16px;flex:none;display:flex} .hrow{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:9px} .hrow .qd{margin-top:0}
 .hcl{all:unset;cursor:pointer;flex:none;padding:7px 12px;border-radius:999px;font-size:13px;font-weight:600;color:#ff3b30;background:rgba(255,59,48,.10)} :host([night]) .hcl{color:#ff6961;background:rgba(255,69,58,.16)} .hcl[disabled]{opacity:.4;cursor:default}
 .hdv{align-self:center;font-size:12px;font-weight:600;color:var(--fg2);padding:2px 10px;margin:4px 0} .m.old{opacity:.72} .m.a.old .re{font-size:16px;font-weight:500}
 /* 1.32.0: the floating orb (mic button): only the orb over the clear dashboard (no blur, no dimming, no glowing edge); tap it for the chat */
@@ -5067,6 +5073,81 @@ const hvHistLoad = c => { let a = []; try { a = JSON.parse(localStorage.getItem(
   const ms = HV_HKEEP[hvHistKeep(c)], now = Date.now(), k = a.filter(m => m && typeof m.x === 'string' && m.t > 0 && (!ms || now - m.t < ms)).slice(-200);
   if (k.length !== a.length) hvHistSave(k); return k; };
 const hvHistAdd = (c, r, x) => { x = String(x || '').trim(); if (!x) return; const a = hvHistLoad(c); a.push({ t: Date.now(), r, x: x.slice(0, 2000) }); hvHistSave(a.slice(-200)); };
+/* 1.32.0: on-device wake word "Hey Jarvis" (openWakeWord models run in this browser with ONNX Runtime Web; no audio leaves the device).
+ * Per device (localStorage, like Quiet mode), default off; set in the assistant's settings panel. Lazy: the runtime and the models
+ * (dist/wakeword/, next to this file) load only when it is turned on. Mic -> AudioWorklet (16 kHz, 80 ms frames of 1280 samples) ->
+ * melspectrogram -> embedding (76 mel frames) -> hey_jarvis (16 embeddings) -> score; over the threshold (Low 0.7 / Medium 0.5 /
+ * High 0.35) the assistant opens exactly like a tap on the mic. Paused (mic released) while the assistant is open, for 3 s after it
+ * closes (its own voice can't re-trigger it), and while the page is hidden. Not on iPhone / iPad (no always-on mic for web pages). */
+const HV_WW_LS = 'nothomeview-wakeword', HV_WW_SENS_LS = 'nothomeview-wakeword-sensitivity', HV_WW_TH = { low: 0.7, medium: 0.5, high: 0.35 };
+const hvWwOn = () => { try { return localStorage.getItem(HV_WW_LS) === 'on'; } catch (e) { return false; } };
+const hvWwSens = () => { try { const v = localStorage.getItem(HV_WW_SENS_LS); return v in HV_WW_TH ? v : 'medium'; } catch (e) { return 'medium'; } };
+const hvWwSupport = () => { const ua = navigator.userAgent || '';
+  if (/iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return false;
+  return !!(window.isSecureContext && navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.AudioWorkletNode && (window.AudioContext || window.webkitAudioContext) && typeof WebAssembly === 'object'); };
+const hvWwBase = () => { let u = (window.__nhvLoader && window.__nhvLoader.url) || '';
+  if (!/homeview-cards\.js/.test(u)) { try { const r = performance.getEntriesByType('resource').find(x => /\/homeview-cards\.js/.test(x.name)); if (r) u = r.name; } catch (e) {} }
+  if (!/homeview-cards\.js/.test(u)) u = '/hacsfiles/NotHomeView/homeview-cards.js';
+  return new URL(u.split('?')[0].replace(/[^/]*$/, ''), location.href).href + 'wakeword/'; };
+const HV_WW_WORKLET = `registerProcessor('hv-ww',class extends AudioWorkletProcessor{constructor(){super();this.r=sampleRate/16000;this.t=0;this.l=0;this.b=new Float32Array(1280);this.n=0}
+process(i){const c=i[0]&&i[0][0];if(!c||!c.length)return true;let t=this.t;while(t<c.length-1){const k=Math.floor(t),f=t-k,a=k<0?this.l:c[k],b=c[k+1];this.b[this.n++]=Math.max(-1,Math.min(1,a+(b-a)*f))*32767;
+if(this.n===1280){this.port.postMessage(this.b.slice(0));this.n=0}t+=this.r}this.t=t-c.length;this.l=c[c.length-1];return true}})`;
+const HVWW = { st: 'off', msg: '', run: null, ac: null, wl: null, stream: null, src: null, node: null, q: [], busy: false, cool: 0, ct: null, pill: null, last: 0, fired: null };
+const hvWwLoad = () => HVWW.loadP || (HVWW.loadP = (async () => { const base = hvWwBase();
+  const ort = await import(base + 'ort.wasm.min.mjs'); ort.env.wasm.numThreads = 1; ort.env.wasm.wasmPaths = base; ort.env.logLevel = 'error';
+  const o = { executionProviders: ['wasm'], graphOptimizationLevel: 'all' }, ld = n => ort.InferenceSession.create(base + n, o);
+  const [mel, emb, ww] = await Promise.all([ld('melspectrogram.onnx'), ld('embedding_model.onnx'), ld('hey_jarvis_v0.1.onnx')]);
+  HVWW.ort = ort; HVWW.ses = { mel, emb, ww }; return HVWW.ses; })().catch(e => { HVWW.loadP = null; throw e; }));
+const hvWwReset = () => { HVWW.raw = new Float32Array(1760); HVWW.mel = new Float32Array(76 * 32).fill(1); HVWW.feat = new Float32Array(16 * 96); HVWW.nf = 0; HVWW.warm = 20; HVWW.q = []; };
+// one 80 ms frame (1280 samples, int16 scale) -> wake word score (null while the buffers fill)
+const hvWwStep = async f => { const W = HVWW, T = W.ort.Tensor, S = W.ses; W.raw.copyWithin(0, 1280); W.raw.set(f, 480);
+  let o = await S.mel.run({ [S.mel.inputNames[0]]: new T('float32', W.raw.slice(), [1, 1760]) }); const md = o[S.mel.outputNames[0]].data, nF = Math.min(76, Math.floor(md.length / 32));
+  W.mel.copyWithin(0, nF * 32); for (let i = 0; i < nF * 32; i++) W.mel[(76 - nF) * 32 + i] = md[i] / 10 + 2;
+  o = await S.emb.run({ [S.emb.inputNames[0]]: new T('float32', W.mel.slice(), [1, 76, 32, 1]) }); const e = o[S.emb.outputNames[0]].data;
+  W.feat.copyWithin(0, 96); W.feat.set(e.subarray(0, 96), 15 * 96); W.nf++; if (W.warm > 0) W.warm--; if (W.nf < 16) return null;
+  o = await S.ww.run({ [S.ww.inputNames[0]]: new T('float32', W.feat.slice(), [1, 16, 96]) }); return o[S.ww.outputNames[0]].data[0]; };
+const hvWwHub = () => { const a = [...HV_HUBS].filter(h => h.isConnected && h._hass && h._config && h._config.assistant_enabled === true); return a.find(h => h.getClientRects().length) || a[0] || null; };
+const hvWwWant = () => hvWwOn() && hvWwSupport() && !document.hidden && !!hvWwHub() && ![...HV_HUBS].some(h => h._assistO) && Date.now() >= HVWW.cool;
+const hvWwEmit = () => { const p = HVWW.pill, show = HVWW.st === 'listening' || HVWW.st === 'tap';
+  if (!show) { if (p) p.hidden = true; return; }
+  if (!p || !p.isConnected) { const el = HVWW.pill = p || document.createElement('div'); el.className = 'hv-ww-pill'; if (!el.shadowRoot) el.attachShadow({ mode: 'open' }).innerHTML = `<style>
+:host{position:fixed;top:calc(env(safe-area-inset-top,0px) + 10px);left:50%;transform:translateX(-50%);z-index:6;pointer-events:none;font-family:${FONT}}:host([hidden]){display:none}
+.p{display:flex;align-items:center;gap:7px;padding:6px 12px 6px 9px;border-radius:16px;background:rgba(10,12,22,.38);-webkit-backdrop-filter:blur(14px) saturate(1.4);backdrop-filter:blur(14px) saturate(1.4);box-shadow:inset 0 0 0 1px rgba(255,255,255,.16),0 4px 14px rgba(0,0,0,.18);font-size:12.5px;font-weight:500;color:rgba(255,255,255,.86);white-space:nowrap}
+.d{width:8px;height:8px;border-radius:50%;background:#34c759;box-shadow:0 0 0 4px rgba(52,199,89,.22)} :host([tap]) .d{background:#8e8e93;box-shadow:0 0 0 4px rgba(142,142,147,.22)}
+ha-icon{--mdc-icon-size:14px;display:flex;opacity:.85}</style><div class="p" role="status"><span class="d"></span><ha-icon icon="mdi:microphone"></ha-icon><span class="t"></span></div>`; document.body.appendChild(el); }
+  const el = HVWW.pill; el.hidden = false; el.toggleAttribute('tap', HVWW.st === 'tap'); el.shadowRoot.querySelector('.t').textContent = HVWW.st === 'tap' ? 'Tap the screen to start “Hey Jarvis”' : 'Listening for “Hey Jarvis”'; };
+const hvWwStop = () => { HVWW.run = null; try { if (HVWW.node) { HVWW.node.port.onmessage = null; HVWW.node.disconnect(); } if (HVWW.src) HVWW.src.disconnect(); } catch (e) {} HVWW.node = HVWW.src = null; HVWW.q = [];
+  if (HVWW.stream) { HVWW.stream.getTracks().forEach(t => t.stop()); HVWW.stream = null; } if (HVWW.st !== 'error' || !hvWwOn()) HVWW.st = hvWwOn() && hvWwSupport() ? 'paused' : 'off'; hvWwEmit(); };
+// an audio context made in a tap (turning the setting on) keeps running; one made without a tap waits for the first touch on the page
+const hvWwCtx = () => { let ac = HVWW.ac; if (ac && ac.state !== 'closed') return ac; const C = window.AudioContext || window.webkitAudioContext;
+  try { ac = new C({ sampleRate: 16000 }); } catch (e) { ac = new C(); } HVWW.ac = ac; HVWW.wl = null; return ac; };
+const hvWwTap = () => { const ac = HVWW.ac; if (ac && ac.state !== 'running') ac.resume().then(() => { if (HVWW.st === 'tap' && ac.state === 'running') { HVWW.st = 'listening'; hvWwEmit(); } }).catch(() => {}); };
+addEventListener('pointerdown', hvWwTap, true); addEventListener('keydown', hvWwTap, true);
+const hvWwStart = async () => { if (HVWW.run) return; const tok = HVWW.run = {}; HVWW.st = 'loading'; HVWW.msg = ''; hvWwEmit();
+  const gone = () => HVWW.run !== tok;
+  try { await hvWwLoad(); if (gone()) return;
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: false, autoGainControl: true, channelCount: 1 } });
+    if (gone()) { stream.getTracks().forEach(t => t.stop()); return; } HVWW.stream = stream;
+    let ac = hvWwCtx(), src; try { src = ac.createMediaStreamSource(stream); } catch (e) { try { ac.close(); } catch (e2) {} HVWW.ac = null; const C = window.AudioContext || window.webkitAudioContext; ac = HVWW.ac = new C(); HVWW.wl = null; src = ac.createMediaStreamSource(stream); } // a browser that can't mix rates: native rate, the worklet resamples
+    if (!HVWW.wl) HVWW.wl = ac.audioWorklet.addModule(URL.createObjectURL(new Blob([HV_WW_WORKLET], { type: 'text/javascript' })));
+    await HVWW.wl; if (gone()) return;
+    hvWwReset(); const node = new AudioWorkletNode(ac, 'hv-ww'); node.port.onmessage = e => hvWwChunk(e.data, tok); src.connect(node); node.connect(ac.destination); HVWW.src = src; HVWW.node = node;
+    if (ac.state !== 'running') { try { await Promise.race([ac.resume(), new Promise(r => setTimeout(r, 300))]); } catch (e) {} } if (gone()) return;
+    HVWW.st = ac.state === 'running' ? 'listening' : 'tap'; hvWwEmit(); }
+  catch (e) { if (gone()) return; hvWwStop(); const n = e && e.name; HVWW.st = 'error';
+    HVWW.msg = n === 'NotAllowedError' || n === 'SecurityError' ? 'Microphone access is blocked for this site (browser or app settings).' : n === 'NotFoundError' ? 'No microphone was found.' : "Couldn't start: " + ((e && e.message) || n || e);
+    console.warn('NotHomeView: wake word', e); hvWwEmit(); } };
+const hvWwChunk = (f, tok) => { if (HVWW.run !== tok) return; HVWW.q.push(f); if (HVWW.q.length > 6) HVWW.q.splice(0, HVWW.q.length - 6); if (!HVWW.busy) hvWwPump(tok); };
+const hvWwPump = async tok => { HVWW.busy = true;
+  try { while (HVWW.q.length && HVWW.run === tok) { const sc = await hvWwStep(HVWW.q.shift()); if (sc == null) continue; HVWW.last = sc;
+      if (sc >= HV_WW_TH[hvWwSens()] && HVWW.warm <= 0 && HVWW.run === tok) { hvWwFire(sc); break; } } }
+  catch (e) { console.warn('NotHomeView: wake word', e); } HVWW.busy = false; };
+// heard: the assistant opens like a tap on the mic (the wake mic is released first; it resumes 3 s after the assistant closes)
+const hvWwFire = sc => { const hub = hvWwHub(); HVWW.fired = { t: Date.now(), score: Math.round(sc * 1000) / 1000 }; hvWwStop(); if (hub && !hub._assistO) hub._openAssist(); hvWwSync(); };
+const hvWwSync = () => { clearTimeout(HVWW.ct); if (hvWwOn() && Date.now() < HVWW.cool) HVWW.ct = setTimeout(hvWwSync, HVWW.cool - Date.now() + 30);
+  if (hvWwWant()) hvWwStart(); else if (HVWW.run || HVWW.st !== (hvWwOn() && hvWwSupport() ? 'paused' : 'off')) hvWwStop(); };
+document.addEventListener('visibilitychange', () => hvWwSync()); addEventListener('pageshow', () => hvWwSync());
+window.__hvWakeWord = HVWW; // state for debugging (st, last score, fired)
 function hvAssist(hub, o) {
   o = o || {}; let compact = !!o.orb;
   const c = hub._config, h0 = hub._hass; const theme = c.assistant_theme && c.assistant_theme !== 'same' ? c.assistant_theme : c.theme;
@@ -5076,8 +5157,12 @@ function hvAssist(hub, o) {
     <div class="ohint">Tap the orb to see the chat</div><div class="cap" hidden aria-live="polite"><div class="q"></div><div class="a"></div><div class="mt"><span class="why"></span><span>Tap orb for chat</span></div></div></div></div>
     <div class="wrap"><div class="bg"></div>
     <div class="cd" role="dialog" aria-modal="true" aria-label="Assistant"><div class="col" style="flex:1 1 auto">
-    <div class="hd"><div class="grab" aria-hidden="true"></div><div class="orb" aria-hidden="true"></div><div class="ti"><b>Assistant</b><span class="pl"></span></div><button class="qb" aria-label="Quiet mode and chat history on this device" aria-expanded="false"><ha-icon></ha-icon><span></span></button><button class="x" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button></div>
+    <div class="hd"><div class="grab" aria-hidden="true"></div><div class="orb" aria-hidden="true"></div><div class="ti"><b>Assistant</b><span class="pl"></span></div><button class="qb" aria-label="Quiet mode, wake word and chat history on this device" aria-expanded="false"><ha-icon></ha-icon><span></span></button><button class="x" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button></div>
     <div class="qp" hidden><div class="qh">Quiet mode · this device</div><div class="seg" role="radiogroup" aria-label="Quiet mode"><button data-q="off" role="radio">Off</button><button data-q="on" role="radio">On</button><button data-q="auto" role="radio">Auto</button></div><div class="qd"></div>
+    <div class="qh qh2">Wake word · this device</div><div class="wwb"><div class="wwr"><div class="wwl"><b>Wake word</b><span>“Hey Jarvis”</span></div><button class="tgl" role="switch" aria-checked="false" aria-label="Wake word “Hey Jarvis” on this device"><i></i></button></div>
+    <div class="qd wwd">Listens on this device only while the dashboard is open.</div><div class="qd wwx" hidden></div>
+    <div class="wws"><div class="wwst"><span>Sensitivity</span><span>fewer false starts ↔ hears from farther</span></div><div class="seg sm" role="radiogroup" aria-label="Wake word sensitivity"><button data-w="low" role="radio">Low</button><button data-w="medium" role="radio">Medium</button><button data-w="high" role="radio">High</button></div></div></div>
+    <div class="wwna" hidden><ha-icon icon="mdi:information-outline"></ha-icon><span>Not available on this device. Use the mic button instead.</span></div>
     <div class="qh qh2">Chat history · this device</div><div class="seg hs" role="radiogroup" aria-label="Keep the chat history">${Object.keys(HV_HKEEP_L).map(k => `<button data-h="${k}" role="radio">${HV_HKEEP_L[k]}</button>`).join('')}</div>
     <div class="hrow"><div class="qd hsd"></div><button class="hcl">Clear history now</button></div></div>
     <div class="bd"><div class="log" aria-live="polite"></div></div>
@@ -5133,7 +5218,8 @@ function hvAssist(hub, o) {
   const endRun = () => { if (unsub) { const u = unsub; unsub = null; Promise.resolve(u).then(f => f && f()).catch(() => {}); } };
   // closing clears the chat and the conversation (a new popup starts fresh)
   const close = () => { if (closed) return; closed = true; clearTimeout(dt); runTok++; stopRec(); endRun(); convId = null; if (player) { player.stop(); player = null; } micOff();
-    removeEventListener('keydown', key); host.classList.remove('in'); setTimeout(() => host.remove(), 320); hub._assistO = null; hvFhOpen.delete(host); };
+    removeEventListener('keydown', key); host.classList.remove('in'); setTimeout(() => host.remove(), 320); hub._assistO = null; hvFhOpen.delete(host);
+    HVWW.cool = Date.now() + 3000; hvWwSync(); }; // wake word: resumes 3 s after the assistant closes
   const key = e => { if (e.key === 'Escape' && !(HVTM.scr && HVTM.scr.isConnected)) close(); };
   // swipe down to close: from the header (always) or anywhere once the chat is scrolled to the top (hvSwipeClose leaves a scrolled list alone)
   if (!compact) hvFhOpen.add(host);
@@ -5277,11 +5363,18 @@ function hvAssist(hub, o) {
     qb.querySelector('ha-icon').setAttribute('icon', q.mode === 'off' ? 'mdi:volume-high' : q.quiet ? 'mdi:volume-off' : 'mdi:volume-medium');
     qb.querySelector('span').textContent = 'Quiet: ' + ({ off: 'Off', on: 'On', auto: 'Auto' })[q.mode]; qb.classList.toggle('on', q.mode !== 'off');
     qp.querySelectorAll('[data-q]').forEach(b => { const on = b.dataset.q === q.mode; b.classList.toggle('sel', on); b.setAttribute('aria-checked', String(on)); }); qp.querySelector('.qd').textContent = q.desc;
+    const wok = hvWwSupport(), won = wok && hvWwOn(), ws = hvWwSens(), tg = qp.querySelector('.tgl'), wx = qp.querySelector('.wwx');
+    tg.setAttribute('aria-checked', String(won)); tg.disabled = !wok; qp.querySelector('.wwb').classList.toggle('dis', !wok); qp.querySelector('.wwna').hidden = wok;
+    qp.querySelectorAll('[data-w]').forEach(b => { const on = b.dataset.w === ws; b.classList.toggle('sel', on); b.setAttribute('aria-checked', String(on)); });
+    wx.hidden = !(won && HVWW.st === 'error'); wx.textContent = HVWW.msg || '';
     const hk = hvHistKeep(c), n = hvHistLoad(c).length; qp.querySelectorAll('[data-h]').forEach(b => { const on = b.dataset.h === hk; b.classList.toggle('sel', on); b.setAttribute('aria-checked', String(on)); });
     qp.querySelector('.hsd').textContent = (n ? `${n} message${n === 1 ? '' : 's'} saved on this device` : 'Nothing saved yet') + (hk === 'forever' ? '.' : `, each removed after ${HV_HKEEP_L[hk]}.`); qp.querySelector('.hcl').disabled = !n; };
   qb.addEventListener('click', () => { qp.hidden = !qp.hidden; qb.setAttribute('aria-expanded', String(!qp.hidden)); qPaint(); });
   qp.addEventListener('click', e => { const p = e.composedPath(), b = p.find(n => n.dataset && n.dataset.q), h = p.find(n => n.dataset && n.dataset.h);
     if (b) { hvQuietSet(b.dataset.q); qPaint(); }
+    if (p.includes(qp.querySelector('.tgl')) && hvWwSupport()) { const on = !hvWwOn(); try { if (on) localStorage.setItem(HV_WW_LS, 'on'); else localStorage.removeItem(HV_WW_LS); } catch (e2) {}
+      if (on) { try { hvWwCtx().resume().catch(() => {}); } catch (e2) {} hvWwLoad().catch(() => {}); } HVWW.st = 'off'; hvWwSync(); qPaint(); } // made in this tap: the audio context may run later without another tap
+    const w = p.find(n => n.dataset && n.dataset.w); if (w) { try { localStorage.setItem(HV_WW_SENS_LS, w.dataset.w); } catch (e2) {} qPaint(); }
     if (h) { try { localStorage.setItem(HV_HKEEP_LS, h.dataset.h); } catch (e2) {} hvHistLoad(c); qPaint(); } // prunes at once
     if (p.includes(qp.querySelector('.hcl'))) { hvHistSave([]); log.querySelectorAll('.old').forEach(x => x.remove()); qPaint(); } }); qPaint();
   $('.x').addEventListener('click', close); hvPen($('.x'), hub._penFn(), { gap: 8 }); mic.addEventListener('click', () => { hvSpkUnlock(); listen(); });
@@ -5309,12 +5402,12 @@ class HVHubCard extends HTMLElement {
     this._sig = null; if (old && (old.photo_source !== c.photo_source || old.photo_order !== c.photo_order || old.photo_source_mode !== c.photo_source_mode || old.photo_album_url !== c.photo_album_url)) { this._ids = null; this._idsExp = 0; this._loadPhotos(); }
     this._calSig = null; this._render(); this._restartTimer(); if (this.isConnected) hvPTR.set(this, this._config.block_pull_refresh !== false); }
   set hass(h) { const first = !this._hass; this._hass = h; this._render(); if (this._cal) this._cal.hass = h; (this._sideEls || []).forEach(e => { e._card.hass = this._simHass(h);
-      if (e._fit) { const o = hubTileOpt(this._config, this._sideEls.indexOf(e)); if (o.sky === true && hvSky(h, o.sky_entity, window.__hvSimScene).sig !== e._skySig) requestAnimationFrame(() => this._fitTile(e)); } }); if (first) { this._loadPhotos(); this._loadCfg(); } if (this._sheetO) this._sheetO.hass = h; }
+      if (e._fit) { const o = hubTileOpt(this._config, this._sideEls.indexOf(e)); if (o.sky === true && hvSky(h, o.sky_entity, window.__hvSimScene).sig !== e._skySig) requestAnimationFrame(() => this._fitTile(e)); } }); if (first) { this._loadPhotos(); this._loadCfg(); setTimeout(hvWwSync, 0); } if (this._sheetO) this._sheetO.hass = h; }
   get hass() { return this._hass; }
   set editMode(v) { this._edit = v; this._layout(); this._ssPaint(); if (v) hvEditChromeSoon(this); }
   getCardSize() { return 12; }
   getGridOptions() { return { columns: 'full', rows: 'auto', min_columns: 12 }; }
-  connectedCallback() { HV_HUBS.add(this);
+  connectedCallback() { HV_HUBS.add(this); setTimeout(hvWwSync, 0);
     if (!this._bound) this._bound = () => this._layout();
     addEventListener('resize', this._bound); addEventListener('orientationchange', this._bound); addEventListener('hv-layout', this._bound); if (window.visualViewport) visualViewport.addEventListener('resize', this._bound);
     if (window.ResizeObserver && !this._ro) { this._ro = new ResizeObserver(() => this._layout()); this._ro.observe(this); }
@@ -5329,8 +5422,8 @@ class HVHubCard extends HTMLElement {
   _tpillPaint() { const p = this._tpill; if (!p) return; const s = HVTM.st, on = !!s && this._config.assistant_enabled === true && !(HVTM.scr && HVTM.scr.isConnected); p.hidden = !on;
     if (on) { const t = s.done ? 'Done' : hvFmtLeft(HVTM.left()) + (s.paused != null ? ' ❚❚' : ''); const sp = p.querySelector('span'); if (sp.textContent !== t) sp.textContent = t; } }
   _openAssist() { if (this._assistO || !this._hass) return; hvSpkUnlock(); HVTM.opts.sound = this._config.timer_sound !== false; const al = this._config.assistant_auto_listen !== false;
-    this._assistO = hvAssist(this, { orb: al && this._config.assistant_orb !== false }); if (al) this._assistO.listen(true); }
-  disconnectedCallback() { HV_HUBS.delete(this); hvTimerPills.delete(this._tpf); if (this._assistO) this._assistO.close(); clearInterval(this._ssHoldIv); this._ssHoldIv = null; this._edgeBind(false); hvPTR.set(this, false); this._ssBind(false); if (this._galO) this._galO.close(); if (this._sheetO) this._sheetO.close(); this._ssPause(false); clearInterval(this._tick); clearTimeout(this._timer); this._timer = null;
+    this._assistO = hvAssist(this, { orb: al && this._config.assistant_orb !== false }); hvWwSync(); if (al) this._assistO.listen(true); }
+  disconnectedCallback() { HV_HUBS.delete(this); setTimeout(hvWwSync, 0); hvTimerPills.delete(this._tpf); if (this._assistO) this._assistO.close(); clearInterval(this._ssHoldIv); this._ssHoldIv = null; this._edgeBind(false); hvPTR.set(this, false); this._ssBind(false); if (this._galO) this._galO.close(); if (this._sheetO) this._sheetO.close(); this._ssPause(false); clearInterval(this._tick); clearTimeout(this._timer); this._timer = null;
     removeEventListener('resize', this._bound); removeEventListener('orientationchange', this._bound); removeEventListener('hv-layout', this._bound); if (window.visualViewport) visualViewport.removeEventListener('resize', this._bound);
     document.removeEventListener('visibilitychange', this._vis); }
   // --- dashboard config (Wallpanel settings, views for the sheets), cached

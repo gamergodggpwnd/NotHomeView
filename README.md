@@ -82,6 +82,12 @@ and Wallpanel 4.67.2.
   with *What it does: Assistant*), speak, and the request goes to the Assist pipeline you pick (or Home Assistant's preferred one). It uses the
   microphone of the device showing the dashboard (the page must be opened over HTTPS, e.g. Home Assistant Cloud) and shows what was heard, the
   answer, and rows for lists, calendar items and the devices that were changed. You can always type instead. Day / Night look.
+* **Wake word “Hey Jarvis”** (per device, off by default): in the Assistant's settings button, under Quiet mode, turn on *Wake word · this
+  device* and pick a sensitivity (Low / Medium / High). While the dashboard with the Home Screen card is open, saying “Hey Jarvis” opens the
+  assistant exactly like tapping the mic; a small pill at the top shows “Listening for “Hey Jarvis””. Recognition runs entirely in the browser
+  (openWakeWord models with ONNX Runtime Web, loaded from `dist/wakeword/` only when turned on); no audio leaves the device. It pauses while the
+  assistant is open, for 3 s after it closes, and while the page is in the background. Not available on iPhone / iPad (web pages can't keep the
+  mic open there); needs HTTPS and microphone access. The *hey_jarvis* model is CC BY-NC-SA 4.0 (openWakeWord), see `dist/wakeword/README.md`.
 * **Timers that work in the browser**: "set a timer for 15 minutes", "set a pasta timer for 12 minutes", "pause / resume / cancel the timer",
   "how much time is left". Timers are recognised in the card, so they work with every pipeline and need no voice satellite. A full-screen countdown
   with a ring of ticks counts down; pause, cancel, +1 minute; at zero it flashes and plays a chime until you tap the screen. The timer keeps
