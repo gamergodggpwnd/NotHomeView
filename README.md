@@ -115,7 +115,8 @@ and Wallpanel 4.67.2.
 | `assistant_orb` | `true` | The mic shows only a floating animated orb near the top (no blur over the dashboard); tap the orb for the chat |
 | `assistant_continue` | `true` | Keep listening until dismissed: after every reply the mic opens again in the same conversation |
 | `assistant_dismiss_phrases` | `thank you, thanks, …, I'm done` | Comma-separated phrases that end the conversation when they are (almost) the whole utterance; not sent to the assistant |
-| `assistant_silence_timeout` | `5` | Seconds the re-opened mic waits; nothing said = the assistant closes |
+| `assistant_silence_timeout` | `5` | Seconds the re-opened mic waits for you to start speaking; nothing said at all = the assistant closes |
+| `assistant_end_of_speech_pause` | `2` | Seconds of quiet (1–5) after you start speaking before the request is sent; shorter pauses while you think keep recording into the same request |
 | `assistant_history_retention` | `forever` | Chat history kept in the browser: `forever`, `1d`, `7d`, `14d`, `30d` (each device can choose its own / clear it in the assistant's settings) |
 | `assistant_quiet_volume_entity` | `''` | Quiet mode *Auto*: the device's volume sensor (percent or 0–1); quiet under `assistant_quiet_volume_below` |
 | `assistant_quiet_volume_below` | `5` | Quiet mode *Auto*: volume threshold in % |

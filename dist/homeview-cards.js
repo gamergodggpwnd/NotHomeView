@@ -4705,7 +4705,7 @@ const PV_CSS = `.pv{position:absolute;inset:0;overflow:hidden;background:#0b0b10
  * Home Screen card options: assistant_enabled, assistant_pipeline (empty = Home Assistant's preferred pipeline), assistant_button
  * (mic button beside the avatar), assistant_theme, assistant_speak (play the spoken reply), assistant_auto_listen, timer_sound.
  * Voice: the microphone of the device showing the dashboard (getUserMedia; needs HTTPS) is resampled to 16 kHz 16-bit mono and
- * streamed to the pipeline (assist_pipeline/run, stt stage). The transcript is checked here for timer requests first ("set a timer
+ * streamed to the pipeline (assist_pipeline/run, stt stage, no_vad: the card ends the stream after assistant_end_of_speech_pause s of quiet). The transcript is checked here for timer requests first ("set a timer
  * for 15 minutes", "cancel / pause / resume the timer", "how much time is left"): those run a timer in this browser, so they work
  * without a voice satellite. Anything else goes to the pipeline's conversation agent (intent stage, optional tts).
  * The timer lives in this browser (localStorage), survives a reload and opens a full-screen countdown. */
@@ -5046,6 +5046,8 @@ function hvQuietNow(c, h) {
 const HV_DISMISS = "thank you, thanks, thanks jarvis, thank you jarvis, goodbye, bye, good bye, that's all, that's it, never mind, nevermind, stop, cancel, no thanks, I'm done";
 const HV_DISMISS_FILL = ['ok', 'okay', 'alright', 'all right', 'great', 'perfect', 'cool', 'awesome', 'oh', 'well', 'so', 'and', 'then', 'now', 'for now', 'very much', 'so much', 'a lot', 'again', 'buddy', 'mate', 'assistant'];
 const hvNorm = t => String(t || '').toLowerCase().replace(/[’‘`´]/g, "'").replace(/[^a-z0-9'\s]+/g, ' ').replace(/\s+/g, ' ').trim();
+// 1.32.0: seconds of continuous quiet, after you started speaking, before the request is sent (assistant_end_of_speech_pause, 1-5, default 2)
+const hvEosPause = c => { const v = Number(c && c.assistant_end_of_speech_pause); return isFinite(v) && v > 0 ? Math.min(5, Math.max(1, v)) : 2; };
 function hvIsDismiss(text, list) {
   const ph = (Array.isArray(list) ? list : String(list == null ? HV_DISMISS : list).split(/[,;\n]+/)).map(hvNorm).filter(Boolean); if (!ph.length) return false;
   const w = hvNorm(text).split(' ').filter(Boolean); if (!w.length || w.length > 12) return false;
@@ -5215,6 +5217,16 @@ function hvAssist(hub, o) {
         : n === 'NotFoundError' || n === 'OverconstrainedError' ? 'No microphone was found on this device. Type your request below.' : "The microphone couldn't start (" + (e && e.message || n) + '). Type your request below.'); return; }
     if (closed) { micOff(); return; }
     const tok = ++runTok; let hid = null, q = [], ended = false, sentEnd = false, srcN = null, proc = null; const RATE = ac ? ac.sampleRate : 48000;
+    // 1.32.0: end of speech is decided here, not by Home Assistant: the run starts with no_vad (the pipeline's own VAD ends the stream after
+    // ~0.7 s of quiet, cutting you off while you think). 20 ms frames, level against an adaptive noise floor; speech starts after ~160 ms above
+    // the threshold; once speech has started, assistant_end_of_speech_pause s (default 2) of continuous quiet sends the request. Shorter pauses
+    // keep recording into the same request (one transcript).
+    const eosMs = hvEosPause(c) * 1000, FR = Math.max(1, Math.round(RATE * 0.02)); let vE = 0, vN = 0, vFloor = 0.003, vOn = 0, vOff = 0, vSpeech = false, onSpeech = null;
+    const vad = f32 => { for (let i = 0; i < f32.length && !ended; i++) { const x = f32[i]; vE += x * x; if (++vN < FR) continue; const r = Math.sqrt(vE / vN); vE = 0; vN = 0;
+        const on = Math.max(0.008, vFloor * 3.5), off = Math.max(0.003, vFloor * 2); // lower 'off' level: soft word endings still count as speech
+        if (!vSpeech) { if (r > on) { vOn += 20; if (vOn >= 160) { vSpeech = true; vOff = 0; if (onSpeech) onSpeech(); } } else { vOn = Math.max(0, vOn - 10); vFloor = Math.min(0.03, Math.max(0.0005, vFloor * 0.97 + r * 0.03)); } }
+        else if (r > off) { if (vOff >= 700 && lt) lt.textContent = 'Hearing you…'; vOff = 0; }
+        else { vOff += 20; if (vOff === 700 && lt) lt.textContent = 'Still listening…'; if (vOff >= eosMs + 120) finish(); } } }; // +120 ms margin (frame and level smoothing): never less than the set pause
     const sendBin = buf => { const sock = hub._hass.connection.socket; if (!sock || sock.readyState !== 1) return; const b = new Uint8Array(1 + buf.byteLength); b[0] = hid; b.set(new Uint8Array(buf.buffer || buf), 1); sock.send(b); };
     let ratio = RATE / 16000, carry = new Float32Array(0), acc = [], accN = 0;
     const onPcm = f32 => { if (ended) return; let lv = 0; for (let i = 0; i < f32.length; i += 8) lv = Math.max(lv, Math.abs(f32[i])); const l0 = Math.min(1, lv * 4);
@@ -5222,7 +5234,8 @@ function hvAssist(hub, o) {
       const all = new Float32Array(carry.length + f32.length); all.set(carry); all.set(f32, carry.length); const n = Math.floor(all.length / ratio), out = new Int16Array(n);
       for (let i = 0; i < n; i++) { const p = i * ratio, k = Math.floor(p), fr = p - k, a = all[k], b = all[Math.min(k + 1, all.length - 1)], v = a + (b - a) * fr; out[i] = Math.max(-1, Math.min(1, v)) * 0x7fff; }
       carry = all.slice(Math.floor(n * ratio)); acc.push(out); accN += n;
-      if (accN >= 1600) { const m = new Int16Array(accN); let o = 0; for (const x of acc) { m.set(x, o); o += x.length; } acc = []; accN = 0; if (hid != null) sendBin(m); else q.push(m); } };
+      if (accN >= 1600) { const m = new Int16Array(accN); let o = 0; for (const x of acc) { m.set(x, o); o += x.length; } acc = []; accN = 0; if (hid != null) sendBin(m); else q.push(m); }
+      vad(f32); };
     const stopAudio = () => { try { proc && proc.disconnect(); srcN && srcN.disconnect(); } catch (e) {} }; // the stream stays open (micS) until a reply is spoken or the assistant closes
     const finish = () => { if (ended) return; ended = true; stopAudio(); host.style.removeProperty('--lv'); host.style.removeProperty('--lv0'); if (hid != null && !sentEnd) { sentEnd = true; const sock = hub._hass.connection.socket; if (sock && sock.readyState === 1) sock.send(new Uint8Array([hid])); }
       if (tok === runTok) { st('thinking'); if (lt) lt.textContent = 'Got it…'; } };
@@ -5233,17 +5246,21 @@ function hvAssist(hub, o) {
         await window.__hvWorklet; proc = new AudioWorkletNode(ac, 'hv-rec'); proc.port.onmessage = e => onPcm(e.data); srcN.connect(proc); }
       else { proc = ac.createScriptProcessor(4096, 1, 1); proc.onaudioprocess = e => onPcm(e.inputBuffer.getChannelData(0)); srcN.connect(proc); proc.connect(ac.destination); } }
     catch (e) { stopAudio(); micOff(); rec = null; st('idle'); drop(); note(null, "The microphone couldn't start (" + (e && e.message || e) + '). Type your request below.'); return; }
-    endRun(); const msg = { type: 'assist_pipeline/run', start_stage: 'stt', end_stage: 'stt', input: { sample_rate: 16000 }, timeout: 60 }; if (pipe) msg.pipeline = pipe;
-    const safety = setTimeout(() => { if (rec && rec.finish === finish) finish(); }, 15000); // never listen for more than 15 s
+    endRun(); const msg = { type: 'assist_pipeline/run', start_stage: 'stt', end_stage: 'stt', input: { sample_rate: 16000, no_vad: true }, timeout: 90 }; if (pipe) msg.pipeline = pipe;
+    const cap_ = () => { if (rec && rec.finish === finish) finish(); };
+    let safety = setTimeout(cap_, 15000); // nothing heard for 15 s: stop (then at most 45 s from the first word)
     // a follow-up: nobody answers within a few seconds -> stop listening (the orb closes)
     let heard = false; const quietEnd = () => { clearTimeout(sil); if (closed) return; if (rec && rec.finish === finish) rec.stop(); rec = null; keepCap = false; micOff(); if (compact) close(); else st('idle'); };
     const silT = (Number(c.assistant_silence_timeout) > 0 ? Number(c.assistant_silence_timeout) : 5) * 1000;
     const sil = fol ? setTimeout(() => { if (!heard && tok === runTok) quietEnd(); }, silT) : null; // nothing said after a reply: the assistant closes (mic off)
     const fail = m => { clearTimeout(safety); clearTimeout(sil); if (fol && !heard) { quietEnd(); return; } finish(); rec = null; endRun(); st('idle'); drop(); micOff(); note(null, m); };
+    // speech started (card VAD): the "nothing said" close (assistant_silence_timeout) no longer applies to this turn
+    onSpeech = () => { if (tok !== runTok || heard) return; heard = true; clearTimeout(sil); clearTimeout(safety); safety = setTimeout(cap_, 45000); if (lt) lt.textContent = 'Hearing you…'; };
+    if (vSpeech) onSpeech();
     try { unsub = hub._hass.connection.subscribeMessage(ev => { if (tok !== runTok) return; const d = ev.data || {};
       if (ev.type === 'run-start') { hid = d.runner_data && d.runner_data.stt_binary_handler_id; if (hid == null) return; for (const m of q) sendBin(m); q = []; if (ended && !sentEnd) { sentEnd = true; hub._hass.connection.socket.send(new Uint8Array([hid])); } }
-      else if (ev.type === 'stt-vad-start') { heard = true; clearTimeout(sil); if (lt) lt.textContent = 'Hearing you…'; }
-      else if (ev.type === 'stt-vad-end') finish();
+      else if (ev.type === 'stt-vad-start') onSpeech(); // not sent with no_vad; kept for older cores that ignore it
+      else if (ev.type === 'stt-vad-end') { if (!vSpeech) finish(); }
       else if (ev.type === 'stt-end') { clearTimeout(safety); clearTimeout(sil); finish(); rec = null; endRun(); const t = ((d.stt_output || {}).text || '').trim();
         if (!t) { if (fol) { drop(); quietEnd(); return; } st('idle'); drop(); micOff(); say("Sorry, I didn't catch that."); return; } typeIn(lm, t);
         if (hvIsDismiss(t, c.assistant_dismiss_phrases)) { micOff(); asked = true; keepCap = false; hvHistAdd(c, 'u', t); say('Goodbye.'); if (compact) { cap.querySelector('.q').textContent = `“${t}”`; showCap(null, 'Goodbye.', ''); }
@@ -5278,7 +5295,7 @@ class HVHubCard extends HTMLElement {
   constructor() { super(); this.attachShadow({ mode: 'open' }); this._layer = 0; }
   static get defaults() { return { theme: 'night', person: '', morning_start: 5, afternoon_start: 12, evening_start: 17, greeting_morning: 'Good morning', greeting_afternoon: 'Good afternoon',
     greeting_evening: 'Good evening', photo_source_mode: 'media', photo_album_url: '', photo_source: '', photo_interval: 25, photo_order: 'random', blur: 32, dim: 0.32, bg_transparency: 60, photo_backdrop: true, bg_freeze: true, photo_tap: 'viewer', photo_viewer_nav: true, photo_viewer_swipe: true, photo_viewer_add: true, photo_gallery_upload: true, photo_viewer_pause: true, photo_label: 'Photos', photo_max_aspect: 2.6,
-    show_calendar: true, calendar_layout: 'wide', calendar_columns: 3, calendar_days: 7, calendar_title: 'Calendar', calendar_min_height: 240, max_icon: 140, edge_sidebar: true, ss_hold: true, weather_entity: '', photo_size: 'wide', side_portrait: 'below', side_sizes: '', row_units: 3, block_pull_refresh: true, calendar_rows: 'auto', swipe_screensaver: 'auto', full_height_popups: true, popup_edit: true, assistant_enabled: false, assistant_pipeline: 'preferred', assistant_theme: 'same', assistant_button: true, assistant_speak: true, assistant_auto_listen: true, assistant_orb: true, assistant_continue: true, assistant_silence_timeout: 5, assistant_history_retention: 'forever', assistant_dismiss_phrases: "thank you, thanks, thanks jarvis, thank you jarvis, goodbye, bye, good bye, that's all, that's it, never mind, nevermind, stop, cancel, no thanks, I'm done", assistant_quiet_volume_below: 5, assistant_quiet_start: '23:30', assistant_quiet_end: '10:00', timer_sound: true }; }
+    show_calendar: true, calendar_layout: 'wide', calendar_columns: 3, calendar_days: 7, calendar_title: 'Calendar', calendar_min_height: 240, max_icon: 140, edge_sidebar: true, ss_hold: true, weather_entity: '', photo_size: 'wide', side_portrait: 'below', side_sizes: '', row_units: 3, block_pull_refresh: true, calendar_rows: 'auto', swipe_screensaver: 'auto', full_height_popups: true, popup_edit: true, assistant_enabled: false, assistant_pipeline: 'preferred', assistant_theme: 'same', assistant_button: true, assistant_speak: true, assistant_auto_listen: true, assistant_orb: true, assistant_continue: true, assistant_silence_timeout: 5, assistant_end_of_speech_pause: 2, assistant_history_retention: 'forever', assistant_dismiss_phrases: "thank you, thanks, thanks jarvis, thank you jarvis, goodbye, bye, good bye, that's all, that's it, never mind, nevermind, stop, cancel, no thanks, I'm done", assistant_quiet_volume_below: 5, assistant_quiet_start: '23:30', assistant_quiet_end: '10:00', timer_sound: true }; }
   static getStubConfig(hass) { return { apps: HUB_APPS.map(a => Object.assign({}, a)), calendar_entities: Object.keys((hass && hass.states) || {}).filter(k => k.startsWith('calendar.')).slice(0, 3) }; }
   static getConfigElement() { return document.createElement('homeview-hub-card-editor'); }
   setConfig(c) { if (!c) throw new Error('Invalid configuration'); this._hvRaw = c; const old = this._config, nc = Object.assign({}, HVHubCard.defaults, c);
@@ -5982,7 +5999,8 @@ const HUB_SCHEMA = [
     { type: 'grid', name: '', schema: [{ name: 'assistant_orb', selector: { boolean: {} } }, { name: 'assistant_continue', selector: { boolean: {} } }] },
     { name: 'assistant_dismiss_phrases', selector: { text: { multiline: true } } },
     { type: 'grid', name: '', schema: [{ name: 'assistant_silence_timeout', selector: { number: { min: 2, max: 30, step: 1, mode: 'box', unit_of_measurement: 's' } } },
-      { name: 'assistant_history_retention', selector: { select: { mode: 'dropdown', options: [{ value: 'forever', label: 'Keep forever' }, { value: '1d', label: '1 day' }, { value: '7d', label: '1 week' }, { value: '14d', label: '14 days' }, { value: '30d', label: '30 days' }] } } }] },
+      { name: 'assistant_end_of_speech_pause', selector: { number: { min: 1, max: 5, step: 0.5, mode: 'box', unit_of_measurement: 's' } } }] },
+    { type: 'grid', name: '', schema: [{ name: 'assistant_history_retention', selector: { select: { mode: 'dropdown', options: [{ value: 'forever', label: 'Keep forever' }, { value: '1d', label: '1 day' }, { value: '7d', label: '1 week' }, { value: '14d', label: '14 days' }, { value: '30d', label: '30 days' }] } } }] },
     { type: 'expandable', name: '', flatten: true, title: 'Quiet mode: Auto', icon: 'mdi:volume-off', schema: [
       { name: 'assistant_quiet_volume_entity', selector: { entity: { domain: ['sensor', 'number', 'input_number'] } } },
       { name: 'assistant_quiet_volume_below', selector: { number: { min: 1, max: 100, step: 1, mode: 'box', unit_of_measurement: '%' } } },
@@ -6015,7 +6033,7 @@ Object.assign(LABELS, { photo_source_mode: 'Photo source', photo_album_url: 'Alb
   popup_edit: 'Edit pencil next to ✕ in popups (admins only): opens the editor of the card the popup belongs to',
   assistant_enabled: 'Assistant on this Home Screen', assistant_button: 'Mic button beside the avatar', assistant_pipeline: 'Assist pipeline', assistant_theme: 'Assistant look',
   assistant_auto_listen: 'Start listening when it opens', assistant_speak: 'Speak the replies', timer_sound: 'Timer alert sound',
-  assistant_orb: 'Mic opens a floating orb (tap it for the chat)', assistant_continue: 'Keep listening until dismissed', assistant_dismiss_phrases: 'Phrases that end the conversation', assistant_silence_timeout: 'Close after silence', assistant_history_retention: 'Chat history', assistant_quiet_volume_entity: 'Volume sensor of the device (optional)', assistant_quiet_volume_below: 'Quiet when the volume is under',
+  assistant_orb: 'Mic opens a floating orb (tap it for the chat)', assistant_continue: 'Keep listening until dismissed', assistant_dismiss_phrases: 'Phrases that end the conversation', assistant_silence_timeout: 'Close after silence', assistant_end_of_speech_pause: 'Pause before sending', assistant_history_retention: 'Chat history', assistant_quiet_volume_entity: 'Volume sensor of the device (optional)', assistant_quiet_volume_below: 'Quiet when the volume is under',
   assistant_quiet_focus_entity: 'Focus / Do Not Disturb sensor (optional)', assistant_quiet_start: 'Quiet hours from', assistant_quiet_end: 'Quiet hours until',
   location_name: 'Weather location name (empty = Home Assistant\'s)', weather_sky_header: 'Weather popup: animated sky header (sunny, partly cloudy, cloudy, rain, snow; night sky after sunset)', swipe_screensaver: 'Swipe down for screensaver (grab bar at the top)', ss_hold: 'Keep the screensaver paused while the Home Screen is showing',
   side_tiles: 'Extra tile options, in order (1st = first extra tile): size, fit, tap opens enlarged view' });
@@ -6039,7 +6057,8 @@ class HVHubEditor extends HTMLElement {
       { const h3 = f.computeHelper; f.computeHelper = s => s.name === 'assistant_orb' ? 'On: the mic shows only an animated orb near the top (the dashboard stays clear); tap the orb for the chat. Off: the full chat opens.'
         : s.name === 'assistant_continue' ? 'After every reply the mic opens again in the same conversation, until you tap outside the orb, say one of the phrases below, or say nothing for a few seconds (Close after silence).'
         : s.name === 'assistant_dismiss_phrases' ? 'Comma-separated. Saying one of them (alone, or with words like "ok", "very much", "for now") closes the assistant without sending it; "thanks, also turn off the lights" is still a request.'
-        : s.name === 'assistant_silence_timeout' ? 'Seconds the mic waits for you after a reply; nothing said = the assistant closes and the mic stops.'
+        : s.name === 'assistant_silence_timeout' ? 'Seconds the mic waits for you to start speaking after a reply; nothing said at all = the assistant closes and the mic stops.'
+        : s.name === 'assistant_end_of_speech_pause' ? 'Seconds of quiet after you start speaking before your request is sent (1–5, default 2). Shorter pauses, while you think what to say next, keep recording.'
         : s.name === 'assistant_history_retention' ? 'How long this browser keeps the chat (shown when the chat opens). The default for devices; each device can choose its own (and clear it) in the assistant\'s settings button.'
         : s.name === 'assistant_quiet_volume_entity' ? 'Quiet mode is chosen on each device (Off / On / Auto) with the Quiet button in the assistant\'s chat. Quiet: the reply is not spoken, it shows as text under the orb. Auto uses this sensor when it reports a number (percent or 0-1), otherwise the quiet hours. A sensor belongs to one phone or tablet: set it on the dashboard that device uses.'
         : s.name === 'assistant_quiet_focus_entity' ? 'Auto is also quiet while this is on (e.g. a phone\'s Focus or Do Not Disturb sensor).' : s.name === 'assistant_quiet_start' ? 'Used by Auto when no volume sensor is set or it isn\'t reporting.' : h3(s); }
