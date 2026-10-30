@@ -1676,10 +1676,17 @@ ha-card::before,ha-card::after{content:none !important;display:none !important}
 .media ha-camera-stream.on{opacity:1}
 .ph{position:absolute;inset:0;display:flex;flex-direction:column;gap:6px;text-align:center;padding:0 12px;box-sizing:border-box;align-items:center;justify-content:center;color:rgba(255,255,255,.55);font-size:13px;font-weight:600;
  background:linear-gradient(160deg,#2b3340,#151a22)} .ph ha-icon{--mdc-icon-size:min(34px,22cqh)} .has .ph{display:none}
+.ph.poster{background:radial-gradient(120% 90% at 20% 0%,rgba(120,150,210,.38),rgba(0,0,0,0) 60%),radial-gradient(90% 80% at 100% 100%,rgba(150,120,220,.28),rgba(0,0,0,0) 60%),linear-gradient(160deg,#2b3340,#141821);color:rgba(255,255,255,.82)}
+.ph.poster .pi{display:flex;align-items:center;justify-content:center;width:min(54px,30cqh);height:min(54px,30cqh);border-radius:50%;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.24);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+.ph.poster .pi ha-icon{--mdc-icon-size:min(26px,15cqh)}
+.ph .pi{display:none} .ph.poster>ha-icon{display:none} .ph.poster .pi{display:flex}
+.err{position:absolute;inset:0;z-index:2;display:none;flex-direction:column;gap:10px;align-items:center;justify-content:center;text-align:center;padding:0 18px;box-sizing:border-box;
+ background:linear-gradient(160deg,rgba(43,51,64,.92),rgba(21,26,34,.94));font-size:13px;font-weight:600;color:rgba(255,255,255,.88)} .err.on{display:flex}
+.err button{padding:8px 18px;font-size:13px;font-weight:650} .err ha-icon{--mdc-icon-size:26px;opacity:.8}
 .hasrow .ph{padding:clamp(28px,22cqh,48px) 12px clamp(36px,30cqh,64px)} .ph.t ha-icon{opacity:.8}
-@container (max-height:180px){ .ph.t ha-icon{display:none} }
+@container (max-height:180px){ .ph.t>ha-icon{display:none} }
 .shade{position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(0,0,0,.42) 0%,rgba(0,0,0,0) 30%,rgba(0,0,0,0) 62%,rgba(0,0,0,.42) 100%)}
-.ov{position:absolute;left:var(--p);top:var(--p);right:var(--p);display:flex;align-items:center;gap:8px;pointer-events:none;--p:clamp(8px,4.5cqmin,16px)}
+.ov{position:absolute;z-index:3;left:var(--p);top:var(--p);right:var(--p);display:flex;align-items:center;gap:8px;pointer-events:none;--p:clamp(8px,4.5cqmin,16px)}
 :host([large]) .ov{--p:clamp(12px,3cqmin,22px);right:calc(var(--p) + 52px);top:calc(var(--p) + env(safe-area-inset-top,0px) * var(--hv-cam-safe,0) + 8px);left:calc(var(--p) + env(safe-area-inset-left,0px) * var(--hv-cam-safe,0))}
 .chip{display:flex;align-items:center;gap:7px;min-width:0;padding:5px 11px 5px 9px;border-radius:999px;background:rgba(20,22,28,.38);border:1px solid rgba(255,255,255,.16);
  backdrop-filter:blur(14px) saturate(150%);-webkit-backdrop-filter:blur(14px) saturate(150%);box-shadow:0 2px 10px rgba(0,0,0,.18)}
@@ -1739,6 +1746,14 @@ ha-icon,ha-state-icon{display:flex;color:inherit;--mdc-icon-size:calc(var(--b) *
 // 1.32.0: "Talk" opens the camera maker's app (Home Assistant has no two-way talk for Nest / Ring). Custom URL schemes: the iOS / Android
 // companion apps hand window.open() of these to the system (as HA's own "url" tap action does).
 const CAM_TALK = { google_home: { url: 'googlehome://', label: 'Google Home' }, ring: { url: 'ring://', label: 'Ring' } };
+// 1.32.0: the camera's maker from its integration (entity registry platform), else brand / attribution
+function camVendor(h, id) { const e = h && h.entities && h.entities[id], st = h && h.states[id], a = (st && st.attributes) || {};
+  const p = String((e && e.platform) || '').toLowerCase(), t = (String(a.brand || '') + ' ' + String(a.attribution || '')).toLowerCase();
+  if (p === 'nest' || /google nest|\bnest\b/.test(t)) return 'nest'; if (p === 'ring' || /ring\.com|\bring\b/.test(t)) return 'ring'; return p || ''; }
+const CAM_VENDOR = { nest: { badge: 'Nest', talk: 'google_home' }, ring: { badge: 'Ring', talk: 'ring' } };
+// Google's SDM API rate-limits live streams (GenerateWebRtcStream / ExtendWebRtcStream) per user: Nest tiles show a poster and only
+// the opened large view streams (one stream, stopped when it closes, no automatic retries)
+const CAM_RATE = /429|RESOURCE_EXHAUSTED|Too Many Requests|Rate limited/i;
 const CAM_EV_ICON = { doorbell: 'mdi:doorbell', motion: 'mdi:motion-sensor', button: 'mdi:gesture-tap-button' };
 function camWhen(h, v) { // event entity state (ISO time) -> "8:42 PM" today, "Yesterday 8:42 PM", else "Oct 27"
   const d = v && !UNAVAILABLE.includes(v) && v !== 'unknown' ? new Date(v) : null; if (!d || isNaN(d)) return 'none yet';
@@ -1760,7 +1775,8 @@ class HVCameraCard extends HTMLElement {
     if (ns !== ps && CAM_SIZES[ns]) cfg.grid_options = Object.assign({}, cfg.grid_options || {}, CAM_SIZES[ns]);
     if (Array.isArray(cfg.buttons)) { cfg.buttons = cfg.buttons.filter(b => b && b.entity).map(b => { const o = {}; for (const k of Object.keys(b)) if (b[k] !== '' && b[k] != null) o[k] = b[k]; return o; }); if (!cfg.buttons.length) delete cfg.buttons; }
     if (Array.isArray(cfg.events)) { cfg.events = cfg.events.filter(b => b && b.entity).map(b => { const o = {}; for (const k of Object.keys(b)) if (b[k] !== '' && b[k] != null) o[k] = b[k]; return o; }); if (!cfg.events.length) delete cfg.events; }
-    if (!cfg.talk_app || cfg.talk_app === 'none') { delete cfg.talk_app; } if (cfg.talk_app !== 'custom') { delete cfg.talk_url; delete cfg.talk_label; }
+    if (cfg.live_tile === true) cfg.live_tile = 'on'; else if (cfg.live_tile === false) cfg.live_tile = 'off'; else if (cfg.live_tile !== 'on' && cfg.live_tile !== 'off') delete cfg.live_tile;
+    if (!cfg.talk_app || cfg.talk_app === 'auto') { delete cfg.talk_app; } if (cfg.talk_app !== 'custom') { delete cfg.talk_url; delete cfg.talk_label; }
     return cfg;
   }
   setConfig(c) {
@@ -1780,12 +1796,18 @@ class HVCameraCard extends HTMLElement {
   getGridOptions() { const g = CAM_SIZES[(this._config || {}).size] || CAM_SIZES['2x3']; return Object.assign({}, g, { min_columns: 3, min_rows: 2 }); }
   getLayoutOptions() { const g = this.getGridOptions(); return { grid_columns: Math.max(1, Math.round(g.columns / 3)), grid_rows: g.rows, grid_min_columns: 1, grid_min_rows: 2 }; }
   connectedCallback() { this._render(); this._resetDrag(); this._timer(); setTimeout(() => this._swipeAttr(), 0); setTimeout(() => this._swipeAttr(), 400); }
-  disconnectedCallback() { clearInterval(this._iv); this._iv = null; }
+  disconnectedCallback() { clearInterval(this._iv); this._iv = null; const me = this; setTimeout(() => { if (!me.isConnected && me._streamEl) { me._stopStream(); me._mediaKey = null; } }, 0); }
   _timer() { clearInterval(this._iv); this._iv = setInterval(() => this._tick(), 1000); }
   get _stateObj() { return this._hass && this._config ? this._hass.states[this._config.entity] : undefined; }
   _btns() { return (this._config.buttons || []).map(b => typeof b === 'string' ? { entity: b } : b).filter(b => b && b.entity); }
   _evs() { return (this._config.events || []).map(b => typeof b === 'string' ? { entity: b } : b).filter(b => b && b.entity); }
-  _talk() { const c = this._config, t = CAM_TALK[c.talk_app]; if (c.talk_app === 'custom') return c.talk_url ? { url: c.talk_url, label: c.talk_label || 'app' } : null; return t || null; }
+  _vendor() { return camVendor(this._hass, this._config.entity); }
+  _badge() { const c = this._config; if (c.badge === 'none') return ''; if (c.badge && c.badge !== 'auto') return c.badge; const v = CAM_VENDOR[this._vendor()]; return v ? v.badge : ''; }
+  _talkApp() { const c = this._config; if (c.talk_app && c.talk_app !== 'auto') return c.talk_app; const v = CAM_VENDOR[this._vendor()]; return v ? v.talk : 'none'; }
+  // live video on the tile: live_tile true / false; default off for Nest (rate limits), on for the others. The large view always streams.
+  _tileLive() { const c = this._config; if (c.large) return true; if (c.live_tile === true || c.live_tile === 'on') return true; if (c.live_tile === false || c.live_tile === 'off') return false; return this._vendor() !== 'nest'; }
+  _noSnap() { return this._vendor() === 'nest'; } // Nest WebRTC cameras have no still images in Home Assistant
+  _talk() { const c = this._config, t = CAM_TALK[this._talkApp()]; if (this._talkApp() === 'custom') return c.talk_url ? { url: c.talk_url, label: c.talk_label || 'app' } : null; return t || null; }
   // large view: the glass control row (only controls that work: History = HA history of the camera + its events, Talk = vendor app,
   // Sound = unmute the live stream, shown once the stream carries an audio track)
   _ctlItems() { const c = this._config; if (!c.large) return []; const o = [], t = this._talk();
@@ -1798,6 +1820,7 @@ class HVCameraCard extends HTMLElement {
     if (k === 'hist') { const ids = [c.entity].concat(this._evs().map(e => e.entity)).join(','), st = new Date(Date.now() - 24 * 3600e3).toISOString();
       const path = `/history?entity_id=${encodeURIComponent(ids)}&start_date=${encodeURIComponent(st)}`; this._close();
       setTimeout(() => { history.pushState(null, '', path); fire(window, 'location-changed', { replace: false }); }, 380); return; }
+    if (k === 'retry') { this._err = null; this._$('.err').classList.remove('on'); this._mediaKey = null; this._ensureMedia(true); this._status(); return; }
     if (k === 'snd') { this._unmuted = !this._unmuted; this._applyMute(); this._sig = null; this._render(); }
   }
   _videos() { const o = [], w = r => { for (const e of r.querySelectorAll('*')) { if (e.tagName === 'VIDEO') o.push(e); if (e.shadowRoot) w(e.shadowRoot); } }; try { if (this._streamEl) w(this._streamEl.shadowRoot || this._streamEl); } catch (e) {} return o; }
@@ -1807,7 +1830,8 @@ class HVCameraCard extends HTMLElement {
     if (has) { this._hasAudio = true; this._sig = null; this._render(); } }
   _build() {
     this.shadowRoot.innerHTML = `<style>${CAM_CSS}</style><ha-card tabindex="0" role="button">
-      <div class="media"><div class="ph"><ha-icon icon="mdi:cctv"></ha-icon><span class="pt"></span></div><img alt=""><img alt=""></div><div class="shade"></div>
+      <div class="media"><div class="ph"><ha-icon icon="mdi:cctv"></ha-icon><span class="pi"><ha-icon icon="mdi:cctv"></ha-icon></span><span class="pt"></span></div><img alt=""><img alt=""></div><div class="shade"></div>
+      <div class="err"><ha-icon icon="mdi:video-off-outline"></ha-icon><span class="et"></span><button class="glass" data-own data-c="retry">Retry</button></div>
       <div class="ov"><div class="chip"><div class="nm"></div><span class="bdg"></span><div class="st"><span class="dot"></span><span class="sx"></span></div></div></div>
       <button class="x glass" data-own aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button>
       <div class="ev"></div><div class="row"></div><div class="ctl"></div><div class="grab" aria-hidden="true"></div></ha-card>`;
@@ -1842,7 +1866,7 @@ class HVCameraCard extends HTMLElement {
     this._$('.nm').style.display = c.show_name === false ? 'none' : ''; this._$('.st').style.display = c.show_status === false ? 'none' : '';
     this._$('.pt').textContent = !s ? 'Camera not found' : UNAVAILABLE.includes(s.state) ? 'Camera unavailable' : ''; this._$('.ph').classList.toggle('t', !!this._$('.pt').textContent);
     this._card.setAttribute('aria-label', name);
-    this._$('.bdg').textContent = c.badge || '';
+    this._$('.bdg').textContent = this._badge();
     const ev = this._$('.ev'); ev.innerHTML = ''; this._card.classList.toggle('hasev', evs.length > 0);
     for (const e of evs) { const x = this._hass.states[e.entity], dc = x && x.attributes.device_class;
       const el = document.createElement('div'); el.className = 'e'; const ic = document.createElement('ha-icon'); ic.icon = e.icon || CAM_EV_ICON[dc] || 'mdi:bell-ring-outline';
@@ -1867,13 +1891,16 @@ class HVCameraCard extends HTMLElement {
     this._fit(); this._status();
   }
   // live stream (ha-camera-stream, muted, no controls) over a snapshot that refreshes; snapshot mode = the snapshot only
+  _stopStream() { if (this._streamEl) { try { this._streamEl.remove(); } catch (e) {} this._streamEl = null; } this._live = false; }
   _ensureMedia() {
-    const c = this._config, s = this._stateObj, key = c.entity + '|' + c.camera_view + '|' + (s && !UNAVAILABLE.includes(s.state) ? 1 : 0);
+    const c = this._config, s = this._stateObj, live = this._tileLive() && c.camera_view !== 'snapshot';
+    const key = c.entity + '|' + c.camera_view + '|' + (s && !UNAVAILABLE.includes(s.state) ? 1 : 0) + '|' + (live ? 'L' : 'P');
     if (this._streamEl) { this._streamEl.hass = this._hass; }
     if (key === this._mediaKey) return; this._mediaKey = key;
-    if (this._streamEl) { this._streamEl.remove(); this._streamEl = null; } this._live = false;
-    this._lastSnap = 0; this._snapOk = false; this._snapErr = false; this._failed = false; this._snap();
-    if (!s || UNAVAILABLE.includes(s.state) || c.camera_view === 'snapshot') return;
+    this._stopStream(); this._err = null; const eo = this._$('.err'); if (eo) eo.classList.remove('on');
+    this._lastSnap = 0; this._snapOk = false; this._snapErr = false; this._failed = false; this._snapFails = 0; this._snap();
+    this._$('.ph').classList.toggle('poster', !live && this._noSnap());
+    if (!s || UNAVAILABLE.includes(s.state) || !live || !this.isConnected) { if (!this.isConnected) this._mediaKey = null; return; }
     const make = () => {
       if (this._mediaKey !== key) return;
       const v = document.createElement('ha-camera-stream'); v.hass = this._hass; v.stateObj = s; v.muted = true; v.controls = false; v.allowExoPlayer = false;
@@ -1890,32 +1917,42 @@ class HVCameraCard extends HTMLElement {
     })();
     return HVCameraCard._lp;
   }
+  // the HA player shows its errors in an ha-alert inside its shadow roots: read it, stop the stream (no retry loop), show our own message
+  _streamError() { const out = [], w = r => { for (const e of r.querySelectorAll('ha-alert')) out.push(e.textContent || ''); for (const e of r.querySelectorAll('*')) if (e.shadowRoot) w(e.shadowRoot); };
+    try { w(this._streamEl.shadowRoot || this._streamEl); } catch (e) {} const t = out.join(' ').trim(); return t || null; }
+  _showErr(m) { this._err = m; this._stopStream(); const rate = CAM_RATE.test(m);
+    this._$('.et').textContent = rate ? (this._vendor() === 'nest' ? 'Google is limiting live view. Try again in a minute.' : 'Live view is rate limited. Try again in a minute.') : 'Live view didn’t start. ' + m.replace(/\s+/g, ' ').slice(0, 120);
+    this._$('.err').classList.add('on'); this._status(); }
   _markLive() { if (!this._streamEl) return; this._streamEl.classList.add('on'); if (!this._live) { this._live = true; this._status(); } }
   _videoReady() { // the players live in nested shadow roots; a <video> with decoded frames = live
     const find = r => { for (const e of r.querySelectorAll('*')) { if (e.tagName === 'VIDEO' && e.readyState >= 2 && e.videoWidth) return true; if (e.tagName === 'IMG' && e.complete && e.naturalWidth && /mjpeg|camera_proxy_stream/.test(e.src)) return true; if (e.shadowRoot && find(e.shadowRoot)) return true; } return false; };
     try { return this._streamEl && find(this._streamEl.shadowRoot || this._streamEl); } catch (e) { return false; }
   }
   _snap() {
-    const s = this._stateObj; if (!s || UNAVAILABLE.includes(s.state) || !s.attributes.entity_picture || !this._hass) return;
+    const s = this._stateObj; if (!s || UNAVAILABLE.includes(s.state) || !s.attributes.entity_picture || !this._hass || this._noSnap()) return;
     this._lastSnap = Date.now();
     let u = s.attributes.entity_picture; u = this._hass.hassUrl ? this._hass.hassUrl(u) : u; u += (u.includes('?') ? '&' : '?') + '_t=' + Date.now();
     const pre = new Image(); pre.onload = () => { const nx = this._imgs[this._imgI ^ 1]; nx.src = u; nx.classList.add('on'); this._imgs[this._imgI].classList.remove('on'); this._imgI ^= 1; this._card.classList.add('has'); this._snapOk = true; this._status(); };
-    pre.onerror = () => { if (!this._snapOk) { this._snapErr = true; this._status(); } }; pre.src = u;
+    pre.onerror = () => { this._snapFails = (this._snapFails || 0) + 1; if (!this._snapOk) { this._snapErr = true; this._status(); } }; pre.src = u;
   }
   _tick() {
     if (!this._built || !this._config) return;
     if (this._streamEl && !this._live && this._videoReady()) this._markLive();
+    if (this._streamEl && !this._err) { const m = this._streamError(); if (m) this._showErr(m); }
     if (this._config.large && this._live) { this._audioCheck(); if (this._unmuted) this._applyMute(); }
-    const every = this._config.camera_view === 'snapshot' ? (this._config.large ? 3000 : 10000) : (this._live ? 0 : 10000);
+    let every = this._config.camera_view === 'snapshot' ? (this._config.large ? 3000 : 10000) : (this._live ? 0 : 10000);
+    if (every && this._snapFails) every = Math.min(300000, every * Math.pow(3, Math.min(this._snapFails, 4))); // failing snapshots: back off (no hammering)
     if (every && Date.now() - this._lastSnap > every) this._snap();
     if (this._streamEl && !this._live && Date.now() - this._streamAt > 25000 && !this._failed) { this._failed = true; this._status(); }
   }
   _status() {
     const c = this._config, s = this._stateObj, st = this._$('.st'); if (!st) return;
     let t; if (!s) t = 'Not found'; else if (UNAVAILABLE.includes(s.state)) t = 'Unavailable';
+    else if (this._err) t = CAM_RATE.test(this._err) ? 'Limited' : 'Error';
+    else if (!this._tileLive() && c.camera_view !== 'snapshot') t = this._snapOk ? 'Snapshot' : 'Tap for live';
     else if (c.camera_view === 'snapshot') t = this._snapErr && !this._snapOk ? 'No snapshot' : 'Snapshot'; else if (this._live) t = 'Live'; else if (this._failed) t = 'Snapshot'; else t = 'Connecting…';
     st.classList.toggle('live', t === 'Live'); this._$('.sx').textContent = t;
-    const pt = this._$('.pt'); if (s && !UNAVAILABLE.includes(s.state)) pt.textContent = t === 'No snapshot' ? 'No snapshot image' : t === 'Connecting…' ? 'Connecting…' : ''; this._$('.ph').classList.toggle('t', !!pt.textContent);
+    const pt = this._$('.pt'); if (s && !UNAVAILABLE.includes(s.state)) pt.textContent = t === 'No snapshot' ? 'No snapshot image' : t === 'Connecting…' ? 'Connecting…' : t === 'Tap for live' ? 'Tap for live view' : ''; this._$('.ph').classList.toggle('t', !!pt.textContent);
   }
   _runButton(i) {
     const b = this._btns()[i]; if (!b) return; const d = domainOf(b.entity);
@@ -1976,19 +2013,20 @@ HVCameraCard.schema = [
     tap_action: { label: 'Tap action (default: toggle, or more-info if it can’t toggle)', selector: { ui_action: { default_action: 'toggle' } } } } } } },
   { type: 'grid', name: '', schema: [{ name: 'show_name', selector: { boolean: {} } }, { name: 'show_status', selector: { boolean: {} } }] },
   { name: 'badge', selector: { text: {} } },
+  { name: 'live_tile', selector: { select: { mode: 'dropdown', options: [{ value: 'auto', label: 'Automatic (Nest: picture, tap for live; others: live)' }, { value: 'on', label: 'Live video on the tile' }, { value: 'off', label: 'No live video on the tile (tap for live)' }] } } },
   { name: 'events', selector: { object: { multiple: true, label_field: 'name', description_field: 'entity', fields: {
     entity: { label: 'Event entity', required: true, selector: { entity: { domain: 'event' } } },
     name: { label: 'Name (optional, e.g. Doorbell, Motion)', selector: { text: {} } },
     icon: { label: 'Icon (optional)', selector: { icon: {} } } } } } },
   { type: 'expandable', name: '', flatten: true, title: 'Large view (tap the picture)', icon: 'mdi:arrow-expand', schema: [
     { name: 'tap_opens', selector: { boolean: {} } },
-    { name: 'talk_app', selector: { select: { mode: 'dropdown', options: [{ value: 'none', label: 'No Talk button' }, { value: 'google_home', label: 'Google Home app (Nest)' }, { value: 'ring', label: 'Ring app' }, { value: 'custom', label: 'Another app (URL below)' }] } } },
+    { name: 'talk_app', selector: { select: { mode: 'dropdown', options: [{ value: 'auto', label: 'Automatic (Nest: Google Home, Ring: Ring)' }, { value: 'none', label: 'No Talk button' }, { value: 'google_home', label: 'Google Home app (Nest)' }, { value: 'ring', label: 'Ring app' }, { value: 'custom', label: 'Another app (URL below)' }] } } },
     { type: 'grid', name: '', schema: [{ name: 'talk_url', selector: { text: {} } }, { name: 'talk_label', selector: { text: {} } }] },
     { type: 'grid', name: '', schema: [{ name: 'show_history', selector: { boolean: {} } }, { name: 'show_sound', selector: { boolean: {} } }] },
     { name: 'popup_style', selector: { select: { mode: 'dropdown', options: [{ value: 'fullscreen', label: 'Full screen (edge to edge, swipe down to close)' }, { value: 'window', label: 'Window (rounded panel)' }] } } },
     { name: 'swipe_to_close', selector: { boolean: {} } }] }];
 Object.assign(LABELS, { show_name: 'Show name', camera_view: 'Live or snapshot', size: 'Size', buttons: 'Buttons', show_status: 'Show status (Live / Snapshot)', tap_opens: 'Open the large view on tap',
-  badge: 'Label next to the name (e.g. Nest, Ring)', events: 'Last-event chips', talk_app: 'Talk button (opens the camera app)', talk_url: 'App URL (Another app)', talk_label: 'App name (Another app)',
+  badge: 'Label next to the name (empty = the camera’s maker, e.g. Nest, Ring; none = no label)', live_tile: 'Live video on the tile', events: 'Last-event chips', talk_app: 'Talk button (opens the camera app)', talk_url: 'App URL (Another app)', talk_label: 'App name (Another app)',
   show_history: 'History button', show_sound: 'Sound button (when the stream has audio)' });
 Object.assign(HELPERS, {
   buttons: 'Glass buttons along the bottom of the tile and the large view. They light up when the entity is on.',
