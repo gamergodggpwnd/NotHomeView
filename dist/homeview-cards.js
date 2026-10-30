@@ -1725,6 +1725,7 @@ ha-icon,ha-state-icon{display:flex;color:inherit;--mdc-icon-size:calc(var(--b) *
  backdrop-filter:blur(14px) saturate(150%);-webkit-backdrop-filter:blur(14px) saturate(150%);font-size:clamp(10px,5cqmin,12px);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ev .e ha-icon{--mdc-icon-size:14px;flex:none} .ev .e span{overflow:hidden;text-overflow:ellipsis}
 @container (max-height:120px){ .ev .e:nth-child(n+2){display:none} }
+@container (max-height:180px){ .ev{flex-wrap:nowrap;overflow:hidden} .ph.poster *{display:none !important} }
 :host([large]) .ev{justify-content:center;--p:clamp(14px,3cqmin,26px);bottom:calc(var(--p) + env(safe-area-inset-bottom,0px) * var(--hv-cam-safe,0))}
 :host([large]) ha-card.hasctl .ev{bottom:calc(var(--p) + env(safe-area-inset-bottom,0px) * var(--hv-cam-safe,0) + 132px)}
 :host([large]) .ev .e{font-size:13px;padding:6px 12px 6px 10px}
