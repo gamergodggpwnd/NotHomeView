@@ -112,10 +112,17 @@ and Wallpanel 4.67.2.
 | `assistant_theme` | `same` | `same` (device pages theme), `day`, `night` or `auto` |
 | `assistant_auto_listen` | `true` | Start listening as soon as it opens |
 | `assistant_speak` | `true` | Play the spoken reply (the pipeline's text-to-speech) |
+| `assistant_orb` | `true` | The mic shows only a floating animated orb near the top (no blur over the dashboard); tap the orb for the chat |
+| `assistant_quiet_volume_entity` | `''` | Quiet mode *Auto*: the device's volume sensor (percent or 0–1); quiet under `assistant_quiet_volume_below` |
+| `assistant_quiet_volume_below` | `5` | Quiet mode *Auto*: volume threshold in % |
+| `assistant_quiet_focus_entity` | `''` | Quiet mode *Auto*: a Focus / Do Not Disturb sensor; quiet while it is on |
+| `assistant_quiet_start` / `assistant_quiet_end` | `23:30` / `10:00` | Quiet mode *Auto*: quiet hours, used when no volume sensor is set or it isn't reporting |
 | `timer_sound` | `true` | Chime when a timer ends |
 | `popup_edit` | `true` | Edit pencil next to ✕ in popups (admins only) |
 | `photo_source_mode` | `media` | `media` (media folder, `photo_source`) or `album` (`photo_album_url`) |
 | `photo_album_url` | `''` | Shared album link (Google Photos, iCloud, OneDrive) |
+
+Quiet mode is chosen on each device (Off / On / Auto) with the **Quiet** button in the assistant's chat header and kept in that browser (localStorage). In quiet mode the reply is not spoken: your words and the answer appear as a glass caption under the orb.
 
 Microphone notes: browsers only allow the microphone on HTTPS pages. In the Home Assistant Companion app and kiosk browsers, the app itself also needs
 microphone permission (Android: app settings → Permissions → Microphone; Fully Kiosk: enable microphone access). If access is blocked, the popup

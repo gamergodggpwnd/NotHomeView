@@ -4847,20 +4847,7 @@ const ASSIST_CSS = `:host{position:fixed;inset:0;z-index:11;font-family:${FONT};
 .wrap{position:absolute;inset:0;opacity:0;transform:translate3d(0,24px,0);transition:opacity .28s ease,transform .38s cubic-bezier(.2,.9,.3,1)} :host(.in) .wrap{opacity:1;transform:none}
 .bg{position:absolute;inset:0;background:rgba(242,242,247,.94);backdrop-filter:blur(34px) saturate(150%);-webkit-backdrop-filter:blur(34px) saturate(150%)}
 :host([night]) .bg{background:rgba(8,8,12,.93)}
-/* Siri-like glowing edge: a spinning conic gradient, shown only near the screen edges (two soft layers) */
-.edge{position:absolute;inset:0;pointer-events:none;opacity:var(--eo,.3);transition:opacity .45s ease}
-.edge i{position:absolute;inset:0;overflow:hidden;--ew:28px;
- -webkit-mask-image:linear-gradient(90deg,#000,transparent var(--ew),transparent calc(100% - var(--ew)),#000),linear-gradient(180deg,#000,transparent var(--ew),transparent calc(100% - var(--ew)),#000);
- mask-image:linear-gradient(90deg,#000,transparent var(--ew),transparent calc(100% - var(--ew)),#000),linear-gradient(180deg,#000,transparent var(--ew),transparent calc(100% - var(--ew)),#000);transition:--ew .4s}
-.edge i.g1{--ew:7px} .edge i.g2{--ew:calc(var(--gw,34px) * var(--lvs,1));opacity:.75}
-.edge b{position:absolute;left:50%;top:50%;width:max(160vw,160vh);height:max(160vw,160vh);margin:calc(max(160vw,160vh) / -2) 0 0 calc(max(160vw,160vh) / -2);
- background:conic-gradient(#ff5fd2,#a259ff,#3b82ff,#2fe0d0,#ffd25e,#ff7a59,#ff5fd2);animation:hvsp var(--sp,14s) linear infinite;will-change:transform}
 @keyframes hvsp{to{transform:rotate(360deg)}}
-:host([st=idle]) .edge{--eo:.28} :host([st=idle]) .edge i.g2{--gw:26px}
-:host([st=listening]) .edge{--eo:calc(.7 + var(--lv0,0) * .3);--sp:5s} :host([st=listening]) .edge i.g2{--gw:70px}
-:host([st=thinking]) .edge{--eo:.9;--sp:1.6s} :host([st=thinking]) .edge i.g2{--gw:56px}
-:host([st=speaking]) .edge{--eo:1;--sp:3.5s;animation:hvep 1.1s ease-in-out infinite} :host([st=speaking]) .edge i.g2{--gw:84px}
-@keyframes hvep{50%{opacity:.62}}
 .cd{position:absolute;inset:0;display:flex;flex-direction:column;box-sizing:border-box;
  padding:calc(var(--st) + 6px) max(14px,var(--sr)) max(12px,var(--sb)) max(14px,var(--sl))}
 .col{width:100%;max-width:780px;margin:0 auto;min-height:0;display:flex;flex-direction:column}
@@ -4913,7 +4900,48 @@ const ASSIST_CSS = `:host{position:fixed;inset:0;z-index:11;font-family:${FONT};
 .snd{all:unset;cursor:pointer;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#0a84ff} .snd ha-icon{--mdc-icon-size:24px;display:flex}
 .jump{all:unset;cursor:pointer;position:absolute;left:50%;transform:translateX(-50%);bottom:calc(max(12px,var(--sb)) + 70px);padding:6px 12px;border-radius:999px;background:var(--fg);color:var(--bub);font-size:13px;font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,.2);display:none}
 :host([night]) .jump{color:#000} .jump.on{display:block}
-@media (prefers-reduced-motion:reduce){.edge b,.orb::before,.dots i,.m,.m.u .w,.edge{animation:none !important} .wrap{transition:opacity .2s}}`;
+/* 1.32.0: quiet mode (per device) in the header */
+.qb{all:unset;cursor:pointer;flex:none;height:34px;padding:0 12px 0 10px;border-radius:17px;display:flex;align-items:center;gap:5px;background:var(--inp);color:var(--fg2);font-size:13px;font-weight:600;white-space:nowrap}
+.qb ha-icon{--mdc-icon-size:18px;display:flex} .qb.on{color:#0a84ff} :host([night]) .qb.on{color:#64b5ff}
+.qp{flex:none;margin:0 4px 10px;padding:12px 14px;border-radius:18px;background:var(--crd);border:1px solid var(--sep)} .qp[hidden]{display:none}
+.qp .qh{font-size:12px;font-weight:700;color:var(--fg2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px}
+.seg{display:flex;gap:3px;padding:3px;border-radius:12px;background:var(--inp)}
+.seg button{all:unset;cursor:pointer;flex:1;text-align:center;padding:8px 0;border-radius:9px;font-size:15px;font-weight:600;color:var(--fg)}
+.seg button.sel{background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.14)} :host([night]) .seg button.sel{background:rgba(255,255,255,.22)}
+.qd{margin-top:9px;font-size:13px;line-height:1.4;color:var(--fg2)} .qd b{color:var(--fg);font-weight:600}
+/* 1.32.0: the floating orb (mic button): only the orb over the clear dashboard (no blur, no dimming, no glowing edge); tap it for the chat */
+.ov{position:absolute;inset:0;display:none;opacity:0;transition:opacity .25s ease} :host([orb]) .ov{display:block} :host([orb].in) .ov{opacity:1} :host([orb]) .wrap{display:none}
+.ow{position:absolute;left:0;right:0;margin:0 auto;top:max(46px,calc(var(--st) + 6px));width:min(330px,calc(100vw - 32px));display:flex;flex-direction:column;align-items:center;
+ color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.55),0 0 12px rgba(0,0,0,.45);pointer-events:none;transform-origin:50% 0;animation:hvop .45s cubic-bezier(.2,1.25,.4,1) backwards} /* backwards, not both: a held opacity animation would stop the caption's backdrop blur */
+@keyframes hvop{from{opacity:0;transform:scale(.55) translate3d(0,-10px,0)}}
+.bo{all:unset;cursor:pointer;pointer-events:auto;position:relative;flex:none;--os:116px;width:var(--os);height:var(--os);border-radius:50%;transform:scale(var(--lv,1));
+ transition:width .35s cubic-bezier(.2,.9,.3,1),height .35s cubic-bezier(.2,.9,.3,1),transform .08s linear;-webkit-tap-highlight-color:transparent}
+:host([cap]) .bo{--os:92px}
+.bo span{position:absolute;border-radius:50%;display:block}
+.bo .ha{inset:-26px;background:conic-gradient(from 200deg,#ff5fd2,#a259ff,#3b82ff,#2fe0d0,#ffd25e,#ff7a59,#ff5fd2);filter:blur(26px);opacity:.55;animation:hvsp 6s linear infinite}
+.bo .ri{inset:-3px;background:conic-gradient(from 200deg,#ff5fd2,#a259ff,#3b82ff,#2fe0d0,#ffd25e,#ff7a59,#ff5fd2);filter:blur(3px);opacity:.95;animation:hvsp 6s linear infinite}
+.bo .co{inset:0;overflow:hidden;background:radial-gradient(circle at 50% 30%,rgba(90,90,115,.9) 0,rgba(22,22,34,.94) 58%,rgba(6,6,12,.97) 100%);
+ box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.28),inset 0 -18px 30px rgba(160,110,255,.45),inset 0 14px 26px rgba(80,200,255,.30)}
+.bo .bd1{left:14%;right:14%;top:48%;height:16%;background:linear-gradient(90deg,transparent,#ff7ad9 18%,#a98bff 36%,#6fb6ff 52%,#5ff0e0 66%,#ffe27a 82%,transparent);filter:blur(6px);opacity:.95;animation:hvbw 3.2s ease-in-out infinite}
+.bo .bd2{left:24%;right:24%;top:56%;height:7%;background:linear-gradient(90deg,transparent,#fff 40%,#fff 60%,transparent);filter:blur(4px);opacity:.55;animation:hvbw 3.2s ease-in-out infinite reverse}
+.bo .sp{left:22%;top:8%;width:56%;height:30%;background:linear-gradient(rgba(255,255,255,.55),rgba(255,255,255,0));filter:blur(1px)}
+.bo .li{left:16%;right:16%;bottom:10%;height:22%;border-radius:0 0 999px 999px;box-shadow:inset 0 -1.5px 0 rgba(255,255,255,.35)}
+@keyframes hvbw{0%,100%{transform:rotate(-6deg) translate3d(-7%,0,0) scaleX(.9)}50%{transform:rotate(-6deg) translate3d(7%,0,0) scaleX(1.08)}}
+:host([st=listening]) .bo .ha{opacity:calc(.55 + var(--lv0,0) * .4);animation-duration:2.6s} :host([st=listening]) .bo .ri{animation-duration:2.6s} :host([st=listening]) .bo .bd1{animation-duration:1.3s}
+:host([st=thinking]) .bo .ha,:host([st=thinking]) .bo .ri{animation-duration:.9s} :host([st=thinking]) .bo .ha{opacity:.8}
+:host([st=speaking]) .bo .ha{animation:hvsp 3s linear infinite,hvpl 1.1s ease-in-out infinite} :host([st=speaking]) .bo .co{animation:hvps 1.1s ease-in-out infinite}
+@keyframes hvpl{50%{opacity:.85}} @keyframes hvps{50%{transform:scale(1.04)}}
+.ost{margin-top:24px;font-size:15px;font-weight:600;letter-spacing:.2px;display:flex;align-items:center;gap:8px;min-height:18px} .ost .wave{margin-left:0} .ost .wave i{background:#fff;height:calc(5px + var(--k) * 6px + var(--lv0,0) * var(--k) * 10px)}
+:host(:not([st=listening])) .ost .wave{display:none}
+.ohint{margin-top:6px;font-size:12px;opacity:.75}
+:host([cap]) .ost,:host([cap]) .ohint{display:none}
+.cap{pointer-events:auto;cursor:pointer;margin-top:22px;width:100%;box-sizing:border-box;padding:14px 16px;border-radius:22px;color:#fff;text-shadow:none;background:rgba(20,22,34,.55);
+ backdrop-filter:blur(24px) saturate(140%);-webkit-backdrop-filter:blur(24px) saturate(140%);box-shadow:inset 0 0 0 1px rgba(255,255,255,.2),0 10px 30px rgba(0,0,0,.35);animation:hvmi .3s ease backwards}
+.cap[hidden]{display:none} .cap .q{font-size:13px;opacity:.6;margin-bottom:6px;overflow-wrap:anywhere} .cap .q:empty{display:none}
+.cap .a{font-size:17px;line-height:1.35;font-weight:500;white-space:pre-wrap;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:7;overflow:hidden}
+.cap.er .a{font-size:15px;color:#ffb4ab}
+.cap .mt{margin-top:10px;display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:11px;opacity:.65} .cap .mt span{display:flex;align-items:center;gap:4px} .cap .mt ha-icon{--mdc-icon-size:13px;display:flex}
+@media (prefers-reduced-motion:reduce){.orb::before,.dots i,.m,.m.u .w,.bo span,.ow,.cap{animation:none !important} .wrap{transition:opacity .2s}}`;
 // response text -> intro + rows (markdown lists, "Day:" headings, times, all-day items)
 function hvAssistRows(text) {
   const lines = String(text || '').replace(/\*\*|__|`/g, '').split(/\n+/).map(x => x.trim()).filter(Boolean); let intro = [], rows = [];
@@ -4964,18 +4992,57 @@ async function hvAssistCalendar(hub, el, q, keep) {
     html += `<div class="ev" style="--cc:${e.col}"><i></i><span class="s">${esc(e.s)}</span><span class="tm">${e.ad ? 'All day' : esc(e.st.toLocaleTimeString(lang, { hour: 'numeric', minute: '2-digit', hour12: to12 }))}</span></div>`; }
   if (evs.length > list.length) html += `<div class="none">+${evs.length - list.length} more</div>`;
   card.innerHTML = html; keep(); return true; }
-function hvAssist(hub) {
+/* 1.32.0: quiet mode, chosen per device (Off / On / Auto, kept in this browser's localStorage like the timer). Quiet = the reply is not spoken;
+ * the request and the answer show as a caption under the orb. Auto: the card's volume sensor when it reports a number (quiet under
+ * assistant_quiet_volume_below %, default 5; percent or 0-1), otherwise the quiet hours (assistant_quiet_start / _end, default 23:30-10:00);
+ * a Focus / Do Not Disturb sensor that is on (assistant_quiet_focus_entity) makes it quiet too. */
+const HV_QUIET_LS = 'nothomeview-assistant-quiet';
+const hvQuietPref = () => { try { const v = localStorage.getItem(HV_QUIET_LS); return v === 'on' || v === 'auto' ? v : 'off'; } catch (e) { return 'off'; } };
+const hvQuietSet = v => { try { if (v === 'on' || v === 'auto') localStorage.setItem(HV_QUIET_LS, v); else localStorage.removeItem(HV_QUIET_LS); } catch (e) { /* no storage */ } };
+const hvHm = (s, d) => { const m = /^\s*(\d{1,2}):(\d{2})/.exec(String(s == null ? '' : s)); return m ? Math.min(23, +m[1]) * 60 + Math.min(59, +m[2]) : d; };
+const hvHmTxt = m => new Date(2000, 0, 1, Math.floor(m / 60), m % 60).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+function hvQuietNow(c, h) {
+  const mode = hvQuietPref(), S = id => (id && h && h.states && h.states[id]) || null, nm = s => (s.attributes && s.attributes.friendly_name) || s.entity_id;
+  if (mode === 'off') return { mode, quiet: false, why: '', desc: 'Replies are spoken (when the assistant has a voice).' };
+  if (mode === 'on') return { mode, quiet: true, why: 'Quiet mode', desc: 'Replies are not spoken: your request and the answer appear as text under the orb.' };
+  const fs = S(c.assistant_quiet_focus_entity), focus = !!fs && !/^(off|false|none|unknown|unavailable|)$/i.test(String(fs.state).trim());
+  const vs = S(c.assistant_quiet_volume_entity), vn = vs ? parseFloat(vs.state) : NaN, thr = Number(c.assistant_quiet_volume_below) > 0 ? Number(c.assistant_quiet_volume_below) : 5;
+  let quiet = false, why = '', desc;
+  if (vs && isFinite(vn)) { const pct = (vs.attributes && vs.attributes.unit_of_measurement === '%') || vn > 1 ? vn : vn * 100;
+    desc = `Auto: quiet when ${nm(vs)} is under ${thr}% (now ${Math.round(pct)}%).`; if (pct < thr) { quiet = true; why = `Volume under ${thr}%`; } }
+  else { const a = hvHm(c.assistant_quiet_start, 1410), b = hvHm(c.assistant_quiet_end, 600), d = new Date(), n = d.getHours() * 60 + d.getMinutes();
+    const inside = a === b ? false : a < b ? n >= a && n < b : n >= a || n < b;
+    desc = `Auto: quiet from ${hvHmTxt(a)} to ${hvHmTxt(b)}` + (vs ? ` (${nm(vs)} isn't reporting).` : ' (no volume sensor set for this Home Screen).'); if (inside) { quiet = true; why = 'Quiet hours'; } }
+  if (fs) desc += ` Also quiet while ${nm(fs)} is on.`; if (focus && !quiet) { quiet = true; why = 'Focus is on'; }
+  return { mode, quiet, why, desc: desc + (quiet ? ` Quiet now (${why.toLowerCase()}).` : ' Not quiet right now.') }; }
+function hvAssist(hub, o) {
+  o = o || {}; let compact = !!o.orb;
   const c = hub._config, h0 = hub._hass; const theme = c.assistant_theme && c.assistant_theme !== 'same' ? c.assistant_theme : c.theme;
   const host = document.createElement('homeview-assist'), sr = host.attachShadow({ mode: 'open' }); host.toggleAttribute('night', hvMode(theme, h0) !== 'day');
-  sr.innerHTML = `<style>${ASSIST_CSS}</style><div class="wrap"><div class="bg"></div><div class="edge" aria-hidden="true"><i class="g2"><b></b></i><i class="g1"><b></b></i></div>
+  sr.innerHTML = `<style>${ASSIST_CSS}</style><div class="ov"><div class="ow"><button class="bo" aria-label="Open the chat"><span class="ha"></span><span class="ri"></span><span class="co"><span class="bd1"></span><span class="bd2"></span><span class="sp"></span><span class="li"></span></span></button>
+    <div class="ost" role="status"><span class="wave" aria-hidden="true"><i style="--k:.5"></i><i style="--k:.8"></i><i style="--k:1"></i><i style="--k:.6"></i><i style="--k:.9"></i><i style="--k:.45"></i><i style="--k:.7"></i></span><span class="olt"></span></div>
+    <div class="ohint">Tap the orb to see the chat</div><div class="cap" hidden aria-live="polite"><div class="q"></div><div class="a"></div><div class="mt"><span class="why"></span><span>Tap orb for chat</span></div></div></div></div>
+    <div class="wrap"><div class="bg"></div>
     <div class="cd" role="dialog" aria-modal="true" aria-label="Assistant"><div class="col" style="flex:1 1 auto">
-    <div class="hd"><div class="grab" aria-hidden="true"></div><div class="orb" aria-hidden="true"></div><div class="ti"><b>Assistant</b><span class="pl"></span></div><button class="x" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button></div>
+    <div class="hd"><div class="grab" aria-hidden="true"></div><div class="orb" aria-hidden="true"></div><div class="ti"><b>Assistant</b><span class="pl"></span></div><button class="qb" aria-label="Quiet mode on this device" aria-expanded="false"><ha-icon></ha-icon><span></span></button><button class="x" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button></div>
+    <div class="qp" hidden><div class="qh">Quiet mode · this device</div><div class="seg" role="radiogroup" aria-label="Quiet mode"><button data-q="off" role="radio">Off</button><button data-q="on" role="radio">On</button><button data-q="auto" role="radio">Auto</button></div><div class="qd"></div></div>
     <div class="bd"><div class="log" aria-live="polite"></div></div>
     <div class="ft"><button class="mic" aria-label="Speak"><ha-icon icon="mdi:microphone"></ha-icon></button><form class="in"><input type="text" enterkeyhint="send" autocomplete="off" placeholder="Type to Assist…" aria-label="Type a request"><button class="snd" type="submit" aria-label="Send"><ha-icon icon="mdi:arrow-up-circle"></ha-icon></button></form></div>
     </div></div><button class="jump" aria-label="Show the newest message">Newest ↓</button></div>`;
   const $ = s => sr.querySelector(s), wrap = $('.wrap'), bd = $('.bd'), log = $('.log'), mic = $('.mic'), inp = $('input'), orb = $('.orb'), jump = $('.jump');
+  const ov = $('.ov'), bo = $('.bo'), olt = $('.olt'), cap = $('.cap'); host.toggleAttribute('orb', compact);
   const pipe = c.assistant_pipeline && c.assistant_pipeline !== 'preferred' ? c.assistant_pipeline : null; let convId = null, rec = null, unsub = null, closed = false, audioEl = null, runTok = 0;
-  const st = s => host.setAttribute('st', s);
+  // 1.32.0: the orb (compact) view: status under the orb, the caption (quiet mode / no voice) and closing itself a few seconds after the reply
+  let asked = false, capMode = compact, capWhy = '', capShown = false, dt = null;
+  const orbLabel = { listening: 'Listening…', thinking: 'Thinking…', speaking: 'Speaking…' };
+  const showCap = (q, a, why, er) => { if (!compact) return; if (q != null) cap.querySelector('.q').textContent = q ? `“${q}”` : ''; cap.querySelector('.a').textContent = a || '';
+    cap.querySelector('.why').innerHTML = why ? `<ha-icon icon="${er ? 'mdi:alert-circle-outline' : 'mdi:volume-off'}"></ha-icon>${esc(why)}` : ''; cap.classList.toggle('er', !!er);
+    cap.hidden = false; capShown = true; host.setAttribute('cap', ''); };
+  const hideCap = () => { cap.hidden = true; capShown = false; host.removeAttribute('cap'); };
+  const st = s => { host.setAttribute('st', s); if (!compact) return; clearTimeout(dt); dt = null; olt.textContent = orbLabel[s] || (asked ? '' : 'Listening…');
+    if (s === 'listening') hideCap();
+    if (s === 'idle' && asked) { const n = capShown ? (cap.querySelector('.a').textContent.length + cap.querySelector('.q').textContent.length) : 0;
+      dt = setTimeout(() => { if (compact) close(); }, capShown ? Math.max(5000, Math.min(14000, 4000 + n * 55)) : 2500); } };
   // --- the chat: newest at the bottom; follows new content only while the user is at the bottom
   let stick = true; const atEnd = () => bd.scrollHeight - bd.scrollTop - bd.clientHeight < 48;
   const keep = () => { if (stick) requestAnimationFrame(() => { bd.scrollTop = bd.scrollHeight; }); else jump.classList.add('on'); };
@@ -4986,9 +5053,10 @@ function hvAssist(hub) {
   const rowsHtml = list => list.map(x => x.h ? `<div class="sec">${esc(x.h)}</div>` : `<div class="row ${x.c || 'p'}"><ha-icon icon="${esc(x.i || 'mdi:circle-small')}"></ha-icon><span class="tx">${esc(x.t)}</span>${x.r ? `<span class="rt">${esc(x.r)}</span>` : ''}</div>`).join('');
   const botMsg = () => add('a', '<div class="re"><span class="dots"><i></i><i></i><i></i></span></div><div class="rows"></div>');
   const fill = (m, text, extra) => { const r = hvAssistRows(text), re = m.querySelector('.re'); re.textContent = r.intro || (r.rows.length ? '' : text || '');
+    if (compact && asked && capMode) showCap(null, [re.textContent].concat((extra || []).concat(r.rows).filter(x => x.t).map(x => '• ' + x.t + (x.r ? ' · ' + x.r : ''))).filter(Boolean).join('\n'), capWhy || 'Shown as text');
     m.classList.toggle('hi', !r.rows.length && !(extra || []).length && re.textContent.length < 40); m.querySelector('.rows').innerHTML = rowsHtml((extra || []).concat(r.rows)); keep(); };
   const say = (text, extra) => { const m = botMsg(); fill(m, text, extra); return m; };
-  const note = (m, msg) => { if (!msg) return; const e = document.createElement('div'); e.className = 'err'; e.setAttribute('role', 'alert'); e.textContent = msg; (m || add('a', '')).appendChild(e); keep(); };
+  const note = (m, msg) => { if (!msg) return; if (compact) { asked = true; showCap(null, msg, 'Tap orb for details', true); } const e = document.createElement('div'); e.className = 'err'; e.setAttribute('role', 'alert'); e.textContent = msg; (m || add('a', '')).appendChild(e); keep(); };
   // first message + suggestions (they go away with the first request)
   const hello = say('How can I help?'); const sugEl = document.createElement('div'); sugEl.className = 'sug';
   sugEl.innerHTML = "<button>What time is it?</button><button>What's the weather like?</button><button>What's on my calendar?</button><button>Set a timer for 10 minutes</button>"; hello.appendChild(sugEl);
@@ -5000,14 +5068,18 @@ function hvAssist(hub) {
   const noStt = p => `“${p.name}” has no speech-to-text set up, so it can only read what you type. Type below, or choose a pipeline with speech-to-text (Settings → Voice assistants).`;
   // conversation agents that fail (an expired or wrong API key, the service is down) often answer with a generic apology instead of an error
   const agentErr = (sp, rt) => (rt === 'error' && !sp) || /unexpected error|problem (talking|communicating)|(invalid|incorrect|wrong) api key|unauthori[sz]ed|authenticat(ion|e) (error|failed)|quota|rate limit/i.test(sp || '');
-  const stopRec = () => { if (!rec) return; const r = rec; rec = null; try { r.stop(); } catch (e) {} orb.style.removeProperty('--lv'); host.style.removeProperty('--lv0'); };
+  const stopRec = () => { if (!rec) return; const r = rec; rec = null; try { r.stop(); } catch (e) {} host.style.removeProperty('--lv'); host.style.removeProperty('--lv0'); };
   const endRun = () => { if (unsub) { const u = unsub; unsub = null; Promise.resolve(u).then(f => f && f()).catch(() => {}); } };
   // closing clears the chat and the conversation (a new popup starts fresh)
-  const close = () => { if (closed) return; closed = true; runTok++; stopRec(); endRun(); convId = null; if (audioEl) { try { audioEl.pause(); } catch (e) {} }
+  const close = () => { if (closed) return; closed = true; clearTimeout(dt); runTok++; stopRec(); endRun(); convId = null; if (audioEl) { try { audioEl.pause(); } catch (e) {} }
     removeEventListener('keydown', key); host.classList.remove('in'); setTimeout(() => host.remove(), 320); hub._assistO = null; hvFhOpen.delete(host); };
   const key = e => { if (e.key === 'Escape' && !(HVTM.scr && HVTM.scr.isConnected)) close(); };
   // swipe down to close: from the header (always) or anywhere once the chat is scrolled to the top (hvSwipeClose leaves a scrolled list alone)
-  hvFhOpen.add(host);
+  if (!compact) hvFhOpen.add(host);
+  // tap the orb (or its caption): the chat; tap anywhere else: close (only the orb is on screen, the dashboard stays clear)
+  const expand = () => { if (!compact || closed) return; compact = false; clearTimeout(dt); dt = null; host.removeAttribute('orb'); host.removeAttribute('cap'); host.classList.remove('in'); hvFhOpen.add(host);
+    requestAnimationFrame(() => requestAnimationFrame(() => { host.classList.add('in'); stick = true; bd.scrollTop = bd.scrollHeight; })); };
+  ov.addEventListener('click', e => { const p = e.composedPath(); if (p.includes(bo) || p.includes(cap)) expand(); else close(); });
   hvSwipeClose({ el: wrap, alive: () => host.isConnected && !closed, close, grab: (path, y) => y < $('.hd').getBoundingClientRect().bottom,
     dragOk: path => !path.some(n => n === $('.ft') || n === jump) });
   // a local timer command? (works with every pipeline, no satellite needed). The countdown opens over the chat; the chat stays.
@@ -5022,9 +5094,10 @@ function hvAssist(hub) {
     else if (ti.cmd === 'resume') { HVTM.resume(); say(`Timer resumed: ${hvSayLeft(HVTM.left())} left.`); setTimeout(() => { if (!closed) HVTM.show(); }, 900); }
     else say(s.done ? 'Your timer is done.' : `${hvSayLeft(HVTM.left())} left${s.paused != null ? ' (paused)' : ''}.`);
     st('idle'); return true; };
-  const ask = (text, um) => { const tok = ++runTok; sugEl.hidden = true; stick = true; if (!um) userMsg(text); if (timerCmd(text)) return;
+  const ask = (text, um) => { const tok = ++runTok; sugEl.hidden = true; stick = true; if (!um) userMsg(text); asked = true; capMode = compact; capWhy = ''; if (compact) cap.querySelector('.q').textContent = `“${text}”`; if (timerCmd(text)) return;
     st('thinking'); endRun(); run(text, tok, true, botMsg()); };
-  const run = async (text, tok, tts, m) => { const pi = await pinfoP; if (tok !== runTok) return; const speak = tts && c.assistant_speak !== false && !(pi && !pi.tts_engine);
+  const run = async (text, tok, tts, m) => { const pi = await pinfoP; if (tok !== runTok) return; const qn = hvQuietNow(c, hub._hass); const speak = tts && !qn.quiet && c.assistant_speak !== false && !(pi && !pi.tts_engine);
+    capMode = compact && !speak; capWhy = qn.quiet ? qn.why + ' · shown as text' : 'Shown as text';
     const msg = { type: 'assist_pipeline/run', start_stage: 'intent', end_stage: speak ? 'tts' : 'intent', input: { text }, conversation_id: convId };
     if (pipe) msg.pipeline = pipe; let streamed = '', answered = false; const re = m.querySelector('.re');
     const failed = er => { if (tok !== runTok) return; if (speak && !answered && /text.to.speech|tts/i.test(er || '')) { endRun(); run(text, tok, false, m); return; } // no voice for the reply: answer silently
@@ -5047,7 +5120,8 @@ function hvAssist(hub) {
         const kind = hvAssistCardKind(text, r); if (kind === 'weather') hvAssistWeather(hub, m, keep); else if (kind === 'calendar') hvAssistCalendar(hub, m, text, keep);
         // the agent itself may have tried a timer (HassStartTimer needs a satellite): fall back to ours
         if (r.response_type === 'error' && /timer/i.test(text)) timerCmd(text); }
-      else if (ev.type === 'tts-end') { const u = d.tts_output && d.tts_output.url; if (u && !closed) { try { audioEl = new Audio(u); st('speaking'); audioEl.onended = () => st('idle'); audioEl.play().catch(() => st('idle')); } catch (e) { st('idle'); } } else st('idle'); }
+      else if (ev.type === 'tts-end') { const u = d.tts_output && d.tts_output.url, txt = () => { if (compact && !capShown) showCap(null, re.textContent, 'Shown as text'); st('idle'); }; // no sound: show the reply as text
+        if (u && !closed) { try { audioEl = new Audio(u); st('speaking'); audioEl.onended = () => st('idle'); audioEl.play().catch(txt); } catch (e) { txt(); } } else txt(); }
       else if (ev.type === 'error') failed(d.message || d.code);
       else if (ev.type === 'run-end') { endRun(); if (host.getAttribute('st') === 'thinking') st('idle'); } }, msg);
       if (unsub && unsub.catch) unsub.catch(e => failed((e && e.message) || 'The assistant is not available.')); }
@@ -5055,15 +5129,15 @@ function hvAssist(hub) {
   // live line while speaking: Home Assistant's pipelines send the words only when speech-to-text is done (no partial text), so the
   // bubble shows that it hears you (level bars, "Hearing you…") and then writes the transcript in word by word
   const liveMsg = () => { const m = add('u live', '<span class="lt">Listening…</span><span class="wave" aria-hidden="true"><i style="--k:.5"></i><i style="--k:1"></i><i style="--k:.7"></i><i style="--k:.9"></i><i style="--k:.4"></i></span>'); return m; };
-  const typeIn = (m, text) => { m.classList.remove('live'); m.innerHTML = text.split(/(\s+)/).map((w, i) => /^\s+$/.test(w) ? w : `<span class="w" style="animation-delay:${Math.min(i * 30, 900)}ms">${esc(w)}</span>`).join(''); keep(); };
+  const typeIn = (m, text) => { m.classList.remove('live'); if (compact) cap.querySelector('.q').textContent = `“${text}”`; m.innerHTML = text.split(/(\s+)/).map((w, i) => /^\s+$/.test(w) ? w : `<span class="w" style="animation-delay:${Math.min(i * 30, 900)}ms">${esc(w)}</span>`).join(''); keep(); };
   // --- voice: mic -> 16 kHz PCM -> stt stage; the transcript then goes through ask()
   const listen = async auto => {
     if (rec) { rec.finish(); return; } // second tap: done speaking
     if (audioEl) { try { audioEl.pause(); } catch (e) {} }
-    const pi = await pinfoP; if (closed) return; if (pi && !pi.stt_engine) { if (!auto) note(null, noStt(pi)); st('idle'); return; } // opened by itself: no error, the dimmed mic explains on a tap
+    const pi = await pinfoP; if (closed) return; if (pi && !pi.stt_engine) { if (!auto) note(null, noStt(pi)); else if (compact) expand(); st('idle'); return; } // opened by itself: no error, the dimmed mic explains on a tap
     const md = navigator.mediaDevices; if (!window.isSecureContext || !md || !md.getUserMedia) {
       note(null, "This browser can't use the microphone here (it needs HTTPS and microphone support). Type your request below instead."); mic.disabled = true; return; }
-    const ac = hvAudio(); let stream; st('listening'); sugEl.hidden = true; stick = true; const lm = liveMsg(), lt = lm.querySelector('.lt');
+    const ac = hvAudio(); let stream; asked = true; st('listening'); sugEl.hidden = true; stick = true; const lm = liveMsg(), lt = lm.querySelector('.lt');
     const drop = () => { if (lm.isConnected) lm.remove(); };
     try { stream = await md.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } }); }
     catch (e) { st('idle'); drop(); const n = e && e.name;
@@ -5074,13 +5148,13 @@ function hvAssist(hub) {
     const sendBin = buf => { const sock = hub._hass.connection.socket; if (!sock || sock.readyState !== 1) return; const b = new Uint8Array(1 + buf.byteLength); b[0] = hid; b.set(new Uint8Array(buf.buffer || buf), 1); sock.send(b); };
     let ratio = RATE / 16000, carry = new Float32Array(0), acc = [], accN = 0;
     const onPcm = f32 => { if (ended) return; let lv = 0; for (let i = 0; i < f32.length; i += 8) lv = Math.max(lv, Math.abs(f32[i])); const l0 = Math.min(1, lv * 4);
-      orb.style.setProperty('--lv', (1 + Math.min(0.35, lv * 1.6)).toFixed(3)); host.style.setProperty('--lv0', l0.toFixed(2));
+      host.style.setProperty('--lv', (1 + Math.min(0.35, lv * 1.6)).toFixed(3)); host.style.setProperty('--lv0', l0.toFixed(2));
       const all = new Float32Array(carry.length + f32.length); all.set(carry); all.set(f32, carry.length); const n = Math.floor(all.length / ratio), out = new Int16Array(n);
       for (let i = 0; i < n; i++) { const p = i * ratio, k = Math.floor(p), fr = p - k, a = all[k], b = all[Math.min(k + 1, all.length - 1)], v = a + (b - a) * fr; out[i] = Math.max(-1, Math.min(1, v)) * 0x7fff; }
       carry = all.slice(Math.floor(n * ratio)); acc.push(out); accN += n;
       if (accN >= 1600) { const m = new Int16Array(accN); let o = 0; for (const x of acc) { m.set(x, o); o += x.length; } acc = []; accN = 0; if (hid != null) sendBin(m); else q.push(m); } };
     const stopAudio = () => { try { proc && proc.disconnect(); srcN && srcN.disconnect(); } catch (e) {} stream.getTracks().forEach(t => t.stop()); };
-    const finish = () => { if (ended) return; ended = true; stopAudio(); orb.style.removeProperty('--lv'); host.style.removeProperty('--lv0'); if (hid != null && !sentEnd) { sentEnd = true; const sock = hub._hass.connection.socket; if (sock && sock.readyState === 1) sock.send(new Uint8Array([hid])); }
+    const finish = () => { if (ended) return; ended = true; stopAudio(); host.style.removeProperty('--lv'); host.style.removeProperty('--lv0'); if (hid != null && !sentEnd) { sentEnd = true; const sock = hub._hass.connection.socket; if (sock && sock.readyState === 1) sock.send(new Uint8Array([hid])); }
       if (tok === runTok) { st('thinking'); if (lt) lt.textContent = 'Got it…'; } };
     rec = { finish, stop: () => { finish(); runTok++; endRun(); drop(); } };
     try { srcN = ac.createMediaStreamSource(stream);
@@ -5105,18 +5179,24 @@ function hvAssist(hub) {
       if (unsub && unsub.catch) unsub.catch(e => { if (tok !== runTok) return; const m = (e && e.message) || ''; fail(/speech.to.text|stt/i.test(m) && pinfoCache ? noStt(pinfoCache) : m || 'The assistant is not available.'); }); }
     catch (e) { fail(String(e && e.message || e)); } };
   sugEl.addEventListener('click', e => { const b = e.composedPath().find(n => n.tagName === 'BUTTON'); if (b) { stopRec(); ask(b.textContent.replace(/\?$/, '')); } });
+  const qb = $('.qb'), qp = $('.qp'), qPaint = () => { const q = hvQuietNow(c, hub._hass);
+    qb.querySelector('ha-icon').setAttribute('icon', q.mode === 'off' ? 'mdi:volume-high' : q.quiet ? 'mdi:volume-off' : 'mdi:volume-medium');
+    qb.querySelector('span').textContent = 'Quiet: ' + ({ off: 'Off', on: 'On', auto: 'Auto' })[q.mode]; qb.classList.toggle('on', q.mode !== 'off');
+    qp.querySelectorAll('[data-q]').forEach(b => { const on = b.dataset.q === q.mode; b.classList.toggle('sel', on); b.setAttribute('aria-checked', String(on)); }); qp.querySelector('.qd').textContent = q.desc; };
+  qb.addEventListener('click', () => { qp.hidden = !qp.hidden; qb.setAttribute('aria-expanded', String(!qp.hidden)); qPaint(); });
+  qp.addEventListener('click', e => { const b = e.composedPath().find(n => n.dataset && n.dataset.q); if (b) { hvQuietSet(b.dataset.q); qPaint(); } }); qPaint();
   $('.x').addEventListener('click', close); hvPen($('.x'), hub._penFn(), { gap: 8 }); mic.addEventListener('click', () => { hvAudio(); listen(); });
   $('form').addEventListener('submit', e => { e.preventDefault(); const t = inp.value.trim(); if (!t) return; stopRec(); inp.value = ''; ask(t); });
   addEventListener('keydown', key); st('idle');
   (hub.shadowRoot || document.body).appendChild(host); requestAnimationFrame(() => requestAnimationFrame(() => host.classList.add('in')));
-  return { close, listen, ask, host }; }
+  return { close, listen, ask, host, expand }; }
 
 try { if (typeof localStorage !== 'undefined' && localStorage.getItem(HVTM.KEY)) setTimeout(() => HVTM.load(), 0); } catch (e) { /* no storage */ }
 class HVHubCard extends HTMLElement {
   constructor() { super(); this.attachShadow({ mode: 'open' }); this._layer = 0; }
   static get defaults() { return { theme: 'night', person: '', morning_start: 5, afternoon_start: 12, evening_start: 17, greeting_morning: 'Good morning', greeting_afternoon: 'Good afternoon',
     greeting_evening: 'Good evening', photo_source_mode: 'media', photo_album_url: '', photo_source: '', photo_interval: 25, photo_order: 'random', blur: 32, dim: 0.32, bg_transparency: 60, photo_backdrop: true, bg_freeze: true, photo_tap: 'viewer', photo_viewer_nav: true, photo_viewer_swipe: true, photo_viewer_add: true, photo_gallery_upload: true, photo_viewer_pause: true, photo_label: 'Photos', photo_max_aspect: 2.6,
-    show_calendar: true, calendar_layout: 'wide', calendar_columns: 3, calendar_days: 7, calendar_title: 'Calendar', calendar_min_height: 240, max_icon: 140, edge_sidebar: true, ss_hold: true, weather_entity: '', photo_size: 'wide', side_portrait: 'below', side_sizes: '', row_units: 3, block_pull_refresh: true, calendar_rows: 'auto', swipe_screensaver: 'auto', full_height_popups: true, popup_edit: true, assistant_enabled: false, assistant_pipeline: 'preferred', assistant_theme: 'same', assistant_button: true, assistant_speak: true, assistant_auto_listen: true, timer_sound: true }; }
+    show_calendar: true, calendar_layout: 'wide', calendar_columns: 3, calendar_days: 7, calendar_title: 'Calendar', calendar_min_height: 240, max_icon: 140, edge_sidebar: true, ss_hold: true, weather_entity: '', photo_size: 'wide', side_portrait: 'below', side_sizes: '', row_units: 3, block_pull_refresh: true, calendar_rows: 'auto', swipe_screensaver: 'auto', full_height_popups: true, popup_edit: true, assistant_enabled: false, assistant_pipeline: 'preferred', assistant_theme: 'same', assistant_button: true, assistant_speak: true, assistant_auto_listen: true, assistant_orb: true, assistant_quiet_volume_below: 5, assistant_quiet_start: '23:30', assistant_quiet_end: '10:00', timer_sound: true }; }
   static getStubConfig(hass) { return { apps: HUB_APPS.map(a => Object.assign({}, a)), calendar_entities: Object.keys((hass && hass.states) || {}).filter(k => k.startsWith('calendar.')).slice(0, 3) }; }
   static getConfigElement() { return document.createElement('homeview-hub-card-editor'); }
   setConfig(c) { if (!c) throw new Error('Invalid configuration'); this._hvRaw = c; const old = this._config, nc = Object.assign({}, HVHubCard.defaults, c);
@@ -5149,8 +5229,8 @@ class HVHubCard extends HTMLElement {
   }
   _tpillPaint() { const p = this._tpill; if (!p) return; const s = HVTM.st, on = !!s && this._config.assistant_enabled === true && !(HVTM.scr && HVTM.scr.isConnected); p.hidden = !on;
     if (on) { const t = s.done ? 'Done' : hvFmtLeft(HVTM.left()) + (s.paused != null ? ' ❚❚' : ''); const sp = p.querySelector('span'); if (sp.textContent !== t) sp.textContent = t; } }
-  _openAssist() { if (this._assistO || !this._hass) return; hvAudio(); HVTM.opts.sound = this._config.timer_sound !== false; this._assistO = hvAssist(this);
-    if (this._config.assistant_auto_listen !== false) this._assistO.listen(true); }
+  _openAssist() { if (this._assistO || !this._hass) return; hvAudio(); HVTM.opts.sound = this._config.timer_sound !== false; const al = this._config.assistant_auto_listen !== false;
+    this._assistO = hvAssist(this, { orb: al && this._config.assistant_orb !== false }); if (al) this._assistO.listen(true); }
   disconnectedCallback() { HV_HUBS.delete(this); hvTimerPills.delete(this._tpf); if (this._assistO) this._assistO.close(); clearInterval(this._ssHoldIv); this._ssHoldIv = null; this._edgeBind(false); hvPTR.set(this, false); this._ssBind(false); if (this._galO) this._galO.close(); if (this._sheetO) this._sheetO.close(); this._ssPause(false); clearInterval(this._tick); clearTimeout(this._timer); this._timer = null;
     removeEventListener('resize', this._bound); removeEventListener('orientationchange', this._bound); removeEventListener('hv-layout', this._bound); if (window.visualViewport) visualViewport.removeEventListener('resize', this._bound);
     document.removeEventListener('visibilitychange', this._vis); }
@@ -5816,7 +5896,13 @@ const HUB_SCHEMA = [
     { type: 'grid', name: '', schema: [{ name: 'assistant_enabled', selector: { boolean: {} } }, { name: 'assistant_button', selector: { boolean: {} } }] },
     { name: 'assistant_pipeline', selector: { select: { mode: 'dropdown', options: [{ value: 'preferred', label: 'Preferred (Home Assistant\'s setting)' }] } } },
     { name: 'assistant_theme', selector: { select: { mode: 'dropdown', options: [{ value: 'same', label: 'Same as the device pages theme' }].concat(HV_THEME_OPTS) } } },
-    { type: 'grid', name: '', schema: [{ name: 'assistant_auto_listen', selector: { boolean: {} } }, { name: 'assistant_speak', selector: { boolean: {} } }, { name: 'timer_sound', selector: { boolean: {} } }] }] },
+    { type: 'grid', name: '', schema: [{ name: 'assistant_auto_listen', selector: { boolean: {} } }, { name: 'assistant_speak', selector: { boolean: {} } }, { name: 'timer_sound', selector: { boolean: {} } }] },
+    { name: 'assistant_orb', selector: { boolean: {} } },
+    { type: 'expandable', name: '', flatten: true, title: 'Quiet mode: Auto', icon: 'mdi:volume-off', schema: [
+      { name: 'assistant_quiet_volume_entity', selector: { entity: { domain: ['sensor', 'number', 'input_number'] } } },
+      { name: 'assistant_quiet_volume_below', selector: { number: { min: 1, max: 100, step: 1, mode: 'box', unit_of_measurement: '%' } } },
+      { name: 'assistant_quiet_focus_entity', selector: { entity: { domain: ['binary_sensor', 'sensor', 'input_boolean'] } } },
+      { type: 'grid', name: '', schema: [{ name: 'assistant_quiet_start', selector: { time: { no_second: true } } }, { name: 'assistant_quiet_end', selector: { time: { no_second: true } } }] }] }] },
   { type: 'expandable', name: '', flatten: true, title: 'Layout & weather', icon: 'mdi:view-dashboard-outline', schema: [
     { type: 'grid', name: '', schema: [{ name: 'photo_size', selector: { select: { mode: 'dropdown', options: [{ value: 'wide', label: 'Wide (2 units; alone it fills the row)' }, { value: 'square', label: 'Square (1 unit)' }] } } }, n_('photo_max_aspect', 0.8, 4, 0.1)] },
     { type: 'grid', name: '', schema: [{ name: 'side_sizes', selector: { text: {} } }, n_('row_units', 1, 6)] },
@@ -5844,6 +5930,8 @@ Object.assign(LABELS, { photo_source_mode: 'Photo source', photo_album_url: 'Alb
   popup_edit: 'Edit pencil next to ✕ in popups (admins only): opens the editor of the card the popup belongs to',
   assistant_enabled: 'Assistant on this Home Screen', assistant_button: 'Mic button beside the avatar', assistant_pipeline: 'Assist pipeline', assistant_theme: 'Assistant look',
   assistant_auto_listen: 'Start listening when it opens', assistant_speak: 'Speak the replies', timer_sound: 'Timer alert sound',
+  assistant_orb: 'Mic opens a floating orb (tap it for the chat)', assistant_quiet_volume_entity: 'Volume sensor of the device (optional)', assistant_quiet_volume_below: 'Quiet when the volume is under',
+  assistant_quiet_focus_entity: 'Focus / Do Not Disturb sensor (optional)', assistant_quiet_start: 'Quiet hours from', assistant_quiet_end: 'Quiet hours until',
   location_name: 'Weather location name (empty = Home Assistant\'s)', weather_sky_header: 'Weather popup: animated sky header (sunny, partly cloudy, cloudy, rain, snow; night sky after sunset)', swipe_screensaver: 'Swipe down for screensaver (grab bar at the top)', ss_hold: 'Keep the screensaver paused while the Home Screen is showing',
   side_tiles: 'Extra tile options, in order (1st = first extra tile): size, fit, tap opens enlarged view' });
 // the Assist pipeline dropdown lists this Home Assistant's pipelines (assist_pipeline/pipeline/list); a removed one stays selectable so nothing is lost
@@ -5863,6 +5951,9 @@ class HVHubEditor extends HTMLElement {
       f.computeLabel = s => LABELS[s.name] || s.name;
       f.computeHelper = s => s.name === 'bg_transparency' ? '0 = solid gradient, 60 = default look, 100 = clear photo. The preview updates while you drag.' : s.name === 'bg_freeze' ? 'On: the background keeps the photo it had when the Home Screen opened (the Photos card still changes); it moves to the current photo only while the page is out of sight (screensaver up, another view, app in the background). Off: it follows the Photos card.' : s.name === 'ss_hold' ? 'On: the screensaver does not start by itself behind the Home Screen (and uses nothing there); swipe the page away to start it, on the photo the Photos card shows. Off: Wallpanel\'s idle timer runs as before.' : s.name === 'blur' ? 'How soft the photo behind the page is. Left at the default it eases to 0 as Background transparency goes from 60 to 100 (a clear, sharp photo); set a value to keep it fixed.' : s.name === 'dim' ? 'Darkens the top and bottom of the page so the text stays readable; also fades out as transparency goes up.' : s.name === 'photo_viewer_add' ? 'The viewer button that opens the gallery (the gallery keeps its own “Add photos” upload button).' : s.name === 'side_sizes' ? hubUnitsNote(this._config) : s.name === 'photo_source' ? 'The photo viewer, the gallery and uploads all use this folder. Empty = the screensaver\'s folder (Media → My media). Uploading needs a media-source:// folder and an administrator.' : s.name === 'apps' ? 'Each app: label, icon, gradient colours and what it does (open a view, Now Playing, Weather, photos, or any tap action).' : undefined;
       { const h1 = f.computeHelper; f.computeHelper = s => s.name === 'assistant_enabled' ? 'Talk to an Assist pipeline with this device\'s microphone (or type). Timers ("set a timer for 15 minutes", "pause / cancel the timer") run right here, full screen.' : s.name === 'assistant_pipeline' ? 'Which assistant answers (Settings → Voice assistants).' : h1(s); }
+      { const h3 = f.computeHelper; f.computeHelper = s => s.name === 'assistant_orb' ? 'On: the mic shows only an animated orb near the top (the dashboard stays clear); tap the orb for the chat. Off: the full chat opens.'
+        : s.name === 'assistant_quiet_volume_entity' ? 'Quiet mode is chosen on each device (Off / On / Auto) with the Quiet button in the assistant\'s chat. Quiet: the reply is not spoken, it shows as text under the orb. Auto uses this sensor when it reports a number (percent or 0-1), otherwise the quiet hours. A sensor belongs to one phone or tablet: set it on the dashboard that device uses.'
+        : s.name === 'assistant_quiet_focus_entity' ? 'Auto is also quiet while this is on (e.g. a phone\'s Focus or Do Not Disturb sensor).' : s.name === 'assistant_quiet_start' ? 'Used by Auto when no volume sensor is set or it isn\'t reporting.' : h3(s); }
       { const h2 = f.computeHelper; f.computeHelper = s => s.name === 'photo_album_url' ? hvAlbumStatus(this._albSt, (this._config || {}).photo_album_url) : s.name === 'photo_source_mode' ? 'Media folder: pictures in Home Assistant\'s media (Media → My media). Album link: a shared Google Photos, iCloud or OneDrive album, used for the Photos tile and its viewer (and the screensaver, if its source is set the same way).' : h2(s); }
       { const h0 = f.computeHelper; f.computeHelper = s => s.name === 'theme' ? 'The look of the device pages (the pages with the button tiles) on this dashboard: their tiles, popups and page background. The Home Screen itself always keeps its own look. Night = dark glass (default); Day = white tiles on a light grey page. A Page Grid card can choose its own.' : h0(s); }
       { const l0 = f.computeLabel; f.computeLabel = s => s.name === 'theme' ? 'Device pages theme' : l0(s); }
