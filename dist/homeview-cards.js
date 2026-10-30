@@ -4756,6 +4756,26 @@ const hvSayLeft = ms => { const s = Math.max(0, Math.ceil(ms / 1000)), h = Math.
 // one shared AudioContext, unlocked by a tap (the mic button / an app), so the alert can sound later without a new gesture
 const hvAudio = () => { try { if (!window.__hvAC) { const C = window.AudioContext || window.webkitAudioContext; if (!C) return null; window.__hvAC = new C(); }
   if (window.__hvAC.state === 'suspended') window.__hvAC.resume().catch(() => {}); return window.__hvAC; } catch (e) { return null; } };
+/* 1.32.0: the assistant's spoken replies. iOS (Safari and the Companion app) only lets a page play sound after a tap: a new Audio()
+ * created when the reply arrives (seconds after the tap, after network round trips) is refused (NotAllowedError) and stays silent.
+ * So ONE <audio> element is primed with a short silent clip inside the tap (mic button, orb, send) and reused for every reply; if it is
+ * still refused, the mp3 is decoded and played through the AudioContext that was also resumed in the tap. */
+const HV_SILENT = 'data:audio/wav;base64,UklGRrQBAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YZABAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICA';
+const hvSpk = () => { let a = window.__hvSpk; if (!a) { a = window.__hvSpk = new Audio(); a.setAttribute('playsinline', ''); a.playsInline = true; a.preload = 'auto'; } return a; };
+const hvSpkUnlock = () => { hvAudio(); const a = hvSpk(); if (a.__hvOk || !a.paused) return; try { a.muted = false; a.src = HV_SILENT; const p = a.play(); if (p && p.then) p.then(() => { a.__hvOk = true; }).catch(() => {}); else a.__hvOk = true; } catch (e) { /* not in a tap */ } };
+const hvSession = t => { try { if (navigator.audioSession && navigator.audioSession.type !== t) navigator.audioSession.type = t; } catch (e) { /* Safari 16.4+ only */ } };
+// play a reply (url from the pipeline's tts-end, e.g. /api/tts_proxy/<token>.mp3); on: { start(), end(), fail(err) }; returns { stop() }
+function hvPlayTts(h, u, on) { let url = u; try { url = h && h.hassUrl ? h.hassUrl(u) : new URL(u, location.href).href; } catch (e) { /* keep u */ }
+  let stopped = false, src = null; const a = hvSpk(); hvSession('playback');
+  const fin = f => { if (stopped) return; stopped = true; hvSession('auto'); f(); };
+  const viaWA = async () => { const ac = hvAudio(); if (!ac) throw new Error('no Web Audio'); const r = await fetch(url, { credentials: 'same-origin' }); if (!r.ok) throw new Error('HTTP ' + r.status);
+    const buf = await r.arrayBuffer(); if (stopped) return; const ab = await new Promise((ok, no) => ac.decodeAudioData(buf, ok, no)); if (stopped) return;
+    if (ac.state === 'suspended') await ac.resume(); src = ac.createBufferSource(); src.buffer = ab; src.connect(ac.destination); src.onended = () => fin(on.end); src.start(); on.start(); };
+  a.onended = () => fin(on.end); a.muted = false; a.volume = 1; a.src = url;
+  let p; try { p = a.play(); } catch (e) { p = Promise.reject(e); }
+  Promise.resolve(p).then(() => { if (!stopped) on.start(); }).catch(e => { if (stopped) return; a.onended = null;
+    viaWA().catch(e2 => fin(() => on.fail(e && e.name === 'NotAllowedError' ? e : (e2 || e)))); });
+  return { stop: () => { stopped = true; hvSession('auto'); a.onended = null; try { a.pause(); } catch (e) {} try { src && src.stop(); } catch (e) {} } }; }
 // ---- the timer (one per browser)
 const HVTM = {
   KEY: 'hv-timer-v1', st: null, iv: 0, scr: null, opts: { sound: true },
@@ -5031,7 +5051,7 @@ function hvAssist(hub, o) {
     </div></div><button class="jump" aria-label="Show the newest message">Newest ↓</button></div>`;
   const $ = s => sr.querySelector(s), wrap = $('.wrap'), bd = $('.bd'), log = $('.log'), mic = $('.mic'), inp = $('input'), orb = $('.orb'), jump = $('.jump');
   const ov = $('.ov'), bo = $('.bo'), olt = $('.olt'), cap = $('.cap'); host.toggleAttribute('orb', compact);
-  const pipe = c.assistant_pipeline && c.assistant_pipeline !== 'preferred' ? c.assistant_pipeline : null; let convId = null, rec = null, unsub = null, closed = false, audioEl = null, runTok = 0;
+  const pipe = c.assistant_pipeline && c.assistant_pipeline !== 'preferred' ? c.assistant_pipeline : null; let convId = null, rec = null, unsub = null, closed = false, player = null, runTok = 0, micS = null, keepCap = false;
   // 1.32.0: the orb (compact) view: status under the orb, the caption (quiet mode / no voice) and closing itself a few seconds after the reply
   let asked = false, capMode = compact, capWhy = '', capShown = false, dt = null;
   const orbLabel = { listening: 'Listening…', thinking: 'Thinking…', speaking: 'Speaking…' };
@@ -5040,7 +5060,7 @@ function hvAssist(hub, o) {
     cap.hidden = false; capShown = true; host.setAttribute('cap', ''); };
   const hideCap = () => { cap.hidden = true; capShown = false; host.removeAttribute('cap'); };
   const st = s => { host.setAttribute('st', s); if (!compact) return; clearTimeout(dt); dt = null; olt.textContent = orbLabel[s] || (asked ? '' : 'Listening…');
-    if (s === 'listening') hideCap();
+    if (s === 'listening' && !keepCap) hideCap();
     if (s === 'idle' && asked) { const n = capShown ? (cap.querySelector('.a').textContent.length + cap.querySelector('.q').textContent.length) : 0;
       dt = setTimeout(() => { if (compact) close(); }, capShown ? Math.max(5000, Math.min(14000, 4000 + n * 55)) : 2500); } };
   // --- the chat: newest at the bottom; follows new content only while the user is at the bottom
@@ -5068,10 +5088,12 @@ function hvAssist(hub, o) {
   const noStt = p => `“${p.name}” has no speech-to-text set up, so it can only read what you type. Type below, or choose a pipeline with speech-to-text (Settings → Voice assistants).`;
   // conversation agents that fail (an expired or wrong API key, the service is down) often answer with a generic apology instead of an error
   const agentErr = (sp, rt) => (rt === 'error' && !sp) || /unexpected error|problem (talking|communicating)|(invalid|incorrect|wrong) api key|unauthori[sz]ed|authenticat(ion|e) (error|failed)|quota|rate limit/i.test(sp || '');
+  const micOff = () => { if (micS) { const m = micS; micS = null; m.getTracks().forEach(t => t.stop()); } };
+  const micLive = () => !!micS && micS.getAudioTracks().some(t => t.readyState === 'live' && t.enabled);
   const stopRec = () => { if (!rec) return; const r = rec; rec = null; try { r.stop(); } catch (e) {} host.style.removeProperty('--lv'); host.style.removeProperty('--lv0'); };
   const endRun = () => { if (unsub) { const u = unsub; unsub = null; Promise.resolve(u).then(f => f && f()).catch(() => {}); } };
   // closing clears the chat and the conversation (a new popup starts fresh)
-  const close = () => { if (closed) return; closed = true; clearTimeout(dt); runTok++; stopRec(); endRun(); convId = null; if (audioEl) { try { audioEl.pause(); } catch (e) {} }
+  const close = () => { if (closed) return; closed = true; clearTimeout(dt); runTok++; stopRec(); endRun(); convId = null; if (player) { player.stop(); player = null; } micOff();
     removeEventListener('keydown', key); host.classList.remove('in'); setTimeout(() => host.remove(), 320); hub._assistO = null; hvFhOpen.delete(host); };
   const key = e => { if (e.key === 'Escape' && !(HVTM.scr && HVTM.scr.isConnected)) close(); };
   // swipe down to close: from the header (always) or anywhere once the chat is scrolled to the top (hvSwipeClose leaves a scrolled list alone)
@@ -5079,7 +5101,7 @@ function hvAssist(hub, o) {
   // tap the orb (or its caption): the chat; tap anywhere else: close (only the orb is on screen, the dashboard stays clear)
   const expand = () => { if (!compact || closed) return; compact = false; clearTimeout(dt); dt = null; host.removeAttribute('orb'); host.removeAttribute('cap'); host.classList.remove('in'); hvFhOpen.add(host);
     requestAnimationFrame(() => requestAnimationFrame(() => { host.classList.add('in'); stick = true; bd.scrollTop = bd.scrollHeight; })); };
-  ov.addEventListener('click', e => { const p = e.composedPath(); if (p.includes(bo) || p.includes(cap)) expand(); else close(); });
+  ov.addEventListener('click', e => { const p = e.composedPath(); if (p.includes(bo) || p.includes(cap)) { hvSpkUnlock(); expand(); } else close(); });
   hvSwipeClose({ el: wrap, alive: () => host.isConnected && !closed, close, grab: (path, y) => y < $('.hd').getBoundingClientRect().bottom,
     dragOk: path => !path.some(n => n === $('.ft') || n === jump) });
   // a local timer command? (works with every pipeline, no satellite needed). The countdown opens over the chat; the chat stays.
@@ -5094,14 +5116,14 @@ function hvAssist(hub, o) {
     else if (ti.cmd === 'resume') { HVTM.resume(); say(`Timer resumed: ${hvSayLeft(HVTM.left())} left.`); setTimeout(() => { if (!closed) HVTM.show(); }, 900); }
     else say(s.done ? 'Your timer is done.' : `${hvSayLeft(HVTM.left())} left${s.paused != null ? ' (paused)' : ''}.`);
     st('idle'); return true; };
-  const ask = (text, um) => { const tok = ++runTok; sugEl.hidden = true; stick = true; if (!um) userMsg(text); asked = true; capMode = compact; capWhy = ''; if (compact) cap.querySelector('.q').textContent = `“${text}”`; if (timerCmd(text)) return;
+  const ask = (text, um) => { const tok = ++runTok; sugEl.hidden = true; stick = true; if (!um) userMsg(text); asked = true; keepCap = false; capMode = compact; capWhy = ''; if (compact) cap.querySelector('.q').textContent = `“${text}”`; if (timerCmd(text)) return;
     st('thinking'); endRun(); run(text, tok, true, botMsg()); };
   const run = async (text, tok, tts, m) => { const pi = await pinfoP; if (tok !== runTok) return; const qn = hvQuietNow(c, hub._hass); const speak = tts && !qn.quiet && c.assistant_speak !== false && !(pi && !pi.tts_engine);
     capMode = compact && !speak; capWhy = qn.quiet ? qn.why + ' · shown as text' : 'Shown as text';
     const msg = { type: 'assist_pipeline/run', start_stage: 'intent', end_stage: speak ? 'tts' : 'intent', input: { text }, conversation_id: convId };
-    if (pipe) msg.pipeline = pipe; let streamed = '', answered = false; const re = m.querySelector('.re');
+    if (pipe) msg.pipeline = pipe; let streamed = '', answered = false, cont = false; const re = m.querySelector('.re');
     const failed = er => { if (tok !== runTok) return; if (speak && !answered && /text.to.speech|tts/i.test(er || '')) { endRun(); run(text, tok, false, m); return; } // no voice for the reply: answer silently
-      if (!answered) re.textContent = ''; note(m, er || 'The assistant could not answer.'); st('idle'); };
+      if (!answered) re.textContent = ''; note(m, er || 'The assistant could not answer.'); st('idle'); micOff(); };
     try { unsub = hub._hass.connection.subscribeMessage(ev => { if (tok !== runTok) return; const d = ev.data || {};
       if (ev.type === 'intent-progress') { const dl = d.chat_log_delta; if (dl && typeof dl.content === 'string') { streamed += dl.content; re.textContent = streamed; keep(); } }
       else if (ev.type === 'intent-end') { answered = true; const o = d.intent_output || {}, r = o.response || {}; convId = o.conversation_id || convId;
@@ -5113,37 +5135,48 @@ function hvAssist(hub, o) {
         // an agent error can carry the provider's raw error payload (JSON): show only its first sentence
         const shown = bad ? ((sp.split(/\s*[{\[]|\n|\.:/)[0] || '').trim().replace(/[:\s]+$/, '') || 'Sorry, something went wrong.') : sp;
         fill(m, shown || (r.response_type === 'error' ? 'Sorry, something went wrong.' : 'Done.'), ex); st(speak ? 'thinking' : 'idle');
+        cont = !bad && r.response_type !== 'error' && (o.continue_conversation === true || /\?["”'’)\s]*$/.test(shown || ''));
         const an = `“${(pinfoCache || {}).name || 'This assistant'}”`;
         if (bad && !/timer/i.test(text)) note(m, quota ? `${an} couldn't answer: its AI service has hit its usage limit (quota) for now. Try again later, or pick another assistant in the Home Screen settings.`
           : `${an} couldn't answer: its conversation agent reported an error. Check that integration (for example its API key) in Settings → Devices & services, or pick another assistant in the Home Screen settings.`);
         // answer cards: weather / calendar, from this Home Assistant's own states (read only)
         const kind = hvAssistCardKind(text, r); if (kind === 'weather') hvAssistWeather(hub, m, keep); else if (kind === 'calendar') hvAssistCalendar(hub, m, text, keep);
         // the agent itself may have tried a timer (HassStartTimer needs a satellite): fall back to ours
-        if (r.response_type === 'error' && /timer/i.test(text)) timerCmd(text); }
-      else if (ev.type === 'tts-end') { const u = d.tts_output && d.tts_output.url, txt = () => { if (compact && !capShown) showCap(null, re.textContent, 'Shown as text'); st('idle'); }; // no sound: show the reply as text
-        if (u && !closed) { try { audioEl = new Audio(u); st('speaking'); audioEl.onended = () => st('idle'); audioEl.play().catch(txt); } catch (e) { txt(); } } else txt(); }
+        if (r.response_type === 'error' && /timer/i.test(text)) timerCmd(text);
+        if (!speak) done(cont); }
+      else if (ev.type === 'tts-end') { const u = d.tts_output && d.tts_output.url; // no sound: show the reply as text (and why)
+        const txt = why => { if (compact && !capShown) showCap(null, re.textContent, why || 'Shown as text'); done(cont); };
+        if (u && !closed) { micOff(); if (player) player.stop(); const me = player = hvPlayTts(hub._hass, u, { start: () => { if (player === me) st('speaking'); },
+          end: () => { if (player !== me) return; player = null; done(cont); },
+          fail: e => { if (player !== me) return; player = null; const n = (e && (e.name || e.message)) || 'error'; console.warn('NotHomeView: the spoken reply could not play', e);
+            if (!compact) note(m, `The spoken reply couldn't play on this device (${n}).`); txt(`Sound couldn't play (${n}) · shown as text`); } }); }
+        else txt(); }
       else if (ev.type === 'error') failed(d.message || d.code);
-      else if (ev.type === 'run-end') { endRun(); if (host.getAttribute('st') === 'thinking') st('idle'); } }, msg);
+      else if (ev.type === 'run-end') { endRun(); if (host.getAttribute('st') === 'thinking' && !player) st('idle'); } }, msg);
       if (unsub && unsub.catch) unsub.catch(e => failed((e && e.message) || 'The assistant is not available.')); }
     catch (e) { failed(String(e && e.message || e)); } };
+  // 1.32.0: after the reply (spoken, or shown as text): listen again when the assistant asked something (a question mark, or the
+  // agent's continue_conversation), with the same conversation; otherwise finish (the orb closes a few seconds later)
+  const done = cnt => { if (closed) return; if (cnt && c.assistant_continue !== false) { listen(true, true); return; } st('idle'); micOff(); };
   // live line while speaking: Home Assistant's pipelines send the words only when speech-to-text is done (no partial text), so the
   // bubble shows that it hears you (level bars, "Hearing you…") and then writes the transcript in word by word
   const liveMsg = () => { const m = add('u live', '<span class="lt">Listening…</span><span class="wave" aria-hidden="true"><i style="--k:.5"></i><i style="--k:1"></i><i style="--k:.7"></i><i style="--k:.9"></i><i style="--k:.4"></i></span>'); return m; };
   const typeIn = (m, text) => { m.classList.remove('live'); if (compact) cap.querySelector('.q').textContent = `“${text}”`; m.innerHTML = text.split(/(\s+)/).map((w, i) => /^\s+$/.test(w) ? w : `<span class="w" style="animation-delay:${Math.min(i * 30, 900)}ms">${esc(w)}</span>`).join(''); keep(); };
   // --- voice: mic -> 16 kHz PCM -> stt stage; the transcript then goes through ask()
-  const listen = async auto => {
+  const listen = async (auto, fol) => {
     if (rec) { rec.finish(); return; } // second tap: done speaking
-    if (audioEl) { try { audioEl.pause(); } catch (e) {} }
+    if (player) { player.stop(); player = null; } hvSession('auto');
     const pi = await pinfoP; if (closed) return; if (pi && !pi.stt_engine) { if (!auto) note(null, noStt(pi)); else if (compact) expand(); st('idle'); return; } // opened by itself: no error, the dimmed mic explains on a tap
     const md = navigator.mediaDevices; if (!window.isSecureContext || !md || !md.getUserMedia) {
       note(null, "This browser can't use the microphone here (it needs HTTPS and microphone support). Type your request below instead."); mic.disabled = true; return; }
-    const ac = hvAudio(); let stream; asked = true; st('listening'); sugEl.hidden = true; stick = true; const lm = liveMsg(), lt = lm.querySelector('.lt');
+    const ac = hvAudio(); let stream; asked = true; keepCap = !!(fol && compact && capShown);
+    if (keepCap) cap.querySelector('.why').innerHTML = '<ha-icon icon="mdi:microphone"></ha-icon>Listening for your answer…'; st('listening'); sugEl.hidden = true; stick = true; const lm = liveMsg(), lt = lm.querySelector('.lt');
     const drop = () => { if (lm.isConnected) lm.remove(); };
-    try { stream = await md.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } }); }
+    try { stream = micLive() ? micS : await md.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } }); micS = stream; } // the open mic is reused for a follow-up
     catch (e) { st('idle'); drop(); const n = e && e.name;
       note(null, n === 'NotAllowedError' || n === 'SecurityError' ? 'Microphone access was blocked. Allow the microphone for this site (browser or app settings), or type your request below.'
         : n === 'NotFoundError' || n === 'OverconstrainedError' ? 'No microphone was found on this device. Type your request below.' : "The microphone couldn't start (" + (e && e.message || n) + '). Type your request below.'); return; }
-    if (closed) { stream.getTracks().forEach(t => t.stop()); return; }
+    if (closed) { micOff(); return; }
     const tok = ++runTok; let hid = null, q = [], ended = false, sentEnd = false, srcN = null, proc = null; const RATE = ac ? ac.sampleRate : 48000;
     const sendBin = buf => { const sock = hub._hass.connection.socket; if (!sock || sock.readyState !== 1) return; const b = new Uint8Array(1 + buf.byteLength); b[0] = hid; b.set(new Uint8Array(buf.buffer || buf), 1); sock.send(b); };
     let ratio = RATE / 16000, carry = new Float32Array(0), acc = [], accN = 0;
@@ -5153,7 +5186,7 @@ function hvAssist(hub, o) {
       for (let i = 0; i < n; i++) { const p = i * ratio, k = Math.floor(p), fr = p - k, a = all[k], b = all[Math.min(k + 1, all.length - 1)], v = a + (b - a) * fr; out[i] = Math.max(-1, Math.min(1, v)) * 0x7fff; }
       carry = all.slice(Math.floor(n * ratio)); acc.push(out); accN += n;
       if (accN >= 1600) { const m = new Int16Array(accN); let o = 0; for (const x of acc) { m.set(x, o); o += x.length; } acc = []; accN = 0; if (hid != null) sendBin(m); else q.push(m); } };
-    const stopAudio = () => { try { proc && proc.disconnect(); srcN && srcN.disconnect(); } catch (e) {} stream.getTracks().forEach(t => t.stop()); };
+    const stopAudio = () => { try { proc && proc.disconnect(); srcN && srcN.disconnect(); } catch (e) {} }; // the stream stays open (micS) until a reply is spoken or the assistant closes
     const finish = () => { if (ended) return; ended = true; stopAudio(); host.style.removeProperty('--lv'); host.style.removeProperty('--lv0'); if (hid != null && !sentEnd) { sentEnd = true; const sock = hub._hass.connection.socket; if (sock && sock.readyState === 1) sock.send(new Uint8Array([hid])); }
       if (tok === runTok) { st('thinking'); if (lt) lt.textContent = 'Got it…'; } };
     rec = { finish, stop: () => { finish(); runTok++; endRun(); drop(); } };
@@ -5162,31 +5195,34 @@ function hvAssist(hub, o) {
         if (!window.__hvWorklet) window.__hvWorklet = ac.audioWorklet.addModule(URL.createObjectURL(new Blob([`registerProcessor('hv-rec',class extends AudioWorkletProcessor{process(i){const c=i[0]&&i[0][0];if(c)this.port.postMessage(c.slice(0));return true}})`], { type: 'text/javascript' })));
         await window.__hvWorklet; proc = new AudioWorkletNode(ac, 'hv-rec'); proc.port.onmessage = e => onPcm(e.data); srcN.connect(proc); }
       else { proc = ac.createScriptProcessor(4096, 1, 1); proc.onaudioprocess = e => onPcm(e.inputBuffer.getChannelData(0)); srcN.connect(proc); proc.connect(ac.destination); } }
-    catch (e) { stopAudio(); rec = null; st('idle'); drop(); note(null, "The microphone couldn't start (" + (e && e.message || e) + '). Type your request below.'); return; }
+    catch (e) { stopAudio(); micOff(); rec = null; st('idle'); drop(); note(null, "The microphone couldn't start (" + (e && e.message || e) + '). Type your request below.'); return; }
     endRun(); const msg = { type: 'assist_pipeline/run', start_stage: 'stt', end_stage: 'stt', input: { sample_rate: 16000 }, timeout: 60 }; if (pipe) msg.pipeline = pipe;
     const safety = setTimeout(() => { if (rec && rec.finish === finish) finish(); }, 15000); // never listen for more than 15 s
-    const fail = m => { clearTimeout(safety); finish(); rec = null; endRun(); st('idle'); drop(); note(null, m); };
+    // a follow-up: nobody answers within a few seconds -> stop listening (the orb closes)
+    let heard = false; const quietEnd = () => { clearTimeout(sil); if (closed) return; if (rec && rec.finish === finish) rec.stop(); rec = null; keepCap = false; micOff(); if (compact) close(); else st('idle'); };
+    const sil = fol ? setTimeout(() => { if (!heard && tok === runTok) quietEnd(); }, keepCap ? 8000 : 6000) : null;
+    const fail = m => { clearTimeout(safety); clearTimeout(sil); if (fol && !heard) { quietEnd(); return; } finish(); rec = null; endRun(); st('idle'); drop(); micOff(); note(null, m); };
     try { unsub = hub._hass.connection.subscribeMessage(ev => { if (tok !== runTok) return; const d = ev.data || {};
       if (ev.type === 'run-start') { hid = d.runner_data && d.runner_data.stt_binary_handler_id; if (hid == null) return; for (const m of q) sendBin(m); q = []; if (ended && !sentEnd) { sentEnd = true; hub._hass.connection.socket.send(new Uint8Array([hid])); } }
-      else if (ev.type === 'stt-vad-start') { if (lt) lt.textContent = 'Hearing you…'; }
+      else if (ev.type === 'stt-vad-start') { heard = true; clearTimeout(sil); if (lt) lt.textContent = 'Hearing you…'; }
       else if (ev.type === 'stt-vad-end') finish();
-      else if (ev.type === 'stt-end') { clearTimeout(safety); finish(); rec = null; endRun(); const t = ((d.stt_output || {}).text || '').trim();
-        if (!t) { st('idle'); drop(); say("Sorry, I didn't catch that."); return; } typeIn(lm, t); ask(t, lm); }
+      else if (ev.type === 'stt-end') { clearTimeout(safety); clearTimeout(sil); finish(); rec = null; endRun(); const t = ((d.stt_output || {}).text || '').trim();
+        if (!t) { if (fol) { drop(); quietEnd(); return; } st('idle'); drop(); micOff(); say("Sorry, I didn't catch that."); return; } typeIn(lm, t); ask(t, lm); }
       else if (ev.type === 'error') fail(d.code === 'stt-no-text-recognized' ? "Sorry, I didn't catch that. Try again or type below."
         : d.code === 'stt-stream-failed' ? `The speech-to-text service of “${(pinfoCache || {}).name || 'this assistant'}” failed. Try again, type below, or choose a pipeline with another speech-to-text engine (Settings → Voice assistants).`
         : (d.message || d.code || 'Speech recognition failed.'));
       else if (ev.type === 'run-end') { if (rec && rec.finish === finish) { finish(); rec = null; } } }, msg);
       if (unsub && unsub.catch) unsub.catch(e => { if (tok !== runTok) return; const m = (e && e.message) || ''; fail(/speech.to.text|stt/i.test(m) && pinfoCache ? noStt(pinfoCache) : m || 'The assistant is not available.'); }); }
     catch (e) { fail(String(e && e.message || e)); } };
-  sugEl.addEventListener('click', e => { const b = e.composedPath().find(n => n.tagName === 'BUTTON'); if (b) { stopRec(); ask(b.textContent.replace(/\?$/, '')); } });
+  sugEl.addEventListener('click', e => { const b = e.composedPath().find(n => n.tagName === 'BUTTON'); if (b) { hvSpkUnlock(); stopRec(); ask(b.textContent.replace(/\?$/, '')); } });
   const qb = $('.qb'), qp = $('.qp'), qPaint = () => { const q = hvQuietNow(c, hub._hass);
     qb.querySelector('ha-icon').setAttribute('icon', q.mode === 'off' ? 'mdi:volume-high' : q.quiet ? 'mdi:volume-off' : 'mdi:volume-medium');
     qb.querySelector('span').textContent = 'Quiet: ' + ({ off: 'Off', on: 'On', auto: 'Auto' })[q.mode]; qb.classList.toggle('on', q.mode !== 'off');
     qp.querySelectorAll('[data-q]').forEach(b => { const on = b.dataset.q === q.mode; b.classList.toggle('sel', on); b.setAttribute('aria-checked', String(on)); }); qp.querySelector('.qd').textContent = q.desc; };
   qb.addEventListener('click', () => { qp.hidden = !qp.hidden; qb.setAttribute('aria-expanded', String(!qp.hidden)); qPaint(); });
   qp.addEventListener('click', e => { const b = e.composedPath().find(n => n.dataset && n.dataset.q); if (b) { hvQuietSet(b.dataset.q); qPaint(); } }); qPaint();
-  $('.x').addEventListener('click', close); hvPen($('.x'), hub._penFn(), { gap: 8 }); mic.addEventListener('click', () => { hvAudio(); listen(); });
-  $('form').addEventListener('submit', e => { e.preventDefault(); const t = inp.value.trim(); if (!t) return; stopRec(); inp.value = ''; ask(t); });
+  $('.x').addEventListener('click', close); hvPen($('.x'), hub._penFn(), { gap: 8 }); mic.addEventListener('click', () => { hvSpkUnlock(); listen(); });
+  $('form').addEventListener('submit', e => { e.preventDefault(); const t = inp.value.trim(); if (!t) return; hvSpkUnlock(); stopRec(); inp.value = ''; ask(t); });
   addEventListener('keydown', key); st('idle');
   (hub.shadowRoot || document.body).appendChild(host); requestAnimationFrame(() => requestAnimationFrame(() => host.classList.add('in')));
   return { close, listen, ask, host, expand }; }
@@ -5196,7 +5232,7 @@ class HVHubCard extends HTMLElement {
   constructor() { super(); this.attachShadow({ mode: 'open' }); this._layer = 0; }
   static get defaults() { return { theme: 'night', person: '', morning_start: 5, afternoon_start: 12, evening_start: 17, greeting_morning: 'Good morning', greeting_afternoon: 'Good afternoon',
     greeting_evening: 'Good evening', photo_source_mode: 'media', photo_album_url: '', photo_source: '', photo_interval: 25, photo_order: 'random', blur: 32, dim: 0.32, bg_transparency: 60, photo_backdrop: true, bg_freeze: true, photo_tap: 'viewer', photo_viewer_nav: true, photo_viewer_swipe: true, photo_viewer_add: true, photo_gallery_upload: true, photo_viewer_pause: true, photo_label: 'Photos', photo_max_aspect: 2.6,
-    show_calendar: true, calendar_layout: 'wide', calendar_columns: 3, calendar_days: 7, calendar_title: 'Calendar', calendar_min_height: 240, max_icon: 140, edge_sidebar: true, ss_hold: true, weather_entity: '', photo_size: 'wide', side_portrait: 'below', side_sizes: '', row_units: 3, block_pull_refresh: true, calendar_rows: 'auto', swipe_screensaver: 'auto', full_height_popups: true, popup_edit: true, assistant_enabled: false, assistant_pipeline: 'preferred', assistant_theme: 'same', assistant_button: true, assistant_speak: true, assistant_auto_listen: true, assistant_orb: true, assistant_quiet_volume_below: 5, assistant_quiet_start: '23:30', assistant_quiet_end: '10:00', timer_sound: true }; }
+    show_calendar: true, calendar_layout: 'wide', calendar_columns: 3, calendar_days: 7, calendar_title: 'Calendar', calendar_min_height: 240, max_icon: 140, edge_sidebar: true, ss_hold: true, weather_entity: '', photo_size: 'wide', side_portrait: 'below', side_sizes: '', row_units: 3, block_pull_refresh: true, calendar_rows: 'auto', swipe_screensaver: 'auto', full_height_popups: true, popup_edit: true, assistant_enabled: false, assistant_pipeline: 'preferred', assistant_theme: 'same', assistant_button: true, assistant_speak: true, assistant_auto_listen: true, assistant_orb: true, assistant_continue: true, assistant_quiet_volume_below: 5, assistant_quiet_start: '23:30', assistant_quiet_end: '10:00', timer_sound: true }; }
   static getStubConfig(hass) { return { apps: HUB_APPS.map(a => Object.assign({}, a)), calendar_entities: Object.keys((hass && hass.states) || {}).filter(k => k.startsWith('calendar.')).slice(0, 3) }; }
   static getConfigElement() { return document.createElement('homeview-hub-card-editor'); }
   setConfig(c) { if (!c) throw new Error('Invalid configuration'); this._hvRaw = c; const old = this._config, nc = Object.assign({}, HVHubCard.defaults, c);
@@ -5229,7 +5265,7 @@ class HVHubCard extends HTMLElement {
   }
   _tpillPaint() { const p = this._tpill; if (!p) return; const s = HVTM.st, on = !!s && this._config.assistant_enabled === true && !(HVTM.scr && HVTM.scr.isConnected); p.hidden = !on;
     if (on) { const t = s.done ? 'Done' : hvFmtLeft(HVTM.left()) + (s.paused != null ? ' ❚❚' : ''); const sp = p.querySelector('span'); if (sp.textContent !== t) sp.textContent = t; } }
-  _openAssist() { if (this._assistO || !this._hass) return; hvAudio(); HVTM.opts.sound = this._config.timer_sound !== false; const al = this._config.assistant_auto_listen !== false;
+  _openAssist() { if (this._assistO || !this._hass) return; hvSpkUnlock(); HVTM.opts.sound = this._config.timer_sound !== false; const al = this._config.assistant_auto_listen !== false;
     this._assistO = hvAssist(this, { orb: al && this._config.assistant_orb !== false }); if (al) this._assistO.listen(true); }
   disconnectedCallback() { HV_HUBS.delete(this); hvTimerPills.delete(this._tpf); if (this._assistO) this._assistO.close(); clearInterval(this._ssHoldIv); this._ssHoldIv = null; this._edgeBind(false); hvPTR.set(this, false); this._ssBind(false); if (this._galO) this._galO.close(); if (this._sheetO) this._sheetO.close(); this._ssPause(false); clearInterval(this._tick); clearTimeout(this._timer); this._timer = null;
     removeEventListener('resize', this._bound); removeEventListener('orientationchange', this._bound); removeEventListener('hv-layout', this._bound); if (window.visualViewport) visualViewport.removeEventListener('resize', this._bound);
@@ -5897,7 +5933,7 @@ const HUB_SCHEMA = [
     { name: 'assistant_pipeline', selector: { select: { mode: 'dropdown', options: [{ value: 'preferred', label: 'Preferred (Home Assistant\'s setting)' }] } } },
     { name: 'assistant_theme', selector: { select: { mode: 'dropdown', options: [{ value: 'same', label: 'Same as the device pages theme' }].concat(HV_THEME_OPTS) } } },
     { type: 'grid', name: '', schema: [{ name: 'assistant_auto_listen', selector: { boolean: {} } }, { name: 'assistant_speak', selector: { boolean: {} } }, { name: 'timer_sound', selector: { boolean: {} } }] },
-    { name: 'assistant_orb', selector: { boolean: {} } },
+    { type: 'grid', name: '', schema: [{ name: 'assistant_orb', selector: { boolean: {} } }, { name: 'assistant_continue', selector: { boolean: {} } }] },
     { type: 'expandable', name: '', flatten: true, title: 'Quiet mode: Auto', icon: 'mdi:volume-off', schema: [
       { name: 'assistant_quiet_volume_entity', selector: { entity: { domain: ['sensor', 'number', 'input_number'] } } },
       { name: 'assistant_quiet_volume_below', selector: { number: { min: 1, max: 100, step: 1, mode: 'box', unit_of_measurement: '%' } } },
@@ -5930,7 +5966,7 @@ Object.assign(LABELS, { photo_source_mode: 'Photo source', photo_album_url: 'Alb
   popup_edit: 'Edit pencil next to ✕ in popups (admins only): opens the editor of the card the popup belongs to',
   assistant_enabled: 'Assistant on this Home Screen', assistant_button: 'Mic button beside the avatar', assistant_pipeline: 'Assist pipeline', assistant_theme: 'Assistant look',
   assistant_auto_listen: 'Start listening when it opens', assistant_speak: 'Speak the replies', timer_sound: 'Timer alert sound',
-  assistant_orb: 'Mic opens a floating orb (tap it for the chat)', assistant_quiet_volume_entity: 'Volume sensor of the device (optional)', assistant_quiet_volume_below: 'Quiet when the volume is under',
+  assistant_orb: 'Mic opens a floating orb (tap it for the chat)', assistant_continue: 'Listen again when the assistant asks something', assistant_quiet_volume_entity: 'Volume sensor of the device (optional)', assistant_quiet_volume_below: 'Quiet when the volume is under',
   assistant_quiet_focus_entity: 'Focus / Do Not Disturb sensor (optional)', assistant_quiet_start: 'Quiet hours from', assistant_quiet_end: 'Quiet hours until',
   location_name: 'Weather location name (empty = Home Assistant\'s)', weather_sky_header: 'Weather popup: animated sky header (sunny, partly cloudy, cloudy, rain, snow; night sky after sunset)', swipe_screensaver: 'Swipe down for screensaver (grab bar at the top)', ss_hold: 'Keep the screensaver paused while the Home Screen is showing',
   side_tiles: 'Extra tile options, in order (1st = first extra tile): size, fit, tap opens enlarged view' });
@@ -5952,6 +5988,7 @@ class HVHubEditor extends HTMLElement {
       f.computeHelper = s => s.name === 'bg_transparency' ? '0 = solid gradient, 60 = default look, 100 = clear photo. The preview updates while you drag.' : s.name === 'bg_freeze' ? 'On: the background keeps the photo it had when the Home Screen opened (the Photos card still changes); it moves to the current photo only while the page is out of sight (screensaver up, another view, app in the background). Off: it follows the Photos card.' : s.name === 'ss_hold' ? 'On: the screensaver does not start by itself behind the Home Screen (and uses nothing there); swipe the page away to start it, on the photo the Photos card shows. Off: Wallpanel\'s idle timer runs as before.' : s.name === 'blur' ? 'How soft the photo behind the page is. Left at the default it eases to 0 as Background transparency goes from 60 to 100 (a clear, sharp photo); set a value to keep it fixed.' : s.name === 'dim' ? 'Darkens the top and bottom of the page so the text stays readable; also fades out as transparency goes up.' : s.name === 'photo_viewer_add' ? 'The viewer button that opens the gallery (the gallery keeps its own “Add photos” upload button).' : s.name === 'side_sizes' ? hubUnitsNote(this._config) : s.name === 'photo_source' ? 'The photo viewer, the gallery and uploads all use this folder. Empty = the screensaver\'s folder (Media → My media). Uploading needs a media-source:// folder and an administrator.' : s.name === 'apps' ? 'Each app: label, icon, gradient colours and what it does (open a view, Now Playing, Weather, photos, or any tap action).' : undefined;
       { const h1 = f.computeHelper; f.computeHelper = s => s.name === 'assistant_enabled' ? 'Talk to an Assist pipeline with this device\'s microphone (or type). Timers ("set a timer for 15 minutes", "pause / cancel the timer") run right here, full screen.' : s.name === 'assistant_pipeline' ? 'Which assistant answers (Settings → Voice assistants).' : h1(s); }
       { const h3 = f.computeHelper; f.computeHelper = s => s.name === 'assistant_orb' ? 'On: the mic shows only an animated orb near the top (the dashboard stays clear); tap the orb for the chat. Off: the full chat opens.'
+        : s.name === 'assistant_continue' ? 'After a reply that ends with a question (or when the assistant keeps the conversation open), the mic opens again for your answer; it stops after about 6 s of silence.'
         : s.name === 'assistant_quiet_volume_entity' ? 'Quiet mode is chosen on each device (Off / On / Auto) with the Quiet button in the assistant\'s chat. Quiet: the reply is not spoken, it shows as text under the orb. Auto uses this sensor when it reports a number (percent or 0-1), otherwise the quiet hours. A sensor belongs to one phone or tablet: set it on the dashboard that device uses.'
         : s.name === 'assistant_quiet_focus_entity' ? 'Auto is also quiet while this is on (e.g. a phone\'s Focus or Do Not Disturb sensor).' : s.name === 'assistant_quiet_start' ? 'Used by Auto when no volume sensor is set or it isn\'t reporting.' : h3(s); }
       { const h2 = f.computeHelper; f.computeHelper = s => s.name === 'photo_album_url' ? hvAlbumStatus(this._albSt, (this._config || {}).photo_album_url) : s.name === 'photo_source_mode' ? 'Media folder: pictures in Home Assistant\'s media (Media → My media). Album link: a shared Google Photos, iCloud or OneDrive album, used for the Photos tile and its viewer (and the screensaver, if its source is set the same way).' : h2(s); }

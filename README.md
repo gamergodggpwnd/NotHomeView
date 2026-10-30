@@ -113,6 +113,7 @@ and Wallpanel 4.67.2.
 | `assistant_auto_listen` | `true` | Start listening as soon as it opens |
 | `assistant_speak` | `true` | Play the spoken reply (the pipeline's text-to-speech) |
 | `assistant_orb` | `true` | The mic shows only a floating animated orb near the top (no blur over the dashboard); tap the orb for the chat |
+| `assistant_continue` | `true` | Listen again after a reply that asks something (ends with `?` or the agent keeps the conversation open); stops after ~6 s of silence |
 | `assistant_quiet_volume_entity` | `''` | Quiet mode *Auto*: the device's volume sensor (percent or 0–1); quiet under `assistant_quiet_volume_below` |
 | `assistant_quiet_volume_below` | `5` | Quiet mode *Auto*: volume threshold in % |
 | `assistant_quiet_focus_entity` | `''` | Quiet mode *Auto*: a Focus / Do Not Disturb sensor; quiet while it is on |
