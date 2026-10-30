@@ -123,13 +123,31 @@ const hvPenPage = (dash, vp) => hvGoEdit(dash ? `/${dash}/${vp}?disable_km&edit=
 // navigate() does, then turn on Lovelace edit mode. Falls back to the old full page load (?disable_km&edit=1) for another dashboard, a YAML
 // dashboard, or when the header stays hidden (kiosk-mode that doesn't react to ?disable_km without a reload).
 // kiosk-mode only reads ?disable_km when the dashboard loads: switch its header / sidebar hiding styles off in place (until the next load)
-function hvKioskOff() { const walk = (r, d) => { if (!r || d > 12) return; r.querySelectorAll('style[id^="kiosk_mode"]').forEach(st => { st.media = 'not all'; });
-    r.querySelectorAll('*').forEach(n => { if (n.shadowRoot) walk(n.shadowRoot, d + 1); }); }; walk(document, 0); window.__hvKmOff = true; }
+// 1.32.0: ... and switches them back on once editing is over (edit mode left with Done / Cancel and no card editor open), so the view selector
+// (HA's header) doesn't stay at the top of the Home Screen afterwards. A ?disable_km we put in the address is dropped again at that point.
+const HVKM = { st: new Set(), iv: null, seen: false, idle: 0, t0: 0, q: false, root: null };
+function hvKioskOff() { const walk = (r, d) => { if (!r || d > 12) return; r.querySelectorAll('style[id^="kiosk_mode"]').forEach(st => { if (st.media !== 'not all') st.__hvKm = st.media || ''; st.media = 'not all'; HVKM.st.add(st); });
+    r.querySelectorAll('*').forEach(n => { if (n.shadowRoot) walk(n.shadowRoot, d + 1); }); }; walk(document, 0); window.__hvKmOff = true; hvKmWatch(); }
+function hvKmEditing() { const ha = document.querySelector('home-assistant'), hr = ha && ha.shadowRoot; if (!hr) return false;
+  if (!HVKM.root || !HVKM.root.isConnected) HVKM.root = hvDeepFind(hr, n => n.tagName === 'HUI-ROOT'); const lv = HVKM.root && HVKM.root.lovelace;
+  const d = hr.querySelector('hui-dialog-edit-card'); return !!((lv && lv.editMode) || (d && d._params)); }
+function hvKmWatch() { if (HVKM.iv) return; HVKM.seen = false; HVKM.idle = 0; HVKM.t0 = Date.now();
+  HVKM.iv = setInterval(() => { if (hvKmEditing()) { HVKM.seen = true; HVKM.idle = 0; return; } if (!HVKM.seen && Date.now() - HVKM.t0 < 8000) return; if (++HVKM.idle >= 2) hvKioskOn(); }, 400); }
+function hvKioskOn() { clearInterval(HVKM.iv); HVKM.iv = null; const ws = window.__hvKmOff;
+  for (const st of HVKM.st) if (st.media === 'not all') st.media = st.__hvKm || ''; HVKM.st.clear(); window.__hvKmOff = false;
+  let u = null; try { u = new URL(location.href); } catch (e) {}
+  if (u && HVKM.q && (u.searchParams.has('disable_km') || u.searchParams.has('edit'))) { HVKM.q = false; u.searchParams.delete('disable_km'); u.searchParams.delete('edit');
+    const qs = u.searchParams.toString(); history.replaceState(history.state, '', u.pathname + (qs ? '?' + qs.replace(/=(&|$)/g, '$1') : '') + u.hash);
+    window.dispatchEvent(new CustomEvent('location-changed', { detail: { replace: true } })); } // kiosk-mode re-reads the address and hides the header again
+  else if (ws) window.dispatchEvent(new Event('resize')); }
+// the full page load fallback (?disable_km&edit=1): kiosk-mode never hid the header, so watch for the end of editing as well
+try { const q0 = new URLSearchParams(location.search); if (q0.has('disable_km') && q0.get('edit') === '1') { HVKM.q = true; setTimeout(hvKmWatch, 0); } } catch (e) {}
 function hvGoEdit(url) { let u; try { u = new URL(url, location.href); } catch (e) { location.assign(url); return; }
   const seg = p => decodeURIComponent((p || '').split('/')[1] || ''), ha = document.querySelector('home-assistant'), find = () => ha && hvDeepFind(ha.shadowRoot, n => n.tagName === 'HUI-ROOT');
   const root0 = find(), lv0 = root0 && root0.lovelace;
   if (u.origin !== location.origin || seg(u.pathname) !== seg(location.pathname) || !lv0 || lv0.mode === 'yaml' || typeof lv0.setEditMode !== 'function') { location.assign(url); return; }
   const q = new URLSearchParams(u.search); q.delete('edit'); const qs = q.toString(), to = u.pathname + (qs ? '?' + qs.replace(/=(&|$)/g, '$1') : '');
+  if (q.has('disable_km') && !new URLSearchParams(location.search).has('disable_km')) HVKM.q = true;
   if (location.pathname + location.search !== to) { history.pushState(null, '', to); window.dispatchEvent(new CustomEvent('location-changed', { detail: { replace: false } })); }
   setTimeout(() => { const r = find(), lv = r && r.lovelace; if (!lv) { location.assign(url); return; } if (q.has('disable_km')) hvKioskOff(); try { lv.setEditMode(true); } catch (e) { location.assign(url); return; }
     setTimeout(() => { if (q.has('disable_km')) hvKioskOff(); const r2 = find(), hd = r2 && r2.shadowRoot && r2.shadowRoot.querySelector('.header, app-header, .toolbar'), on = r2 && r2.lovelace && r2.lovelace.editMode;
@@ -1664,7 +1682,7 @@ const CAM_CSS = `
 :host([fixed]){aspect-ratio:auto}
 ha-card{position:relative !important;height:100%;width:100%;box-sizing:border-box;overflow:hidden !important;border-radius:var(--hv-radius,22px) !important;
  border:1px solid var(--hv-border,rgba(255,255,255,.35)) !important;box-shadow:var(--hv-shadow,0 8px 24px rgba(0,0,30,.16)) !important;
- background:#0d1117 !important;font-family:${FONT};color:#fff;container-type:size;user-select:none;-webkit-user-select:none;cursor:pointer;touch-action:manipulation}
+ background:#0d1117 !important;font-family:${FONT};color:#fff;container-type:size;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;cursor:pointer;touch-action:manipulation}
 ha-card::before,ha-card::after{content:none !important;display:none !important}
 :host([large]) ha-card{border-radius:26px !important;border:1px solid rgba(255,255,255,.12) !important;cursor:default;touch-action:none;background:#05070a !important}
 :host([fs]) ha-card{border-radius:0 !important;border:none !important;box-shadow:none !important}
@@ -3238,7 +3256,7 @@ class HVGridCard extends HTMLElement {
     if (!this._bound) { this._bound = () => this._layout(); }
     addEventListener('resize', this._bound); addEventListener('hv-layout', this._bound); addEventListener('orientationchange', this._bound); if (window.visualViewport) visualViewport.addEventListener('resize', this._bound);
     if (window.ResizeObserver && !this._ro) { this._ro = new ResizeObserver(() => this._layout()); this._ro.observe(this); }
-    this._edgeBind(true); this._backBind(true);
+    { const on = !hvInDialog(this); this._edgeBind(on); this._backBind(on); }
     [900, 3000].forEach(t => setTimeout(() => { this._arrF = true; this._arrBtn(); }, t));
     requestAnimationFrame(() => this._layout(true)); setTimeout(() => this._layout(true), 600); setTimeout(() => this._layout(), 1700); // 1700: after the edit buttons appear
   }
@@ -3246,7 +3264,7 @@ class HVGridCard extends HTMLElement {
   // where the sidebar is a drawer) instead of moving the page scroller. Mid-screen swipes keep paging the grid.
   _edgeBind(on) {
     if (!this._edgeH) { let st = null;
-      const ts = e => { st = null; const c = this._config || {}; if (c.edge_sidebar === false || this._edit || !this.isConnected || e.touches.length !== 1) return;
+      const ts = e => { st = null; const c = this._config || {}; if (c.edge_sidebar === false || this._edit || !this.isConnected || e.touches.length !== 1 || hvInUi(e) || hvEdOpen()) return;
         const t = e.touches[0]; if (t.clientX <= 24 + this._px('env(safe-area-inset-left, 0px)')) st = { x: t.clientX, y: t.clientY, done: false }; };
       const tm = e => { if (!st) return; const t = e.touches[0], dx = t.clientX - st.x, dy = t.clientY - st.y;
         if (e.cancelable) e.preventDefault(); // hold the page scroller still during the edge gesture
@@ -3497,7 +3515,8 @@ addEventListener('pointerdown', hvTapPick, true);
   for (const t of ['pointerup', 'pointercancel']) addEventListener(t, stopLp, true);
   addEventListener('scroll', stopLp, { capture: true, passive: true });
   // eat = time arrange mode was entered; after the finger lifts, keep eating the trailing mouseup / click for 0.6 s
-  let rel = 0; const eatOn = () => eat && (!rel || Date.now() - rel < 600);
+  let rel = 0; const eatOn = () => eat && (!rel || Date.now() - rel < 600) && Date.now() - eat < 8000;
+  for (const t of ['pointercancel', 'touchcancel']) addEventListener(t, () => { if (eat && !rel) { rel = Date.now(); setTimeout(() => { eat = rel = 0; }, 650); } }, { capture: true, passive: true });
   for (const t of ['pointerup', 'touchend', 'mouseup', 'click', 'contextmenu']) addEventListener(t, e => { if (!eatOn()) { eat = rel = 0; return; } e.stopImmediatePropagation(); if (e.cancelable) e.preventDefault();
     if ((t === 'touchend' || t === 'pointerup') && !rel) { rel = Date.now(); setTimeout(() => { eat = rel = 0; }, 650); } }, true); }
 /* 1.32.0: per-tile controls in the dashboard's edit mode (room / device pages, the Page Grid). Home Assistant puts an overlay over every card while
@@ -3593,16 +3612,18 @@ const hvEcl = { host: null, sr: null, lay: null, ctl: new WeakMap(), timer: null
   ensure() { if (this.host && this.host.isConnected) return;
     const h = this.host = document.createElement('div'); h.id = 'hv-edit-layer'; const sr = this.sr = h.attachShadow({ mode: 'open' });
     sr.innerHTML = `<style>${HV_ECL_CSS}</style><div class="lay"></div>`; this.lay = sr.querySelector('.lay'); document.body.appendChild(h);
-    const stop = e => { if (this.drag) e.preventDefault(); }; // finger drags move the tile, never the page
-    document.addEventListener('touchmove', stop, { passive: false, capture: true }); this._stop = stop;
-    addEventListener('scroll', () => this.kick(), { capture: true, passive: true }); addEventListener('resize', () => this.kick());
-    addEventListener('keydown', e => { if (e.key === 'Escape' && this.rs) this.endResize(); if (e.key === 'Escape' && (this.menu || this.drag)) { if (this.drag) this.endDrag(false); this.closeMenu(); } }, true); },
+    // 1.32.0: added once (not once per layer), and the touchmove block is only live during a tile drag and never for a touch in a dialog
+    if (!this._gl) { this._gl = true; this._stop = e => { if ((this.drag || hvHubArr.drag) && e.cancelable && !hvInUi(e)) e.preventDefault(); }; // finger drags move the tile, never the page
+      addEventListener('scroll', () => this.kick(), { capture: true, passive: true }); addEventListener('resize', () => this.kick());
+      addEventListener('keydown', e => { if (e.key === 'Escape' && this.rs) this.endResize(); if (e.key === 'Escape' && (this.menu || this.drag)) { if (this.drag) this.endDrag(false); this.closeMenu(); } }, true); }
+    this.tmBind(true); },
+  tmBind(on) { if (!this._stop || !!on === !!this._tmOn) return; this._tmOn = !!on; if (on) document.addEventListener('touchmove', this._stop, { passive: false, capture: true }); else document.removeEventListener('touchmove', this._stop, { passive: false, capture: true }); },
   kick() { if (this._raf) return; this._raf = requestAnimationFrame(() => { this._raf = 0; this.tick(); }); },
   start() { if (this.timer) return; this.timer = setInterval(() => this.tick(), 150); this.kick(); },
   tick() { for (const g of hvGridCards) if (g._arr && !g.isConnected) this.arrange(g, false, true);
     const gs = [...hvGridCards].filter(g => g.isConnected && (g._edit || g._arr) && g._kids && hvEclOK(g)); 
     if (!gs.length && hvHubArr.hub) { clearInterval(this.timer); this.timer = null; return; }
-    if (!gs.length) { clearInterval(this.timer); this.timer = null; this.closeMenu(); if (this.drag) this.endDrag(false); if (this.host) { this.host.remove(); this.host = null; this.ctl = new WeakMap(); } return; }
+    if (!gs.length) { clearInterval(this.timer); this.timer = null; this.closeMenu(); if (this.drag) this.endDrag(false); if (this.host) { this.host.remove(); this.host = null; this.ctl = new WeakMap(); } this.tmBind(false); return; }
     this.ensure(); this.bar(gs.find(g => g._arr && !g._edit)); { const day = gs.some(g => g.hasAttribute('hv-day')); if (this.host.hasAttribute('day') !== day) this.host.toggleAttribute('day', day); } const vw = document.documentElement.clientWidth || innerWidth, vh = innerHeight, live = new Set();
     for (const g of gs) { if (g._edit) hvEditChrome(g); const root = hvFindRoot(g), hd = root && root.shadowRoot && root.shadowRoot.querySelector('.header'), top = hd ? hd.getBoundingClientRect().bottom : 0, gr = g.getBoundingClientRect();
       const L = Math.max(0, gr.left) - 2, R = Math.min(vw, gr.right) + 2;
@@ -3774,7 +3795,7 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
     if (navigator.vibrate) try { navigator.vibrate(15); } catch (x) {} this.timer = setInterval(() => this.tick(), 150); this._k = () => this.tick(); addEventListener('scroll', this._k, { capture: true, passive: true }); addEventListener('resize', this._k); this.tick(); },
   exit(save) { const h = this.hub; if (!h) return Promise.resolve(true); hvEcl.closeMenu(); this.endDrag(false); this.endResize();
     const fin = () => { clearInterval(this.timer); this.timer = null; removeEventListener('scroll', this._k, true); removeEventListener('resize', this._k); for (const c of this.ctl.values()) c.remove(); this.ctl.clear(); this.bar(false);
-      h.toggleAttribute('hv-arr', false); this.hub = null; this.dirty = false; hvEcl.kick(); };
+      h.toggleAttribute('hv-arr', false); this.hub = null; this.dirty = false; if (this.drag) this.endDrag(false); hvEcl.kick(); };
     if (!save || !this.dirty) { if (this.dirty) h._arrSet(JSON.parse(this.orig)); fin(); return Promise.resolve(true); }
     if (this.busy) return Promise.resolve(false); this.busy = true; const raw = this.raw();
     return hvHubMutate(h, this.orig, raw).then(() => { this.busy = false; fin(); hvToast('Saved', 'hv-arrange'); return true; },
@@ -4200,7 +4221,7 @@ function hvPullDown(o) { // o: { on: el|window, ok(touch, ev) -> bool, target() 
   let st = null;
   const reset = (el, anim) => { if (!el) return; el.style.transition = anim ? 'transform .28s cubic-bezier(.2,.9,.3,1), opacity .28s ease' : ''; el.style.transform = ''; el.style.opacity = '';
     if (anim) setTimeout(() => { el.style.transition = ''; el.style.willChange = ''; }, 300); };
-  const ts = e => { st = null; if (e.touches.length !== 1) return; const t = e.touches[0]; if (t.clientX <= 28 || !o.ok(t, e)) return;
+  const ts = e => { st = null; if (e.touches.length !== 1 || (!o.on && (hvInUi(e) || hvEdOpen()))) return; const t = e.touches[0]; if (t.clientX <= 28 || !o.ok(t, e)) return;
     st = { x: t.clientX, y: t.clientY, t: Date.now(), on: false, dy: 0, el: null }; };
   const tm = e => { if (!st) return; const t = e.touches[0], dx = t.clientX - st.x, dy = t.clientY - st.y;
     if (!st.on) { if (Math.abs(dx) > 14 && Math.abs(dx) > dy) { st = null; return; } if (dy < -6) { st = null; return; }
@@ -4218,6 +4239,15 @@ function hvPullDown(o) { // o: { on: el|window, ok(touch, ev) -> bool, target() 
 const hvNavigate = path => { if (location.search && !path.includes('?')) path += location.search; history.pushState(null, '', path); fire(window, 'location-changed', { replace: false }); };
 const hvHaRoot = () => document.querySelector('home-assistant');
 
+/* 1.32.0: touches inside Home Assistant's dialogs (card editor, more-info, browser_mod popups) and the card editor preview never start a
+   Home Screen / Page Grid gesture (pull-down screensaver, swipe back, edge sidebar, pull-to-refresh block): those dialogs scroll on their own. */
+const HV_UI_RX = /^(HA-DIALOG|HA-MD-DIALOG|HA-WA-DIALOG|HA-ADAPTIVE-DIALOG|HA-BOTTOM-SHEET|WA-DIALOG|WA-DRAWER|DIALOG|HA-MORE-INFO-DIALOG|BROWSER-MOD-POPUP|HUI-CARD-PREVIEW|HUI-CARD-ELEMENT-EDITOR|HUI-DIALOG-[A-Z-]+|[A-Z-]+-CARD-EDITOR)$/;
+const HV_ED_RX = /^(HUI-DIALOG-[A-Z-]+|HUI-CARD-PREVIEW|HUI-CARD-ELEMENT-EDITOR|HUI-SECTION-EDITOR|[A-Z-]+-CARD-EDITOR)$/;
+const hvPathHas = (e, rx) => { try { for (const n of (e.composedPath ? e.composedPath() : [])) if (n && n.tagName && rx.test(n.tagName)) return true; } catch (x) {} return false; };
+const hvInUi = e => hvPathHas(e, HV_UI_RX);
+// the card editor dialog is open right now (HA keeps the element around after closing; _params is set only while it is open)
+const hvEdOpen = () => { const ha = document.querySelector('home-assistant'), d = ha && ha.shadowRoot && ha.shadowRoot.querySelector('hui-dialog-edit-card'); return !!(d && d._params); };
+
 /* ---------------- block pull-to-refresh ----------------
    While a card that wants it is on the page (hub card; page grid with swipe-back), a downward drag that would overscroll the
    page at the top is cancelled (touchmove preventDefault, non-passive), so neither the HA iOS / Android app's native
@@ -4227,13 +4257,16 @@ const hvPTR = (() => { const owners = new Set(); let st = null, saved = null;
   const docTop = () => { const se = document.scrollingElement || document.documentElement; return (se.scrollTop || 0) <= 0 && (window.scrollY || 0) <= 0; };
   const scroller = path => { for (const n of path) { if (!(n instanceof Element)) continue; if (n === document.documentElement || n === document.body) break;
     if (n.scrollHeight > n.clientHeight + 1) { const oy = getComputedStyle(n).overflowY; if (oy === 'auto' || oy === 'scroll') return n; } } return null; };
-  const ts = e => { st = null; if (!owners.size || e.touches.length !== 1) return; const t = e.touches[0]; st = { x: t.clientX, y: t.clientY, sc: scroller(e.composedPath()) }; };
-  const tm = e => { if (!st || !e.cancelable || e.touches.length !== 1) return; const t = e.touches[0], dx = t.clientX - st.x, dy = t.clientY - st.y;
-    if (dy <= 0 || Math.abs(dx) > dy) return;              // up, or sideways (paging, sidebar swipe): leave alone
-    if (st.sc && st.sc.scrollTop > 0) return;               // an inner list that can still scroll up
-    if (!docTop()) return;                                   // the page itself is scrolled: normal scroll back up
-    e.preventDefault(); };
+  // 1.32.0: never in the card editor / HA's edit-mode dialogs or while an owner is in edit mode; the direction is decided once per touch
+  // (after a few px, so a finger that lands with a 1 px downward wobble before swiping up still scrolls), then kept for the whole touch
+  const live = () => { for (const o of owners) if (o.isConnected && !o._edit) return true; return false; };
+  const ts = e => { st = null; if (!owners.size || e.touches.length !== 1 || !live() || hvPathHas(e, HV_ED_RX) || hvEdOpen()) return; const t = e.touches[0]; st = { x: t.clientX, y: t.clientY, sc: scroller(e.composedPath()), lock: 0 }; };
+  const tm = e => { if (!st || e.touches.length !== 1) return; if (!e.cancelable) { st = null; return; } const t = e.touches[0], dx = t.clientX - st.x, dy = t.clientY - st.y;
+    if (!st.lock) { if (Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
+      st.lock = dy > 0 && Math.abs(dx) <= dy && !(st.sc && st.sc.scrollTop > 0) && docTop() ? 1 : -1; } // down at the top: block; up, sideways, inner list scrolled: free
+    if (st.lock < 0) { st = null; return; } e.preventDefault(); };
   const te = () => { st = null; };
+  document.addEventListener('visibilitychange', () => { st = null; });
   const css = on => { const els = [document.documentElement, document.body, document.querySelector('home-assistant')].filter(Boolean);
     if (on && !saved) { saved = els.map(el => [el, el.style.overscrollBehaviorY]); els.forEach(el => { el.style.overscrollBehaviorY = 'none'; }); }
     if (!on && saved) { saved.forEach(([el, v]) => { el.style.overscrollBehaviorY = v; }); saved = null; } };
@@ -4438,7 +4471,7 @@ const HUB_APPS = [
   { name: 'Security', icon: 'mdi:shield-home', color_from: '#5b8cff', color_to: '#2b3fd6', kind: 'navigate', navigation_path: 'security' },
   { name: 'Music', icon: 'mdi:music-note', color_from: '#ff6b81', color_to: '#f5163d', kind: 'now_playing' },
   { name: 'Weather', icon: 'mdi:weather-partly-cloudy', color_from: '#5ec8ff', color_to: '#1a73e8', kind: 'weather' }];
-const HUB_CSS = `:host{display:block;position:relative;font-family:${FONT};color:#fff;-webkit-tap-highlight-color:transparent}
+const HUB_CSS = `:host{display:block;position:relative;font-family:${FONT};color:#fff;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none}
 .bg{position:fixed;inset:0;z-index:-1;pointer-events:none;overflow:hidden;background:var(--hv-wall,radial-gradient(120% 90% at 20% 10%,#4b3a66 0%,#1c1a33 55%,#0d0f1a 100%))}
 :host([contained]) .bg{position:absolute;border-radius:24px;z-index:0}
 .bgi{position:absolute;inset:calc(-2 * var(--blur,32px));background-size:cover;background-position:center;filter:blur(var(--blur,32px)) saturate(1.35);transform:scale(1.08);opacity:0;transition:opacity 2.2s ease}
@@ -5400,18 +5433,24 @@ class HVHubCard extends HTMLElement {
       this._config = nc; this.style.setProperty('--blur', (Number(nc.blur) || 0) + 'px'); this.style.setProperty('--dim', String(Math.max(0, Math.min(0.9, Number(nc.dim) || 0)))); this._bgMode(); if (nc.bg_freeze === false) this._paintBg(true, true); return; }
     this._config = nc;
     this._sig = null; if (old && (old.photo_source !== c.photo_source || old.photo_order !== c.photo_order || old.photo_source_mode !== c.photo_source_mode || old.photo_album_url !== c.photo_album_url)) { this._ids = null; this._idsExp = 0; this._loadPhotos(); }
-    this._calSig = null; this._render(); this._restartTimer(); if (this.isConnected) hvPTR.set(this, this._config.block_pull_refresh !== false); }
+    this._calSig = null; this._render(); this._restartTimer(); if (this.isConnected) this._gBind(); }
   set hass(h) { const first = !this._hass; this._hass = h; this._render(); if (this._cal) this._cal.hass = h; (this._sideEls || []).forEach(e => { e._card.hass = this._simHass(h);
       if (e._fit) { const o = hubTileOpt(this._config, this._sideEls.indexOf(e)); if (o.sky === true && hvSky(h, o.sky_entity, window.__hvSimScene).sig !== e._skySig) requestAnimationFrame(() => this._fitTile(e)); } }); if (first) { this._loadPhotos(); this._loadCfg(); setTimeout(hvWwSync, 0); } if (this._sheetO) this._sheetO.hass = h; }
   get hass() { return this._hass; }
-  set editMode(v) { this._edit = v; this._layout(); this._ssPaint(); if (v) hvEditChromeSoon(this); }
+  set editMode(v) { const was = !!this._edit; this._edit = v; this._layout(); this._ssPaint(); if (v) hvEditChromeSoon(this);
+    if (v && !was && hvHubArr.hub === this) hvHubArr.exit(true); // HA's edit mode takes over: finish the Home Screen arrange (saves like Done)
+    if (!!v !== was) this._gBind(); }
+  // 1.32.0: the page-wide touch listeners (edge sidebar swipe, pull-to-refresh block, pull-down screensaver) only while this is the real Home
+  // Screen: connected, not in HA's edit mode and not the card editor's preview. Released on edit mode, disconnect and in the preview.
+  _gBind() { const on = !!this.isConnected && !this._edit && !hvInDialog(this); this._edgeBind(on);
+    hvPTR.set(this, on && (this._config || {}).block_pull_refresh !== false); this._ssBind(on); }
   getCardSize() { return 12; }
   getGridOptions() { return { columns: 'full', rows: 'auto', min_columns: 12 }; }
   connectedCallback() { HV_HUBS.add(this); setTimeout(hvWwSync, 0);
     if (!this._bound) this._bound = () => this._layout();
     addEventListener('resize', this._bound); addEventListener('orientationchange', this._bound); addEventListener('hv-layout', this._bound); if (window.visualViewport) visualViewport.addEventListener('resize', this._bound);
     if (window.ResizeObserver && !this._ro) { this._ro = new ResizeObserver(() => this._layout()); this._ro.observe(this); }
-    this._edgeBind(true); hvPTR.set(this, (this._config || {}).block_pull_refresh !== false); this._ssBind(true); if (this._hass) this._loadCfg(true);
+    this._gBind(); setTimeout(() => this._gBind(), 0); if (this._hass) this._loadCfg(true);
     if (!this._tpf) this._tpf = () => this._tpillPaint(); hvTimerPills.add(this._tpf); this._tpillPaint();
     clearInterval(this._tick); this._tick = setInterval(() => { this._sig = null; this._render(); if (++this._tn % 4 === 0) this._loadCfg(true); else this._ssPaint(); }, 30000); this._tn = 0;
     if (!this._vis) { this._vis = () => { if (!document.hidden) this._restartTimer(); else this._paintBg(true, true); }; } document.addEventListener('visibilitychange', this._vis);
@@ -5462,7 +5501,7 @@ class HVHubCard extends HTMLElement {
     if (!this._ssH) { let g = null;
       const ok = t => this._ssOn && !this._edit && !this._sheetO && !this._ssBusy && this.isConnected && !hvFhBusy() && !this.hasAttribute('contained') && scrollY <= 2 && t.clientX > 28
         && t.clientY <= this._px('var(--hv-safe-top, env(safe-area-inset-top, 0px))') + 96;
-      const ts = e => { g = null; if (e.touches.length !== 1) return; const t = e.touches[0]; if (!ok(t)) return; g = { x: t.clientX, y: t.clientY, on: false, pts: [] }; };
+      const ts = e => { g = null; if (e.touches.length !== 1 || hvInUi(e) || hvEdOpen()) return; const t = e.touches[0]; if (!ok(t)) return; g = { x: t.clientX, y: t.clientY, on: false, pts: [] }; };
       const tm = e => { if (!g) return; const t = e.touches[0], dx = t.clientX - g.x, dy = t.clientY - g.y;
         if (!g.on) { if (Math.abs(dx) > 14 && Math.abs(dx) > dy) { g = null; return; } if (dy < -6) { g = null; return; }
           if (dy > 10 && dy > Math.abs(dx) * 1.2) { g.on = true; g.y0 = t.clientY; this._ssPrev(true); } else return; }
@@ -5559,7 +5598,7 @@ class HVHubCard extends HTMLElement {
   // --- edge swipe opens the sidebar drawer (same gesture as the Page Grid)
   _edgeBind(on) {
     if (!this._edgeH) { let st = null;
-      const ts = e => { st = null; if ((this._config || {}).edge_sidebar === false || this._edit || !this.isConnected || e.touches.length !== 1) return;
+      const ts = e => { st = null; if ((this._config || {}).edge_sidebar === false || this._edit || !this.isConnected || e.touches.length !== 1 || hvInUi(e) || hvEdOpen()) return;
         const t = e.touches[0]; if (t.clientX <= 24) st = { x: t.clientX, y: t.clientY, done: false }; };
       const tm = e => { if (!st) return; const t = e.touches[0], dx = t.clientX - st.x, dy = t.clientY - st.y; if (e.cancelable) e.preventDefault();
         if (!st.done && dx > 36 && Math.abs(dy) < dx) { st.done = true; if (innerWidth < 870) { let d = null; try { d = document.querySelector('home-assistant').shadowRoot.querySelector('home-assistant-main').shadowRoot.querySelector('ha-drawer'); } catch (x) {}

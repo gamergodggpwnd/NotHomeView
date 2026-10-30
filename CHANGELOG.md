@@ -44,6 +44,9 @@
 * Home Screen: in landscape, 5 to 8 apps sit in 2 rows (3 or 4 columns) when there is room, so they line up with the tiles beside them.
 
 ### Bug fixes (staged builds)
+* **Card editor scrolls again on phones.** The Home Screen's pull-to-refresh block (and the pull-down screensaver / swipe-back / edge-sidebar gestures) listened on the whole page and also cancelled touches inside Home Assistant's card editor dialog while its list was at the top, so on iPhone a swipe that started with a tiny downward wobble didn't scroll the editor ("sometimes stuck"). These page-wide gestures now ignore every Home Assistant dialog and the card editor (and its preview), are released while the dashboard is in edit mode, decide the direction once per touch after a few px, and the arrange layer's touch block is only active during a tile drag (one listener instead of one per layer)
+* After a long-press whose touch was cancelled (iOS image callout), the next tap is no longer swallowed (Home Screen / Page Grid arrange mode), and camera / Home Screen tiles no longer show iOS's "Save to Photos" callout on a long-press
+* **The page selector hides again after editing.** Opening edit mode with the pencil switches kiosk-mode's header hiding off; it now comes back once edit mode is left (Done / Cancel) and no card editor is open, and the `?disable_km` / `edit=1` the pencil added is dropped from the address
 * Assistant: pipelines without text-to-speech now answer (silently) instead of failing with "the pipeline does not support text-to-speech".
 * Assistant: pipelines without speech-to-text no longer show a raw error when the popup opens; the mic is dimmed and explains on a tap.
 * Assistant: a conversation agent that fails (for example an expired API key) shows a clear note on what to check instead of only a generic apology.
