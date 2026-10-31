@@ -734,6 +734,11 @@ is inside a browser_mod popup.
   **Tap action** (HA's action picker). The default is *toggle* (lights, switches, sirens, covers, locks…) or *more‑info* for things that
   can't toggle; scenes, scripts and buttons run. Buttons sit in a glass row along the bottom of the tile and the large view and
   light up (white) while their entity is on. Small tiles show round icon buttons; when there is room the name appears next to the icon.
+* **Live video on the tile** (`live_tile`): *Automatic* (Nest: still picture, tap for live; others: live), *Always live (while on screen)* (`visible`),
+  *Live video on the tile (always connected)* (`on`) or *Tap for live* (`off`). *Always live* streams only while at least half the tile is on screen and stops
+  when you scroll away, the page is hidden, the screensaver runs or the large view is open (it keeps the last frame and reconnects by itself; after 5 failed
+  tries it falls back to *Tap for live*). **Pause after no activity** (`live_pause`, `live_pause_min`, default on / 30 min) stops it after that long without
+  a touch on the device. Each device can override the mode from the large view's *Tile on this device* button (saved in that browser).
 * **Large view (tap the picture)**: opens a browser_mod popup with the stream large (letter‑boxed, nothing cropped), the same name chip,
   the buttons and a ✕. **Popup style** *Full screen* (default, edge to edge, safe areas respected) or *Window* (a 960 × 540 rounded
   panel, smaller on small screens). **Swipe down to close** works the same as in the Now Playing popup. Without browser_mod, or with
@@ -746,6 +751,8 @@ name: Front Yard
 size: 4x6                      # 2x3 (default) | 2x6 | 4x6
 grid_options: {columns: 6, rows: 4}
 camera_view: live              # live (default) | snapshot
+live_tile: visible             # auto (default) | visible (Always live while on screen) | on | off
+live_pause_min: 30             # Always live: pause after 30 min without a touch (live_pause: false = never)
 buttons:
   - entity: light.front_yard
     name: Lights

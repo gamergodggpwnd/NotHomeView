@@ -1775,6 +1775,16 @@ const CAM_VENDOR = { nest: { badge: 'Nest', talk: 'google_home' }, ring: { badge
 // Google's SDM API rate-limits live streams (GenerateWebRtcStream / ExtendWebRtcStream) per user: Nest tiles show a poster and only
 // the opened large view streams (one stream, stopped when it closes, no automatic retries)
 const CAM_RATE = /429|RESOURCE_EXHAUSTED|Too Many Requests|Rate limited/i;
+// 1.32.0 Always live (live_tile: visible): per-device override kept in this browser ('live' = always live, 'tap' = tap for live,
+// none = the card's setting), last user activity (for "Pause after no activity") and which cameras have their large view open
+const CAM_DEV_LS = 'hvCamLiveDev:', CAM_DEV_LABEL = { '': 'Card setting', live: 'Always live', tap: 'Tap for live' }, CAM_DEV_NEXT = { '': 'live', live: 'tap', tap: '' };
+function camDevGet(id) { try { const v = localStorage.getItem(CAM_DEV_LS + id); return v === 'live' || v === 'tap' ? v : ''; } catch (e) { return ''; } }
+function camDevSet(id, v) { try { if (v === 'live' || v === 'tap') localStorage.setItem(CAM_DEV_LS + id, v); else localStorage.removeItem(CAM_DEV_LS + id); } catch (e) {}
+  window.dispatchEvent(new CustomEvent('hv-cam-dev', { detail: { entity: id, value: v || '' } })); }
+let camLastAct = Date.now(); const camBig = {};
+for (const t of ['pointerdown', 'keydown', 'touchstart', 'wheel']) addEventListener(t, () => { camLastAct = Date.now(); }, { capture: true, passive: true });
+const camSsOn = () => { try { const w = ssWallpanel(); return !!(w && w.screensaverRunning && w.screensaverRunning()); } catch (e) { return false; } };
+const CAM_AL_RETRY = [5000, 15000, 45000, 120000], CAM_AL_MAXFAIL = 5, CAM_AL_GIVEUP = 600000;
 // 1.32.0: still previews for tiles without live video (Nest): the newest of the last Nest event image (Home Assistant's Nest media
 // source, read when an event entity changes) and the last frame seen in the large view (saved in this browser, and for admins also
 // in Home Assistant's media folder, /media/nothomeview_camera_previews/<camera>.jpg, one file per camera, overwritten).
@@ -1818,7 +1828,7 @@ function camWhen(h, v) { // event entity state (ISO time) -> "8:42 PM" today, "Y
 }
 class HVCameraCard extends HTMLElement {
   constructor() { super(); this.attachShadow({ mode: 'open' }); }
-  static get defaults() { return { camera_view: 'live', size: '2x3', show_name: true, show_status: true, tap_opens: true, popup_style: 'fullscreen', swipe_to_close: true, show_history: true, show_sound: true, show_preview: true }; }
+  static get defaults() { return { camera_view: 'live', size: '2x3', show_name: true, show_status: true, tap_opens: true, popup_style: 'fullscreen', swipe_to_close: true, show_history: true, show_sound: true, show_preview: true, live_pause: true, live_pause_min: 30, show_device_live: true }; }
   static getStubConfig(hass) { const ids = Object.keys(hass.states).filter(k => k.startsWith('camera.')); return { entity: ids.find(k => !UNAVAILABLE.includes(hass.states[k].state)) || ids[0] || 'camera.example' }; }
   static getConfigElement() { const e = document.createElement('homeview-card-editor'); e.cardClass = this; return e; }
   // the Size dropdown writes grid_options (sections grid cells) when it is changed
@@ -1827,7 +1837,8 @@ class HVCameraCard extends HTMLElement {
     if (ns !== ps && CAM_SIZES[ns]) cfg.grid_options = Object.assign({}, cfg.grid_options || {}, CAM_SIZES[ns]);
     if (Array.isArray(cfg.buttons)) { cfg.buttons = cfg.buttons.filter(b => b && b.entity).map(b => { const o = {}; for (const k of Object.keys(b)) if (b[k] !== '' && b[k] != null) o[k] = b[k]; return o; }); if (!cfg.buttons.length) delete cfg.buttons; }
     if (Array.isArray(cfg.events)) { cfg.events = cfg.events.filter(b => b && b.entity).map(b => { const o = {}; for (const k of Object.keys(b)) if (b[k] !== '' && b[k] != null) o[k] = b[k]; return o; }); if (!cfg.events.length) delete cfg.events; }
-    if (cfg.live_tile === true) cfg.live_tile = 'on'; else if (cfg.live_tile === false) cfg.live_tile = 'off'; else if (cfg.live_tile !== 'on' && cfg.live_tile !== 'off') delete cfg.live_tile;
+    if (cfg.live_tile === true) cfg.live_tile = 'on'; else if (cfg.live_tile === false) cfg.live_tile = 'off'; else if (cfg.live_tile !== 'on' && cfg.live_tile !== 'off' && cfg.live_tile !== 'visible') delete cfg.live_tile;
+    if (cfg.live_pause_min != null) { const n = Math.round(Number(cfg.live_pause_min)); if (!(n >= 1)) delete cfg.live_pause_min; else cfg.live_pause_min = Math.min(720, n); if (cfg.live_pause_min === 30) delete cfg.live_pause_min; }
     if (!cfg.talk_app || cfg.talk_app === 'auto') { delete cfg.talk_app; } if (cfg.talk_app !== 'custom') { delete cfg.talk_url; delete cfg.talk_label; }
     return cfg;
   }
@@ -1840,6 +1851,7 @@ class HVCameraCard extends HTMLElement {
     this.style.setProperty('--hv-cam-aspect', CAM_ASPECT[C.size] || '1.3');
     this.toggleAttribute('large', !!C.large); this.toggleAttribute('fs', !!C.large && C.popup_style === 'fullscreen');
     if (this._built && (!prev || prev.entity !== C.entity || prev.camera_view !== C.camera_view)) this._mediaKey = null;
+    if (!prev || prev.live_tile !== C.live_tile || prev.entity !== C.entity) this._alReset();
     this._swipeAttr(); this._sig = null; this._render();
   }
   set hass(h) { this._hass = h; this._render(); }
@@ -1848,8 +1860,8 @@ class HVCameraCard extends HTMLElement {
   getGridOptions() { const g = CAM_SIZES[(this._config || {}).size] || CAM_SIZES['2x3']; return Object.assign({}, g, { min_columns: 3, min_rows: 2 }); }
   getLayoutOptions() { const g = this.getGridOptions(); return { grid_columns: Math.max(1, Math.round(g.columns / 3)), grid_rows: g.rows, grid_min_columns: 1, grid_min_rows: 2 }; }
   connectedCallback() { if (!this._pvH) this._pvH = ev => { if (this._config && ev.detail && ev.detail.entity === this._config.entity && !this._config.large) { this._pvBump = (this._pvBump || 0) + 1; this._prevCheck(); } };
-    addEventListener('hv-cam-preview', this._pvH); this._render(); this._resetDrag(); this._timer(); setTimeout(() => this._swipeAttr(), 0); setTimeout(() => this._swipeAttr(), 400); }
-  disconnectedCallback() { removeEventListener('hv-cam-preview', this._pvH); clearInterval(this._iv); this._iv = null; const me = this; setTimeout(() => { if (!me.isConnected && me._streamEl) { me._stopStream(); me._mediaKey = null; } }, 0); }
+    addEventListener('hv-cam-preview', this._pvH); this._alBind(); this._render(); this._resetDrag(); this._timer(); setTimeout(() => this._swipeAttr(), 0); setTimeout(() => this._swipeAttr(), 400); }
+  disconnectedCallback() { removeEventListener('hv-cam-preview', this._pvH); this._alUnbind(); clearInterval(this._iv); this._iv = null; const me = this; setTimeout(() => { if (!me.isConnected && me._streamEl) { me._stopStream(); me._mediaKey = null; } }, 0); }
   _timer() { clearInterval(this._iv); this._iv = setInterval(() => this._tick(), 1000); }
   get _stateObj() { return this._hass && this._config ? this._hass.states[this._config.entity] : undefined; }
   _btns() { return (this._config.buttons || []).map(b => typeof b === 'string' ? { entity: b } : b).filter(b => b && b.entity); }
@@ -1858,17 +1870,21 @@ class HVCameraCard extends HTMLElement {
   _badge() { const c = this._config; if (c.badge === 'none') return ''; if (c.badge && c.badge !== 'auto') return c.badge; const v = CAM_VENDOR[this._vendor()]; return v ? v.badge : ''; }
   _talkApp() { const c = this._config; if (c.talk_app && c.talk_app !== 'auto') return c.talk_app; const v = CAM_VENDOR[this._vendor()]; return v ? v.talk : 'none'; }
   // live video on the tile: live_tile true / false; default off for Nest (rate limits), on for the others. The large view always streams.
-  _tileLive() { const c = this._config; if (c.large) return true; if (c.live_tile === true || c.live_tile === 'on') return true; if (c.live_tile === false || c.live_tile === 'off') return false; return this._vendor() !== 'nest'; }
+  // 1.32.0: live_tile 'visible' = Always live while on screen; this device's override (large view > This device) wins over the card
+  _liveMode() { const c = this._config, d = camDevGet(c.entity); if (d === 'live') return 'visible'; if (d === 'tap') return 'off';
+    const v = c.live_tile; if (v === true || v === 'on') return 'on'; if (v === false || v === 'off') return 'off'; if (v === 'visible') return 'visible'; return 'auto'; }
+  _alwaysLive() { const c = this._config; return !c.large && c.camera_view !== 'snapshot' && this._liveMode() === 'visible'; }
+  _tileLive() { const c = this._config; if (c.large) return true; const m = this._liveMode(); if (m === 'on') return true; if (m === 'off') return false; if (m === 'visible') return !this._alGaveUp; return this._vendor() !== 'nest'; }
   _noSnap() { return this._vendor() === 'nest'; }
   // a still preview instead of live video on the tile (Nest by default, or live_tile: off)
-  _previewMode() { const c = this._config; if (c.show_preview === false || c.camera_view === 'snapshot') return false; if (c.live_tile === true || c.live_tile === 'on') return false; if (c.live_tile === false || c.live_tile === 'off') return true; return this._vendor() === 'nest'; }
+  _previewMode() { const c = this._config; if (c.show_preview === false || c.camera_view === 'snapshot') return false; const m = this._liveMode(); if (m === 'on') return false; if (m === 'off' || m === 'visible') return true; return this._vendor() === 'nest'; }
   _prevCheck() { if (this._config.large || !this._previewMode() || !this._hass) return;
     const h = this._hass, id = this._config.entity;
     if (this._pvIdsFor !== id) { const dev = (h.entities[id] || {}).device_id; this._pvIdsFor = id; this._pvIds = dev ? Object.values(h.entities).filter(e => e.device_id === dev && /^event\./.test(e.entity_id)).map(e => e.entity_id) : []; }
     const evk = this._evs().map(e => e.entity).concat(this._pvIds).map(e => (h.states[e] || {}).state).join('|');
     const key = this._config.entity + '#' + evk + '#' + (this._pvBump || 0); if (key === this._pvKey) return; this._pvKey = key; this._prevLoad(evk); }
   async _prevLoad(evk) { const h = this._hass, id = this._config.entity, tok = this._pvTok = (this._pvTok || 0) + 1;
-    const all = (await Promise.all([camPvLocal(id), camPvShared(h, id), camPvEvent(h, id, evk)])).filter(Boolean).sort((a, b) => b.t - a.t);
+    const all = (await Promise.all([camPvLocal(id), camPvShared(h, id), camPvEvent(h, id, evk)])).concat(this._alHeld && this._alHeld.id === id ? [this._alHeld] : []).filter(Boolean).sort((a, b) => b.t - a.t);
     if (tok !== this._pvTok) return; this._pvList = all; this._prevShow(0); }
   _prevShow(i) { const p = (this._pvList || [])[i], img = this._$('.pv'); if (!img) return;
     if (!p) { this._pv = null; img.classList.remove('on'); img.removeAttribute('src'); if (!this._snapOk) this._card.classList.remove('has'); this._sig = null; this._render(); return; }
@@ -1887,6 +1903,7 @@ class HVCameraCard extends HTMLElement {
   _ctlItems() { const c = this._config; if (!c.large) return []; const o = [], t = this._talk();
     if (c.show_history !== false) o.push({ k: 'hist', icon: 'mdi:history', label: 'History' });
     if (t) o.push({ k: 'talk', icon: 'mdi:microphone', label: c.talk_name || 'Talk', cap: 'Opens ' + t.label });
+    if (c.show_device_live !== false) { const d = camDevGet(c.entity); o.push({ k: 'dev', icon: d === 'live' ? 'mdi:play-circle-outline' : d === 'tap' ? 'mdi:gesture-tap' : 'mdi:cellphone-cog', label: CAM_DEV_LABEL[d], cap: 'Tile on this device', on: !!d }); }
     if (c.show_sound !== false && this._hasAudio) o.push({ k: 'snd', icon: this._unmuted ? 'mdi:volume-high' : 'mdi:volume-off', label: this._unmuted ? 'Sound on' : 'Sound', on: !!this._unmuted });
     return o; }
   _ctl(k) { const c = this._config;
@@ -1896,6 +1913,9 @@ class HVCameraCard extends HTMLElement {
       setTimeout(() => { history.pushState(null, '', path); fire(window, 'location-changed', { replace: false }); }, 380); return; }
     if (k === 'retry') { this._err = null; this._$('.err').classList.remove('on'); this._mediaKey = null; this._ensureMedia(true); this._status(); return; }
     if (k === 'snd') { this._unmuted = !this._unmuted; this._applyMute(); this._sig = null; this._render(); }
+    if (k === 'dev') { const n = CAM_DEV_NEXT[camDevGet(c.entity)]; camDevSet(c.entity, n);
+      const nm = c.name || ((this._stateObj || {}).attributes || {}).friendly_name || c.entity;
+      fire(this, 'hass-notification', { message: `${nm} tile on this device: ${n === 'live' ? 'Always live (while on screen)' : n === 'tap' ? 'Tap for live' : 'uses the card setting'}` }); this._sig = null; this._render(); }
   }
   _videos() { const o = [], w = r => { for (const e of r.querySelectorAll('*')) { if (e.tagName === 'VIDEO') o.push(e); if (e.shadowRoot) w(e.shadowRoot); } }; try { if (this._streamEl) w(this._streamEl.shadowRoot || this._streamEl); } catch (e) {} return o; }
   _applyMute() { const m = !this._unmuted; if (this._streamEl) this._streamEl.muted = m; for (const v of this._videos()) { v.muted = m; if (!m) { try { v.play(); } catch (e) {} } } }
@@ -1931,7 +1951,7 @@ class HVCameraCard extends HTMLElement {
     const c = this._config, s = this._stateObj, btns = this._btns();
     const evs = this._evs(), ctl = this._ctlItems(), dayKey0 = new Date().toDateString();
     const sig = JSON.stringify([s && s.state, btns.map(b => { const x = this._hass.states[b.entity]; return x ? [x.state, x.attributes.friendly_name] : 0; }), c,
-      evs.map(e => { const x = this._hass.states[e.entity]; return x ? [x.state, x.attributes.event_type] : 0; }), ctl, dayKey0, this._pv && [this._pv.kind, this._pv.t], Math.floor(Date.now() / 60e3)]);
+      evs.map(e => { const x = this._hass.states[e.entity]; return x ? [x.state, x.attributes.event_type] : 0; }), ctl, dayKey0, this._pv && [this._pv.kind, this._pv.t], Math.floor(Date.now() / 60e3), this._alwaysLive() && !!this._live, camDevGet(c.entity)]);
     this._media.classList.toggle('dead', !s || UNAVAILABLE.includes(s.state));
     this._ensureMedia(); this._prevCheck();
     if (sig === this._sig) return; this._sig = sig;
@@ -1941,8 +1961,9 @@ class HVCameraCard extends HTMLElement {
     this._$('.pt').textContent = !s ? 'Camera not found' : UNAVAILABLE.includes(s.state) ? 'Camera unavailable' : ''; this._$('.ph').classList.toggle('t', !!this._$('.pt').textContent);
     this._card.setAttribute('aria-label', name);
     this._$('.bdg').textContent = this._badge();
-    const ev = this._$('.ev'); ev.innerHTML = ''; this._card.classList.toggle('hasev', evs.length > 0 || !!(this._pv && !c.large));
-    if (this._pv && !c.large) { const p = this._pv, el = document.createElement('div'); el.className = 'e src'; const ic = document.createElement('ha-icon'); ic.icon = p.kind === 'viewed' ? 'mdi:eye-outline' : 'mdi:image-outline';
+    const pvChip = this._pv && !c.large && !(this._alwaysLive() && this._live);
+    const ev = this._$('.ev'); ev.innerHTML = ''; this._card.classList.toggle('hasev', evs.length > 0 || !!pvChip);
+    if (pvChip) { const p = this._pv, el = document.createElement('div'); el.className = 'e src'; const ic = document.createElement('ha-icon'); ic.icon = p.kind === 'viewed' ? 'mdi:eye-outline' : 'mdi:image-outline';
       const tx = document.createElement('span'); tx.textContent = p.label + ' · ' + camWhen(this._hass, new Date(p.t).toISOString()); el.append(ic, tx); ev.appendChild(el); }
     for (const e of evs) { const x = this._hass.states[e.entity], dc = x && x.attributes.device_class;
       const el = document.createElement('div'); el.className = 'e'; const ic = document.createElement('ha-icon'); ic.icon = e.icon || CAM_EV_ICON[dc] || 'mdi:bell-ring-outline';
@@ -1969,19 +1990,20 @@ class HVCameraCard extends HTMLElement {
   // live stream (ha-camera-stream, muted, no controls) over a snapshot that refreshes; snapshot mode = the snapshot only
   _stopStream() { if (this._streamEl) { try { this._streamEl.remove(); } catch (e) {} this._streamEl = null; } this._live = false; }
   _ensureMedia() {
-    const c = this._config, s = this._stateObj, live = this._tileLive() && c.camera_view !== 'snapshot';
-    const key = c.entity + '|' + c.camera_view + '|' + (s && !UNAVAILABLE.includes(s.state) ? 1 : 0) + '|' + (live ? 'L' : 'P');
+    const c = this._config, s = this._stateObj, live = this._tileLive() && c.camera_view !== 'snapshot', al = live && this._alwaysLive(), want = !al || this._alWant();
+    const key = c.entity + '|' + c.camera_view + '|' + (s && !UNAVAILABLE.includes(s.state) ? 1 : 0) + '|' + (live ? 'L' : 'P') + (al ? (want ? 'W' : 'w') : '');
     if (this._streamEl) { this._streamEl.hass = this._hass; }
     if (key === this._mediaKey) return; this._mediaKey = key;
+    if (this._streamEl && this._live && (al || this._alwaysLive())) this._alHold();
     this._stopStream(); this._err = null; const eo = this._$('.err'); if (eo) eo.classList.remove('on');
     this._lastSnap = 0; this._snapOk = false; this._snapErr = false; this._failed = false; this._snapFails = 0; this._snap();
     this._$('.ph').classList.toggle('poster', !live && this._noSnap());
-    if (!s || UNAVAILABLE.includes(s.state) || !live || !this.isConnected) { if (!this.isConnected) this._mediaKey = null; return; }
+    if (!s || UNAVAILABLE.includes(s.state) || !live || !want || !this.isConnected) { if (!this.isConnected) this._mediaKey = null; this._status(); return; }
     const make = () => {
       if (this._mediaKey !== key) return;
       const v = document.createElement('ha-camera-stream'); v.hass = this._hass; v.stateObj = s; v.muted = true; v.controls = false; v.allowExoPlayer = false;
       v.fitMode = c.large ? 'contain' : 'cover'; v.setAttribute('muted', ''); v.addEventListener('load', () => this._markLive(), true);
-      this._media.appendChild(v); this._streamEl = v; this._streamAt = Date.now();
+      this._media.appendChild(v); this._streamEl = v; this._streamAt = Date.now(); this._alT = null; this._status();
     };
     if (customElements.get('ha-camera-stream')) make();
     else HVCameraCard._loadStream().then(ok => ok && make());
@@ -1999,7 +2021,50 @@ class HVCameraCard extends HTMLElement {
   _showErr(m) { this._err = m; this._stopStream(); const rate = CAM_RATE.test(m);
     this._$('.et').textContent = rate ? (this._vendor() === 'nest' ? 'Google is limiting live view. Try again in a minute.' : 'Live view is rate limited. Try again in a minute.') : 'Live view didn’t start. ' + m.replace(/\s+/g, ' ').slice(0, 120);
     this._$('.err').classList.add('on'); this._status(); }
-  _markLive() { if (!this._streamEl) return; this._streamEl.classList.add('on'); if (!this._live) { this._live = true; this._status(); } }
+  _markLive() { if (!this._streamEl) return; this._streamEl.classList.add('on'); if (!this._live) { this._live = true; this._liveAt = Date.now(); this._sig = null; this._render(); this._status(); } }
+  // ---- 1.32.0 Always live (live_tile: visible) ----
+  _alReset() { this._alFails = 0; this._alGaveUp = false; this._alRetryAt = 0; this._alGaveUpAt = 0; }
+  _alBind() { if (!this._alOn) { this._alOn = true;
+      this._alVisH = () => { if (!document.hidden && this._alHid) { this._alHid = false; if (this._alGaveUp) this._alReset(); } if (document.hidden) this._alHid = true; this._alCheck(); };
+      this._alDevH = ev => { if (this._config && ev.detail && ev.detail.entity === this._config.entity) { this._alReset(); this._sig = null; this._render(); } };
+      document.addEventListener('visibilitychange', this._alVisH); addEventListener('pagehide', this._alVisH); addEventListener('pageshow', this._alVisH); addEventListener('hv-cam-dev', this._alDevH); }
+    this._alObserve(); }
+  _alUnbind() { if (this._alOn) { this._alOn = false; document.removeEventListener('visibilitychange', this._alVisH); removeEventListener('pagehide', this._alVisH); removeEventListener('pageshow', this._alVisH); removeEventListener('hv-cam-dev', this._alDevH); }
+    if (this._io) { this._io.disconnect(); this._io = null; } this._ioEl = null; this._alVis = false; }
+  // on screen = at least half the tile visible (or half the screen height for tiles taller than the screen)
+  _alObserve() { if (!this._card || this._ioEl === this._card || !this.isConnected) return;
+    if (!window.IntersectionObserver) { this._alVis = true; return; }
+    if (!this._io) this._io = new IntersectionObserver(es => { for (const e of es) { const rb = e.rootBounds, v = e.isIntersecting && (e.intersectionRatio >= 0.5 || !!(rb && rb.height && e.intersectionRect.height >= rb.height * 0.5));
+      if (v && !this._alVis && this._alGaveUp) this._alReset(); this._alVis = v; } this._alCheck(); }, { threshold: [0, 0.25, 0.5, 0.75, 1] });
+    this._io.disconnect(); this._io.observe(this._card); this._ioEl = this._card; }
+  _alIdle() { const c = this._config; if (c.live_pause === false) return false; const m = Math.max(1, Number(c.live_pause_min) || 30); return Date.now() - camLastAct > m * 60e3; }
+  _alBigOpen() { return Date.now() - (camBig[this._config.entity] || 0) < 2500; } // the same camera's large view is up: it streams, the tile waits
+  _alWhy() { if (!this._alVis) return 'offscreen'; if (document.hidden) return 'hidden'; if (camSsOn()) return 'screensaver'; if (this._alIdle()) return 'idle'; if (this._alBigOpen()) return 'large view'; if (this._alRetryAt) return 'retry'; return ''; }
+  _alWant() { return !this._alWhy(); }
+  _alCheck() { if (!this._built || !this._config || !this._hass) return; this._alObserve(); if (this._alwaysLive() || this._alWas) { this._alWas = this._alwaysLive(); this._ensureMedia(); this._render(); this._status(); } }
+  // keep the last frame on the tile (memory, and this browser's preview slot; never uploaded)
+  _alHold() { const c = this._config, v = this._videos().find(x => x.readyState >= 2 && x.videoWidth); if (!v) return;
+    try { const w = Math.min(640, v.videoWidth), hh = Math.round(v.videoHeight * w / v.videoWidth), cv = document.createElement('canvas'); cv.width = w; cv.height = hh;
+      cv.getContext('2d').drawImage(v, 0, 0, w, hh); const d = cv.toDataURL('image/jpeg', 0.7); if (d.length < 2000) return; const t = Date.now();
+      this._alHeld = { id: c.entity, url: d, t, kind: 'viewed', label: 'Viewed' };
+      if (!this._alSavedAt || t - this._alSavedAt > 300000) { this._alSavedAt = t; try { localStorage.setItem(CAM_PV_LS + c.entity, JSON.stringify({ t, d })); } catch (e) {} }
+      const img = this._$('.pv'); if (img) { img.onload = null; img.onerror = null; img.src = d; img.classList.add('on'); this._card.classList.add('has'); } this._pv = this._alHeld; this._sig = null;
+    } catch (e) { /* no frame */ } }
+  // a failed / stalled / expired stream: quiet reconnect with backoff, Tap for live after repeated failures (tried again after 10 min)
+  _alFail(m) { this._alFails = (this._alFails || 0) + 1; const rate = CAM_RATE.test(m || '');
+    (window.__hvCamAl = window.__hvCamAl || []).push({ e: this._config.entity, t: Date.now(), why: String(m || '').slice(0, 80), n: this._alFails });
+    if (this._live) this._alHold(); this._stopStream(); this._err = null;
+    if (this._alFails >= CAM_AL_MAXFAIL) { this._alGaveUp = true; this._alGaveUpAt = Date.now(); this._alRetryAt = 0; }
+    else { let d = CAM_AL_RETRY[Math.min(this._alFails - 1, CAM_AL_RETRY.length - 1)]; if (rate) d = Math.max(d, 60000); this._alRetryAt = Date.now() + d; }
+    this._mediaKey = null; this._sig = null; this._render(); this._ensureMedia(); this._status(); }
+  _alTick() { if (!this._alwaysLive() && !this._alGaveUp) { if (this._alWas) this._alCheck(); return; }
+    if (this._alGaveUp && Date.now() - this._alGaveUpAt > CAM_AL_GIVEUP) { this._alReset(); this._mediaKey = null; }
+    if (this._alRetryAt && Date.now() >= this._alRetryAt) this._alRetryAt = 0;
+    if (this._live && this._alFails && Date.now() - (this._liveAt || 0) > 60000) this._alFails = 0; // a minute of good video resets the backoff
+    if (this._streamEl && this._live && !document.hidden) { // stalled: the picture hasn't moved for 12 s (ended / expired session)
+      const v = this._videos().find(x => x.videoWidth); if (v) { let ct = v.currentTime; try { const q = v.getVideoPlaybackQuality && v.getVideoPlaybackQuality(); if (q && q.totalVideoFrames) ct = q.totalVideoFrames; } catch (e) {} if (!this._alT || this._alT.ct !== ct) this._alT = { ct, at: Date.now() };
+        else if (Date.now() - this._alT.at > 12000) { this._alT = null; this._alFail('stalled'); return; } } }
+    this._alCheck(); }
   _videoReady() { // the players live in nested shadow roots; a <video> with decoded frames = live
     const find = r => { for (const e of r.querySelectorAll('*')) { if (e.tagName === 'VIDEO' && e.readyState >= 2 && e.videoWidth) return true; if (e.tagName === 'IMG' && e.complete && e.naturalWidth && /mjpeg|camera_proxy_stream/.test(e.src)) return true; if (e.shadowRoot && find(e.shadowRoot)) return true; } return false; };
     try { return this._streamEl && find(this._streamEl.shadowRoot || this._streamEl); } catch (e) { return false; }
@@ -2014,19 +2079,23 @@ class HVCameraCard extends HTMLElement {
   _tick() {
     if (!this._built || !this._config) return;
     if (this._streamEl && !this._live && this._videoReady()) this._markLive();
-    if (this._streamEl && !this._err) { const m = this._streamError(); if (m) this._showErr(m); }
+    if (this._streamEl && !this._err) { const m = this._streamError(); if (m) { if (this._alwaysLive()) { this._alFail(m); return; } this._showErr(m); } }
+    if (this._config.large && this.isConnected) camBig[this._config.entity] = Date.now();
+    if (!this._config.large) this._alTick();
     if (this._config.large && this._live) { this._capture(); this._audioCheck(); if (this._unmuted) this._applyMute(); }
     let every = this._config.camera_view === 'snapshot' ? (this._config.large ? 3000 : 10000) : (this._live ? 0 : 10000);
     if (every && this._snapFails) every = Math.min(300000, every * Math.pow(3, Math.min(this._snapFails, 4))); // failing snapshots: back off (no hammering)
     if (every && Date.now() - this._lastSnap > every) this._snap();
-    if (this._streamEl && !this._live && Date.now() - this._streamAt > 25000 && !this._failed) { this._failed = true; this._status(); }
+    if (this._streamEl && !this._live && Date.now() - this._streamAt > 25000 && !this._failed) { if (this._alwaysLive()) { this._alFail('no video after 25 s'); return; } this._failed = true; this._status(); }
   }
   _status() {
     const c = this._config, s = this._stateObj, st = this._$('.st'); if (!st) return;
     let t; if (!s) t = 'Not found'; else if (UNAVAILABLE.includes(s.state)) t = 'Unavailable';
     else if (this._err) t = CAM_RATE.test(this._err) ? 'Limited' : 'Error';
     else if (!this._tileLive() && c.camera_view !== 'snapshot') t = this._snapOk ? 'Snapshot' : 'Tap for live';
-    else if (c.camera_view === 'snapshot') t = this._snapErr && !this._snapOk ? 'No snapshot' : 'Snapshot'; else if (this._live) t = 'Live'; else if (this._failed) t = 'Snapshot'; else t = 'Connecting…';
+    else if (c.camera_view === 'snapshot') t = this._snapErr && !this._snapOk ? 'No snapshot' : 'Snapshot'; else if (this._live) t = 'Live';
+    else if (this._alwaysLive()) { const w = this._alWhy(); t = w === 'retry' ? 'Reconnecting…' : w ? 'Paused' : 'Connecting…'; }
+    else if (this._failed) t = 'Snapshot'; else t = 'Connecting…';
     st.classList.toggle('live', t === 'Live'); st.classList.toggle('tap', t === 'Tap for live'); this._$('.sx').textContent = t === 'Tap for live' ? '▶ Tap for live' : t;
     const pt = this._$('.pt'); if (s && !UNAVAILABLE.includes(s.state)) pt.textContent = t === 'No snapshot' ? 'No snapshot image' : t === 'Connecting…' ? 'Connecting…' : t === 'Tap for live' ? 'Tap for live view' : ''; this._$('.ph').classList.toggle('t', !!pt.textContent);
   }
@@ -2090,7 +2159,9 @@ HVCameraCard.schema = [
   { type: 'grid', name: '', schema: [{ name: 'show_name', selector: { boolean: {} } }, { name: 'show_status', selector: { boolean: {} } }] },
   { name: 'badge', selector: { text: {} } },
   { name: 'show_preview', selector: { boolean: {} } },
-  { name: 'live_tile', selector: { select: { mode: 'dropdown', options: [{ value: 'auto', label: 'Automatic (Nest: picture, tap for live; others: live)' }, { value: 'on', label: 'Live video on the tile' }, { value: 'off', label: 'No live video on the tile (tap for live)' }] } } },
+  { name: 'live_tile', selector: { select: { mode: 'dropdown', options: [{ value: 'auto', label: 'Automatic (Nest: picture, tap for live; others: live)' }, { value: 'visible', label: 'Always live (while on screen)' }, { value: 'on', label: 'Live video on the tile (always connected)' }, { value: 'off', label: 'Tap for live (still picture on the tile)' }] } } },
+  { type: 'grid', name: '', schema: [{ name: 'live_pause', selector: { boolean: {} } }, { name: 'live_pause_min', selector: { number: { min: 1, max: 720, step: 1, mode: 'box', unit_of_measurement: 'min' } } }] },
+  { name: 'show_device_live', selector: { boolean: {} } },
   { name: 'events', selector: { object: { multiple: true, label_field: 'name', description_field: 'entity', fields: {
     entity: { label: 'Event entity', required: true, selector: { entity: { domain: 'event' } } },
     name: { label: 'Name (optional, e.g. Doorbell, Motion)', selector: { text: {} } },
@@ -2103,11 +2174,14 @@ HVCameraCard.schema = [
     { name: 'popup_style', selector: { select: { mode: 'dropdown', options: [{ value: 'fullscreen', label: 'Full screen (edge to edge, swipe down to close)' }, { value: 'window', label: 'Window (rounded panel)' }] } } },
     { name: 'swipe_to_close', selector: { boolean: {} } }] }];
 Object.assign(LABELS, { show_name: 'Show name', camera_view: 'Live or snapshot', size: 'Size', buttons: 'Buttons', show_status: 'Show status (Live / Snapshot)', tap_opens: 'Open the large view on tap',
-  badge: 'Label next to the name (empty = the camera’s maker, e.g. Nest, Ring; none = no label)', live_tile: 'Live video on the tile', show_preview: 'Still preview on the tile (last event image or last frame you watched)', events: 'Last-event chips', talk_app: 'Talk button (opens the camera app)', talk_url: 'App URL (Another app)', talk_label: 'App name (Another app)',
+  badge: 'Label next to the name (empty = the camera’s maker, e.g. Nest, Ring; none = no label)', live_tile: 'Live video on the tile', live_pause: 'Pause after no activity (Always live)', live_pause_min: 'Minutes without a touch', show_device_live: 'This-device button in the large view (tile live mode per device)', show_preview: 'Still preview on the tile (last event image or last frame you watched)', events: 'Last-event chips', talk_app: 'Talk button (opens the camera app)', talk_url: 'App URL (Another app)', talk_label: 'App name (Another app)',
   show_history: 'History button', show_sound: 'Sound button (when the stream has audio)' });
 Object.assign(HELPERS, {
   buttons: 'Glass buttons along the bottom of the tile and the large view. They light up when the entity is on.',
   tap_opens: 'Needs browser_mod. Off = tap opens the camera’s more-info.',
+  live_tile: 'Always live plays the muted stream while at least half the tile is on screen. It stops when you scroll away, the page is hidden, the screensaver runs or the large view is open, keeps the last frame, and reconnects by itself (Tap for live after repeated failures). Each device can override this from the large view.',
+  live_pause: 'Always live only: stop the stream after this many minutes with no touch, click or key on this device; any touch resumes it.',
+  show_device_live: 'Cycles Card setting → Always live → Tap for live for this camera’s tiles on this device only (saved in this browser), e.g. always live on the wall tablet, tap for live on a phone.',
   events: 'Event entities (doorbell press, motion …): each shows a chip with the time of its last event.',
   talk_app: 'Home Assistant can’t do two-way talk for Nest or Ring: the large view’s Talk button opens the maker’s app, where you talk.',
   talk_url: 'A URL scheme, e.g. myapp:// or shortcuts://run-shortcut?name=…' });
