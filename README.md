@@ -208,7 +208,10 @@ Full list: [CHANGELOG.md](CHANGELOG.md).
   over a blurred photo background that stays **frozen** while the Home Screen is showing.
   **Calendar size** (`calendar_size`, Home Screen editor → Calendar, or drag the calendar's corner in arrange mode): *Full · 2 rows*
   (`full`, default), *Full · 1 row* (`row`), *Tile · two wide* (`wide`, three days in the tile row) or *Tile · Up next* (`tile`, the next
-  events as one square tile). The tiles sit after the other tiles and wrap to the row below when the top row is full. Photos (and its
+  events as one square tile) or *Tile · two wide, 2 rows* (`wide2`, 4 × 6: three days on top, the next three below). The tiles sit after the other tiles and wrap to the row below when the top row is full.
+  **4 × 6 tiles**: Photos (`photo_size: big`) and the extra tiles (`side_tiles: - size: big`, or `B` in `side_sizes`) can also be two wide and two rows tall
+  (arrange mode: drag the corner down, or ⋯ → *4 × 6*). They sit on the row below the apps (the top row keeps its height) and are as tall as fits on the screen
+  (a phone shows them one row tall when more tiles follow). Photos (and its
   viewer and gallery) never shows the camera tiles' saved frames (`nothomeview_camera_previews`).
 * **Screensaver pauses on the Home Screen**: it starts again only when it is enabled and the Home Screen is closed / swiped away.
 * **Photo viewer** with **Previous / Next** (and swipe), and a **View Gallery** popup with **Add photos** (upload straight into the

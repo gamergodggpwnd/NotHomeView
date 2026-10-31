@@ -3873,7 +3873,7 @@ async function hvHubMutate(h, sig0, raw) { const root = hvFindRoot(h), lv = root
   for (const k of Object.keys(node)) delete node[k]; Object.assign(node, JSON.parse(JSON.stringify(raw)));
   if (typeof lv.saveConfig === 'function' && (lv.urlPath || null) === (dash || null)) { if (same) await hvQuietSave(h, lv, fresh); else await lv.saveConfig(fresh); }
   else { const sv = { type: 'lovelace/config/save', config: fresh }; if (dash) sv.url_path = dash; await h._hass.callWS(sv); } }
-const HUB_CAL_SIZES = [['full', 'mdi:view-agenda-outline', 'Full · 2 rows'], ['row', 'mdi:view-day-outline', 'Full · 1 row'], ['wide', 'mdi:rectangle-outline', 'Tile · two wide'], ['tile', 'mdi:square-rounded-outline', 'Tile · Up next']];
+const HUB_CAL_SIZES = [['full', 'mdi:view-agenda-outline', 'Full · 2 rows'], ['row', 'mdi:view-day-outline', 'Full · 1 row'], ['wide', 'mdi:rectangle-outline', 'Tile · two wide'], ['wide2', 'mdi:square-outline', 'Tile · two wide, 2 rows'], ['tile', 'mdi:square-rounded-outline', 'Tile · Up next']];
 const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: null, rs: null, dirty: false, busy: false,
   ok(h) { return !!(h && h._w && h.isConnected && !h._sheetO && h._config && h._config.arrange !== false && !hvInDialog(h) && hvEclOK(h)); },
   raw() { return JSON.parse(JSON.stringify(this.hub._hvRaw || {})); },
@@ -3901,7 +3901,7 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
   label(it) { const c = this.hub._config; if (it.kind === 'app') return (c.apps[it.i] && c.apps[it.i].name) || 'App'; if (it.kind === 'photo') return c.photo_label || 'Photos'; if (it.kind === 'cal') return c.calendar_title || 'Calendar';
     const s = (c.side_cards || []).filter(x => x && x.type)[it.i] || {}, st = s.entity && this.hub._hass && this.hub._hass.states[s.entity];
     return s.name || s.title || (st && st.attributes.friendly_name) || hvTileTypeName(s.type); },
-  units(it) { const c = this.hub._config; if (it.kind === 'cal') return c.calendar_size === 'wide' ? 2 : 1; return it.kind === 'photo' ? (c.photo_size === 'square' ? 1 : 2) : it.kind === 'side' ? (hubTileSizes(c)[it.i] === 2 ? 2 : 1) : 1; },
+  units(it) { const c = this.hub._config; if (it.kind === 'cal') return c.calendar_size === 'wide2' ? 3 : c.calendar_size === 'wide' ? 2 : 1; return it.kind === 'photo' ? (c.photo_size === 'big' ? 3 : c.photo_size === 'square' ? 1 : 2) : it.kind === 'side' ? (hubTileSizes(c)[it.i] || 1) : 1; },
   tick() { const h = this.hub; if (!h) return; if (!h.isConnected || h._sheetO) { this.exit(false); return; }
     hvEcl.ensure(); this.bar(true); const lay = hvEcl.lay, day = h.hasAttribute('hv-day'); if (hvEcl.host.hasAttribute('day') !== day) hvEcl.host.toggleAttribute('day', day);
     const live = new Set(), vh = innerHeight;
@@ -3917,7 +3917,7 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
       if (!rr || rr === '0px') rr = it.kind === 'app' ? Math.round(r.width * 0.23) + 'px' : '22px';
       c.style.setProperty('--bs', bs + 'px'); c.style.setProperty('--bi', bi + 'px'); c.style.setProperty('--rr', rr); c.style.width = r.width + 'px'; c.style.height = r.height + 'px';
       c.style.transform = `translate(${Math.round(r.left)}px,${Math.round(r.top)}px)`; c.classList.toggle('off', !!(this.rs && this.rs.el === it.el) || !!(this.drag && this.drag.el === it.el));
-      if (it.kind === 'cal') { const z = c.querySelector('.rz'), ab = hvEcl.sr && hvEcl.sr.querySelector('.abar'), br = ab && ab.getBoundingClientRect(); // keep the calendar's corner clear of the Done bar (phones)
+      if (it.kind !== 'app') { const z = c.querySelector('.rz'), ab = hvEcl.sr && hvEcl.sr.querySelector('.abar'), br = ab && ab.getBoundingClientRect(); // keep the calendar's corner clear of the Done bar (phones)
         const lift = br && br.width && br.top < r.bottom && br.bottom > r.bottom - bs && br.left < r.right && br.right > r.right - bs ? Math.round(r.bottom - br.top + 6) : 0; if (z) z.style.bottom = lift + 'px'; } }
     for (const [el, c] of [...this.ctl]) if (!live.has(c)) { c.remove(); this.ctl.delete(el); } },
   // tap = menu; hold = drag (the Photos tile: its menu); slide = scroll the page
@@ -3953,12 +3953,12 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
   sideRows(raw) { const cards = (raw.side_cards || []).filter(x => x && x.type), sz = String(raw.side_sizes || '').trim() ? hubSizes(raw.side_sizes) : null;
     return cards.map((card, i) => ({ card, tile: Array.isArray(raw.side_tiles) ? raw.side_tiles[i] || null : null, sz: sz ? sz[i] || 1 : null })); },
   sideWrite(raw, rows) { const had = Array.isArray(raw.side_tiles); raw.side_cards = rows.map(r => r.card);
-    if (had || rows.some(r => r.tile)) raw.side_tiles = rows.map(r => r.tile || {}); if (String(raw.side_sizes || '').trim()) raw.side_sizes = rows.map(r => (r.sz === 2 ? 'W' : 'S')).join(', '); },
+    if (had || rows.some(r => r.tile)) raw.side_tiles = rows.map(r => r.tile || {}); if (String(raw.side_sizes || '').trim()) raw.side_sizes = rows.map(r => (r.sz === 3 ? 'B' : r.sz === 2 ? 'W' : 'S')).join(', '); },
   edit(raw, kind, fn) { if (kind === 'app') { if (!Array.isArray(raw.apps) || !raw.apps.length) raw.apps = HUB_APPS.map(a => Object.assign({}, a)); fn(raw.apps); }
     else { const rows = this.sideRows(raw); fn(rows); this.sideWrite(raw, rows); } },
   move(kind, i, j) { this.change(raw => this.edit(raw, kind, a => { const t = a.splice(i, 1)[0]; a.splice(j, 0, t); })); },
-  setUnits(it, u) { if (this.units(it) === u) return; this.change(raw => { if (it.kind === 'photo') { raw.photo_size = u === 2 ? 'wide' : 'square'; return; }
-    this.edit(raw, 'side', rows => { const r = rows[it.i]; if (!r) return; r.tile = Object.assign({}, r.tile || {}, { size: u === 2 ? 'wide' : 'square' }); if (r.sz != null) r.sz = u; }); }); },
+  setUnits(it, u) { if (this.units(it) === u) return; this.change(raw => { if (it.kind === 'photo') { raw.photo_size = u === 3 ? 'big' : u === 2 ? 'wide' : 'square'; return; }
+    this.edit(raw, 'side', rows => { const r = rows[it.i]; if (!r) return; r.tile = Object.assign({}, r.tile || {}, { size: u === 3 ? 'big' : u === 2 ? 'wide' : 'square' }); if (r.sz != null) r.sz = u; }); }); },
   // corner handle: one tile / two wide (the Home Screen row's two sizes)
   setCal(k) { this.change(raw => { if (k === 'full') delete raw.calendar_size; else raw.calendar_size = k; }); },
   // calendar corner: drag between the four sizes (Full 2 rows / Full 1 row below; Up next / Two wide in the tile row)
@@ -3966,31 +3966,31 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
     const d = this.rs = { it, el: it.el, k: h._calMode(), id: e.pointerId, x: e.clientX, y: e.clientY, zones: [] };
     try { h0.setPointerCapture(e.pointerId); } catch (x) {}
     const mk = cls => { const n = document.createElement('div'); n.className = cls; lay.appendChild(n); return n; };
-    const Z = { full: [G.rl, G.rt, G.rw, G.rh], row: [G.rl, G.rt, G.rw, G.rowH], wide: [G.sl, G.st, 2 * G.U + G.tg, G.U], tile: [G.sl, G.st, G.U, G.U] };
+    const Z = { full: [G.rl, G.rt, G.rw, G.rh], row: [G.rl, G.rt, G.rw, G.rowH], wide: [G.sl, G.st, 2 * G.U + G.tg, G.U], wide2: [G.sl, G.st, 2 * G.U + G.tg, Math.max(G.U + G.tg, Math.min(2 * G.U + G.tg, G.rt + G.rh - G.st))], tile: [G.sl, G.st, G.U, G.U] };
     for (const [k, , t] of HUB_CAL_SIZES) { const z = mk('tgt'); z.dataset.k = k; z.textContent = t; d.zones.push(z); } d.live = mk('live'); d.lbl = mk('szl');
     const paint = () => { for (const z of d.zones) { const q = Z[z.dataset.k]; hvEcl.pos(z, { left: q[0], top: q[1], width: q[2], height: q[3] }); z.classList.toggle('on', z.dataset.k === d.k); }
       const x = this.items().find(y => y.kind === 'cal'); if (x) { d.el = x.el; const r = this.box(x); if (r.width) hvEcl.pos(d.live, r); }
       d.lbl.textContent = (HUB_CAL_SIZES.find(y => y[0] === d.k) || [])[2] || '';
       const lw = d.lbl.offsetWidth || 140, vw = document.documentElement.clientWidth || innerWidth; d.lbl.style.left = Math.max(8, Math.min(vw - lw - 8, d.x - lw / 2)) + 'px'; d.lbl.style.top = Math.max(8, d.y - 64) + 'px'; };
     const inn = q => d.x >= q[0] && d.x <= q[0] + q[2] && d.y >= q[1] && d.y <= q[1] + q[3];
-    const pick = () => inn(Z.tile) ? 'tile' : inn(Z.wide) ? 'wide' : d.y < Math.min(G.rt, G.st) - G.gap / 2 ? (d.x - G.sl > G.U * 1.5 + G.tg ? 'wide' : 'tile') : (d.y - G.rt > Math.max(G.rowH + 24, G.rh * 0.62) ? 'full' : 'row');
+    const pick = () => inn(Z.tile) ? 'tile' : inn(Z.wide) ? 'wide' : inn(Z.wide2) ? 'wide2' : d.y < Math.min(G.rt, G.st) - G.gap / 2 ? (d.x - G.sl > G.U * 1.5 + G.tg ? 'wide' : 'tile') : (d.y - G.rt > Math.max(G.rowH + 24, G.rh * 0.62) ? 'full' : 'row');
     d.iv = setInterval(paint, 60); paint(); if (navigator.vibrate) try { navigator.vibrate(10); } catch (x) {}
     d.mv = ev => { if (ev.pointerId !== d.id) return; ev.preventDefault(); d.x = ev.clientX; d.y = ev.clientY; const k = pick();
       if (k !== d.k) { d.k = k; this.setCal(k); d.live.classList.remove('pulse'); void d.live.offsetWidth; d.live.classList.add('pulse'); if (navigator.vibrate) try { navigator.vibrate(8); } catch (z) {} } paint(); };
     d.up = ev => { if (ev.pointerId !== d.id) return; this.endResize(); }; d.h0 = h0;
     addEventListener('pointermove', d.mv, true); addEventListener('pointerup', d.up, true); addEventListener('pointercancel', d.up, true); this.tick(); },
   resize(it, e) { if ((e.button != null && e.button > 0) || this.drag || this.rs) return; if (it.kind === 'cal') return this.resizeCal(it, e); e.preventDefault(); e.stopPropagation(); hvEcl.closeMenu();
-    const r0 = this.box(it), U = r0.height, tg = parseFloat(this.hub._w.style.getPropertyValue('--cg2')) || 16, h0 = e.currentTarget, lay = hvEcl.lay, rr = this.ctl.get(it.el) && this.ctl.get(it.el).style.getPropertyValue('--rr');
+    const r0 = this.box(it), tg = parseFloat(this.hub._w.style.getPropertyValue('--cg2')) || 16, u0 = this.units(it), U = u0 === 1 ? r0.width : (r0.width - tg) / 2, h0 = e.currentTarget, lay = hvEcl.lay, rr = this.ctl.get(it.el) && this.ctl.get(it.el).style.getPropertyValue('--rr');
     const d = this.rs = { it, el: it.el, u: this.units(it), first: this.units(it), id: e.pointerId, o0: r0, U, tg, x: e.clientX, y: e.clientY, zones: [] };
     try { h0.setPointerCapture(e.pointerId); } catch (x) {}
     const mk = cls => { const n = document.createElement('div'); n.className = cls; if (rr) n.style.setProperty('--rr', rr); lay.appendChild(n); return n; };
-    for (const u of [1, 2]) { const z = mk('tgt'); z.dataset.u = u; z.textContent = u === 2 ? '2 × 6' : '2 × 3'; d.zones.push(z); } d.live = mk('live'); d.lbl = mk('szl');
+    for (const u of [1, 2, 3]) { const z = mk('tgt'); z.dataset.u = u; z.textContent = u === 3 ? '4 × 6' : u === 2 ? '2 × 6' : '2 × 3'; d.zones.push(z); } d.live = mk('live'); d.lbl = mk('szl');
     const paint = () => { const x = this.find(d.el); if (!x) return; const r = this.box(x); if (!r.width) return;
-      for (const z of d.zones) { const u = Number(z.dataset.u); hvEcl.pos(z, { left: r.left, top: r.top, width: u === 2 ? 2 * U + tg : U, height: U }); z.classList.toggle('on', u === d.u); }
-      hvEcl.pos(d.live, r); d.lbl.textContent = d.u === 2 ? '2 × 6 · Two wide' : '2 × 3 · One tile';
+      for (const z of d.zones) { const u = Number(z.dataset.u); hvEcl.pos(z, { left: d.o0.left, top: d.o0.top, width: u >= 2 ? 2 * U + tg : U, height: u === 3 ? 2 * U + tg : U }); z.classList.toggle('on', u === d.u); }
+      hvEcl.pos(d.live, r); d.lbl.textContent = d.u === 3 ? '4 × 6 · Two wide, 2 rows' : d.u === 2 ? '2 × 6 · Two wide' : '2 × 3 · One tile';
       const lw = d.lbl.offsetWidth || 120, vw = document.documentElement.clientWidth || innerWidth; d.lbl.style.left = Math.max(8, Math.min(vw - lw - 8, d.x - lw / 2)) + 'px'; d.lbl.style.top = Math.max(8, d.y - 64) + 'px'; };
     d.iv = setInterval(paint, 60); paint(); if (navigator.vibrate) try { navigator.vibrate(10); } catch (x) {}
-    d.mv = ev => { if (ev.pointerId !== d.id) return; ev.preventDefault(); d.x = ev.clientX; d.y = ev.clientY; const u = d.x - d.o0.left > U * 1.5 + tg ? 2 : 1;
+    d.mv = ev => { if (ev.pointerId !== d.id) return; ev.preventDefault(); d.x = ev.clientX; d.y = ev.clientY; const u = d.y - d.o0.top > U * 1.5 + tg / 2 ? 3 : d.x - d.o0.left > U * 1.5 + tg ? 2 : 1;
       if (u !== d.u) { d.u = u; const x = this.find(d.el); if (x) this.setUnits(x, u); d.live.classList.remove('pulse'); void d.live.offsetWidth; d.live.classList.add('pulse'); if (navigator.vibrate) try { navigator.vibrate(8); } catch (z) {} } paint(); };
     d.up = ev => { if (ev.pointerId !== d.id) return; this.endResize(); }; d.h0 = h0;
     addEventListener('pointermove', d.mv, true); addEventListener('pointerup', d.up, true); addEventListener('pointercancel', d.up, true); this.tick(); },
@@ -4014,7 +4014,8 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
     if (it.kind !== 'photo') { item('mdi:arrow-left', 'Move earlier', () => { close(); this.move(it.kind, it.i, it.i - 1); }, '', it.i <= 0);
       item('mdi:arrow-right', 'Move later', () => { close(); this.move(it.kind, it.i, it.i + 1); }, '', it.i >= n - 1); }
     if (it.kind !== 'app') { const u = this.units(it); item(u === 1 ? 'mdi:check' : 'mdi:square-rounded-outline', '2 × 3 · One tile', () => { close(); this.setUnits(it, 1); });
-      item(u === 2 ? 'mdi:check' : 'mdi:rectangle-outline', '2 × 6 · Two wide', () => { close(); this.setUnits(it, 2); }); }
+      item(u === 2 ? 'mdi:check' : 'mdi:rectangle-outline', '2 × 6 · Two wide', () => { close(); this.setUnits(it, 2); });
+      item(u === 3 ? 'mdi:check' : 'mdi:square-outline', '4 × 6 · Two wide, 2 rows', () => { close(); this.setUnits(it, 3); }); }
     if (it.kind === 'side') item('mdi:content-copy', 'Duplicate', () => { close(); this.change(raw => this.edit(raw, 'side', a => a.splice(it.i + 1, 0, JSON.parse(JSON.stringify(a[it.i]))))); });
     if (it.kind !== 'photo') { sep(); item('mdi:delete-outline', 'Delete', () => { m.innerHTML = ''; const q = document.createElement('div'); q.className = 'q'; q.textContent = `Delete “${this.label(it)}”?`; m.appendChild(q);
       const row = document.createElement('div'); row.className = 'row'; m.appendChild(row);
@@ -5809,8 +5810,8 @@ class HVHubCard extends HTMLElement {
     const o = hubTileOpt(this._config, (this._sideEls || []).indexOf(w)), fo = this._tileFitOpt(o); w._skySig = fo.sky ? fo.sky.sig : '';
     if (!hvFitCard(w._card, W, H, Math.round(Math.min(W, H) * 0.06), fo)) setTimeout(() => this._fitTile(w), 400); }
   // 1.32.0 calendar sizes: full (2 rows, classic) / row (1 row) below the tiles, or a tile in the tile row (wide = two wide, tile = Up next)
-  _calMode() { const s = this._config.calendar_size; return s === 'row' || s === 'wide' || s === 'tile' ? s : 'full'; }
-  _calTiled() { const m = this._calMode(); return m === 'wide' || m === 'tile'; }
+  _calMode() { const s = this._config.calendar_size; return s === 'row' || s === 'wide' || s === 'wide2' || s === 'tile' ? s : 'full'; }
+  _calTiled() { const m = this._calMode(); return m === 'wide' || m === 'wide2' || m === 'tile'; }
   _placeCal() { const cw = this._w && this._w.querySelector('.calw'); if (!cw || !this._cal) return; const tiled = this._calTiled(), m = this._calMode();
     if (tiled) { let t = this._calTile; if (!t) { t = this._calTile = document.createElement('div'); t.className = 'tile calt'; } if (this._cal.parentNode !== t) t.appendChild(this._cal); }
     else { if (this._calTile && this._calTile.parentNode) this._calTile.remove(); if (this._cal.parentNode !== cw) cw.appendChild(this._cal); }
@@ -5831,6 +5832,7 @@ class HVHubCard extends HTMLElement {
       max_events: 30, show_location: c.calendar_show_location === true, show_weather: c.calendar_show_weather !== false, weather_entity: c.weather_entity || undefined, tap_action: { action: 'none' } };
     const m = this._calMode(), nc = this._calCols || 4;
     if (m === 'row') Object.assign(cfg, { layout: 'wide', rows: 1, columns: nc, days: Math.max(nc, Number(c.calendar_days) || 7), compact: this._calCompact ? true : undefined });
+    else if (m === 'wide2') Object.assign(cfg, { layout: 'wide', rows: 2, columns: 3, days: Math.max(6, Number(c.calendar_days) || 7), compact: true }); // 4 x 6: 3 days on top, the next 3 below
     else if (m === 'wide') Object.assign(cfg, { layout: 'wide', rows: 1, columns: 3, days: Math.max(3, Number(c.calendar_days) || 7), compact: true });
     else if (m === 'tile') Object.assign(cfg, { layout: 'list', title: 'Up next', max_events: 4, show_location: false, compact: true });
     const sig = JSON.stringify(cfg); if (keep && sig === this._calSig) { this._cal = keep; return; }
@@ -5855,7 +5857,7 @@ class HVHubCard extends HTMLElement {
     const below = full ? this._below || 0 : 0;
     const H = full ? vh - top - below : Math.max(520, r.width * 0.7);
     const Wc = W - 2 * Math.max(0, px), gap = Math.round(Math.max(16, Math.min(36, vh * 0.032)));
-    this._placeCal(); const cm = c.show_calendar !== false && this._cal ? this._calMode() : '', calT = (cm === 'wide' || cm === 'tile') ? this._calTile : null, calU = cm === 'wide' ? 2 : 1;
+    this._placeCal(); const cm = c.show_calendar !== false && this._cal ? this._calMode() : '', calT = (cm === 'wide' || cm === 'wide2' || cm === 'tile') ? this._calTile : null, calU = cm === 'wide2' ? 3 : cm === 'wide' ? 2 : 1;
     const calRow = this._calRowH = Math.round(Math.max(160, Math.min(230, vh * 0.27, Wc * 0.5)));
     if (cm === 'row') { const cc = Wc >= 1100 ? 5 : Wc >= 700 ? 4 : 3, cp = Wc < 600; if (cc !== this._calCols || cp !== this._calCompact) { this._calCols = cc; this._calCompact = cp; this._makeCal(this._cal); } }
     const portrait = vh >= vw, calMin = cm === 'full' ? Number(c.calendar_min_height) || 240 : cm === 'row' ? calRow : 0;
@@ -5864,8 +5866,8 @@ class HVHubCard extends HTMLElement {
     let I = Math.min(Wc / 5.2, (H - pt - pb - greetH - gap * 2 - calMin) / 2.75, Number(c.max_icon) || 140);
     // landscape with extra tiles: size everything so the wanted units (Photos + extras, up to row_units) fit beside the apps
     const nA = (c.apps || []).length; let ac = !portrait && nA > 4 ? Math.min(4, Math.ceil(nA / 2)) : 2; // 1.32.0: landscape keeps the apps in 2 rows (5-8 apps) when they fit
-    const hs = hubTileSizes(c), xs0 = (this._sideEls || []).concat(calT ? [calT] : []), szAll = (this._sideEls || []).map((_, i) => hs[i] === 2 ? 2 : 1).concat(calT ? [calU] : []);
-    if (!portrait && xs0.length) { const want = Math.min(Number(c.row_units) || 3, (c.photo_size === 'square' ? 1 : 2) + szAll.reduce((a, u) => a + u, 0));
+    const hs = hubTileSizes(c), xs0 = (this._sideEls || []).concat(calT ? [calT] : []), szAll = (this._sideEls || []).map((_, i) => hs[i] || 1).concat(calT ? [calU] : []);
+    if (!portrait && xs0.length) { const want = Math.min(Number(c.row_units) || 3, (c.photo_size === 'square' ? 1 : 2) + szAll.reduce((a, u) => a + (u === 3 ? 2 : u), 0)); // 4 x 6 tiles count as two wide (same tile size as before)
       const fI = a => (Wc - want * 22) / (a * 1.36 + want * 2.26 + (want - 1) * 0.36) - 1; if (ac > 2 && fI(ac) < 72) ac = 2; // too narrow for wider apps: classic 2 columns
       I = Math.min(I, fI(ac)); }
     if (ac > 2) I = Math.min(I, Wc / (ac * 1.36 + 2.4));
@@ -5875,12 +5877,14 @@ class HVHubCard extends HTMLElement {
     // Tile row right of the apps: Photos + the extra cards, Square = 1 unit (ph x ph), Wide = 2 units. As many units as fit
     // (3 on a landscape tablet); what doesn't fit wraps to a row below (squares sized like the photo tile, or hidden).
     const tg = Math.round(I * 0.36), U = ph, fit = Math.max(1, Math.floor((pwMax + tg) / (U + tg))), xs = xs0, sizes = szAll;
-    const pu = square ? 1 : 2; let used = Math.min(pu, fit), pw;
+    const pbig = c.photo_size === 'big', pu = square ? 1 : 2; let used = pbig ? 0 : Math.min(pu, fit), pw;
     if (!xs.length) pw = square ? ph : Math.max(ph * 0.9, Math.min(pwMax, ph * (Number(c.photo_max_aspect) || 2.6))); // alone: Wide fills the row (classic look)
     else pw = used === 2 ? 2 * U + tg : U;
     const bw = Math.min(U, Math.floor((Wc - tg) / 2)), wrapped = [];
-    xs.forEach((w, i) => { const u = sizes[i] === 2 ? 2 : 1;
-      if (used + u <= fit) { used += u; w.style.setProperty('--tw', (u === 2 ? 2 * U + tg : U) + 'px'); w.style.setProperty('--th', U + 'px'); if (w.parentNode !== this._rowEl) this._rowEl.appendChild(w); }
+    const phw = this._w.querySelector('.phw'); if (pbig) pw = Math.min(Wc, 2 * bw + tg);
+    if (phw) { if (pbig) { wrapped.push(phw); if (phw.parentNode !== this._belowEl) this._belowEl.prepend(phw); } else if (phw.parentNode !== this._rowEl) this._rowEl.prepend(phw); }
+    xs.forEach((w, i) => { const u = sizes[i] === 1 ? 1 : 2;
+      if (sizes[i] !== 3 && used + u <= fit) { used += u; w.style.setProperty('--tw', (u === 2 ? 2 * U + tg : U) + 'px'); w.style.setProperty('--th', U + 'px'); if (w.parentNode !== this._rowEl) this._rowEl.appendChild(w); }
       else { wrapped.push(w); w.style.setProperty('--tw', Math.min(Wc, u === 2 ? 2 * bw + tg : bw) + 'px'); w.style.setProperty('--th', bw + 'px'); if (w.parentNode !== this._belowEl) this._belowEl.appendChild(w); } });
     if (calT && calT.nextElementSibling) calT.parentNode.appendChild(calT); // the calendar tile stays after the other tiles (side tiles are re-appended on a redraw)
     if (this._belowEl) this._belowEl.hidden = !wrapped.length || c.side_portrait === 'hide';
@@ -5889,6 +5893,12 @@ class HVHubCard extends HTMLElement {
     set('--rg', rg + 'px'); set('--cg', cg + 'px'); set('--cg2', Math.round(I * 0.36) + 'px'); set('--ph', ph + 'px'); set('--pw', Math.floor(pw) + 'px');
     set('--gfs', Math.round(Math.max(15, Math.min(26, I * 0.2))) + 'px'); set('--av', Math.round(Math.max(44, Math.min(72, I * 0.56))) + 'px');
     set('--h', Math.floor(H) + 'px'); set('--calmin', calMin + 'px'); set('--calrow', calRow + 'px');
+    { const ppw = phw && phw.querySelector('.pw'), bigs = xs.filter((w, i) => sizes[i] === 3); if (pbig && ppw) bigs.unshift(ppw); else if (ppw) ppw.style.removeProperty('--ph');
+      if (bigs.length) { const b0 = Math.min(U, bw), full2 = 2 * b0 + tg, lim = r.top + H - pb - (calMin ? calMin + gap : 0), lb = ppw && phw.querySelector('.lb') ? lh + lg : 0; // 4 x 6: two tiles tall, or as tall as fits on screen
+        const sh = (el, v) => { if (el === ppw) el.style.setProperty('--ph', Math.max(60, v - lb) + 'px'); else el.style.setProperty('--th', v + 'px'); };
+        for (const el of bigs) sh(el, full2); for (const el of bigs) sh(el, Math.round(Math.max(b0, Math.min(full2, lim - el.getBoundingClientRect().top))));
+        const ls = this._belowEl.lastElementChild; if (ls && ls.getBoundingClientRect().bottom > lim + 1) for (const el of bigs) if (el !== ls && !(el === ppw && phw === ls)) sh(el, b0); // tiles after it would leave the screen (phones): one row tall
+        for (const el of bigs) if (el._fit) this._fitTile(el); } }
     this.style.setProperty('--blur', (Number(c.blur) || 0) + 'px'); this.style.setProperty('--dim', String(Math.max(0, Math.min(0.9, Number(c.dim) || 0))));
     this._bgMode();
     // keep the avatar clear of the floating edit / screensaver buttons
@@ -6235,9 +6245,9 @@ const HUB_APP_FIELDS = {
   weather_entity: { label: 'Weather entity (Weather popup)', selector: { entity: { domain: 'weather' } } },
   tap_action: { label: 'Tap action (Custom tap action)', selector: { ui_action: {} } } };
 const hubTileOpt = (c, i) => ((c && Array.isArray(c.side_tiles) ? c.side_tiles[i] : null) || {});
-const hubTileSizes = c => { const s = hubSizes(c && c.side_sizes); return Array.from({ length: Math.max(s.length, ((c && c.side_cards) || []).length) }, (_, i) => { const o = hubTileOpt(c, i); return o.size === 'wide' ? 2 : o.size === 'square' ? 1 : s[i] || 1; }); };
-const hubSizes = t => String(t || '').split(/[\s,;]+/).filter(Boolean).map(x => /^w/i.test(x) || x === '2' ? 2 : 1);
-const hubUnitsNote = c => { const n = ((c && c.side_cards) || []).length, sz = hubTileSizes(c), u = (c && c.photo_size === 'square' ? 1 : 2) + Array.from({ length: n }, (_, i) => sz[i] === 2 ? 2 : 1).reduce((a, b) => a + b, 0);
+const hubTileSizes = c => { const s = hubSizes(c && c.side_sizes); return Array.from({ length: Math.max(s.length, ((c && c.side_cards) || []).length) }, (_, i) => { const o = hubTileOpt(c, i); return o.size === 'big' ? 3 : o.size === 'wide' ? 2 : o.size === 'square' ? 1 : s[i] || 1; }); };
+const hubSizes = t => String(t || '').split(/[\s,;]+/).filter(Boolean).map(x => /^b/i.test(x) || x === '3' ? 3 : /^w/i.test(x) || x === '2' ? 2 : 1);
+const hubUnitsNote = c => { const n = ((c && c.side_cards) || []).length, sz = hubTileSizes(c), u = (c && c.photo_size === 'square' ? 1 : 2) + Array.from({ length: n }, (_, i) => sz[i] === 2 ? 2 : sz[i] === 3 ? 0 : 1).reduce((a, b) => a + b, 0);
   return `Photos + ${n} extra tile(s) = ${u} unit(s). A landscape tablet fits 3 beside the apps, a portrait tablet / phone 1;` + (u > 3 ? ' ⚠ more than 3: the rest wraps to a row below.' : ' the rest wraps to a row below.'); };
 const n_ = (name, min, max, step, unit) => ({ name, selector: { number: Object.assign({ min, max, step: step || 1, mode: 'box' }, unit ? { unit_of_measurement: unit } : {}) } });
 const HUB_SCHEMA = [
@@ -6284,10 +6294,10 @@ const HUB_SCHEMA = [
       { name: 'assistant_quiet_focus_entity', selector: { entity: { domain: ['binary_sensor', 'sensor', 'input_boolean'] } } },
       { type: 'grid', name: '', schema: [{ name: 'assistant_quiet_start', selector: { time: { no_second: true } } }, { name: 'assistant_quiet_end', selector: { time: { no_second: true } } }] }] }] },
   { type: 'expandable', name: '', flatten: true, title: 'Layout & weather', icon: 'mdi:view-dashboard-outline', schema: [
-    { type: 'grid', name: '', schema: [{ name: 'photo_size', selector: { select: { mode: 'dropdown', options: [{ value: 'wide', label: 'Wide (2 units; alone it fills the row)' }, { value: 'square', label: 'Square (1 unit)' }] } } }, n_('photo_max_aspect', 0.8, 4, 0.1)] },
+    { type: 'grid', name: '', schema: [{ name: 'photo_size', selector: { select: { mode: 'dropdown', options: [{ value: 'wide', label: 'Wide (2 units; alone it fills the row)' }, { value: 'big', label: '4 × 6: two wide, 2 rows (on the row below)' }, { value: 'square', label: 'Square (1 unit)' }] } } }, n_('photo_max_aspect', 0.8, 4, 0.1)] },
     { type: 'grid', name: '', schema: [{ name: 'side_sizes', selector: { text: {} } }, n_('row_units', 1, 6)] },
     { name: 'side_tiles', selector: { object: { multiple: true, label_field: 'size', description_field: 'fit', fields: {
-      size: { label: 'Size', selector: { select: { mode: 'dropdown', options: [{ value: 'square', label: 'Square (1 unit)' }, { value: 'wide', label: 'Wide (2 units)' }] } } },
+      size: { label: 'Size', selector: { select: { mode: 'dropdown', options: [{ value: 'square', label: 'Square (1 unit)' }, { value: 'wide', label: 'Wide (2 units)' }, { value: 'big', label: '4 × 6: two wide, 2 rows (on the row below)' }] } } },
       fit: { label: 'Fit', selector: { select: { mode: 'dropdown', options: [{ value: 'auto', label: 'Auto (centre pictures, fill the rest)' }, { value: 'contain', label: 'Centre & fit inside' }, { value: 'fill', label: 'Fill the tile' }] } } },
       enlarge: { label: 'Tap opens enlarged view', selector: { boolean: {} } },
       zoom: { label: 'Scale / zoom: picture width vs the tile (empty = fit everything; 1.2 = a little cropped at the sides)', selector: { number: { min: 0.5, max: 2.5, step: 0.05, mode: 'slider' } } },
