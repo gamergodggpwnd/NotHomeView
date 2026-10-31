@@ -5907,10 +5907,17 @@ class HVHubCard extends HTMLElement {
     else pw = used === 2 ? 2 * U + tg : U;
     const bw = Math.min(U, Math.floor((Wc - tg) / 2)), wrapped = [];
     const phw = this._w.querySelector('.phw'); if (pbig) pw = Math.min(Wc, 2 * bw + tg);
-    const rowL = []; if (phw) { if (pbig) wrapped.push(phw); else rowL.push(phw); }
+    const rowL = [], wq = []; if (phw) { if (pbig) { wrapped.push(phw); wq.push({ el: phw, w: pw, u: 2 }); } else rowL.push(phw); }
     xs.forEach((w, i) => { const u = sizes[i] === 1 ? 1 : 2;
       if (sizes[i] !== 3 && used + u <= fit) { used += u; w.style.setProperty('--tw', (u === 2 ? 2 * U + tg : U) + 'px'); w.style.setProperty('--th', U + 'px'); rowL.push(w); }
-      else { wrapped.push(w); w.style.setProperty('--tw', Math.min(Wc, u === 2 ? 2 * bw + tg : bw) + 'px'); w.style.setProperty('--th', bw + 'px'); } });
+      else { wrapped.push(w); wq.push({ el: w, w: Math.min(Wc, u === 2 ? 2 * bw + tg : bw), u }); w.style.setProperty('--th', bw + 'px'); } });
+    // 1.32.0: the row below lines up with the columns above (apps block | Photos / tile units): two-wide / 4 x 6 tiles snap their right edge to the
+    // nearest column edge, squares only when it's a few px (phones / portrait), so e.g. a two-wide calendar spans apps + Photos exactly
+    { const A = nA ? ac * I + (ac - 1) * cg : 0, E = []; if (A) for (let e = A; e <= Wc + 1; e += tg + U) E.push(e); let x = 0;
+      for (const q of wq) { let w = q.w; if (x > 0 && x + w > Wc + 1) x = 0;
+        if (E.length) { let best = null; for (const e of E) if (e > x && (best === null || Math.abs(e - x - w) < Math.abs(best - x - w))) best = e;
+          if (best !== null && best - x <= Wc && (q.u === 2 ? best - x >= w * 0.6 : Math.abs(best - x - w) <= w * 0.08)) w = best - x; }
+        q.w = Math.round(w); if (q.el === phw) pw = q.w; else q.el.style.setProperty('--tw', q.w + 'px'); x += q.w + tg; } }
     hvOrder(this._rowEl, rowL); if (this._belowEl) hvOrder(this._belowEl, wrapped); // calendar tile last; unmoved tiles keep their element in place
     if (this._belowEl) this._belowEl.hidden = !wrapped.length || c.side_portrait === 'hide';
     xs.forEach(w => { w.classList.toggle('fit', w._fit); if (w._fit) this._fitTile(w); });
