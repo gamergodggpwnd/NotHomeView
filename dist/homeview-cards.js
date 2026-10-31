@@ -1781,7 +1781,10 @@ const CAM_DEV_LS = 'hvCamLiveDev:', CAM_DEV_LABEL = { '': 'Card setting', live: 
 function camDevGet(id) { try { const v = localStorage.getItem(CAM_DEV_LS + id); return v === 'live' || v === 'tap' ? v : ''; } catch (e) { return ''; } }
 function camDevSet(id, v) { try { if (v === 'live' || v === 'tap') localStorage.setItem(CAM_DEV_LS + id, v); else localStorage.removeItem(CAM_DEV_LS + id); } catch (e) {}
   window.dispatchEvent(new CustomEvent('hv-cam-dev', { detail: { entity: id, value: v || '' } })); }
-let camLastAct = Date.now(); const camBig = {};
+let camLastAct = Date.now(); const camBig = {}, camAlOwn = {}, camAlCards = new Set(); const CAM_AL_MOVE_WAIT = 2500;
+// 1.32.0: before NotHomeView moves a tile that holds a live Always-live camera, the camera drops HA's player while still attached (a player moved mid-stream re-runs its connect and can leave an orphan WebRTC session)
+const hvInside = (n, el) => { while (n) { if (n === el) return true; n = n.parentNode || (n instanceof ShadowRoot ? n.host : null); } return false; };
+const hvPreMove = el => { if (!camAlCards.size) return; for (const c of camAlCards) if (c._streamEl && hvInside(c, el)) c._alDrop(); }; // camAlOwn: the tile that holds a camera's Always-live stream
 for (const t of ['pointerdown', 'keydown', 'touchstart', 'wheel']) addEventListener(t, () => { camLastAct = Date.now(); }, { capture: true, passive: true });
 const camSsOn = () => { try { const w = ssWallpanel(); return !!(w && w.screensaverRunning && w.screensaverRunning()); } catch (e) { return false; } };
 const CAM_AL_RETRY = [5000, 15000, 45000, 120000], CAM_AL_MAXFAIL = 5, CAM_AL_GIVEUP = 600000;
@@ -1860,8 +1863,13 @@ class HVCameraCard extends HTMLElement {
   getGridOptions() { const g = CAM_SIZES[(this._config || {}).size] || CAM_SIZES['2x3']; return Object.assign({}, g, { min_columns: 3, min_rows: 2 }); }
   getLayoutOptions() { const g = this.getGridOptions(); return { grid_columns: Math.max(1, Math.round(g.columns / 3)), grid_rows: g.rows, grid_min_columns: 1, grid_min_rows: 2 }; }
   connectedCallback() { if (!this._pvH) this._pvH = ev => { if (this._config && ev.detail && ev.detail.entity === this._config.entity && !this._config.large) { this._pvBump = (this._pvBump || 0) + 1; this._prevCheck(); } };
+    if (this._alMovedAt && Date.now() - this._alMovedAt < 15000) this._alWaitUntil = Date.now() + CAM_AL_MOVE_WAIT; // re-attached: one fresh stream after a short wait
+    else if (!this._alSeen) this._alWaitUntil = Date.now() + 1200; // first attach: HA often re-parents cards right after building the view, so start once it settles
+    this._alSeen = true; camAlCards.add(this);
     addEventListener('hv-cam-preview', this._pvH); this._alBind(); this._render(); this._resetDrag(); this._timer(); setTimeout(() => this._swipeAttr(), 0); setTimeout(() => this._swipeAttr(), 400); }
-  disconnectedCallback() { removeEventListener('hv-cam-preview', this._pvH); this._alUnbind(); clearInterval(this._iv); this._iv = null; const me = this; setTimeout(() => { if (!me.isConnected && me._streamEl) { me._stopStream(); me._mediaKey = null; } }, 0); }
+  disconnectedCallback() { // 1.32.0: an Always-live tile that is moved / detached drops HA's player now (it would start a 2nd session on re-attach) and keeps the last frame
+    camAlCards.delete(this); if (!this.isConnected) this._alDrop(); // isConnected here = moved by someone else within one call: HA's player restarts itself once, cleanly
+    removeEventListener('hv-cam-preview', this._pvH); this._alUnbind(); clearInterval(this._iv); this._iv = null; const me = this; setTimeout(() => { if (!me.isConnected && me._streamEl) { me._stopStream(); me._mediaKey = null; } }, 0); }
   _timer() { clearInterval(this._iv); this._iv = setInterval(() => this._tick(), 1000); }
   get _stateObj() { return this._hass && this._config ? this._hass.states[this._config.entity] : undefined; }
   _btns() { return (this._config.buttons || []).map(b => typeof b === 'string' ? { entity: b } : b).filter(b => b && b.entity); }
@@ -1988,7 +1996,8 @@ class HVCameraCard extends HTMLElement {
     this._fit(); this._status();
   }
   // live stream (ha-camera-stream, muted, no controls) over a snapshot that refreshes; snapshot mode = the snapshot only
-  _stopStream() { if (this._streamEl) { try { this._streamEl.remove(); } catch (e) {} this._streamEl = null; } this._live = false; }
+  _alDrop() { if (!(this._streamEl && this._config && !this._config.large && this._alwaysLive())) return; if (this._live) this._alHold(); this._stopStream(); this._mediaKey = null; this._alMovedAt = Date.now(); }
+  _stopStream() { if (this._streamEl) { try { this._streamEl.remove(); } catch (e) {} this._streamEl = null; } this._live = false; if (this._config && camAlOwn[this._config.entity] === this) delete camAlOwn[this._config.entity]; }
   _ensureMedia() {
     const c = this._config, s = this._stateObj, live = this._tileLive() && c.camera_view !== 'snapshot', al = live && this._alwaysLive(), want = !al || this._alWant();
     const key = c.entity + '|' + c.camera_view + '|' + (s && !UNAVAILABLE.includes(s.state) ? 1 : 0) + '|' + (live ? 'L' : 'P') + (al ? (want ? 'W' : 'w') : '');
@@ -2003,6 +2012,7 @@ class HVCameraCard extends HTMLElement {
       if (this._mediaKey !== key) return;
       const v = document.createElement('ha-camera-stream'); v.hass = this._hass; v.stateObj = s; v.muted = true; v.controls = false; v.allowExoPlayer = false;
       v.fitMode = c.large ? 'contain' : 'cover'; v.setAttribute('muted', ''); v.addEventListener('load', () => this._markLive(), true);
+      if (al) { const o = camAlOwn[c.entity]; if (o && o !== this && o._streamEl) { this._mediaKey = null; return; } camAlOwn[c.entity] = this; (window.__hvCamAl = window.__hvCamAl || []).push({ e: c.entity, t: Date.now(), why: 'start', n: 0 }); }
       this._media.appendChild(v); this._streamEl = v; this._streamAt = Date.now(); this._alT = null; this._status();
     };
     if (customElements.get('ha-camera-stream')) make();
@@ -2039,7 +2049,9 @@ class HVCameraCard extends HTMLElement {
     this._io.disconnect(); this._io.observe(this._card); this._ioEl = this._card; }
   _alIdle() { const c = this._config; if (c.live_pause === false) return false; const m = Math.max(1, Number(c.live_pause_min) || 30); return Date.now() - camLastAct > m * 60e3; }
   _alBigOpen() { return Date.now() - (camBig[this._config.entity] || 0) < 2500; } // the same camera's large view is up: it streams, the tile waits
-  _alWhy() { if (!this._alVis) return 'offscreen'; if (document.hidden) return 'hidden'; if (camSsOn()) return 'screensaver'; if (this._alIdle()) return 'idle'; if (this._alBigOpen()) return 'large view'; if (this._alRetryAt) return 'retry'; return ''; }
+  _alWhy() { if (!this._alVis) return 'offscreen'; if (document.hidden) return 'hidden'; if (camSsOn()) return 'screensaver'; if (this._alIdle()) return 'idle'; if (this._alBigOpen()) return 'large view'; if (this._alWaitUntil && Date.now() < this._alWaitUntil) return 'moved';
+    const o = camAlOwn[this._config.entity]; if (o && o !== this && o.isConnected && o._streamEl) return 'other tile'; // never two streams for one camera
+    if (this._alRetryAt) return 'retry'; return ''; }
   _alWant() { return !this._alWhy(); }
   _alCheck() { if (!this._built || !this._config || !this._hass) return; this._alObserve(); if (this._alwaysLive() || this._alWas) { this._alWas = this._alwaysLive(); this._ensureMedia(); this._render(); this._status(); } }
   // keep the last frame on the tile (memory, and this browser's preview slot; never uploaded)
@@ -2051,16 +2063,16 @@ class HVCameraCard extends HTMLElement {
       const img = this._$('.pv'); if (img) { img.onload = null; img.onerror = null; img.src = d; img.classList.add('on'); this._card.classList.add('has'); } this._pv = this._alHeld; this._sig = null;
     } catch (e) { /* no frame */ } }
   // a failed / stalled / expired stream: quiet reconnect with backoff, Tap for live after repeated failures (tried again after 10 min)
-  _alFail(m) { this._alFails = (this._alFails || 0) + 1; const rate = CAM_RATE.test(m || '');
-    (window.__hvCamAl = window.__hvCamAl || []).push({ e: this._config.entity, t: Date.now(), why: String(m || '').slice(0, 80), n: this._alFails });
+  _alFail(m) { const rate = CAM_RATE.test(m || ''); if (rate) this._alRate = (this._alRate || 0) + 1; else this._alFails = (this._alFails || 0) + 1; // 429 rate limits: just wait (not a failure)
+    (window.__hvCamAl = window.__hvCamAl || []).push({ e: this._config.entity, t: Date.now(), why: String(m || '').slice(0, 80), n: this._alFails || 0, rate });
     if (this._live) this._alHold(); this._stopStream(); this._err = null;
-    if (this._alFails >= CAM_AL_MAXFAIL) { this._alGaveUp = true; this._alGaveUpAt = Date.now(); this._alRetryAt = 0; }
-    else { let d = CAM_AL_RETRY[Math.min(this._alFails - 1, CAM_AL_RETRY.length - 1)]; if (rate) d = Math.max(d, 60000); this._alRetryAt = Date.now() + d; }
+    if (!rate && this._alFails >= CAM_AL_MAXFAIL) { this._alGaveUp = true; this._alGaveUpAt = Date.now(); this._alRetryAt = 0; }
+    else { const d = rate ? Math.min(300000, 60000 * Math.pow(2, this._alRate - 1)) + Math.round(Math.random() * 10000) : CAM_AL_RETRY[Math.min(this._alFails - 1, CAM_AL_RETRY.length - 1)]; this._alRetryAt = Date.now() + d; }
     this._mediaKey = null; this._sig = null; this._render(); this._ensureMedia(); this._status(); }
   _alTick() { if (!this._alwaysLive() && !this._alGaveUp) { if (this._alWas) this._alCheck(); return; }
     if (this._alGaveUp && Date.now() - this._alGaveUpAt > CAM_AL_GIVEUP) { this._alReset(); this._mediaKey = null; }
     if (this._alRetryAt && Date.now() >= this._alRetryAt) this._alRetryAt = 0;
-    if (this._live && this._alFails && Date.now() - (this._liveAt || 0) > 60000) this._alFails = 0; // a minute of good video resets the backoff
+    if (this._live && (this._alFails || this._alRate) && Date.now() - (this._liveAt || 0) > 60000) { this._alFails = 0; this._alRate = 0; } // a minute of good video resets the backoff
     if (this._streamEl && this._live && !document.hidden) { // stalled: the picture hasn't moved for 12 s (ended / expired session)
       const v = this._videos().find(x => x.videoWidth); if (v) { let ct = v.currentTime; try { const q = v.getVideoPlaybackQuality && v.getVideoPlaybackQuality(); if (q && q.totalVideoFrames) ct = q.totalVideoFrames; } catch (e) {} if (!this._alT || this._alT.ct !== ct) this._alT = { ct, at: Date.now() };
         else if (Date.now() - this._alT.at > 12000) { this._alT = null; this._alFail('stalled'); return; } } }
@@ -2094,7 +2106,7 @@ class HVCameraCard extends HTMLElement {
     else if (this._err) t = CAM_RATE.test(this._err) ? 'Limited' : 'Error';
     else if (!this._tileLive() && c.camera_view !== 'snapshot') t = this._snapOk ? 'Snapshot' : 'Tap for live';
     else if (c.camera_view === 'snapshot') t = this._snapErr && !this._snapOk ? 'No snapshot' : 'Snapshot'; else if (this._live) t = 'Live';
-    else if (this._alwaysLive()) { const w = this._alWhy(); t = w === 'retry' ? 'Reconnecting…' : w ? 'Paused' : 'Connecting…'; }
+    else if (this._alwaysLive()) { const w = this._alWhy(); t = w === 'retry' ? 'Reconnecting…' : w === 'moved' ? 'Connecting…' : w ? 'Paused' : 'Connecting…'; }
     else if (this._failed) t = 'Snapshot'; else t = 'Connecting…';
     st.classList.toggle('live', t === 'Live'); st.classList.toggle('tap', t === 'Tap for live'); this._$('.sx').textContent = t === 'Tap for live' ? '▶ Tap for live' : t;
     const pt = this._$('.pt'); if (s && !UNAVAILABLE.includes(s.state)) pt.textContent = t === 'No snapshot' ? 'No snapshot image' : t === 'Connecting…' ? 'Connecting…' : t === 'Tap for live' ? 'Tap for live view' : ''; this._$('.ph').classList.toggle('t', !!pt.textContent);
@@ -3873,6 +3885,9 @@ async function hvHubMutate(h, sig0, raw) { const root = hvFindRoot(h), lv = root
   for (const k of Object.keys(node)) delete node[k]; Object.assign(node, JSON.parse(JSON.stringify(raw)));
   if (typeof lv.saveConfig === 'function' && (lv.urlPath || null) === (dash || null)) { if (same) await hvQuietSave(h, lv, fresh); else await lv.saveConfig(fresh); }
   else { const sv = { type: 'lovelace/config/save', config: fresh }; if (dash) sv.url_path = dash; await h._hass.callWS(sv); } }
+// put list's elements into p in that order, moving only the ones out of place (others, e.g. tiles about to move elsewhere, are skipped over)
+const hvOrder = (p, list) => { if (!p) return; const want = new Set(list); let ref = p.firstElementChild;
+  for (const el of list) { while (ref && !want.has(ref)) ref = ref.nextElementSibling; if (ref === el) { ref = ref.nextElementSibling; continue; } hvPreMove(el); p.insertBefore(el, ref); } };
 const HUB_CAL_SIZES = [['full', 'mdi:view-agenda-outline', 'Full · 2 rows'], ['row', 'mdi:view-day-outline', 'Full · 1 row'], ['wide', 'mdi:rectangle-outline', 'Tile · two wide'], ['wide2', 'mdi:square-outline', 'Tile · two wide, 2 rows'], ['tile', 'mdi:square-rounded-outline', 'Tile · Up next']];
 const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: null, rs: null, dirty: false, busy: false,
   ok(h) { return !!(h && h._w && h.isConnected && !h._sheetO && h._config && h._config.arrange !== false && !hvInDialog(h) && hvEclOK(h)); },
@@ -5569,7 +5584,7 @@ class HVHubCard extends HTMLElement {
     if (window.ResizeObserver && !this._ro) { this._ro = new ResizeObserver(() => this._layout()); this._ro.observe(this); }
     this._gBind(); setTimeout(() => this._gBind(), 0); if (this._hass) this._loadCfg(true);
     if (!this._tpf) this._tpf = () => this._tpillPaint(); hvTimerPills.add(this._tpf); this._tpillPaint();
-    clearInterval(this._tick); this._tick = setInterval(() => { this._sig = null; this._render(); if (++this._tn % 4 === 0) this._loadCfg(true); else this._ssPaint(); }, 30000); this._tn = 0;
+    clearInterval(this._tick); this._tick = setInterval(() => { this._render(); if (++this._tn % 4 === 0) this._loadCfg(true); else this._ssPaint(); }, 30000); this._tn = 0;
     if (!this._vis) { this._vis = () => { if (!document.hidden) this._restartTimer(); else this._paintBg(true, true); }; } document.addEventListener('visibilitychange', this._vis);
     requestAnimationFrame(() => this._layout()); setTimeout(() => this._layout(), 700); setTimeout(() => this._layout(), 1800);
     for (const t of [2500, 6000]) setTimeout(() => { this._vk = null; this._layout(); }, t); // re-measure the space below once the page has settled
@@ -5765,9 +5780,19 @@ class HVHubCard extends HTMLElement {
     const greet = String(this._greeting() || '').trim().replace(/,?$/, ',');
     const apps = this._appsHtml(c);
     const keepCal = this._cal && c.show_calendar !== false ? this._cal : null;
-    this._w.innerHTML = `<div class="top"><div class="gr"><div class="g1">${esc(greet)}</div><div class="g2">${esc(first)}</div></div>
+    const topH = `<div class="top"><div class="gr"><div class="g1">${esc(greet)}</div><div class="g2">${esc(first)}</div></div>
       <div class="tr"><button class="tpill" data-k="timer" hidden aria-label="Show the timer"><ha-icon icon="mdi:timer-outline"></ha-icon><span></span></button>${amic ? '<button class="amic" data-k="assist" aria-label="Assistant"><ha-icon icon="mdi:microphone"></ha-icon></button>' : ''}
-      <button class="av" data-k="person" aria-label="${esc(first)}"${c.ring_color ? ` style="--ring:${esc(c.ring_color)}"` : ''}><div class="pic"${pic ? ` style="background-image:url('${esc(pic)}')"` : ''}>${pic ? '' : esc(first.charAt(0))}</div></button></div></div>
+      <button class="av" data-k="person" aria-label="${esc(first)}"${c.ring_color ? ` style="--ring:${esc(c.ring_color)}"` : ''}><div class="pic"${pic ? ` style="background-image:url('${esc(pic)}')"` : ''}>${pic ? '' : esc(first.charAt(0))}</div></button></div></div>`;
+    if (this._rowEl && this._rowEl.parentNode && this._w.contains(this._rowEl)) { // 1.32.0: redraw in place: greeting / avatar / apps / labels / calendar slot; the tile row (camera streams) stays
+      const t0 = this._w.querySelector('.top'); if (t0) { t0.insertAdjacentHTML('beforebegin', topH); t0.remove(); }
+      const ap = this._w.querySelector('.apps'); if (ap) ap.innerHTML = apps;
+      const ph = this._w.querySelector('.phw'); if (ph) { let lb = ph.querySelector('.lb'); if (c.photo_label) { if (!lb) { lb = document.createElement('span'); lb.className = 'lb'; ph.appendChild(lb); } lb.textContent = c.photo_label; } else if (lb) lb.remove();
+        const pb0 = ph.querySelector('.pw'); if (pb0) pb0.setAttribute('aria-label', c.photo_label || 'Photos'); }
+      let cw = this._w.querySelector('.calw'); if (c.show_calendar !== false && !cw) { cw = document.createElement('div'); cw.className = 'calw'; this._w.appendChild(cw); } else if (c.show_calendar === false && cw) { cw.remove(); cw = null; }
+      this._tpill = this._w.querySelector('.tpill'); this._tpillPaint(); this._makeSide();
+      if (cw) { this._makeCal(keepCal); if (!this._cal.parentNode) cw.appendChild(this._cal); this._placeCal(); } else { this._cal = null; if (this._calTile) this._calTile.remove(); }
+      this._layout(); return; }
+    this._w.innerHTML = topH + `
       <div class="mid"><div class="apps">${apps}</div><div class="row"><div class="phw"><button class="pw" data-k="photos" aria-label="${esc(c.photo_label || 'Photos')}"><div class="ph0"><ha-icon icon="mdi:image-multiple-outline"></ha-icon></div><div class="pi"></div><div class="pi"></div></button>${c.photo_label ? `<span class="lb">${esc(c.photo_label)}</span>` : ''}</div></div></div>
       <div class="below" hidden></div>${c.show_calendar !== false ? '<div class="calw"></div>' : ''}`;
     this._tpill = this._w.querySelector('.tpill'); this._tpillPaint();
@@ -5799,7 +5824,7 @@ class HVHubCard extends HTMLElement {
         if (window.ResizeObserver) { wrap._ro = new ResizeObserver(() => { if (wrap._fit) requestAnimationFrame(() => this._fitTile(wrap)); }); setTimeout(() => { const r = el.shadowRoot && el.shadowRoot.querySelector('#root'); if (r) wrap._ro.observe(r); }, 400); }
         return wrap; }); pool.forEach(x => x.w.remove()); }
     (this._sideEls || []).forEach((w, i) => { const o = hubTileOpt(c, i), t = (w._cfg && w._cfg.type) || ''; w._fit = o.fit === 'contain' || (o.fit !== 'fill' && /^picture/.test(t)); });
-    if (this._rowEl) { for (const w of this._sideEls) this._rowEl.appendChild(w); this._layout(); }
+    if (this._rowEl) this._layout(); // placement (and order) is _layout's: only tiles that change place are moved
   }
   _tileFitOpt(o) { const sky = o.sky === true ? hvSky(this._hass, o.sky_entity, window.__hvSimScene) : null;
     return { zoom: o.zoom ? Number(o.zoom) : 0, label: o.label_size ? Number(o.label_size) : 1, sky }; }
@@ -5882,11 +5907,11 @@ class HVHubCard extends HTMLElement {
     else pw = used === 2 ? 2 * U + tg : U;
     const bw = Math.min(U, Math.floor((Wc - tg) / 2)), wrapped = [];
     const phw = this._w.querySelector('.phw'); if (pbig) pw = Math.min(Wc, 2 * bw + tg);
-    if (phw) { if (pbig) { wrapped.push(phw); if (phw.parentNode !== this._belowEl) this._belowEl.prepend(phw); } else if (phw.parentNode !== this._rowEl) this._rowEl.prepend(phw); }
+    const rowL = []; if (phw) { if (pbig) wrapped.push(phw); else rowL.push(phw); }
     xs.forEach((w, i) => { const u = sizes[i] === 1 ? 1 : 2;
-      if (sizes[i] !== 3 && used + u <= fit) { used += u; w.style.setProperty('--tw', (u === 2 ? 2 * U + tg : U) + 'px'); w.style.setProperty('--th', U + 'px'); if (w.parentNode !== this._rowEl) this._rowEl.appendChild(w); }
-      else { wrapped.push(w); w.style.setProperty('--tw', Math.min(Wc, u === 2 ? 2 * bw + tg : bw) + 'px'); w.style.setProperty('--th', bw + 'px'); if (w.parentNode !== this._belowEl) this._belowEl.appendChild(w); } });
-    if (calT && calT.nextElementSibling) calT.parentNode.appendChild(calT); // the calendar tile stays after the other tiles (side tiles are re-appended on a redraw)
+      if (sizes[i] !== 3 && used + u <= fit) { used += u; w.style.setProperty('--tw', (u === 2 ? 2 * U + tg : U) + 'px'); w.style.setProperty('--th', U + 'px'); rowL.push(w); }
+      else { wrapped.push(w); w.style.setProperty('--tw', Math.min(Wc, u === 2 ? 2 * bw + tg : bw) + 'px'); w.style.setProperty('--th', bw + 'px'); } });
+    hvOrder(this._rowEl, rowL); if (this._belowEl) hvOrder(this._belowEl, wrapped); // calendar tile last; unmoved tiles keep their element in place
     if (this._belowEl) this._belowEl.hidden = !wrapped.length || c.side_portrait === 'hide';
     xs.forEach(w => { w.classList.toggle('fit', w._fit); if (w._fit) this._fitTile(w); });
     set('--px', px + 'px'); set('--pt', Math.max(0, pt) + 'px'); set('--pb', pb + 'px'); set('--gap', gap + 'px'); set('--I', I + 'px'); set('--ac', String(ac)); set('--lfs', lfs + 'px'); set('--lh', lh + 'px'); set('--lg', lg + 'px');

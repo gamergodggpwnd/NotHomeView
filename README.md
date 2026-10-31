@@ -744,7 +744,8 @@ is inside a browser_mod popup.
 * **Live video on the tile** (`live_tile`): *Automatic* (Nest: still picture, tap for live; others: live), *Always live (while on screen)* (`visible`),
   *Live video on the tile (always connected)* (`on`) or *Tap for live* (`off`). *Always live* streams only while at least half the tile is on screen and stops
   when you scroll away, the page is hidden, the screensaver runs or the large view is open (it keeps the last frame and reconnects by itself; after 5 failed
-  tries it falls back to *Tap for live*). **Pause after no activity** (`live_pause`, `live_pause_min`, default on / 30 min) stops it after that long without
+  tries it falls back to *Tap for live*; a camera's rate limit (Google Nest 429) is not counted as a failure, it just waits at least a minute). Each camera keeps one
+  stream: moving or resizing the tile (arrange mode) starts one fresh stream after a short wait, and the Home Screen's clock refresh no longer touches the tiles. **Pause after no activity** (`live_pause`, `live_pause_min`, default on / 30 min) stops it after that long without
   a touch on the device. Each device can override the mode from the large view's *Tile on this device* button (saved in that browser).
 * **Large view (tap the picture)**: opens a browser_mod popup with the stream large (letter‑boxed, nothing cropped), the same name chip,
   the buttons and a ✕. **Popup style** *Full screen* (default, edge to edge, safe areas respected) or *Window* (a 960 × 540 rounded
