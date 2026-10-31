@@ -206,6 +206,10 @@ Full list: [CHANGELOG.md](CHANGELOG.md).
 * **Device pages theme: Night / Day / Auto.** Pick it from the ✏️ pencil menu or in the Home Screen card's editor (details below).
 * **NotHomeView Home Screen** (picker name *NotHomeView Hub*): greeting, app icons, Photos widget, Now Playing, calendar and weather,
   over a blurred photo background that stays **frozen** while the Home Screen is showing.
+  **Calendar size** (`calendar_size`, Home Screen editor → Calendar, or drag the calendar's corner in arrange mode): *Full · 2 rows*
+  (`full`, default), *Full · 1 row* (`row`), *Tile · two wide* (`wide`, three days in the tile row) or *Tile · Up next* (`tile`, the next
+  events as one square tile). The tiles sit after the other tiles and wrap to the row below when the top row is full. Photos (and its
+  viewer and gallery) never shows the camera tiles' saved frames (`nothomeview_camera_previews`).
 * **Screensaver pauses on the Home Screen**: it starts again only when it is enabled and the Home Screen is closed / swiped away.
 * **Photo viewer** with **Previous / Next** (and swipe), and a **View Gallery** popup with **Add photos** (upload straight into the
   screensaver folder).

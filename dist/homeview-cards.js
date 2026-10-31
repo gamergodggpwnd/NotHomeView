@@ -1789,7 +1789,7 @@ const CAM_AL_RETRY = [5000, 15000, 45000, 120000], CAM_AL_MAXFAIL = 5, CAM_AL_GI
 // source, read when an event entity changes) and the last frame seen in the large view (saved in this browser, and for admins also
 // in Home Assistant's media folder, /media/nothomeview_camera_previews/<camera>.jpg, one file per camera, overwritten).
 // No camera commands: nothing here starts a stream.
-const CAM_PV_DIR = 'nothomeview_camera_previews', CAM_PV_LS = 'hvCamPrev:', camPvFile = id => String(id).split('.').pop() + '.jpg', camPvCache = {};
+const CAM_PV_DIR = 'nothomeview_camera_previews', CAM_PV_EX = '/nothomeview_camera_previews(/|$)', CAM_PV_RE = /(^|\/)nothomeview_camera_previews(\/|$)/, CAM_PV_LS = 'hvCamPrev:', camPvFile = id => String(id).split('.').pop() + '.jpg', camPvCache = {};
 function camPvLocal(id) { try { const j = JSON.parse(localStorage.getItem(CAM_PV_LS + id) || 'null'); if (j && j.d && j.t) return { url: j.d, t: j.t, kind: 'viewed', label: 'Viewed' }; } catch (e) {} return null; }
 function camPvShared(h, id) { const k = 's' + id;
   if (!camPvCache[k]) camPvCache[k] = (async () => { try {
@@ -2611,6 +2611,8 @@ class HVScreensaverCard extends HTMLElement {
       else { if (wp.show_images === false) wp.show_images = true;
         wp.image_url = d.source === 'album' ? HV_ALB_MS + hvB64u(String(d.album_url || '').trim()) : d.source === 'media' ? (String(d.media_folder || '').trim() || 'media-source://media_source/local/') : d.source === 'picsum' ? SS_DEF.image_url : String(d.web_url || '').trim(); }
     }
+    if (wp.show_images !== false && String(wp.image_url || '').startsWith('media-source://')) { const ex = Array.isArray(wp.exclude_filenames) ? wp.exclude_filenames.slice() : [];
+      if (!ex.includes(CAM_PV_EX)) { ex.push(CAM_PV_EX); wp.exclude_filenames = ex; } } // 1.32.0: camera tiles' saved frames are not photos
     if (ch.includes('exclude_videos')) { const l = Array.isArray(wp.exclude_media_types) ? wp.exclude_media_types.filter(x => x !== 'video') : []; if (d.exclude_videos) l.push('video'); if (l.length || 'exclude_media_types' in wp) wp.exclude_media_types = l; }
     if (['clock_show', 'clock_format', 'clock_seconds'].some(k => ch.includes(k))) {
       if (!Array.isArray(wp.cards)) wp.cards = [];
@@ -2945,7 +2947,7 @@ class HVCalendarCard extends HVBase {
           ${c.show_location && e.location ? `<div class="em"><ha-icon icon="mdi:map-marker-outline"></ha-icon><span>${esc(e.location)}</span></div>` : ''}</div>`).join('')}</div></div>`; };
     const body = this._events == null ? `<div class="empty"><span>Loading…</span></div>`
       : !groups.length ? `<div class="empty"><ha-icon icon="mdi:calendar-check-outline"></ha-icon><span>No upcoming events</span></div>` : groups.map(day).join('');
-    this._root.innerHTML = `<div class="cal"><div class="hd"><ha-icon class="hi" icon="${esc(c.icon || 'mdi:calendar')}"></ha-icon><span class="ht">${esc(c.title != null ? c.title : 'Calendar')}</span>
+    this._root.innerHTML = `<div class="cal${c.compact ? ' compact' : ''}"><div class="hd"><ha-icon class="hi" icon="${esc(c.icon || 'mdi:calendar')}"></ha-icon><span class="ht">${esc(c.title != null ? c.title : 'Calendar')}</span>
       ${(this.actionConfig('tap') || {}).action !== 'none' ? '<ha-icon class="chev" icon="mdi:chevron-right"></ha-icon>' : ''}</div><div class="list">${body}</div></div>`;
     this._card.setAttribute('aria-label', `${c.title || 'Calendar'}, ${ev.length} upcoming events`);
     this._root.querySelectorAll('.ev').forEach(el => {
@@ -2965,14 +2967,14 @@ class HVCalendarCard extends HVBase {
     const rel = i => { if (i < 2) { try { const s = new Intl.RelativeTimeFormat(lang, { numeric: 'auto' }).format(i, 'day'); return s.charAt(0).toUpperCase() + s.slice(1); } catch (x) {} return i ? 'Tomorrow' : 'Today'; }
       return cols[i].d.toLocaleDateString(lang, { weekday: 'long' }); };
     const tt = e => e._all ? 'All day' : this._fmtT(e._s) + (e._e - e._s > 60000 ? ' – ' + this._fmtT(e._e) : '');
-    this._narrowNow = !!(this._card && this._card.clientWidth && this._card.clientWidth < 520);
+    this._narrowNow = this._nw();
     const col = cl => { const f = c.show_weather ? fc[cl.k] : null;
       return `<div class="col${cl.i === 0 ? ' today' : ''}"><div class="ch"><div class="cn">${esc(rel(cl.i))}</div><div class="cd">${esc(cl.d.toLocaleDateString(lang, rows > 1 && !this._narrowNow ? { month: 'short', day: 'numeric' } : { weekday: 'short', month: 'short', day: 'numeric' }))}</div>
         ${f ? `<div class="cw"><ha-icon icon="${WX_ICON[f.condition] || 'mdi:weather-partly-cloudy'}"></ha-icon><span>${Math.round(f.temperature)}°${f.templow != null ? `<i>${Math.round(f.templow)}°</i>` : ''}</span></div>` : ''}</div>
         <div class="evs">${cl.ev.length ? cl.ev.map(e => `<div class="ev${e._all ? ' ad' : ''}" data-own data-i="${all.indexOf(e)}" role="button" tabindex="0"><div class="et">${esc(e.summary || '(No title)')}</div>
           <div class="em"><span>${esc(tt(e))}${c.show_location && e.location ? ' · ' + esc(e.location) : ''}</span></div></div>`).join('') : `<div class="none">${this._events == null ? 'Loading…' : 'Nothing planned'}</div>`}</div><div class="more"></div></div>`; };
-    const narrow = this._card && this._card.clientWidth && this._card.clientWidth < 520; this._narrow = narrow;
-    this._rowsPainted = rows; this._root.innerHTML = `<div class="cal wide${narrow ? ' stack' : rows > 1 ? ' r2' : ''}" style="--nc:${nc}"><div class="hd"><ha-icon class="hi" icon="${esc(c.icon || 'mdi:calendar')}"></ha-icon><span class="ht">${esc(c.title != null ? c.title : 'Calendar')}</span>
+    const narrow = this._nw(); this._narrow = narrow;
+    this._rowsPainted = rows; this._root.innerHTML = `<div class="cal wide${narrow ? ' stack' : rows > 1 ? ' r2' : ''}${c.compact ? ' compact' : ''}" style="--nc:${nc}"><div class="hd"><ha-icon class="hi" icon="${esc(c.icon || 'mdi:calendar')}"></ha-icon><span class="ht">${esc(c.title != null ? c.title : 'Calendar')}</span>
       ${(this.actionConfig('tap') || {}).action !== 'none' ? '<ha-icon class="chev" icon="mdi:chevron-right"></ha-icon>' : ''}</div><div class="cols">${cols.map(col).join('')}</div></div>`;
     this._card.setAttribute('aria-label', `${c.title || 'Calendar'}, next ${n} days`);
     this._root.querySelectorAll('.ev').forEach(el => {
@@ -2984,9 +2986,11 @@ class HVCalendarCard extends HVBase {
   _build() { super._build(); if (window.ResizeObserver) { this._ro = new ResizeObserver(() => this._fit()); this._ro.observe(this._card); } }
   // tall wide cards (e.g. tablet portrait) show a second row of days instead of empty space; rows: 1 / 2 forces it
   _wideRows() { const c = this._config; if (Number(c.rows) === 1 || Number(c.rows) === 2) return Number(c.rows); const card = this._card; if (!card) return 1;
-    const H = card.clientHeight, W = card.clientWidth; return (H > 600 && W >= 560) || (W && W < 520) ? 2 : 1; }
+    const H = card.clientHeight, W = card.clientWidth; return (H > 600 && W >= 560) || (W && W < 520 && !c.compact) ? 2 : 1; }
+  // 1.32.0: phones stack the days; compact cards (Home Screen tile / one-row sizes) never do
+  _nw() { return !this._config.compact && !!(this._card && this._card.clientWidth && this._card.clientWidth < 520); }
   _fitWide(root) {
-    const nw = !!(this._card && this._card.clientWidth && this._card.clientWidth < 520);
+    const nw = this._nw();
     if (this._wideRows() !== this._rowsPainted || nw !== !!this._narrow) { this._paintWide(); return; }
     if (nw) return; // stacked days scroll instead // per column: hide events that don't fit, show "+N more"
     const rb = root.getBoundingClientRect().bottom + 1; root.querySelectorAll('.col').forEach(cl => { cl.style.visibility = ''; });
@@ -3091,7 +3095,14 @@ ha-card{cursor:default}
 .col .ev.ad::before{top:18%;bottom:18%;background:var(--hv-text2,rgba(255,255,255,.6))}
 .col .et{font-size:15px} .col .em{font-size:13px}
 .none{color:var(--hv-text2,rgba(255,255,255,.6));font-size:14px;padding:6px 2px}
-.more{flex:none;font-size:12.5px;font-weight:600;color:var(--hv-text2,rgba(255,255,255,.7));padding:0 4px}`; }
+.more{flex:none;font-size:12.5px;font-weight:600;color:var(--hv-text2,rgba(255,255,255,.7));padding:0 4px}
+.cal.compact{padding:12px 12px 6px;gap:8px} .cal.compact .ht{font-size:15px}
+.cal.compact .cols{gap:8px;overflow:hidden} .cal.compact .col{min-width:0;padding:9px 9px 7px;gap:6px;border-radius:16px}
+.cal.compact .cn{font-size:14px} .cal.compact .cd{display:none} .cal.compact .cw{font-size:12px;gap:2px} .cal.compact .cw ha-icon{--mdc-icon-size:16px} .cal.compact .cw i{display:none}
+.cal.compact .ev{padding:5px 7px 5px 11px;border-radius:11px} .cal.compact .col .evs{gap:5px} .cal.compact .col .et{font-size:12.5px;-webkit-line-clamp:1;display:block;white-space:nowrap;text-overflow:ellipsis}
+.cal.compact .col .em{font-size:11px;margin-top:1px} .cal.compact .none{font-size:12px} .cal.compact .more{font-size:11px}
+.cal.compact .list{gap:7px} .cal.compact .day{gap:8px} .cal.compact .db{width:34px} .cal.compact .dn{font-size:19px} .cal.compact .wd,.cal.compact .mo{font-size:9.5px} .cal.compact .wx{display:none}
+.cal.compact .list .et{font-size:13px;-webkit-line-clamp:1} .cal.compact .list .em{font-size:11px} .cal.compact .empty{font-size:12.5px}`; }
 }
 HVCalendarCard.schema = [
   { name: 'calendars', required: true, selector: { entity: { domain: 'calendar', multiple: true } } },
@@ -3862,6 +3873,7 @@ async function hvHubMutate(h, sig0, raw) { const root = hvFindRoot(h), lv = root
   for (const k of Object.keys(node)) delete node[k]; Object.assign(node, JSON.parse(JSON.stringify(raw)));
   if (typeof lv.saveConfig === 'function' && (lv.urlPath || null) === (dash || null)) { if (same) await hvQuietSave(h, lv, fresh); else await lv.saveConfig(fresh); }
   else { const sv = { type: 'lovelace/config/save', config: fresh }; if (dash) sv.url_path = dash; await h._hass.callWS(sv); } }
+const HUB_CAL_SIZES = [['full', 'mdi:view-agenda-outline', 'Full · 2 rows'], ['row', 'mdi:view-day-outline', 'Full · 1 row'], ['wide', 'mdi:rectangle-outline', 'Tile · two wide'], ['tile', 'mdi:square-rounded-outline', 'Tile · Up next']];
 const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: null, rs: null, dirty: false, busy: false,
   ok(h) { return !!(h && h._w && h.isConnected && !h._sheetO && h._config && h._config.arrange !== false && !hvInDialog(h) && hvEclOK(h)); },
   raw() { return JSON.parse(JSON.stringify(this.hub._hvRaw || {})); },
@@ -3881,13 +3893,15 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
   items() { const h = this.hub, w = h && h._w, out = []; if (!w) return out;
     w.querySelectorAll('.apps .app').forEach((el, i) => out.push({ kind: 'app', i, el }));
     const ph = w.querySelector('.phw .pw'); if (ph) out.push({ kind: 'photo', i: 0, el: ph });
-    (h._sideEls || []).forEach((el, i) => { if (el.isConnected && !(el.parentNode && el.parentNode.hidden)) out.push({ kind: 'side', i, el }); }); return out; },
+    (h._sideEls || []).forEach((el, i) => { if (el.isConnected && !(el.parentNode && el.parentNode.hidden)) out.push({ kind: 'side', i, el }); });
+    if (h._config.show_calendar !== false && h._cal) { const t = h._calTiled(), el = t ? h._calTile : w.querySelector('.calw'); if (el && el.isConnected && !el.hidden && !(el.parentNode && el.parentNode.hidden)) out.push({ kind: 'cal', i: 0, el }); }
+    return out; },
   find(el) { return this.items().find(x => x.el === el); },
   box(it) { return (it.kind === 'app' ? (it.el.querySelector('.ico') || it.el) : it.el).getBoundingClientRect(); },
-  label(it) { const c = this.hub._config; if (it.kind === 'app') return (c.apps[it.i] && c.apps[it.i].name) || 'App'; if (it.kind === 'photo') return c.photo_label || 'Photos';
+  label(it) { const c = this.hub._config; if (it.kind === 'app') return (c.apps[it.i] && c.apps[it.i].name) || 'App'; if (it.kind === 'photo') return c.photo_label || 'Photos'; if (it.kind === 'cal') return c.calendar_title || 'Calendar';
     const s = (c.side_cards || []).filter(x => x && x.type)[it.i] || {}, st = s.entity && this.hub._hass && this.hub._hass.states[s.entity];
     return s.name || s.title || (st && st.attributes.friendly_name) || hvTileTypeName(s.type); },
-  units(it) { const c = this.hub._config; return it.kind === 'photo' ? (c.photo_size === 'square' ? 1 : 2) : it.kind === 'side' ? (hubTileSizes(c)[it.i] === 2 ? 2 : 1) : 1; },
+  units(it) { const c = this.hub._config; if (it.kind === 'cal') return c.calendar_size === 'wide' ? 2 : 1; return it.kind === 'photo' ? (c.photo_size === 'square' ? 1 : 2) : it.kind === 'side' ? (hubTileSizes(c)[it.i] === 2 ? 2 : 1) : 1; },
   tick() { const h = this.hub; if (!h) return; if (!h.isConnected || h._sheetO) { this.exit(false); return; }
     hvEcl.ensure(); this.bar(true); const lay = hvEcl.lay, day = h.hasAttribute('hv-day'); if (hvEcl.host.hasAttribute('day') !== day) hvEcl.host.toggleAttribute('day', day);
     const live = new Set(), vh = innerHeight;
@@ -3902,7 +3916,9 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
       const app = it.kind === 'app', bs = app ? 30 : Math.max(30, Math.min(42, Math.round(Math.min(r.width, r.height) * 0.36))), bi = app ? 24 : Math.max(24, bs - 10); c.classList.toggle('app', app); let rr = getComputedStyle(it.kind === 'app' ? (it.el.querySelector('.ico') || it.el) : it.el).borderTopLeftRadius;
       if (!rr || rr === '0px') rr = it.kind === 'app' ? Math.round(r.width * 0.23) + 'px' : '22px';
       c.style.setProperty('--bs', bs + 'px'); c.style.setProperty('--bi', bi + 'px'); c.style.setProperty('--rr', rr); c.style.width = r.width + 'px'; c.style.height = r.height + 'px';
-      c.style.transform = `translate(${Math.round(r.left)}px,${Math.round(r.top)}px)`; c.classList.toggle('off', !!(this.rs && this.rs.el === it.el) || !!(this.drag && this.drag.el === it.el)); }
+      c.style.transform = `translate(${Math.round(r.left)}px,${Math.round(r.top)}px)`; c.classList.toggle('off', !!(this.rs && this.rs.el === it.el) || !!(this.drag && this.drag.el === it.el));
+      if (it.kind === 'cal') { const z = c.querySelector('.rz'), ab = hvEcl.sr && hvEcl.sr.querySelector('.abar'), br = ab && ab.getBoundingClientRect(); // keep the calendar's corner clear of the Done bar (phones)
+        const lift = br && br.width && br.top < r.bottom && br.bottom > r.bottom - bs && br.left < r.right && br.right > r.right - bs ? Math.round(r.bottom - br.top + 6) : 0; if (z) z.style.bottom = lift + 'px'; } }
     for (const [el, c] of [...this.ctl]) if (!live.has(c)) { c.remove(); this.ctl.delete(el); } },
   // tap = menu; hold = drag (the Photos tile: its menu); slide = scroll the page
   press(it, e) { if ((e.button != null && e.button > 0) || this.drag || this.rs) return; e.preventDefault(); e.stopPropagation(); hvEcl.closeMenu();
@@ -3944,7 +3960,26 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
   setUnits(it, u) { if (this.units(it) === u) return; this.change(raw => { if (it.kind === 'photo') { raw.photo_size = u === 2 ? 'wide' : 'square'; return; }
     this.edit(raw, 'side', rows => { const r = rows[it.i]; if (!r) return; r.tile = Object.assign({}, r.tile || {}, { size: u === 2 ? 'wide' : 'square' }); if (r.sz != null) r.sz = u; }); }); },
   // corner handle: one tile / two wide (the Home Screen row's two sizes)
-  resize(it, e) { if ((e.button != null && e.button > 0) || this.drag || this.rs) return; e.preventDefault(); e.stopPropagation(); hvEcl.closeMenu();
+  setCal(k) { this.change(raw => { if (k === 'full') delete raw.calendar_size; else raw.calendar_size = k; }); },
+  // calendar corner: drag between the four sizes (Full 2 rows / Full 1 row below; Up next / Two wide in the tile row)
+  resizeCal(it, e) { e.preventDefault(); e.stopPropagation(); hvEcl.closeMenu(); const h = this.hub, h0 = e.currentTarget, lay = hvEcl.lay, G = h._calGeo(); if (!G) return;
+    const d = this.rs = { it, el: it.el, k: h._calMode(), id: e.pointerId, x: e.clientX, y: e.clientY, zones: [] };
+    try { h0.setPointerCapture(e.pointerId); } catch (x) {}
+    const mk = cls => { const n = document.createElement('div'); n.className = cls; lay.appendChild(n); return n; };
+    const Z = { full: [G.rl, G.rt, G.rw, G.rh], row: [G.rl, G.rt, G.rw, G.rowH], wide: [G.sl, G.st, 2 * G.U + G.tg, G.U], tile: [G.sl, G.st, G.U, G.U] };
+    for (const [k, , t] of HUB_CAL_SIZES) { const z = mk('tgt'); z.dataset.k = k; z.textContent = t; d.zones.push(z); } d.live = mk('live'); d.lbl = mk('szl');
+    const paint = () => { for (const z of d.zones) { const q = Z[z.dataset.k]; hvEcl.pos(z, { left: q[0], top: q[1], width: q[2], height: q[3] }); z.classList.toggle('on', z.dataset.k === d.k); }
+      const x = this.items().find(y => y.kind === 'cal'); if (x) { d.el = x.el; const r = this.box(x); if (r.width) hvEcl.pos(d.live, r); }
+      d.lbl.textContent = (HUB_CAL_SIZES.find(y => y[0] === d.k) || [])[2] || '';
+      const lw = d.lbl.offsetWidth || 140, vw = document.documentElement.clientWidth || innerWidth; d.lbl.style.left = Math.max(8, Math.min(vw - lw - 8, d.x - lw / 2)) + 'px'; d.lbl.style.top = Math.max(8, d.y - 64) + 'px'; };
+    const inn = q => d.x >= q[0] && d.x <= q[0] + q[2] && d.y >= q[1] && d.y <= q[1] + q[3];
+    const pick = () => inn(Z.tile) ? 'tile' : inn(Z.wide) ? 'wide' : d.y < Math.min(G.rt, G.st) - G.gap / 2 ? (d.x - G.sl > G.U * 1.5 + G.tg ? 'wide' : 'tile') : (d.y - G.rt > Math.max(G.rowH + 24, G.rh * 0.62) ? 'full' : 'row');
+    d.iv = setInterval(paint, 60); paint(); if (navigator.vibrate) try { navigator.vibrate(10); } catch (x) {}
+    d.mv = ev => { if (ev.pointerId !== d.id) return; ev.preventDefault(); d.x = ev.clientX; d.y = ev.clientY; const k = pick();
+      if (k !== d.k) { d.k = k; this.setCal(k); d.live.classList.remove('pulse'); void d.live.offsetWidth; d.live.classList.add('pulse'); if (navigator.vibrate) try { navigator.vibrate(8); } catch (z) {} } paint(); };
+    d.up = ev => { if (ev.pointerId !== d.id) return; this.endResize(); }; d.h0 = h0;
+    addEventListener('pointermove', d.mv, true); addEventListener('pointerup', d.up, true); addEventListener('pointercancel', d.up, true); this.tick(); },
+  resize(it, e) { if ((e.button != null && e.button > 0) || this.drag || this.rs) return; if (it.kind === 'cal') return this.resizeCal(it, e); e.preventDefault(); e.stopPropagation(); hvEcl.closeMenu();
     const r0 = this.box(it), U = r0.height, tg = parseFloat(this.hub._w.style.getPropertyValue('--cg2')) || 16, h0 = e.currentTarget, lay = hvEcl.lay, rr = this.ctl.get(it.el) && this.ctl.get(it.el).style.getPropertyValue('--rr');
     const d = this.rs = { it, el: it.el, u: this.units(it), first: this.units(it), id: e.pointerId, o0: r0, U, tg, x: e.clientX, y: e.clientY, zones: [] };
     try { h0.setPointerCapture(e.pointerId); } catch (x) {}
@@ -3970,6 +4005,11 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
       b.innerHTML = '<ha-icon></ha-icon><span></span>'; b.querySelector('ha-icon').setAttribute('icon', ic); b.querySelector('span').textContent = txt; b.addEventListener('click', e => { e.stopPropagation(); if (Date.now() - t0 < 400) return; fn(); }); m.appendChild(b); return b; };
     const sep = () => { const s = document.createElement('div'); s.className = 'sep'; m.appendChild(s); };
     const head = document.createElement('div'); head.className = 't'; head.textContent = this.label(it); m.appendChild(head);
+    const fin = () => { wrap.querySelector('.scrim').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); close(); });
+      hvEcl.lay.appendChild(wrap); hvEcl.place(m, anchor); const f = m.querySelector('button:not([disabled])'); if (f) f.focus({ preventScroll: true }); };
+    if (it.kind === 'cal') { const cm = this.hub._calMode(); item('mdi:pencil', 'Edit calendar', () => { close(); this.openEditor(); }); sep();
+      for (const [k, ic, t] of HUB_CAL_SIZES) item(cm === k ? 'mdi:check' : ic, t, () => { close(); this.setCal(k); });
+      sep(); item('mdi:eye-off-outline', 'Hide', () => { close(); this.change(raw => { raw.show_calendar = false; }); hvToast('Calendar hidden. Turn it back on in the Home Screen settings (Calendar).', 'hv-arrange'); }); fin(); return; }
     item('mdi:pencil', 'Edit', () => { close(); this.openEditor(); });
     if (it.kind !== 'photo') { item('mdi:arrow-left', 'Move earlier', () => { close(); this.move(it.kind, it.i, it.i - 1); }, '', it.i <= 0);
       item('mdi:arrow-right', 'Move later', () => { close(); this.move(it.kind, it.i, it.i + 1); }, '', it.i >= n - 1); }
@@ -4590,6 +4630,8 @@ const HUB_CSS = `:host{display:block;position:relative;font-family:${FONT};color
 .below{display:flex;flex-wrap:wrap;gap:var(--cg2,40px);flex:none} .below[hidden]{display:none}
 .calw{flex:1 1 0;min-height:var(--calmin,240px);position:relative}
 .calw > *{position:absolute;inset:0;width:100%;height:100%;aspect-ratio:auto}
+.calw[hidden]{display:none} .calw.crow{flex:none;height:var(--calrow,200px);min-height:0}
+.tile.calt > *{position:absolute;inset:0;width:100%;height:100%}
 .empty{opacity:.7;padding:12px}
 .ssp{position:fixed;left:50%;top:calc(var(--hv-safe-top, env(safe-area-inset-top, 0px)) + 5px);width:38px;height:5px;margin-left:-19px;border-radius:3px;background:rgba(255,255,255,.55);box-shadow:0 1px 4px rgba(0,0,30,.25);pointer-events:none;z-index:3}
 .ssp[hidden],:host([contained]) .ssp{display:none}
@@ -5495,7 +5537,7 @@ class HVHubCard extends HTMLElement {
   constructor() { super(); this.attachShadow({ mode: 'open' }); this._layer = 0; }
   static get defaults() { return { theme: 'night', person: '', morning_start: 5, afternoon_start: 12, evening_start: 17, greeting_morning: 'Good morning', greeting_afternoon: 'Good afternoon',
     greeting_evening: 'Good evening', photo_source_mode: 'media', photo_album_url: '', photo_source: '', photo_interval: 25, photo_order: 'random', blur: 32, dim: 0.32, bg_transparency: 60, photo_backdrop: true, bg_freeze: true, photo_tap: 'viewer', photo_viewer_nav: true, photo_viewer_swipe: true, photo_viewer_add: true, photo_gallery_upload: true, photo_viewer_pause: true, photo_label: 'Photos', photo_max_aspect: 2.6,
-    show_calendar: true, calendar_layout: 'wide', calendar_columns: 3, calendar_days: 7, calendar_title: 'Calendar', calendar_min_height: 240, max_icon: 140, edge_sidebar: true, ss_hold: true, weather_entity: '', photo_size: 'wide', side_portrait: 'below', side_sizes: '', row_units: 3, block_pull_refresh: true, calendar_rows: 'auto', swipe_screensaver: 'auto', full_height_popups: true, popup_edit: true, assistant_enabled: false, assistant_pipeline: 'preferred', assistant_theme: 'same', assistant_button: true, assistant_speak: true, assistant_auto_listen: true, assistant_orb: true, assistant_continue: true, assistant_silence_timeout: 5, assistant_end_of_speech_pause: 2, assistant_history_retention: 'forever', assistant_dismiss_phrases: "thank you, thanks, thanks jarvis, thank you jarvis, goodbye, bye, good bye, that's all, that's it, never mind, nevermind, stop, cancel, no thanks, I'm done", assistant_quiet_volume_below: 5, assistant_quiet_start: '23:30', assistant_quiet_end: '10:00', timer_sound: true }; }
+    show_calendar: true, calendar_size: 'full', calendar_layout: 'wide', calendar_columns: 3, calendar_days: 7, calendar_title: 'Calendar', calendar_min_height: 240, max_icon: 140, edge_sidebar: true, ss_hold: true, weather_entity: '', photo_size: 'wide', side_portrait: 'below', side_sizes: '', row_units: 3, block_pull_refresh: true, calendar_rows: 'auto', swipe_screensaver: 'auto', full_height_popups: true, popup_edit: true, assistant_enabled: false, assistant_pipeline: 'preferred', assistant_theme: 'same', assistant_button: true, assistant_speak: true, assistant_auto_listen: true, assistant_orb: true, assistant_continue: true, assistant_silence_timeout: 5, assistant_end_of_speech_pause: 2, assistant_history_retention: 'forever', assistant_dismiss_phrases: "thank you, thanks, thanks jarvis, thank you jarvis, goodbye, bye, good bye, that's all, that's it, never mind, nevermind, stop, cancel, no thanks, I'm done", assistant_quiet_volume_below: 5, assistant_quiet_start: '23:30', assistant_quiet_end: '10:00', timer_sound: true }; }
   static getStubConfig(hass) { return { apps: HUB_APPS.map(a => Object.assign({}, a)), calendar_entities: Object.keys((hass && hass.states) || {}).filter(k => k.startsWith('calendar.')).slice(0, 3) }; }
   static getConfigElement() { return document.createElement('homeview-hub-card-editor'); }
   setConfig(c) { if (!c) throw new Error('Invalid configuration'); this._hvRaw = c; const old = this._config, nc = Object.assign({}, HVHubCard.defaults, c);
@@ -5701,6 +5743,8 @@ class HVHubCard extends HTMLElement {
   // 1.32.0 Home Screen arrange: a new config applied in place (apps redrawn, side tiles reordered / resized with their elements kept, no rebuild)
   _arrSet(raw) { const old = this._config; this._hvRaw = raw; const nc = Object.assign({}, HVHubCard.defaults, raw); if (!Array.isArray(nc.apps) || !nc.apps.length) nc.apps = HUB_APPS; this._config = nc;
     if (!this._w) return this._render(); if (JSON.stringify(old && old.apps) !== JSON.stringify(nc.apps)) { const a = this._w.querySelector('.apps'); if (a) a.innerHTML = this._appsHtml(nc); }
+    if (old && (old.show_calendar !== false) !== (nc.show_calendar !== false)) { this._sig = null; return this._render(); } // calendar shown / hidden: rebuild once
+    if (this._cal && old && old.calendar_size !== nc.calendar_size) this._makeCal(this._cal);
     this._sig = this._rSig(); this._makeSide(); this._layout(); }
   _render() {
     if (!this._config || !this._hass) return;
@@ -5728,7 +5772,7 @@ class HVHubCard extends HTMLElement {
     this._tpill = this._w.querySelector('.tpill'); this._tpillPaint();
     this._rowEl = this._w.querySelector('.row'); this._belowEl = this._w.querySelector('.below'); this._makeSide();
     this._pis = [...this._w.querySelectorAll('.pi')]; this._paintPhoto(true);
-    if (c.show_calendar !== false) { const w = this._w.querySelector('.calw'); this._makeCal(keepCal); w.appendChild(this._cal); } else this._cal = null;
+    if (c.show_calendar !== false) { const w = this._w.querySelector('.calw'); this._makeCal(keepCal); w.appendChild(this._cal); this._placeCal(); } else { this._cal = null; if (this._calTile) this._calTile.remove(); }
     this._layout();
   }
   // Side slot (Square photos): any cards (picked in the editor), right of the Photos tile, or below the row when there's no room
@@ -5764,10 +5808,31 @@ class HVHubCard extends HTMLElement {
   _fitTile(w) { if (this._sheetO || !w.isConnected) return; const W = w.offsetWidth, H = w.offsetHeight; if (!W || !H) return;
     const o = hubTileOpt(this._config, (this._sideEls || []).indexOf(w)), fo = this._tileFitOpt(o); w._skySig = fo.sky ? fo.sky.sig : '';
     if (!hvFitCard(w._card, W, H, Math.round(Math.min(W, H) * 0.06), fo)) setTimeout(() => this._fitTile(w), 400); }
+  // 1.32.0 calendar sizes: full (2 rows, classic) / row (1 row) below the tiles, or a tile in the tile row (wide = two wide, tile = Up next)
+  _calMode() { const s = this._config.calendar_size; return s === 'row' || s === 'wide' || s === 'tile' ? s : 'full'; }
+  _calTiled() { const m = this._calMode(); return m === 'wide' || m === 'tile'; }
+  _placeCal() { const cw = this._w && this._w.querySelector('.calw'); if (!cw || !this._cal) return; const tiled = this._calTiled(), m = this._calMode();
+    if (tiled) { let t = this._calTile; if (!t) { t = this._calTile = document.createElement('div'); t.className = 'tile calt'; } if (this._cal.parentNode !== t) t.appendChild(this._cal); }
+    else { if (this._calTile && this._calTile.parentNode) this._calTile.remove(); if (this._cal.parentNode !== cw) cw.appendChild(this._cal); }
+    cw.hidden = tiled; cw.classList.toggle('crow', m === 'row'); }
+  _calGeo() { const w = this._w; if (!w) return null; const S = w.style, n = k => parseFloat(S.getPropertyValue(k)) || 0, U = n('--ph'), tg = n('--cg2'), gap = n('--gap'), pb = n('--pb');
+    const ct = this._calTile, vis = el => [...((el && el.children) || [])].filter(x => x !== ct).map(x => x.getBoundingClientRect()).filter(r => r.width);
+    const top = w.querySelector('.mid') || this._rowEl, tr = top.getBoundingClientRect(), be = this._belowEl, bl = be && !be.hidden ? vis(be) : [];
+    const rt = Math.round((bl.length ? Math.max(...bl.map(r => r.bottom)) : tr.bottom) + gap), wr = w.getBoundingClientRect(), rh = Math.max(120, wr.bottom - pb - rt);
+    const rl = wr.left + n('--px'), rw = wr.width - 2 * n('--px'), rr = rl + rw; // the calendar's region: below the tiles, full width
+    const rw0 = vis(this._rowEl), last = rw0.length ? rw0[rw0.length - 1] : null; let sl, st;
+    if (last && last.right + tg + U <= rr + 1) { sl = last.right + tg; st = last.top; } // room in the tile row
+    else if (bl.length) { const b = bl[bl.length - 1]; if (b.right + tg + U <= rr + 1) { sl = b.right + tg; st = b.top; } else { sl = rl; st = b.bottom + tg; } } // after the wrapped tiles
+    else { sl = rl; st = rt; } // a new row below the tiles
+    return { U, tg, gap, rt, rl, rw, rh, rowH: this._calRowH || 200, sl, st }; }
   _makeCal(keep) {
     const c = this._config, ids = c.calendar_entities && c.calendar_entities.length ? c.calendar_entities : Object.keys(this._hass.states).filter(k => k.startsWith('calendar.'));
     const cfg = { type: 'custom:homeview-calendar-card', entities: ids, title: c.calendar_title, layout: c.calendar_layout, columns: c.calendar_columns, rows: c.calendar_rows || 'auto', days: c.calendar_days,
       max_events: 30, show_location: c.calendar_show_location === true, show_weather: c.calendar_show_weather !== false, weather_entity: c.weather_entity || undefined, tap_action: { action: 'none' } };
+    const m = this._calMode(), nc = this._calCols || 4;
+    if (m === 'row') Object.assign(cfg, { layout: 'wide', rows: 1, columns: nc, days: Math.max(nc, Number(c.calendar_days) || 7), compact: this._calCompact ? true : undefined });
+    else if (m === 'wide') Object.assign(cfg, { layout: 'wide', rows: 1, columns: 3, days: Math.max(3, Number(c.calendar_days) || 7), compact: true });
+    else if (m === 'tile') Object.assign(cfg, { layout: 'list', title: 'Up next', max_events: 4, show_location: false, compact: true });
     const sig = JSON.stringify(cfg); if (keep && sig === this._calSig) { this._cal = keep; return; }
     this._calSig = sig; const el = keep || document.createElement('homeview-calendar-card');
     try { el.setConfig(cfg); } catch (e) { el.textContent = String(e); } el.hass = this._hass; this._cal = el;
@@ -5790,14 +5855,17 @@ class HVHubCard extends HTMLElement {
     const below = full ? this._below || 0 : 0;
     const H = full ? vh - top - below : Math.max(520, r.width * 0.7);
     const Wc = W - 2 * Math.max(0, px), gap = Math.round(Math.max(16, Math.min(36, vh * 0.032)));
-    const portrait = vh >= vw, calMin = c.show_calendar !== false ? Number(c.calendar_min_height) || 240 : 0;
+    this._placeCal(); const cm = c.show_calendar !== false && this._cal ? this._calMode() : '', calT = (cm === 'wide' || cm === 'tile') ? this._calTile : null, calU = cm === 'wide' ? 2 : 1;
+    const calRow = this._calRowH = Math.round(Math.max(160, Math.min(230, vh * 0.27, Wc * 0.5)));
+    if (cm === 'row') { const cc = Wc >= 1100 ? 5 : Wc >= 700 ? 4 : 3, cp = Wc < 600; if (cc !== this._calCols || cp !== this._calCompact) { this._calCols = cc; this._calCompact = cp; this._makeCal(this._cal); } }
+    const portrait = vh >= vw, calMin = cm === 'full' ? Number(c.calendar_min_height) || 240 : cm === 'row' ? calRow : 0;
     const greetH = Math.max(15, Math.min(26, Wc * 0.03)) * 2.5;
     // icon size: the 2 x 2 apps + Photos (= 2 icons tall) fit the width, and leave room for the calendar below
     let I = Math.min(Wc / 5.2, (H - pt - pb - greetH - gap * 2 - calMin) / 2.75, Number(c.max_icon) || 140);
     // landscape with extra tiles: size everything so the wanted units (Photos + extras, up to row_units) fit beside the apps
     const nA = (c.apps || []).length; let ac = !portrait && nA > 4 ? Math.min(4, Math.ceil(nA / 2)) : 2; // 1.32.0: landscape keeps the apps in 2 rows (5-8 apps) when they fit
-    const xs0 = this._sideEls || [];
-    if (!portrait && xs0.length) { const sz = hubTileSizes(c), want = Math.min(Number(c.row_units) || 3, (c.photo_size === 'square' ? 1 : 2) + xs0.reduce((a, _, i) => a + (sz[i] === 2 ? 2 : 1), 0));
+    const hs = hubTileSizes(c), xs0 = (this._sideEls || []).concat(calT ? [calT] : []), szAll = (this._sideEls || []).map((_, i) => hs[i] === 2 ? 2 : 1).concat(calT ? [calU] : []);
+    if (!portrait && xs0.length) { const want = Math.min(Number(c.row_units) || 3, (c.photo_size === 'square' ? 1 : 2) + szAll.reduce((a, u) => a + u, 0));
       const fI = a => (Wc - want * 22) / (a * 1.36 + want * 2.26 + (want - 1) * 0.36) - 1; if (ac > 2 && fI(ac) < 72) ac = 2; // too narrow for wider apps: classic 2 columns
       I = Math.min(I, fI(ac)); }
     if (ac > 2) I = Math.min(I, Wc / (ac * 1.36 + 2.4));
@@ -5806,7 +5874,7 @@ class HVHubCard extends HTMLElement {
     const ph = 2 * I + lg + lh + rg, pwMax = Wc - ac * I - (ac - 1) * cg - Math.round(I * 0.36), square = c.photo_size === 'square';
     // Tile row right of the apps: Photos + the extra cards, Square = 1 unit (ph x ph), Wide = 2 units. As many units as fit
     // (3 on a landscape tablet); what doesn't fit wraps to a row below (squares sized like the photo tile, or hidden).
-    const tg = Math.round(I * 0.36), U = ph, fit = Math.max(1, Math.floor((pwMax + tg) / (U + tg))), xs = this._sideEls || [], sizes = hubTileSizes(c);
+    const tg = Math.round(I * 0.36), U = ph, fit = Math.max(1, Math.floor((pwMax + tg) / (U + tg))), xs = xs0, sizes = szAll;
     const pu = square ? 1 : 2; let used = Math.min(pu, fit), pw;
     if (!xs.length) pw = square ? ph : Math.max(ph * 0.9, Math.min(pwMax, ph * (Number(c.photo_max_aspect) || 2.6))); // alone: Wide fills the row (classic look)
     else pw = used === 2 ? 2 * U + tg : U;
@@ -5814,12 +5882,13 @@ class HVHubCard extends HTMLElement {
     xs.forEach((w, i) => { const u = sizes[i] === 2 ? 2 : 1;
       if (used + u <= fit) { used += u; w.style.setProperty('--tw', (u === 2 ? 2 * U + tg : U) + 'px'); w.style.setProperty('--th', U + 'px'); if (w.parentNode !== this._rowEl) this._rowEl.appendChild(w); }
       else { wrapped.push(w); w.style.setProperty('--tw', Math.min(Wc, u === 2 ? 2 * bw + tg : bw) + 'px'); w.style.setProperty('--th', bw + 'px'); if (w.parentNode !== this._belowEl) this._belowEl.appendChild(w); } });
+    if (calT && calT.nextElementSibling) calT.parentNode.appendChild(calT); // the calendar tile stays after the other tiles (side tiles are re-appended on a redraw)
     if (this._belowEl) this._belowEl.hidden = !wrapped.length || c.side_portrait === 'hide';
     xs.forEach(w => { w.classList.toggle('fit', w._fit); if (w._fit) this._fitTile(w); });
     set('--px', px + 'px'); set('--pt', Math.max(0, pt) + 'px'); set('--pb', pb + 'px'); set('--gap', gap + 'px'); set('--I', I + 'px'); set('--ac', String(ac)); set('--lfs', lfs + 'px'); set('--lh', lh + 'px'); set('--lg', lg + 'px');
     set('--rg', rg + 'px'); set('--cg', cg + 'px'); set('--cg2', Math.round(I * 0.36) + 'px'); set('--ph', ph + 'px'); set('--pw', Math.floor(pw) + 'px');
     set('--gfs', Math.round(Math.max(15, Math.min(26, I * 0.2))) + 'px'); set('--av', Math.round(Math.max(44, Math.min(72, I * 0.56))) + 'px');
-    set('--h', Math.floor(H) + 'px'); set('--calmin', calMin + 'px');
+    set('--h', Math.floor(H) + 'px'); set('--calmin', calMin + 'px'); set('--calrow', calRow + 'px');
     this.style.setProperty('--blur', (Number(c.blur) || 0) + 'px'); this.style.setProperty('--dim', String(Math.max(0, Math.min(0.9, Number(c.dim) || 0))));
     this._bgMode();
     // keep the avatar clear of the floating edit / screensaver buttons
@@ -5857,6 +5926,7 @@ class HVHubCard extends HTMLElement {
       const walk = async (id, depth) => { if (ids.length >= 800 || depth > 5) return; let r; try { r = await this._hass.callWS({ type: 'media_source/browse_media', media_content_id: id }); } catch (e) { return; }
         for (const ch of (r && r.children) || []) { if (ids.length >= 800) break; const nm = ch.media_content_id || '';
           if (ex.some(re => re.test(nm) || re.test(ch.title || ''))) continue;
+          if (CAM_PV_RE.test(nm) || ch.title === CAM_PV_DIR) continue; // 1.32.0: never the camera tiles' saved frames (Photos, its viewer and gallery)
           if (ch.can_expand && !ch.can_play) await walk(ch.media_content_id, depth + 1);
           else if (ch.media_class === 'image' || /^image\//.test(ch.media_content_type || '')) ids.push(nm); } };
       await walk(src.url.replace(/\/$/, '') + (src.url.endsWith('/') ? '/' : ''), 0); }
@@ -6195,6 +6265,7 @@ const HUB_SCHEMA = [
     { type: 'grid', name: '', schema: [{ name: 'show_calendar', selector: { boolean: {} } }, { name: 'calendar_show_weather', selector: { boolean: {} } }] },
     { name: 'calendar_entities', selector: { entity: { domain: 'calendar', multiple: true } } },
     { type: 'grid', name: '', schema: [{ name: 'calendar_layout', selector: { select: { mode: 'dropdown', options: [{ value: 'wide', label: 'Wide: days side by side' }, { value: 'list', label: 'List' }] } } }, n_('calendar_columns', 1, 7), n_('calendar_days', 1, 30)] },
+    { name: 'calendar_size', selector: { select: { mode: 'dropdown', options: HUB_CAL_SIZES.map(([value, , label]) => ({ value, label: value === 'full' ? label + ' (default)' : label })) } } },
     { name: 'calendar_rows', selector: { select: { mode: 'dropdown', options: [{ value: 'auto', label: 'Auto (2 when tall)' }, { value: '1', label: '1 row' }, { value: '2', label: '2 rows' }] } } },
     { type: 'grid', name: '', schema: [{ name: 'calendar_title', selector: { text: {} } }, n_('calendar_min_height', 120, 800, 10, 'px')] }] },
   { type: 'expandable', name: '', flatten: true, title: 'Assistant & timer', icon: 'mdi:microphone-message', schema: [
@@ -6234,7 +6305,7 @@ Object.assign(LABELS, { photo_source_mode: 'Photo source', photo_album_url: 'Alb
   morning_start: 'Morning from (hour)', afternoon_start: 'Afternoon from', evening_start: 'Evening from', night_start: 'Night from (empty = evening until morning)', greeting_night: 'Night greeting', greeting_morning: 'Morning greeting', greeting_afternoon: 'Afternoon greeting', greeting_evening: 'Evening greeting',
   wallpaper: 'Wallpaper when there are no photos (any CSS background, e.g. a colour or gradient)', photo_source: 'Media folder (empty = the Wallpanel screensaver\'s, e.g. media-source://media_source/local/)', photo_interval: 'Next photo every', photo_order: 'Order', blur: 'Background blur (px)', dim: 'Edge darkening for text readability (0-0.9)', photo_backdrop: 'Show the current photo, blurred, behind the page', bg_freeze: 'Freeze the blurred background while the Home Screen is showing', bg_transparency: 'Background transparency',
   photo_tap: 'Tapping Photos', photo_label: 'Photos label', photo_viewer_nav: 'Viewer: Previous / Next buttons', photo_viewer_swipe: 'Viewer: swipe left / right to change picture', photo_viewer_add: 'Viewer: View Gallery button', photo_gallery_upload: 'Gallery: let people upload new pictures', photo_viewer_pause: 'Pause the screensaver while the viewer is open', show_calendar: 'Show the calendar', calendar_show_weather: 'Forecast per day', calendar_entities: 'Calendars (empty = all)', calendar_layout: 'Calendar layout',
-  calendar_columns: 'Days side by side', calendar_rows: 'Rows of days (phones always stack)', calendar_days: 'Days to load', calendar_title: 'Calendar title', calendar_min_height: 'Calendar min height', max_icon: 'Largest app icon', photo_max_aspect: 'Photos widget: widest aspect (w/h)', photo_size: 'Photos tile size', side_sizes: 'Extra tiles\' sizes, in order: S = square, W = wide (e.g. S, S)', side_portrait: 'Tiles that don\'t fit beside the apps', row_units: 'Landscape: units beside the apps (icons shrink to fit)',
+  calendar_size: 'Calendar size', calendar_columns: 'Days side by side', calendar_rows: 'Rows of days (phones always stack)', calendar_days: 'Days to load', calendar_title: 'Calendar title', calendar_min_height: 'Calendar min height', max_icon: 'Largest app icon', photo_max_aspect: 'Photos widget: widest aspect (w/h)', photo_size: 'Photos tile size', side_sizes: 'Extra tiles\' sizes, in order: S = square, W = wide (e.g. S, S)', side_portrait: 'Tiles that don\'t fit beside the apps', row_units: 'Landscape: units beside the apps (icons shrink to fit)',
   full_height_popups: 'Full-height popups: every popup on this dashboard reaches the top of the screen; swipe down to close',
   popup_edit: 'Edit pencil next to ✕ in popups (admins only): opens the editor of the card the popup belongs to',
   assistant_enabled: 'Assistant on this Home Screen', assistant_button: 'Mic button beside the avatar', assistant_pipeline: 'Assist pipeline', assistant_theme: 'Assistant look',
