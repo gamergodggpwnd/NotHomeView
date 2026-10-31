@@ -5910,7 +5910,7 @@ class HVHubCard extends HTMLElement {
     const rowL = [], wq = []; if (phw) { if (pbig) { wrapped.push(phw); wq.push({ el: phw, w: pw, u: 2 }); } else rowL.push(phw); }
     xs.forEach((w, i) => { const u = sizes[i] === 1 ? 1 : 2;
       if (sizes[i] !== 3 && used + u <= fit) { used += u; w.style.setProperty('--tw', (u === 2 ? 2 * U + tg : U) + 'px'); w.style.setProperty('--th', U + 'px'); rowL.push(w); }
-      else { wrapped.push(w); wq.push({ el: w, w: Math.min(Wc, u === 2 ? 2 * bw + tg : bw), u }); w.style.setProperty('--th', bw + 'px'); } });
+      else { wrapped.push(w); wq.push({ el: w, w: Math.min(Wc, u === 2 ? 2 * bw + tg : bw), u }); w.style.setProperty('--th', U + 'px'); } }); // 1.32.0: one tile height on every row (= the top row's)
     // 1.32.0: the row below lines up with the columns above (apps block | Photos / tile units): two-wide / 4 x 6 tiles snap their right edge to the
     // nearest column edge, squares only when it's a few px (phones / portrait), so e.g. a two-wide calendar spans apps + Photos exactly
     { const A = nA ? ac * I + (ac - 1) * cg : 0, E = []; if (A) for (let e = A; e <= Wc + 1; e += tg + U) E.push(e); let x = 0;
@@ -5926,10 +5926,13 @@ class HVHubCard extends HTMLElement {
     set('--gfs', Math.round(Math.max(15, Math.min(26, I * 0.2))) + 'px'); set('--av', Math.round(Math.max(44, Math.min(72, I * 0.56))) + 'px');
     set('--h', Math.floor(H) + 'px'); set('--calmin', calMin + 'px'); set('--calrow', calRow + 'px');
     { const ppw = phw && phw.querySelector('.pw'), bigs = xs.filter((w, i) => sizes[i] === 3); if (pbig && ppw) bigs.unshift(ppw); else if (ppw) ppw.style.removeProperty('--ph');
-      if (bigs.length) { const b0 = Math.min(U, bw), full2 = 2 * b0 + tg, lim = r.top + H - pb - (calMin ? calMin + gap : 0), lb = ppw && phw.querySelector('.lb') ? lh + lg : 0; // 4 x 6: two tiles tall, or as tall as fits on screen
-        const sh = (el, v) => { if (el === ppw) el.style.setProperty('--ph', Math.max(60, v - lb) + 'px'); else el.style.setProperty('--th', v + 'px'); };
-        for (const el of bigs) sh(el, full2); for (const el of bigs) sh(el, Math.round(Math.max(b0, Math.min(full2, lim - el.getBoundingClientRect().top))));
-        const ls = this._belowEl.lastElementChild; if (ls && ls.getBoundingClientRect().bottom > lim + 1) for (const el of bigs) if (el !== ls && !(el === ppw && phw === ls)) sh(el, b0); // tiles after it would leave the screen (phones): one row tall
+      if (bigs.length) { const b0 = U, full2 = 2 * b0 + tg, lim = r.top + H - pb - (calMin ? calMin + gap : 0), lb = ppw && phw.querySelector('.lb') ? lh + lg : 0; // 4 x 6: two tiles tall, or as tall as fits on screen
+        // 1.32.0: every 4 x 6 tile gets one shared height (the picture / card itself; Photos' label hangs below it like in the top row)
+        const sh = (el, v) => { if (el === ppw) el.style.setProperty('--ph', Math.max(60, v) + 'px'); else el.style.setProperty('--th', v + 'px'); };
+        for (const el of bigs) sh(el, full2);
+        let V = full2; for (const el of bigs) V = Math.min(V, lim - el.getBoundingClientRect().top - (el === ppw ? lb : 0)); V = Math.round(Math.max(b0, V));
+        for (const el of bigs) sh(el, V);
+        const ls = this._belowEl.lastElementChild; if (V > b0 && ls && ls.getBoundingClientRect().bottom > lim + 1) for (const el of bigs) sh(el, b0); // tiles after them would leave the screen (phones): all one row tall
         for (const el of bigs) if (el._fit) this._fitTile(el); } }
     this.style.setProperty('--blur', (Number(c.blur) || 0) + 'px'); this.style.setProperty('--dim', String(Math.max(0, Math.min(0.9, Number(c.dim) || 0))));
     this._bgMode();
