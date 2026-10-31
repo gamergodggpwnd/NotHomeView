@@ -1,6 +1,6 @@
 # Album links (Google Photos, iCloud, OneDrive)
 
-From 1.32.0 the Photos tile (Home Screen card), its viewer and gallery, the blurred backdrop and the Wallpanel screensaver can show a
+From v1.5 the Photos tile (Home Screen card), its viewer and gallery, the blurred backdrop and the Wallpanel screensaver can show a
 **shared album link** instead of Home Assistant's media folder.
 
 | Provider | Link | Works without the helper? |

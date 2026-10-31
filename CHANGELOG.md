@@ -1,6 +1,8 @@
 # Changelog
 
-## 1.32.0 – unreleased (staged)
+## 1.5.0 – 2026-10-31 (tag `v1.5`)
+
+This update was developed as "1.32.0" and is published as **v1.5**. Note for HACS users: HACS compares version numbers, and v1.5 counts as lower than v1.31.x, so HACS may not offer it as an update automatically; pick it under *Redownload* → version **v1.5**.
 
 ### New features
 * **Home Screen: 4 × 6 tiles** (two wide, two rows): Photos (`photo_size: big`), the extra tiles (`side_tiles` `size: big`, `B` in `side_sizes`) and the calendar (`calendar_size: wide2`, three days on top and the next three below) can be two tiles wide and two rows tall: drag a tile's corner down in arrange mode, or pick *4 × 6* in its ⋯ menu or the editor. They sit on the row below the apps and are as tall as fits on the screen; camera, Photos and Now Playing simply fill the bigger tile (bigger live view / photo / artwork). The resize corner of every tile stays clear of the Done bar on phones.
@@ -46,7 +48,7 @@
 * Edit pencil in popups: for admins, a pencil sits next to the ✕ of the NotHomeView popups (Photos viewer and gallery, full-screen photo, Weather, Music, device pages shown as sheets, Assistant, timer, camera and people large views, Rooms popup). It closes the popup and opens the visual editor of the card the popup belongs to (a Page Grid tile opens straight on that tile); a device page opens in edit mode. Hidden for non-admins and YAML-mode dashboards; Home Screen card option `popup_edit: false` turns it off.
 * Home Screen: in landscape, 5 to 8 apps sit in 2 rows (3 or 4 columns) when there is room, so they line up with the tiles beside them.
 
-### Bug fixes (staged builds)
+### Bug fixes
 * **Tiles of the same size share one height on the Home Screen.** All 4 × 6 tiles (camera, music, Photos, calendar *two wide, 2 rows*) get one shared height, measured on the picture / card itself (Photos' label hangs below it, as in the top row, instead of eating into the picture), and squares / two-wide tiles on the row below are as tall as the top row's tiles (portrait tablets / phones were a few px shorter).
 * **Tiles on the Home Screen's row below line up with the columns above.** Two-wide and 4 × 6 tiles (calendar *Tile · two wide* / *two wide, 2 rows*, camera / music / Photos at 4 × 6) snap their right edge to the nearest column edge of the apps block and the tile row (e.g. a two-wide calendar spans the apps plus Photos exactly), and squares below snap when it is only a few pixels (phones, portrait tablets).
 * **Always-live camera tiles no longer drop to "Reconnecting…" on the Home Screen.** The Home Screen's 30 s clock / greeting refresh redrew the whole card, which detached the camera tile and made Home Assistant's player open a new camera session every 30 s until Google Nest answered 429 (rate limit). The refresh now only updates the greeting, apps, labels and calendar in place, and the tile row is reordered with minimal moves, so tiles stay attached. A moved or resized Always-live tile drops HA's player before the move and starts exactly one fresh stream after 2.5 s (never two at once for one camera); 429 rate limits wait 1–5 min with jitter and do not count toward the 5-failure *Tap for live* fallback.

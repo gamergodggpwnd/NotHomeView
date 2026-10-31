@@ -62,7 +62,7 @@ asks for the screensaver but Wallpanel is missing.
 Tested with Home Assistant 2026.10, card-mod 4.2.1, layout-card 2.4.7, button-card 7.0.1, browser_mod 3.3.0, kiosk-mode 15.0.0
 and Wallpanel 4.67.2.
 
-## What's new in v1.32.0 (next update, staged)
+## What's new in v1.5
 
 * **Animated weather header** (Home Screen card → *Layout & weather* → "Weather popup: animated sky header"). The Weather popup opens on an
   illustrated sky that follows the weather entity's live state: sunny, partly cloudy, cloudy, rain or snow, with a moonlit night sky after sunset.
