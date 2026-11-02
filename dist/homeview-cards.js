@@ -3,7 +3,7 @@
  *         homeview-group-card, homeview-scene-card, homeview-music-card, homeview-nav-card, homeview-edit-button-card
  *  Every card has a visual editor (ha-form). Look = HomeView glass tiles; colours come from the
  *  HomeView CSS variables (--hv-*) set by the HomeView theme / style helper, with glass fall-backs. */
-const HV_VERSION = '1.5.0';
+const HV_VERSION = '1.6.0-dev';
 // Registered colour properties so a scene background written as linear-gradient(var(--hv-bg-top), var(--hv-bg-bottom))
 // can fade smoothly between scenes (plain gradients can't transition). Unused unless a dashboard style sets them.
 try { if (window.CSS && CSS.registerProperty) for (const n of ['--hv-bg-top', '--hv-bg-bottom'])
@@ -1754,6 +1754,7 @@ ha-icon,ha-state-icon{display:flex;color:inherit;--mdc-icon-size:calc(var(--b) *
  bottom:calc(clamp(14px,3cqmin,26px) + env(safe-area-inset-bottom,0px) * var(--hv-cam-safe,0))}
 :host([large]) .ctl:not(:empty){display:flex}
 .ctl .c{display:flex;flex-direction:column;align-items:center;gap:6px;font-size:12px;font-weight:600;color:rgba(255,255,255,.92);text-shadow:0 1px 4px rgba(0,0,0,.45);min-width:64px;text-align:center}
+ha-card.many .ctl{gap:clamp(8px,3.2cqw,34px)} ha-card.many .ctl .c{min-width:56px}
 .ctl button{width:54px;height:54px;margin-top:13px} .ctl button ha-icon{--mdc-icon-size:24px}
 .ctl .talk button{width:80px;height:80px;margin-top:0;background:rgba(120,180,255,.3);border-color:rgba(170,210,255,.8);box-shadow:0 0 0 8px rgba(120,180,255,.13),0 10px 30px rgba(0,0,0,.35)}
 .ctl .talk ha-icon{--mdc-icon-size:36px} .ctl .talk b{font-size:15px} .ctl small{font-size:11px;font-weight:500;opacity:.78;margin-top:-4px;white-space:nowrap}
@@ -1788,6 +1789,17 @@ const hvPreMove = el => { if (!camAlCards.size) return; for (const c of camAlCar
 for (const t of ['pointerdown', 'keydown', 'touchstart', 'wheel']) addEventListener(t, () => { camLastAct = Date.now(); }, { capture: true, passive: true });
 const camSsOn = () => { try { const w = ssWallpanel(); return !!(w && w.screensaverRunning && w.screensaverRunning()); } catch (e) { return false; } };
 const CAM_AL_RETRY = [5000, 15000, 45000, 120000], CAM_AL_MAXFAIL = 5, CAM_AL_GIVEUP = 600000;
+// 1.6.0 Doorbell & motion pop-up (the pop-up itself is at the end of this file): per-device setting, kept in this browser per camera:
+// both (default) / ring (doorbell only) / motion (motion only) / off; the large view's Pop-ups button cycles it
+const DB_LS = 'hvCamPop:', DB_POP_LABEL = { both: 'Pop-ups on', ring: 'Doorbell only', motion: 'Motion only', off: 'Pop-ups off' }, DB_POP_NEXT = { both: 'ring', ring: 'motion', motion: 'off', off: 'both' };
+const DB_POP_SAY = { both: 'doorbell and motion pop-ups on', ring: 'doorbell pop-up only', motion: 'motion pop-up only', off: 'no pop-ups' };
+function dbDevGet(cam) { try { const v = localStorage.getItem(DB_LS + cam); return DB_POP_LABEL[v] ? v : 'both'; } catch (e) { return 'both'; } }
+function dbDevSet(cam, v) { try { if (v && v !== 'both') localStorage.setItem(DB_LS + cam, v); else localStorage.removeItem(DB_LS + cam); } catch (e) {}
+  window.dispatchEvent(new CustomEvent('hv-cam-pop', { detail: { entity: cam, value: v || 'both' } })); }
+const dbAllowed = (cam, kind) => { const v = dbDevGet(cam); return v === 'both' || v === kind; };
+// does this camera's device have a doorbell / motion event entity (then the large view offers the Pop-ups button)
+function camDbKinds(h, id) { const e = h && h.entities && h.entities[id], dev = e && e.device_id; if (!dev) return false;
+  return Object.values(h.entities).some(x => x.device_id === dev && /^event\./.test(x.entity_id) && ['doorbell', 'motion'].includes(((h.states[x.entity_id] || {}).attributes || {}).device_class)); }
 // 1.32.0: still previews for tiles without live video (Nest): the newest of the last Nest event image (Home Assistant's Nest media
 // source, read when an event entity changes) and the last frame seen in the large view (saved in this browser, and for admins also
 // in Home Assistant's media folder, /media/nothomeview_camera_previews/<camera>.jpg, one file per camera, overwritten).
@@ -1831,7 +1843,7 @@ function camWhen(h, v) { // event entity state (ISO time) -> "8:42 PM" today, "Y
 }
 class HVCameraCard extends HTMLElement {
   constructor() { super(); this.attachShadow({ mode: 'open' }); }
-  static get defaults() { return { camera_view: 'live', size: '2x3', show_name: true, show_status: true, tap_opens: true, popup_style: 'fullscreen', swipe_to_close: true, show_history: true, show_sound: true, show_preview: true, live_pause: true, live_pause_min: 30, show_device_live: true }; }
+  static get defaults() { return { camera_view: 'live', size: '2x3', show_name: true, show_status: true, tap_opens: true, popup_style: 'fullscreen', swipe_to_close: true, show_history: true, show_sound: true, show_preview: true, live_pause: true, live_pause_min: 30, show_device_live: true, show_device_popup: true }; }
   static getStubConfig(hass) { const ids = Object.keys(hass.states).filter(k => k.startsWith('camera.')); return { entity: ids.find(k => !UNAVAILABLE.includes(hass.states[k].state)) || ids[0] || 'camera.example' }; }
   static getConfigElement() { const e = document.createElement('homeview-card-editor'); e.cardClass = this; return e; }
   // the Size dropdown writes grid_options (sections grid cells) when it is changed
@@ -1912,6 +1924,7 @@ class HVCameraCard extends HTMLElement {
     if (c.show_history !== false) o.push({ k: 'hist', icon: 'mdi:history', label: 'History' });
     if (t) o.push({ k: 'talk', icon: 'mdi:microphone', label: c.talk_name || 'Talk', cap: 'Opens ' + t.label });
     if (c.show_device_live !== false) { const d = camDevGet(c.entity); o.push({ k: 'dev', icon: d === 'live' ? 'mdi:play-circle-outline' : d === 'tap' ? 'mdi:gesture-tap' : 'mdi:cellphone-cog', label: CAM_DEV_LABEL[d], cap: 'Tile on this device', on: !!d }); }
+    if (c.show_device_popup !== false && camDbKinds(this._hass, c.entity)) { const v = dbDevGet(c.entity); o.push({ k: 'pop', icon: v === 'off' ? 'mdi:bell-off-outline' : v === 'motion' ? 'mdi:walk' : v === 'ring' ? 'mdi:bell-outline' : 'mdi:bell-ring-outline', label: DB_POP_LABEL[v], cap: 'Pop-ups on this device', on: v !== 'both' }); }
     if (c.show_sound !== false && this._hasAudio) o.push({ k: 'snd', icon: this._unmuted ? 'mdi:volume-high' : 'mdi:volume-off', label: this._unmuted ? 'Sound on' : 'Sound', on: !!this._unmuted });
     return o; }
   _ctl(k) { const c = this._config;
@@ -1921,6 +1934,8 @@ class HVCameraCard extends HTMLElement {
       setTimeout(() => { history.pushState(null, '', path); fire(window, 'location-changed', { replace: false }); }, 380); return; }
     if (k === 'retry') { this._err = null; this._$('.err').classList.remove('on'); this._mediaKey = null; this._ensureMedia(true); this._status(); return; }
     if (k === 'snd') { this._unmuted = !this._unmuted; this._applyMute(); this._sig = null; this._render(); }
+    if (k === 'pop') { const n = DB_POP_NEXT[dbDevGet(c.entity)]; dbDevSet(c.entity, n); const nm = c.name || ((this._stateObj || {}).attributes || {}).friendly_name || c.entity;
+      fire(this, 'hass-notification', { message: `${nm} on this device: ${DB_POP_SAY[n]}` }); this._sig = null; this._render(); return; }
     if (k === 'dev') { const n = CAM_DEV_NEXT[camDevGet(c.entity)]; camDevSet(c.entity, n);
       const nm = c.name || ((this._stateObj || {}).attributes || {}).friendly_name || c.entity;
       fire(this, 'hass-notification', { message: `${nm} tile on this device: ${n === 'live' ? 'Always live (while on screen)' : n === 'tap' ? 'Tap for live' : 'uses the card setting'}` }); this._sig = null; this._render(); }
@@ -1977,7 +1992,7 @@ class HVCameraCard extends HTMLElement {
       const el = document.createElement('div'); el.className = 'e'; const ic = document.createElement('ha-icon'); ic.icon = e.icon || CAM_EV_ICON[dc] || 'mdi:bell-ring-outline';
       const tx = document.createElement('span'); tx.textContent = (e.name || (x ? x.attributes.friendly_name : e.entity)) + ' · ' + (x ? camWhen(this._hass, x.state) : 'not found');
       el.append(ic, tx); ev.appendChild(el); }
-    const cb = this._$('.ctl'); this._card.classList.toggle('hasctl', ctl.length > 0);
+    const cb = this._$('.ctl'); this._card.classList.toggle('hasctl', ctl.length > 0); this._card.classList.toggle('many', ctl.length >= 5);
     cb.innerHTML = ctl.map(o => `<div class="c ${o.k === 'talk' ? 'talk' : ''} ${o.on ? 'on' : ''}"><button class="glass" data-own data-c="${o.k}"><ha-icon></ha-icon></button><b></b>${o.cap ? '<small></small>' : ''}</div>`).join('');
     ctl.forEach((o, i) => { const d = cb.children[i]; d.querySelector('ha-icon').icon = o.icon; d.querySelector('b').textContent = o.label; d.querySelector('button').setAttribute('aria-label', o.label + (o.cap ? ' – ' + o.cap : ''));
       if (o.cap) d.querySelector('small').textContent = o.cap; });
@@ -2174,6 +2189,7 @@ HVCameraCard.schema = [
   { name: 'live_tile', selector: { select: { mode: 'dropdown', options: [{ value: 'auto', label: 'Automatic (Nest: picture, tap for live; others: live)' }, { value: 'visible', label: 'Always live (while on screen)' }, { value: 'on', label: 'Live video on the tile (always connected)' }, { value: 'off', label: 'Tap for live (still picture on the tile)' }] } } },
   { type: 'grid', name: '', schema: [{ name: 'live_pause', selector: { boolean: {} } }, { name: 'live_pause_min', selector: { number: { min: 1, max: 720, step: 1, mode: 'box', unit_of_measurement: 'min' } } }] },
   { name: 'show_device_live', selector: { boolean: {} } },
+  { name: 'show_device_popup', selector: { boolean: {} } },
   { name: 'events', selector: { object: { multiple: true, label_field: 'name', description_field: 'entity', fields: {
     entity: { label: 'Event entity', required: true, selector: { entity: { domain: 'event' } } },
     name: { label: 'Name (optional, e.g. Doorbell, Motion)', selector: { text: {} } },
@@ -2186,7 +2202,7 @@ HVCameraCard.schema = [
     { name: 'popup_style', selector: { select: { mode: 'dropdown', options: [{ value: 'fullscreen', label: 'Full screen (edge to edge, swipe down to close)' }, { value: 'window', label: 'Window (rounded panel)' }] } } },
     { name: 'swipe_to_close', selector: { boolean: {} } }] }];
 Object.assign(LABELS, { show_name: 'Show name', camera_view: 'Live or snapshot', size: 'Size', buttons: 'Buttons', show_status: 'Show status (Live / Snapshot)', tap_opens: 'Open the large view on tap',
-  badge: 'Label next to the name (empty = the camera’s maker, e.g. Nest, Ring; none = no label)', live_tile: 'Live video on the tile', live_pause: 'Pause after no activity (Always live)', live_pause_min: 'Minutes without a touch', show_device_live: 'This-device button in the large view (tile live mode per device)', show_preview: 'Still preview on the tile (last event image or last frame you watched)', events: 'Last-event chips', talk_app: 'Talk button (opens the camera app)', talk_url: 'App URL (Another app)', talk_label: 'App name (Another app)',
+  badge: 'Label next to the name (empty = the camera’s maker, e.g. Nest, Ring; none = no label)', live_tile: 'Live video on the tile', live_pause: 'Pause after no activity (Always live)', live_pause_min: 'Minutes without a touch', show_device_live: 'This-device button in the large view (tile live mode per device)', show_device_popup: 'Pop-ups button in the large view (doorbell / motion pop-up per device)', show_preview: 'Still preview on the tile (last event image or last frame you watched)', events: 'Last-event chips', talk_app: 'Talk button (opens the camera app)', talk_url: 'App URL (Another app)', talk_label: 'App name (Another app)',
   show_history: 'History button', show_sound: 'Sound button (when the stream has audio)' });
 Object.assign(HELPERS, {
   buttons: 'Glass buttons along the bottom of the tile and the large view. They light up when the entity is on.',
@@ -2194,6 +2210,7 @@ Object.assign(HELPERS, {
   live_tile: 'Always live plays the muted stream while at least half the tile is on screen. It stops when you scroll away, the page is hidden, the screensaver runs or the large view is open, keeps the last frame, and reconnects by itself (Tap for live after repeated failures). Each device can override this from the large view.',
   live_pause: 'Always live only: stop the stream after this many minutes with no touch, click or key on this device; any touch resumes it.',
   show_device_live: 'Cycles Card setting → Always live → Tap for live for this camera’s tiles on this device only (saved in this browser), e.g. always live on the wall tablet, tap for live on a phone.',
+  show_device_popup: 'Doorbell & motion pop-up (needs the nothomeview_doorbell automation, see docs/doorbell-popup.md): cycles Pop-ups on → Doorbell only → Motion only → Pop-ups off for this camera on this device only (saved in this browser). Shown when the camera has a doorbell or motion event entity.',
   events: 'Event entities (doorbell press, motion …): each shows a chip with the time of its last event.',
   talk_app: 'Home Assistant can’t do two-way talk for Nest or Ring: the large view’s Talk button opens the maker’s app, where you talk.',
   talk_url: 'A URL scheme, e.g. myapp:// or shortcuts://run-shortcut?name=…' });
@@ -6779,3 +6796,191 @@ function hvSetupEditorBtn(ed) { if (ed.querySelector('.hv-setup-btn')) return; c
   w.style.cssText = 'margin:18px 0 4px;padding:12px 14px;border-radius:12px;border:1px solid var(--divider-color,rgba(127,127,127,.3));display:flex;align-items:center;gap:12px;justify-content:space-between';
   w.innerHTML = '<span style="font-size:14px;color:var(--secondary-text-color)">Make a new NotHomeView dashboard from your own devices (adds a dashboard; this one is not changed).</span><button style="all:unset;cursor:pointer;white-space:nowrap;padding:9px 14px;border-radius:10px;background:var(--primary-color,#4d3ad6);color:var(--text-primary-color,#fff);font-weight:600;font-size:14px">Create NotHomeView dashboard</button>';
   w.querySelector('button').addEventListener('click', () => { if (ed._hass) hvSetupDialog(ed._hass, { force: true }); }); ed.appendChild(w); }
+/* ---------------- 1.6.0 Doorbell & motion pop-up ---------------- */
+// A Home Assistant automation fires the event `nothomeview_doorbell` (data: kind: ring | motion, camera: camera.xxx, event_type) when the
+// doorbell rings / the camera sees motion (docs/doorbell-popup.md). Every NotHomeView dashboard listens:
+//  * ring, screen awake: the camera live, full screen over the dashboard (purple), closes after 60 s or on ✕ / Dismiss
+//  * ring during the Wallpanel screensaver: a small corner pop-up, top right (tap = full screen; waking the screen also opens it full screen)
+//  * motion, only during the screensaver: the same corner pop-up in orange, muted, closes 45 s after the last motion event, then 5 min quiet
+// A still picture (the tile's last live frame, the Nest event image, the last viewed frame) shows at once while the stream starts (Nest:
+// 3-8 s); one stream per camera (Always-live tiles of that camera pause meanwhile, like for the large view); a rate-limited (429) or failed
+// stream leaves the still picture. Home Assistant lets only admins subscribe to custom events, so the automation also writes each event to
+// the helper input_text.nothomeview_doorbell ("kind|camera|id|event_type"): every user's dashboard sees that as a state change.
+// Per device: the camera large view's Pop-ups button (doorbell / motion independently, default on). No sound is played, nothing is called.
+const DB_EVENT = 'nothomeview_doorbell', DB_HELPER = 'input_text.nothomeview_doorbell', DB_RING_MS = 60000, DB_MOTION_MS = 45000, DB_COOLDOWN = 300000;
+const DB_ACC = { ring: '#9b87ff', motion: '#ffa425' }, DB_TYPE = { camera_person: 'Person', camera_motion: 'Motion', camera_sound: 'Sound', ring: 'Rang' };
+const dbStat = { sub: 'not yet', quietUntil: 0, seen: [] }, dbLog = r => { (window.__hvDb = window.__hvDb || []).push(Object.assign({ t: Date.now() }, r)); if (window.__hvDb.length > 60) window.__hvDb.shift(); return r; };
+const DB_CSS = `
+:host{position:fixed;inset:0;margin:0;padding:0;border:0;width:auto;height:auto;max-width:none;max-height:none;background:transparent;overflow:visible;z-index:100001;pointer-events:none;
+ display:block;font-family:${FONT};color:#fff;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;--acc:${DB_ACC.ring}}
+:host([kind=motion]){--acc:${DB_ACC.motion}}
+.bd{position:absolute;inset:0;background:rgba(0,0,20,.45);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);opacity:0;transition:opacity .3s ease;pointer-events:none}
+:host([mode=full]) .bd{opacity:1;pointer-events:auto}
+.box{position:absolute;overflow:hidden;background:#05070a;pointer-events:auto;box-shadow:0 18px 50px rgba(0,0,0,.45);animation:dbIn .32s cubic-bezier(.2,.8,.2,1);touch-action:manipulation}
+@keyframes dbIn{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:none}}
+:host([mode=full]) .box{top:calc(20px + env(safe-area-inset-top,0px));bottom:calc(20px + env(safe-area-inset-bottom,0px));left:20px;right:20px;border-radius:26px;border:1px solid rgba(255,255,255,.12)}
+:host([mode=corner]) .box{top:calc(20px + env(safe-area-inset-top,0px));right:20px;width:clamp(250px,31vw,420px);aspect-ratio:3/2;border-radius:18px;border:2px solid var(--acc);cursor:pointer;
+ box-shadow:0 0 0 1px rgba(0,0,0,.25),0 0 24px color-mix(in srgb,var(--acc) 45%,transparent),0 14px 40px rgba(0,0,0,.4)}
+:host([mode=corner][kind=motion]) .box{width:clamp(270px,34vw,460px)} :host([mode=corner][kind=motion]) .cfoot{font-size:11px}
+@media (max-width:600px){:host([mode=full]) .box{top:calc(12px + env(safe-area-inset-top,0px));bottom:calc(12px + env(safe-area-inset-bottom,0px));left:12px;right:12px;border-radius:22px}
+ :host([mode=corner]) .box,:host([mode=corner][kind=motion]) .box{top:calc(12px + env(safe-area-inset-top,0px));right:12px;width:min(320px,calc(100vw - 24px))}}
+.media,.media>*{position:absolute;inset:0;width:100%;height:100%}
+.media img{object-fit:cover;opacity:0;transition:opacity .4s ease} .media img.on{opacity:1}
+:host([mode=full]) .media img{object-fit:contain}
+.media ha-camera-stream{opacity:0;transition:opacity .5s ease;--video-max-height:100%;display:block} .media ha-camera-stream.on{opacity:1}
+.ph{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:rgba(255,255,255,.55);font-size:13px;font-weight:600;background:radial-gradient(120% 90% at 50% 40%,#1c2230,#07090d)}
+.ph ha-icon{--mdc-icon-size:40px;opacity:.7} :host([mode=corner]) .ph ha-icon{--mdc-icon-size:28px} :host([mode=corner]) .ph span{display:none}
+.shade{position:absolute;inset:0;pointer-events:none;background:linear-gradient(to bottom,rgba(0,0,0,.42),rgba(0,0,0,0) 26%,rgba(0,0,0,0) 64%,rgba(0,0,0,.5))}
+.top{position:absolute;left:16px;top:16px;right:64px;display:flex;align-items:center;gap:10px;min-width:0}
+:host([mode=corner]) .top{left:10px;top:10px;right:46px}
+.pill{display:inline-flex;align-items:center;gap:7px;padding:7px 13px;border-radius:999px;background:rgba(38,38,44,.6);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+ border:1px solid rgba(255,255,255,.14);font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.pill b{font-size:15px;font-weight:700} .pill .sub{font-size:12px;font-weight:500;opacity:.88;overflow:hidden;text-overflow:ellipsis}
+:host([mode=corner]) .pill{padding:5px 11px 5px 5px;font-size:12.5px}
+.ic{flex:none;width:22px;height:22px;border-radius:50%;background:var(--acc);display:inline-flex;align-items:center;justify-content:center;--mdc-icon-size:14px;color:#1d1236}
+:host([kind=motion]) .ic{color:#3a2200}
+.live{flex:none;display:inline-flex;align-items:center;gap:5px;padding:4px 9px 4px 7px;border-radius:999px;background:#e5484d;font-size:11px;font-weight:800;letter-spacing:.06em;box-shadow:0 2px 10px rgba(229,72,77,.35)}
+.live::before{content:'';width:8px;height:8px;border-radius:50%;background:#fff;box-shadow:0 0 0 2px rgba(255,255,255,.35)}
+.live.wait,.live.snap{background:rgba(38,38,44,.66);box-shadow:none;letter-spacing:0;font-weight:600;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+.live.wait::before{background:#ffd166;animation:dbPulse 1.1s ease-in-out infinite} .live.snap::before{background:#b9bcc6;box-shadow:none}
+@keyframes dbPulse{50%{opacity:.25}}
+.x{position:absolute;top:14px;right:14px;width:40px;height:40px;border-radius:50%;background:rgba(38,38,44,.6);border:1px solid rgba(255,255,255,.16);color:#fff;display:flex;align-items:center;justify-content:center;
+ cursor:pointer;--mdc-icon-size:22px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);padding:0;font:inherit}
+:host([mode=corner]) .x{top:8px;right:8px;width:30px;height:30px;--mdc-icon-size:17px}
+.foot{position:absolute;left:0;right:0;bottom:24px;display:flex;justify-content:center;gap:10px;padding:0 12px;flex-wrap:wrap}
+.foot button{display:inline-flex;align-items:center;gap:8px;height:42px;padding:0 17px;border-radius:999px;background:rgba(38,38,44,.6);border:1px solid rgba(255,255,255,.16);color:#fff;
+ font:600 14px ${FONT};cursor:pointer;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);--mdc-icon-size:18px;white-space:nowrap}
+.foot button.on{background:rgba(255,255,255,.9);color:#1c1c1e}
+.foot .rang ha-icon{color:#ffd166} .foot .snd ha-icon{color:#ff6b6b} .foot .snd.on ha-icon{color:#1c1c1e}
+@media (max-width:600px){.foot{bottom:20px;gap:6px;padding:0 8px}.foot button{height:38px;padding:0 11px;gap:6px;font-size:13px;--mdc-icon-size:16px}
+ :host([mode=full]) .top{flex-wrap:wrap;row-gap:8px;left:12px;top:12px;right:60px} :host([mode=full]) .pill{max-width:100%} :host([mode=full]) .pill b{font-size:14px} :host([mode=full]) .pill .sub{font-size:11.5px} :host([mode=full]) .x{top:12px;right:12px}}
+.cfoot{position:absolute;left:10px;right:10px;bottom:11px;display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11.5px;font-weight:600;text-shadow:0 1px 4px rgba(0,0,0,.6);min-width:0}
+.cfoot span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:.95}
+:host([mode=corner]) .live{font-size:10px;padding:3px 8px 3px 6px} :host([mode=corner]) .live::before{width:7px;height:7px}
+.bar{position:absolute;left:0;right:0;bottom:0;height:4px;background:rgba(255,255,255,.12)} .bar i{display:block;height:100%;width:100%;background:var(--acc);transform-origin:left center}
+:host([mode=full]) .bar i{background:rgba(255,255,255,.85)}
+:host([mode=full]) .cfoot,:host([mode=corner]) .foot,:host([mode=corner]) .top .live,:host([mode=full]) .top .ic{display:none}`;
+class HVDoorbellPopup extends HTMLElement {
+  constructor() { super(); this.attachShadow({ mode: 'open' });
+    this.shadowRoot.innerHTML = `<style>${DB_CSS}</style><div class="bd"></div><div class="box" role="dialog" aria-live="assertive"><div class="media"><div class="ph"><ha-icon icon="mdi:doorbell-video"></ha-icon><span>Connecting…</span></div><img class="snap" alt=""></div><div class="shade"></div>
+      <div class="top"><span class="pill"><span class="ic"><ha-icon></ha-icon></span><span class="tt"></span></span><span class="live wait"></span></div>
+      <button class="x" data-a="x" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button>
+      <div class="cfoot"><span class="live wait"></span><span class="cf"></span></div><div class="foot"></div><div class="bar"><i></i></div></div>`;
+    const R = this.shadowRoot; this._$ = s => R.querySelector(s); this._box = this._$('.box'); this._media = this._$('.media'); this._img = this._$('.snap');
+    R.addEventListener('click', e => { if (!camSsOn()) this._act(e); }); this._muted = true; }
+  // d = { kind, camera, type }; mode 'full' | 'corner'
+  open(d, mode) { this._cam = d.camera; this._kind = d.kind; this._type = d.type || (d.kind === 'ring' ? 'ring' : 'camera_motion'); this._at = Date.now(); this._lastMotion = Date.now();
+    this._live = false; this._noLive = false; this._why = ''; this._retry = 0; this._ssWas = camSsOn(); this._pvN = 0;
+    this.setAttribute('kind', d.kind); this._setMode(mode); this.setAttribute('popover', 'manual');
+    // inside Home Assistant's element tree (not document.body): HA's camera player gets hass from the app's context there
+    const ha = document.querySelector('home-assistant'); (ha && ha.shadowRoot ? ha.shadowRoot : document.body).appendChild(this); try { if (this.showPopover) this.showPopover(); } catch (e) { /* no top layer: z-index */ }
+    dbGuard(true); this._paint(); this._takeStream(); this._snapLoad(); this._snapT = [setTimeout(() => this._snapLoad(), 3500), setTimeout(() => this._snapLoad(), 9000)];
+    clearInterval(this._iv); this._iv = setInterval(() => this._tick(), 250); this._tick();
+    return dbLog({ act: 'open', kind: d.kind, mode, cam: d.camera }); }
+  // another event while open: a ring turns a motion pop-up into the doorbell one (full screen when awake), motion keeps a motion pop-up open
+  bump(d, ss) { if (d.camera !== this._cam) return { act: 'busy' };
+    if (d.kind === 'ring') { const up = this._kind !== 'ring'; this._kind = 'ring'; this._type = 'ring'; this._at = Date.now(); this.setAttribute('kind', 'ring'); if (!ss) this._setMode('full'); this._paint(); if (up) this._snapLoad(); return { act: up ? 'to ring' : 'ring again' }; }
+    if (this._kind === 'motion') { this._lastMotion = Date.now(); this._type = d.type || this._type; this._paint(); return { act: 'motion extended' }; }
+    return { act: 'ignored (doorbell pop-up open)' }; }
+  _setMode(m) { this._mode = m; this.setAttribute('mode', m); if (this._streamEl) this._streamEl.fitMode = m === 'full' ? 'contain' : 'cover'; }
+  _name() { const h = hvHaHass(), s = h && h.states[this._cam]; return (s && s.attributes.friendly_name) || String(this._cam).split('.').pop(); }
+  _when() { return camWhen(hvHaHass(), new Date(this._kind === 'ring' ? this._at : this._lastMotion).toISOString()); }
+  _paint() { const ring = this._kind === 'ring', nm = this._name(), w = this._when(), tl = DB_TYPE[this._type] || 'Motion';
+    this._$('.ic ha-icon').icon = ring ? 'mdi:bell' : 'mdi:walk';
+    const tt = this._$('.tt'); tt.textContent = '';
+    if (this._mode === 'full') { const b = document.createElement('b'); b.textContent = nm; const s = document.createElement('span'); s.className = 'sub'; s.textContent = ring ? ' · Someone’s at the door' : ` · ${tl === 'Person' ? 'Person at the door' : 'Motion'}`; tt.append(b, s); }
+    else { const b = document.createElement('b'); b.style.fontSize = '12.5px'; b.textContent = ring ? 'Someone’s at the door' : `Motion at ${nm}`; tt.append(b); }
+    this._$('.cf').textContent = ring ? `${nm} · tap to expand` : `${tl} · ${w} · closes ${DB_MOTION_MS / 1000} s after motion stops`;
+    const f = this._$('.foot'); f.innerHTML = `<button class="rang" data-a="none"><ha-icon></ha-icon><span></span></button>${ring ? `<button class="snd ${this._muted ? '' : 'on'}" data-a="snd"><ha-icon></ha-icon><span></span></button>` : ''}<button data-a="x"><ha-icon icon="mdi:close"></ha-icon><span>Dismiss</span></button>`;
+    f.querySelector('.rang ha-icon').icon = ring ? 'mdi:bell' : 'mdi:walk'; f.querySelector('.rang span').textContent = `${ring ? 'Rang' : tl} ${w}`;
+    const sb = f.querySelector('.snd'); if (sb) { sb.querySelector('ha-icon').icon = this._muted ? 'mdi:volume-off' : 'mdi:volume-high'; sb.querySelector('span').textContent = this._muted ? 'Muted' : 'Sound on'; }
+    this._badge(); }
+  _badge() { const t = this._live ? 'LIVE' : this._noLive ? (this._mode === 'full' ? 'Snapshot · ' + this._why : 'Snapshot') : 'Connecting…', cls = this._live ? '' : this._noLive ? 'snap' : 'wait';
+    for (const b of this.shadowRoot.querySelectorAll('.live')) { b.textContent = t; b.className = 'live ' + cls; } }
+  _act(e) { const p = e.composedPath(), b = p.find(n => n && n.dataset && n.dataset.a), a = b ? b.dataset.a : p.includes(this._box) ? 'box' : 'bd';
+    if (a === 'x') { this.close('closed'); return; }
+    if (a === 'snd') { this._muted = !this._muted; this._applyMute(); this._paint(); return; }
+    if (a === 'box' && this._mode === 'corner') { this._setMode('full'); this._paint(); dbLog({ act: 'expand' }); } }
+  _applyMute() { if (this._streamEl) this._streamEl.muted = this._muted; for (const v of this._videos()) { v.muted = this._muted; if (!this._muted) { try { v.play(); } catch (e) {} } } }
+  // one stream per camera: the camera's Always-live tile hands over (keeps its last frame, which shows here at once) and waits while this is open
+  _takeStream() { camBig[this._cam] = Date.now(); const o = camAlOwn[this._cam];
+    if (o && o._streamEl) { try { if (o._live) { o._alHold(); if (o._alHeld) this._showSnap(o._alHeld); } o._alCheck(); } catch (e) {} this._waitUntil = Date.now() + 900; } else this._waitUntil = 0; }
+  _startStream() { if (this._streamEl || this._noLive || document.hidden || (this._waitUntil && Date.now() < this._waitUntil)) return;
+    const h = hvHaHass(), s = h && h.states[this._cam]; if (!s || UNAVAILABLE.includes(s.state)) return;
+    const make = () => { if (!this.isConnected || this._streamEl || this._noLive) return;
+      const v = document.createElement('ha-camera-stream'); v.hass = h; v.stateObj = s; v.muted = this._muted; v.controls = false; v.allowExoPlayer = false;
+      v.fitMode = this._mode === 'full' ? 'contain' : 'cover'; v.setAttribute('muted', ''); v.addEventListener('load', () => this._markLive(), true);
+      this._media.appendChild(v); this._streamEl = v; this._streamAt = Date.now(); dbLog({ act: 'stream start', cam: this._cam }); };
+    if (customElements.get('ha-camera-stream')) make(); else { this._streamAt = Date.now(); HVCameraCard._loadStream().then(ok => ok && make()); } }
+  _stopStream() { if (this._streamEl) { try { this._streamEl.remove(); } catch (e) {} this._streamEl = null; } this._live = false; }
+  _markLive() { if (!this._streamEl) return; this._streamEl.classList.add('on'); if (!this._live) { this._live = true; this._liveAt = Date.now(); this._badge(); dbLog({ act: 'live', ms: Date.now() - this._at }); } }
+  _fail(m) { const rate = CAM_RATE.test(m || ''); dbLog({ act: 'stream failed', why: String(m || '').slice(0, 80), rate }); this._stopStream();
+    if (!rate && this._retry < 1) { this._retry++; this._waitUntil = Date.now() + 4000; return; } // one quiet retry, then the still picture
+    this._noLive = true; this._why = rate ? 'live view rate limited' : 'live view didn’t start'; this._badge(); this._snapLoad(); }
+  // still picture: the newest of the Always-live tile's last frame, the camera's event image (Nest), the last viewed frame, or a snapshot (non-Nest)
+  async _snapLoad() { const h = hvHaHass(), id = this._cam; if (!h || !id) return; const n = ++this._pvN, s = h.states[id];
+    const held = [...camAlCards].map(c => c._alHeld).filter(x => x && x.id === id);
+    const all = (await Promise.all([camPvLocal(id), camPvShared(h, id), camPvEvent(h, id, 'db' + Date.now())].map(p => Promise.resolve(p).catch(() => null)))).concat(held).filter(Boolean);
+    if (s && s.attributes.entity_picture && camVendor(h, id) !== 'nest') { let u = s.attributes.entity_picture; u = h.hassUrl ? h.hassUrl(u) : u; all.push({ url: u + (u.includes('?') ? '&' : '?') + '_t=' + Date.now(), t: Date.now() }); }
+    if (n !== this._pvN || !this.isConnected) return; all.sort((a, b) => b.t - a.t); const best = all[0]; if (best && (!this._snapT0 || best.t > this._snapT0)) this._showSnap(best, all.slice(1)); }
+  _showSnap(p, rest) { const img = this._img; this._snapT0 = p.t; img.onload = () => img.classList.add('on'); img.onerror = () => { if (rest && rest.length) this._showSnap(rest[0], rest.slice(1)); }; if (img.src !== p.url) img.src = p.url; }
+  _tick() { if (!this.isConnected) return; const now = Date.now(), h = hvHaHass(), ss = camSsOn();
+    camBig[this._cam] = now; // Always-live tiles of this camera pause while the pop-up streams
+    if (this._mode === 'corner' && this._kind === 'ring' && this._ssWas && !ss) { this._setMode('full'); this._paint(); dbLog({ act: 'screen woke: full screen' }); }
+    this._ssWas = ss;
+    if (this._streamEl) { if (h && this._streamEl.hass !== h) this._streamEl.hass = h;
+      if (!this._live && this._videoReady()) this._markLive();
+      const m = this._streamError(); if (m) this._fail(m); else if (!this._live && now - this._streamAt > 25000) this._fail('no video after 25 s'); }
+    else this._startStream();
+    const total = this._kind === 'ring' ? DB_RING_MS : DB_MOTION_MS, from = this._kind === 'ring' ? this._at : this._lastMotion, left = Math.max(0, from + total - now);
+    this._$('.bar i').style.transform = `scaleX(${(left / total).toFixed(4)})`;
+    if (!left) this.close('timeout'); }
+  close(why) { if (this._closed) return; this._closed = true; clearInterval(this._iv); (this._snapT || []).forEach(clearTimeout); this._stopStream();
+    if (this._kind === 'motion') dbStat.quietUntil = Date.now() + DB_COOLDOWN; delete camBig[this._cam];
+    try { if (this.hidePopover && this.matches(':popover-open')) this.hidePopover(); } catch (e) {}
+    this.remove(); if (dbPop === this) dbPop = null; dbGuard(false); dbLog({ act: 'close', why, kind: this._kind, open_s: Math.round((Date.now() - this._at) / 1000) }); }
+}
+for (const k of ['_videos', '_streamError', '_videoReady']) HVDoorbellPopup.prototype[k] = HVCameraCard.prototype[k];
+if (!customElements.get('homeview-doorbell-popup')) customElements.define('homeview-doorbell-popup', HVDoorbellPopup);
+let dbPop = null;
+// Wallpanel stops the screensaver on any touch / click / mouse move (window capture listeners). Taps on the corner pop-up must not wake the
+// screen, so while a pop-up is up a capture listener of ours runs first (Wallpanel's own listeners are re-added after it, unchanged) and keeps
+// events on the pop-up from reaching Wallpanel while the screensaver runs; the pop-up handles those taps itself.
+const DB_GUARD_EV = ['click', 'touchstart', 'touchend', 'touchmove', 'wheel', 'keydown', 'mousemove', 'mousedown', 'mouseup', 'pointerdown', 'pointerup', 'pointermove', 'contextmenu'];
+function dbGuardH(e) { const p = dbPop; if (!p || !p.isConnected || !camSsOn()) return; let path; try { path = e.composedPath(); } catch (x) { return; } if (!path.includes(p)) return;
+  e.stopImmediatePropagation(); if (e.type === 'click') p._act(e); }
+function dbGuard(on) { for (const t of DB_GUARD_EV) removeEventListener(t, dbGuardH, true); if (!on) return;
+  for (const t of DB_GUARD_EV) addEventListener(t, dbGuardH, true);
+  const w = ssWallpanel(); for (const x of (w && Array.isArray(w.windowEventHandlers) ? w.windowEventHandlers : [])) { if (!x || !x.eventName || !x.handler || !DB_GUARD_EV.includes(x.eventName)) continue;
+    try { removeEventListener(x.eventName, x.handler, x.options); addEventListener(x.eventName, x.handler, x.options); } catch (e) {} } }
+// is a NotHomeView dashboard on screen (a Lovelace panel with NotHomeView cards)
+function dbOnNhv() { const seg = decodeURIComponent(location.pathname.split('/')[1] || ''), h = hvHaHass(), pn = h && h.panels && h.panels[seg || 'lovelace'];
+  if (!pn || pn.component_name !== 'lovelace') return false;
+  const w = r => { for (const e of r.querySelectorAll('*')) { if (e.localName.startsWith('homeview-') && e.localName !== 'homeview-doorbell-popup') return true; if (e.shadowRoot && w(e.shadowRoot)) return true; } return false; };
+  try { return w(document); } catch (e) { return true; } }
+function dbIn(d, via) { const rec = { via, kind: d && d.kind, cam: d && d.camera, type: d && d.type };
+  if (!d || !['ring', 'motion'].includes(d.kind)) return dbLog(Object.assign(rec, { skip: 'unknown kind' }));
+  if (d.id) { if (dbStat.seen.includes(d.id)) return dbLog(Object.assign(rec, { skip: 'duplicate' })); dbStat.seen.push(d.id); if (dbStat.seen.length > 40) dbStat.seen.shift(); }
+  const h = hvHaHass(), cam = String(d.camera || ''); if (!h || !/^camera\./.test(cam) || !h.states[cam]) return dbLog(Object.assign(rec, { skip: 'no such camera' }));
+  if (!dbAllowed(cam, d.kind)) return dbLog(Object.assign(rec, { skip: 'off on this device' }));
+  if (!dbOnNhv()) return dbLog(Object.assign(rec, { skip: 'not a NotHomeView dashboard' }));
+  if ([...camAlCards].some(c => c.isConnected && c._config && c._config.large && c._config.entity === cam)) return dbLog(Object.assign(rec, { skip: 'large view of this camera open' }));
+  const ss = camSsOn();
+  if (dbPop && dbPop.isConnected) return dbLog(Object.assign(rec, dbPop.bump(d, ss)));
+  if (d.kind === 'motion') { if (!ss) return dbLog(Object.assign(rec, { skip: 'screen awake (motion pop-up only during the screensaver)' }));
+    if (Date.now() < dbStat.quietUntil) return dbLog(Object.assign(rec, { skip: 'motion cooldown', left_s: Math.round((dbStat.quietUntil - Date.now()) / 1000) })); }
+  dbPop = document.createElement('homeview-doorbell-popup'); return Object.assign(dbPop.open(d, ss ? 'corner' : 'full'), { via }); }
+window.NotHomeView = Object.assign(window.NotHomeView || {}, { doorbell: {
+  status: () => ({ subscription: dbStat.sub, quiet_s: Math.max(0, Math.round((dbStat.quietUntil - Date.now()) / 1000)), screensaver: camSsOn(),
+    open: dbPop && dbPop.isConnected ? { kind: dbPop._kind, mode: dbPop._mode, live: !!dbPop._live, still: !!(dbPop._img && dbPop._img.classList.contains('on')), why: dbPop._why || '' } : null, log: (window.__hvDb || []).slice(-12) }),
+  show: (kind = 'ring', camera, type) => dbIn({ kind, camera, type }, 'test'), // local preview on this device only (no Home Assistant event)
+  close: () => dbPop && dbPop.close('api'), setting: (camera, v) => (v === undefined ? dbDevGet(camera) : dbDevSet(camera, v)) } });
+// listen: the custom event (admins) and the helper entity (everyone), the same event id is shown once
+(() => { if (window.__hvDbBoot || typeof document === 'undefined') return; window.__hvDbBoot = true; let conn = null, last;
+  setInterval(() => { const h = hvHaHass(); if (!h || !h.connection || !h.states || !Object.keys(h.states).length) return;
+    if (h.connection !== conn && !window.__hvDbNoSub) { conn = h.connection; dbStat.sub = 'subscribing';
+      h.connection.subscribeEvents(ev => { const x = (ev && ev.data) || {}; dbIn({ kind: x.kind, camera: x.camera, type: x.event_type, id: ev.context && ev.context.id }, 'event'); }, DB_EVENT)
+        .then(() => { dbStat.sub = 'event'; }, e => { dbStat.sub = 'helper only (' + ((e && (e.code || e.message)) || 'refused') + ')'; }); }
+    const st = h.states[DB_HELPER], v = st ? st.state : null; if (last === undefined) { last = v; return; } if (v === last) return; last = v;
+    if (!v || UNAVAILABLE.includes(v)) return; const age = Date.now() - Date.parse(st.last_changed || 0); if (!(age < 300000)) return; // late states after a reconnect: ignored after 5 min
+    const [kind, camera, id, type] = String(v).split('|'); dbIn({ kind, camera, id, type }, 'helper'); }, 600); })();
