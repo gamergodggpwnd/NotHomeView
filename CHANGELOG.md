@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased (next after v1.5, in development as 1.6.0-dev)
+
+### New features
+* **Doorbell & motion pop-up** (event `nothomeview_doorbell`, see [docs/doorbell-popup.md](docs/doorbell-popup.md)): when the doorbell rings, every NotHomeView dashboard shows the camera live full screen (purple, 60 s, ✕ / *Dismiss*, *Muted* toggles sound); during the Wallpanel screensaver a small corner pop-up instead (tap = full screen, the screensaver stays). Motion / person events show the corner pop-up in orange during the screensaver only (muted, closes 45 s after the last motion event, then 5 min quiet). A still picture shows at once while the stream starts, one stream per camera (Always-live tiles pause meanwhile), still picture when the stream is rate limited. Non-admin users get the event through the `input_text.nothomeview_doorbell` helper written by the automation. Per device: the camera large view's **Pop-ups** button (*Pop-ups on → Doorbell only → Motion only → Pop-ups off*; `show_device_popup: false` hides it).
+* Camera large view: the control row packs tighter when it has five buttons.
+
 ## 1.5.0 – 2026-10-31 (tag `v1.5`)
 
 This update was developed as "1.32.0" and is published as **v1.5**. Note for HACS users: HACS compares version numbers, and v1.5 counts as lower than v1.31.x, so HACS may not offer it as an update automatically; pick it under *Redownload* → version **v1.5**.
