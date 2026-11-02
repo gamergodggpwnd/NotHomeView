@@ -12,9 +12,9 @@ dashboard with clicks instead of code.
 
 ![Glass theme on a tablet](docs/images/banner_glass.png)
 
-![Example Home Screen](docs/images/example_home_screen.png)
+![Example Home Screen](docs/images/v1.5/home_screen.png)
 
-*The example Home Screen: greeting, app icons, Photos, Now Playing, the House tile and a week of calendar (sample data).*
+*The Home Screen in v1.5: greeting with the Assistant mic, app icons, Photos, Now Playing, a 4 × 6 live camera tile and a two‑wide, two‑row calendar (sample data).*
 
 ![Screensaver](docs/images/screensaver_example.png)
 
@@ -31,7 +31,7 @@ dashboard with clicks instead of code.
 - ✅ NotHomeView Home Screen - shortcuts, calendar, photos, all at a glance. *(shipped in v1.30.7)*
 - ✅ TV Controls - allows user to control playback and navigation. *(shipped in v1.30.7: NotHomeView TV card)*
 - ✅ Media uploader - allows user to upload photos directly to screensaver, no swiping out of the dashboard required. *(shipped in v1.30.7: "Add photos" in the photo gallery)*
-- AI Assist support - allows user to access their preferred voice Assistant directly from dashboard. (must have assistant linked through plugin)
+- ✅ AI Assist support - allows user to access their preferred voice Assistant directly from dashboard. (must have assistant linked through plugin) *(shipped in v1.5: the optional Assistant popup, see below)*
 - Bug fixes and tweaks.
 
 ## Requirements
@@ -63,6 +63,30 @@ Tested with Home Assistant 2026.10, card-mod 4.2.1, layout-card 2.4.7, button-ca
 and Wallpanel 4.67.2.
 
 ## What's new in v1.5
+
+**Voice assistant (Assist).** Tap the mic beside the avatar (or the Assistant app) and talk or type; the floating orb shows when it's listening.
+Quiet mode, the in‑browser “Hey Jarvis” wake word and chat history are set per device, and timers run full screen.
+
+| Listening orb | Chat with answer history |
+|---|---|
+| ![Assistant orb listening over the Home Screen](docs/images/v1.5/assistant_orb_listening.png) | ![Assistant chat](docs/images/v1.5/assistant_chat.png) |
+
+| Quiet mode, wake word and chat history (per device) | Full‑screen timer | Card editor → Assistant & timer |
+|---|---|---|
+| ![Assistant settings: quiet mode, wake word, chat history](docs/images/v1.5/assistant_settings_quiet_wake_word.png) | ![Full-screen pasta timer](docs/images/v1.5/assistant_timer.png) | ![Home Screen card editor, Assistant & timer section](docs/images/v1.5/editor_assistant_timer.png) |
+
+**New Home Screen layout and arrange mode.** Tiles can be two wide and two rows tall (4 × 6), the calendar has new sizes (including *Up next*),
+and admins can long‑press the Home Screen or a room page to move, resize (drag a corner), duplicate, delete or edit tiles right on the dashboard.
+
+| 4 × 6 photo and camera tiles, *Up next* calendar | Home Screen arrange mode (long‑press) | Phone |
+|---|---|---|
+| ![Home Screen with big tiles](docs/images/v1.5/home_screen_big_tiles.png) | ![Home Screen arrange mode with resize corners](docs/images/v1.5/home_arrange_mode.png) | ![Home Screen on a phone](docs/images/v1.5/home_screen_phone.png) |
+
+| Room page arrange mode | Tile ⋯ menu in arrange mode | Home Screen card editor |
+|---|---|---|
+| ![Room page arrange mode with resize corners](docs/images/v1.5/room_arrange_mode.png) | ![Tile menu: Edit, Move, Duplicate, Delete](docs/images/v1.5/room_arrange_menu.png) | ![Home Screen card editor](docs/images/v1.5/editor_hub_card.png) |
+
+*All v1.5 pictures use a demo dashboard with made‑up entities and generated placeholder photos.*
 
 * **Animated weather header** (Home Screen card → *Layout & weather* → "Weather popup: animated sky header"). The Weather popup opens on an
   illustrated sky that follows the weather entity's live state: sunny, partly cloudy, cloudy, rain or snow, with a moonlit night sky after sunset.
@@ -408,6 +432,14 @@ Can't copy files? See [Can't install theme files?](#cant-install-theme-files): t
 7. **Move it.** In edit mode, drag a card by its body to a new spot in the grid; the other tiles move out of the way.
 8. **Edit or remove later.** In edit mode click any card to open its editor again, or use its **⋮** menu to duplicate or delete it.
 9. Click **Done** (top right) when you're finished.
+
+**Shortcut (v1.5): arrange mode.** Admins can skip Home Assistant's edit mode for everyday changes: long‑press a room page (or the Home Screen),
+tap a tile for its **⋯** menu (Edit, Move earlier / later, Duplicate, Delete), hold and drag to move it, drag its corner to resize it,
+then tap **Done** to save (or **Cancel**).
+
+| Arrange mode | Tile ⋯ menu |
+|---|---|
+| ![Room page arrange mode](docs/images/v1.5/room_arrange_mode.png) | ![Tile menu in arrange mode](docs/images/v1.5/room_arrange_menu.png) |
 
 ## Walkthrough: tile sizes and the Layout tab
 
