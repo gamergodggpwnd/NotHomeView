@@ -1677,53 +1677,6 @@ const CAM_POPUP_W = 'min(94vw, 960px)';
 const CAM_POPUP_HEIGHT = `min(calc(var(--hv-vh, 100dvh) - 24px), calc(${CAM_POPUP_W} * 0.5625 + 0px))`;
 const CAM_POPUP_CSS = `ha-dialog,ha-adaptive-dialog{--dialog-surface-margin-top:max(8px, calc((var(--hv-vh, 100dvh) - ${CAM_POPUP_HEIGHT}) / 2)) !important;--popup-min-height:0px !important;--popup-max-height:calc(100dvh - 16px) !important;--popup-border-radius:26px !important;--popup-min-width:${CAM_POPUP_W} !important;--popup-max-width:94vw !important;--popup-width-full:94vw !important;--popup-padding-x:0px !important;--popup-padding-y:0px !important;--ha-dialog-surface-background:transparent;--mdc-theme-surface:transparent;--wa-color-surface-raised:transparent;--ha-card-background:transparent;--card-background-color:transparent;--primary-text-color:#fff;--dialog-box-shadow:none;--dialog-backdrop-filter:blur(6px);--mdc-dialog-scrim-color:rgba(0,0,20,.45)}.content .container{padding:0 !important}@media (max-height:520px){ha-dialog,ha-adaptive-dialog{--popup-max-height:100dvh !important}.content .container{padding:12px 0 !important}}`;
 const CAM_TOGGLE = ['light', 'switch', 'fan', 'input_boolean', 'cover', 'siren', 'humidifier', 'automation', 'valve', 'group', 'climate', 'media_player', 'water_heater', 'lock'];
-/* 1.6.0 camera fill: the camera large view and the doorbell full-screen pop-up fill the screen like object-fit: cover (portrait phones crop the
-   sides), drag sideways to look around (remembered per camera on this device), double-tap = whole picture <-> fill (remembered on this device).
-   Until the first picture (snapshot / video) gives the aspect, nothing changes, so the placeholder stays centred. */
-const CAM_FIT_KEY = 'hvCamFit', CAM_PAN_KEY = 'hvCamPan:', CAM_HINT_KEY = 'hvCamFitHint';
-const camLs = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) {} return null; };
-const camFitGet = () => camLs(CAM_FIT_KEY) === 'fit' ? 'fit' : 'fill';
-class HVCamFill {
-  // o: { host, box, media, active(), stream(), videos(), imgs(), cam(), panY(e) = may an up/down drag starting here pan (not the swipe-down-to-close zone) }
-  constructor(o) { this.o = o; this.ar = 0; this.px = 0.5; this.py = 0.5; this.ox = 0; this.oy = 0; this.key = ''; this.camKey = null; this.on = false;
-    const b = o.box; let st = null, lastTap = 0;
-    const skip = e => e.composedPath().some(n => n && (n.tagName === 'BUTTON' || n.tagName === 'INPUT' || n.tagName === 'A' || (n.classList && ['ctl', 'row', 'foot', 'err', 'x'].some(k => n.classList.contains(k)))));
-    // the picture overflows sideways (portrait) -> sideways drags pan; it overflows up/down (wide screens) -> up/down drags pan, outside the swipe-to-close zone
-    b.addEventListener('pointerdown', e => { if (!this.on || (e.pointerType === 'mouse' && e.button !== 0) || skip(e)) return; const ax = this.ox >= 2 ? 'x' : this.oy >= 2 && (!o.panY || o.panY(e)) ? 'y' : null;
-      if (ax) st = { id: e.pointerId, x: e.clientX, y: e.clientY, p0: ax === 'x' ? this.px : this.py, ax, pan: false }; });
-    b.addEventListener('pointermove', e => { if (!st || e.pointerId !== st.id) return; const dx = e.clientX - st.x, dy = e.clientY - st.y, X = st.ax === 'x';
-      if (!st.pan) { if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return; if (X ? Math.abs(dy) >= Math.abs(dx) : Math.abs(dx) >= Math.abs(dy)) { st = null; return; } // the other direction: not a pan (swipe down closes)
-        st.pan = true; st.x = e.clientX; st.y = e.clientY; try { b.setPointerCapture(e.pointerId); } catch (x) {} o.host.setAttribute('panning', ''); this._hintOff(); }
-      const v = Math.min(1, Math.max(0, st.p0 - (X ? (e.clientX - st.x) / this.ox : (e.clientY - st.y) / this.oy))); if (X) this.px = v; else this.py = v; this.place(); e.preventDefault(); e.stopPropagation(); });
-    const end = e => { if (!st || e.pointerId !== st.id) return; const p = st.pan; st = null; if (!p) return; o.host.removeAttribute('panning'); this.justPanned = Date.now();
-      if (this.camKey) camLs(CAM_PAN_KEY + this.camKey, this.px.toFixed(3) + ',' + this.py.toFixed(3)); };
-    b.addEventListener('pointerup', end); b.addEventListener('pointercancel', end);
-    b.addEventListener('click', e => { if (this.justPanned && Date.now() - this.justPanned < 450) { e.stopPropagation(); e.preventDefault(); return; }
-      if (!o.active() || !this.ar || skip(e)) return; const now = Date.now(); if (now - lastTap < 340) { lastTap = 0; this.toggle(); } else lastTap = now; }, true);
-    if (window.ResizeObserver) { this.ro = new ResizeObserver(() => this.tick()); this.ro.observe(b); } }
-  toggle() { const m = camFitGet() === 'fit' ? 'fill' : 'fit'; camLs(CAM_FIT_KEY, m); this.key = ''; this.tick(); this._chip(m === 'fit' ? 'Whole picture · double-tap to fill the screen' : 'Fill screen · double-tap for the whole picture', 1600); }
-  tick() { const o = this.o, md = o.media, act = o.active();
-    if (!act) { if (this.key || this.on) this.reset(); return; }
-    const v = o.videos().find(x => x.videoWidth && x.videoHeight); let ar = v ? v.videoWidth / v.videoHeight : 0;
-    if (!ar) { const i = o.imgs().find(x => x.classList.contains('on') && x.naturalWidth && x.naturalHeight); if (i) ar = i.naturalWidth / i.naturalHeight; }
-    if (ar > 0.2 && ar < 6) this.ar = ar;
-    const c = o.cam(); if (c !== this.camKey) { this.camKey = c; const p = String(camLs(CAM_PAN_KEY + c) || '').split(',').map(parseFloat), ok = v => v >= 0 && v <= 1; this.px = ok(p[0]) ? p[0] : 0.5; this.py = ok(p[1]) ? p[1] : 0.5; }
-    const mode = camFitGet(), s = o.stream(), fm = mode === 'fill' ? 'cover' : 'contain'; if (s && s.fitMode !== fm) s.fitMode = fm;
-    const W = o.box.clientWidth, H = o.box.clientHeight, key = [W, H, this.ar.toFixed(3), mode].join('|'); if (key === this.key) return; this.key = key;
-    const fill = mode === 'fill' && !!this.ar && W > 0 && H > 0; o.host.toggleAttribute('fill', fill);
-    if (!fill) { this._clear(); this.on = false; this.ox = this.oy = 0; return; }
-    let mw, mh; if (W / H < this.ar) { mh = H; mw = H * this.ar; } else { mw = W; mh = W / this.ar; }
-    this.mw = mw; this.mh = mh; this.ox = Math.max(0, mw - W); this.oy = Math.max(0, mh - H); this.on = true; this.place();
-    if (Math.max(this.ox, this.oy) > 40 && !this._hinted) { this._hinted = true; const n = +camLs(CAM_HINT_KEY) || 0; if (n < 3) { camLs(CAM_HINT_KEY, String(n + 1)); this._chip(this.ox > 40 ? '‹  Drag to look around · double-tap for the whole picture  ›' : 'Drag up or down to look around · double-tap for the whole picture', 3200); } } }
-  place() { const st = this.o.media.style; st.inset = 'auto'; st.right = 'auto'; st.bottom = 'auto';
-    st.left = (-this.ox * this.px).toFixed(1) + 'px'; st.top = (-this.oy * this.py).toFixed(1) + 'px'; st.width = this.mw.toFixed(1) + 'px'; st.height = this.mh.toFixed(1) + 'px'; }
-  _clear() { const st = this.o.media.style; for (const k of ['inset', 'left', 'top', 'right', 'bottom', 'width', 'height']) st.removeProperty(k); }
-  reset() { this._clear(); this.o.host.removeAttribute('fill'); this.key = ''; this.on = false; this.ox = this.oy = 0; this._hintOff(); }
-  _hintOff() { if (this._hc) { this._hc.remove(); this._hc = null; } }
-  _chip(t, ms) { this._hintOff(); const d = document.createElement('div'); d.textContent = t; d.setAttribute('aria-hidden', 'true');
-    d.style.cssText = 'position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:4;pointer-events:none;max-width:calc(100% - 40px);box-sizing:border-box;text-align:center;padding:9px 16px;border-radius:18px;background:rgba(20,22,28,.62);border:1px solid rgba(255,255,255,.18);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);color:#fff;font:600 13px/1.3 ' + FONT.replace(/"/g, "'") + ';transition:opacity .5s ease;opacity:1';
-    this.o.box.appendChild(d); this._hc = d; setTimeout(() => { d.style.opacity = '0'; }, ms); setTimeout(() => { if (this._hc === d) this._hintOff(); }, ms + 600); }
-}
 const CAM_CSS = `
 :host{display:block;width:100%;height:100%;aspect-ratio:var(--hv-cam-aspect,1.3);-webkit-tap-highlight-color:transparent}
 :host([fixed]){aspect-ratio:auto}
@@ -1737,7 +1690,6 @@ ha-card::before,ha-card::after{content:none !important;display:none !important}
 .media,.media>*{position:absolute;inset:0;width:100%;height:100%}
 .media img{object-fit:cover;opacity:0;transition:opacity .4s ease} .media img.on{opacity:1}
 :host([large]) .media img{object-fit:contain}
-:host([large][fill]) .media img{object-fit:cover}
 .media ha-camera-stream{opacity:0;transition:opacity .5s ease;--video-max-height:100%;display:block}
 .media ha-camera-stream.on{opacity:1}
 .ph{position:absolute;inset:0;display:flex;flex-direction:column;gap:6px;text-align:center;padding:0 12px;box-sizing:border-box;align-items:center;justify-content:center;color:rgba(255,255,255,.55);font-size:13px;font-weight:600;
@@ -2013,9 +1965,6 @@ class HVCameraCard extends HTMLElement {
     if (this._config.large) { const og = this._hvOrigin || (this._hvOrigin = hvPopTake()), x = this._card.querySelector('.x'); if (og && x && hvPenOK(og, og._hass)) hvPen(x, () => { this._close(); setTimeout(() => hvPopEdit(og, { card: og }), 420); }); } // 1.32.0: edit pencil
     this._card.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target === this._card) { e.preventDefault(); if (!this._config.large) this.openLarge(); } });
     this._bindSwipe(); this._built = true;
-    if (this._config.large) this._fill = new HVCamFill({ host: this, box: this._card, media: this._media, active: () => !!(this._config && this._config.large), stream: () => this._streamEl,
-      videos: () => this._videos(), imgs: () => this._imgs, cam: () => this._config && this._config.entity,
-      panY: e => { if (!this.hasAttribute('swipe')) return true; const r = this.getBoundingClientRect(); return e.clientY - r.top > Math.max(120, r.height * 0.5); } }); // 1.6.0 camera fill
     if (this._config.large) [0, 120, 400, 900].forEach(t => setTimeout(() => this._fsSafe(), t));
     if (window.ResizeObserver) { this._ro = new ResizeObserver(() => this._fit()); this._ro.observe(this._card); }
   }
@@ -2079,7 +2028,7 @@ class HVCameraCard extends HTMLElement {
     const make = () => {
       if (this._mediaKey !== key) return;
       const v = document.createElement('ha-camera-stream'); v.hass = this._hass; v.stateObj = s; v.muted = true; v.controls = false; v.allowExoPlayer = false;
-      v.fitMode = c.large && camFitGet() === 'fit' ? 'contain' : 'cover'; v.setAttribute('muted', ''); v.addEventListener('load', () => this._markLive(), true);
+      v.fitMode = c.large ? 'contain' : 'cover'; v.setAttribute('muted', ''); v.addEventListener('load', () => this._markLive(), true);
       if (al) { const o = camAlOwn[c.entity]; if (o && o !== this && o._streamEl) { this._mediaKey = null; return; } camAlOwn[c.entity] = this; (window.__hvCamAl = window.__hvCamAl || []).push({ e: c.entity, t: Date.now(), why: 'start', n: 0 }); }
       this._media.appendChild(v); this._streamEl = v; this._streamAt = Date.now(); this._alT = null; this._status();
     };
@@ -2099,7 +2048,7 @@ class HVCameraCard extends HTMLElement {
   _showErr(m) { this._err = m; this._stopStream(); const rate = CAM_RATE.test(m);
     this._$('.et').textContent = rate ? (this._vendor() === 'nest' ? 'Google is limiting live view. Try again in a minute.' : 'Live view is rate limited. Try again in a minute.') : 'Live view didn’t start. ' + m.replace(/\s+/g, ' ').slice(0, 120);
     this._$('.err').classList.add('on'); this._status(); }
-  _markLive() { if (!this._streamEl) return; this._streamEl.classList.add('on'); if (!this._live) { this._live = true; this._liveAt = Date.now(); this._sig = null; this._render(); this._status(); } if (this._fill) this._fill.tick(); }
+  _markLive() { if (!this._streamEl) return; this._streamEl.classList.add('on'); if (!this._live) { this._live = true; this._liveAt = Date.now(); this._sig = null; this._render(); this._status(); } }
   // ---- 1.32.0 Always live (live_tile: visible) ----
   _alReset() { this._alFails = 0; this._alGaveUp = false; this._alRetryAt = 0; this._alGaveUpAt = 0; }
   _alBind() { if (!this._alOn) { this._alOn = true;
@@ -2153,13 +2102,13 @@ class HVCameraCard extends HTMLElement {
     const s = this._stateObj; if (!s || UNAVAILABLE.includes(s.state) || !s.attributes.entity_picture || !this._hass || this._noSnap()) return;
     this._lastSnap = Date.now();
     let u = s.attributes.entity_picture; u = this._hass.hassUrl ? this._hass.hassUrl(u) : u; u += (u.includes('?') ? '&' : '?') + '_t=' + Date.now();
-    const pre = new Image(); pre.onload = () => { const nx = this._imgs[this._imgI ^ 1]; nx.src = u; nx.classList.add('on'); this._imgs[this._imgI].classList.remove('on'); this._imgI ^= 1; this._card.classList.add('has'); this._snapOk = true; this._status(); if (this._fill) setTimeout(() => this._fill.tick(), 30); };
+    const pre = new Image(); pre.onload = () => { const nx = this._imgs[this._imgI ^ 1]; nx.src = u; nx.classList.add('on'); this._imgs[this._imgI].classList.remove('on'); this._imgI ^= 1; this._card.classList.add('has'); this._snapOk = true; this._status(); };
     pre.onerror = () => { this._snapFails = (this._snapFails || 0) + 1; if (!this._snapOk) { this._snapErr = true; this._status(); } }; pre.src = u;
   }
   _tick() {
     if (!this._built || !this._config) return;
     if (this._streamEl && !this._live && this._videoReady()) this._markLive();
-    if (this._fill) { this._fill.tick(); this._fsSafe(); }
+    if (this._config.large) this._fsSafe();
     if (this._streamEl && !this._err) { const m = this._streamError(); if (m) { if (this._alwaysLive()) { this._alFail(m); return; } this._showErr(m); } }
     if (this._config.large && this.isConnected) camBig[this._config.entity] = Date.now();
     if (!this._config.large) this._alTick();
@@ -2224,7 +2173,7 @@ class HVCameraCard extends HTMLElement {
   // header / controls add the safe areas); it is put back when the card goes (the dialog can be reused for other popups).
   _fsSafe() { const c = this._config; if (!(c && c.large && c.popup_style !== 'window') || !this.isConnected) return; let n = this.parentNode || this.getRootNode().host, d = null;
     for (let i = 0; n && i < 80; i++) { if (n.__hvFh) { d = n; break; } n = n.assignedSlot || n.parentNode || n.host; }
-    if (d && d.style.getPropertyValue('padding-top') !== '0px') { d.style.setProperty('padding-top', '0px', 'important'); this._fsDlg = d; if (this._fill) this._fill.tick(); } }
+    if (d && d.style.getPropertyValue('padding-top') !== '0px') { d.style.setProperty('padding-top', '0px', 'important'); this._fsDlg = d; } }
   _fsRestore() { const d = this._fsDlg; if (d) { this._fsDlg = null; d.style.setProperty('padding-top', HV_FH_SAFE, 'important'); } }
 }
 // swipe down to close: same gesture as the Now Playing popup
@@ -6879,7 +6828,7 @@ const DB_CSS = `
 :host([mode=full]) .bd{opacity:1;pointer-events:auto}
 .box{position:absolute;overflow:hidden;background:#05070a;pointer-events:auto;box-shadow:0 18px 50px rgba(0,0,0,.45);animation:dbIn .32s cubic-bezier(.2,.8,.2,1);touch-action:manipulation}
 @keyframes dbIn{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:none}}
-:host([mode=full]) .box{top:0;bottom:0;left:0;right:0;border-radius:0;border:none;box-shadow:none;touch-action:none}
+:host([mode=full]) .box{top:0;bottom:0;left:0;right:0;border-radius:0;border:none;box-shadow:none}
 :host([mode=corner]) .box{top:calc(20px + env(safe-area-inset-top,0px));right:20px;width:clamp(250px,31vw,420px);aspect-ratio:3/2;border-radius:18px;border:2px solid var(--acc);cursor:pointer;
  box-shadow:0 0 0 1px rgba(0,0,0,.25),0 0 24px color-mix(in srgb,var(--acc) 45%,transparent),0 14px 40px rgba(0,0,0,.4)}
 :host([mode=corner][kind=motion]) .box{width:clamp(270px,34vw,460px)} :host([mode=corner][kind=motion]) .cfoot{font-size:11px}
@@ -6888,7 +6837,6 @@ const DB_CSS = `
 .media,.media>*{position:absolute;inset:0;width:100%;height:100%}
 .media img{object-fit:cover;opacity:0;transition:opacity .4s ease} .media img.on{opacity:1}
 :host([mode=full]) .media img{object-fit:contain}
-:host([mode=full][fill]) .media img{object-fit:cover}
 .media ha-camera-stream{opacity:0;transition:opacity .5s ease;--video-max-height:100%;display:block} .media ha-camera-stream.on{opacity:1}
 .ph{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:rgba(255,255,255,.55);font-size:13px;font-weight:600;background:radial-gradient(120% 90% at 50% 40%,#1c2230,#07090d)}
 .ph ha-icon{--mdc-icon-size:40px;opacity:.7} :host([mode=corner]) .ph ha-icon{--mdc-icon-size:28px} :host([mode=corner]) .ph span{display:none}
@@ -6933,8 +6881,7 @@ class HVDoorbellPopup extends HTMLElement {
       <button class="x" data-a="x" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button>
       <div class="cfoot"><span class="live wait"></span><span class="cf"></span></div><div class="foot"></div><div class="bar"><i></i></div></div>`;
     const R = this.shadowRoot; this._$ = s => R.querySelector(s); this._box = this._$('.box'); this._media = this._$('.media'); this._img = this._$('.snap');
-    R.addEventListener('click', e => { if (!camSsOn()) this._act(e); }); this._muted = true;
-    this._fill = new HVCamFill({ host: this, box: this._box, media: this._media, active: () => this._mode === 'full', stream: () => this._streamEl, videos: () => this._videos(), imgs: () => [this._img], cam: () => this._cam }); } // 1.6.0 camera fill
+    R.addEventListener('click', e => { if (!camSsOn()) this._act(e); }); this._muted = true; }
   // d = { kind, camera, type }; mode 'full' | 'corner'
   open(d, mode) { this._cam = d.camera; this._kind = d.kind; this._type = d.type || (d.kind === 'ring' ? 'ring' : 'camera_motion'); this._at = Date.now(); this._lastMotion = Date.now();
     this._live = false; this._noLive = false; this._why = ''; this._retry = 0; this._ssWas = camSsOn(); this._pvN = 0;
@@ -6949,7 +6896,7 @@ class HVDoorbellPopup extends HTMLElement {
     if (d.kind === 'ring') { const up = this._kind !== 'ring'; this._kind = 'ring'; this._type = 'ring'; this._at = Date.now(); this.setAttribute('kind', 'ring'); if (!ss) this._setMode('full'); this._paint(); if (up) this._snapLoad(); return { act: up ? 'to ring' : 'ring again' }; }
     if (this._kind === 'motion') { this._lastMotion = Date.now(); this._type = d.type || this._type; this._paint(); return { act: 'motion extended' }; }
     return { act: 'ignored (doorbell pop-up open)' }; }
-  _setMode(m) { this._mode = m; this.setAttribute('mode', m); if (this._streamEl) this._streamEl.fitMode = m === 'full' && camFitGet() === 'fit' ? 'contain' : 'cover'; if (this._fill) this._fill.tick(); }
+  _setMode(m) { this._mode = m; this.setAttribute('mode', m); if (this._streamEl) this._streamEl.fitMode = m === 'full' ? 'contain' : 'cover'; }
   _name() { const h = hvHaHass(), s = h && h.states[this._cam]; return (s && s.attributes.friendly_name) || String(this._cam).split('.').pop(); }
   _when() { return camWhen(hvHaHass(), new Date(this._kind === 'ring' ? this._at : this._lastMotion).toISOString()); }
   _paint() { const ring = this._kind === 'ring', nm = this._name(), w = this._when(), tl = DB_TYPE[this._type] || 'Motion';
@@ -6976,7 +6923,7 @@ class HVDoorbellPopup extends HTMLElement {
     const h = hvHaHass(), s = h && h.states[this._cam]; if (!s || UNAVAILABLE.includes(s.state)) return;
     const make = () => { if (!this.isConnected || this._streamEl || this._noLive) return;
       const v = document.createElement('ha-camera-stream'); v.hass = h; v.stateObj = s; v.muted = this._muted; v.controls = false; v.allowExoPlayer = false;
-      v.fitMode = this._mode === 'full' && camFitGet() === 'fit' ? 'contain' : 'cover'; v.setAttribute('muted', ''); v.addEventListener('load', () => this._markLive(), true);
+      v.fitMode = this._mode === 'full' ? 'contain' : 'cover'; v.setAttribute('muted', ''); v.addEventListener('load', () => this._markLive(), true);
       this._media.appendChild(v); this._streamEl = v; this._streamAt = Date.now(); dbLog({ act: 'stream start', cam: this._cam }); };
     if (customElements.get('ha-camera-stream')) make(); else { this._streamAt = Date.now(); HVCameraCard._loadStream().then(ok => ok && make()); } }
   _stopStream() { if (this._streamEl) { try { this._streamEl.remove(); } catch (e) {} this._streamEl = null; } this._live = false; }
@@ -6990,10 +6937,9 @@ class HVDoorbellPopup extends HTMLElement {
     const all = (await Promise.all([camPvLocal(id), camPvShared(h, id), camPvEvent(h, id, 'db' + Date.now())].map(p => Promise.resolve(p).catch(() => null)))).concat(held).filter(Boolean);
     if (s && s.attributes.entity_picture && camVendor(h, id) !== 'nest') { let u = s.attributes.entity_picture; u = h.hassUrl ? h.hassUrl(u) : u; all.push({ url: u + (u.includes('?') ? '&' : '?') + '_t=' + Date.now(), t: Date.now() }); }
     if (n !== this._pvN || !this.isConnected) return; all.sort((a, b) => b.t - a.t); const best = all[0]; if (best && (!this._snapT0 || best.t > this._snapT0)) this._showSnap(best, all.slice(1)); }
-  _showSnap(p, rest) { const img = this._img; this._snapT0 = p.t; img.onload = () => { img.classList.add('on'); this._fill.tick(); }; img.onerror = () => { if (rest && rest.length) this._showSnap(rest[0], rest.slice(1)); }; if (img.src !== p.url) img.src = p.url; }
+  _showSnap(p, rest) { const img = this._img; this._snapT0 = p.t; img.onload = () => img.classList.add('on'); img.onerror = () => { if (rest && rest.length) this._showSnap(rest[0], rest.slice(1)); }; if (img.src !== p.url) img.src = p.url; }
   _tick() { if (!this.isConnected) return; const now = Date.now(), h = hvHaHass(), ss = camSsOn();
     camBig[this._cam] = now; // Always-live tiles of this camera pause while the pop-up streams
-    this._fill.tick();
     if (this._mode === 'corner' && this._kind === 'ring' && this._ssWas && !ss) { this._setMode('full'); this._paint(); dbLog({ act: 'screen woke: full screen' }); }
     this._ssWas = ss;
     if (this._streamEl) { if (h && this._streamEl.hass !== h) this._streamEl.hass = h;
