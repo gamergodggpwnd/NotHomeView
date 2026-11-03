@@ -100,6 +100,7 @@ function hvViewTheme(cfg, v) {
   const find = (o, d = 0) => { if (!o || typeof o !== 'object' || d > 14) return '';
     if (Array.isArray(o)) { for (const x of o) { const r = find(x, d + 1); if (r) return r; } return ''; }
     if (o.type === 'custom:homeview-grid-card' && HV_THEMES.includes(o.theme)) return o.theme;
+    if (o.type === 'custom:homeview-myhome-card') return 'night'; // My Home is always the dark glass page
     for (const k of ['sections', 'cards', 'card', 'elements']) if (o[k]) { const r = find(o[k], d + 1); if (r) return r; } return ''; };
   const hub = cfg ? hvHubCfgOf(cfg) : null;
   return find(v) || (hub && HV_THEMES.includes(hub.theme) ? hub.theme : '') || 'night'; }
@@ -6385,7 +6386,7 @@ const HUB_SCHEMA = [
     { type: 'grid', name: '', schema: [{ name: 'edge_sidebar', selector: { boolean: {} } }, { name: 'block_pull_refresh', selector: { boolean: {} } }] },
     { name: 'full_height_popups', selector: { boolean: {} } },
     { name: 'popup_edit', selector: { boolean: {} } },
-    { name: 'swipe_screensaver', selector: { select: { mode: 'dropdown', options: [{ value: 'auto', label: 'Auto (when the screensaver is on here)' }, { value: 'on', label: 'On' }, { value: 'off', label: 'Off' }] } } }, { name: 'ss_hold', selector: { boolean: {} } }] }];
+    { name: 'swipe_screensaver', selector: { select: { mode: 'dropdown', options: [{ value: 'auto', label: 'Auto (when the screensaver is on here)' }, { value: 'on', label: 'On' }, { value: 'off', label: 'Off' }] } } }, { name: 'ss_hold', selector: { boolean: {} } }, { name: 'swipe_page', selector: { navigation: {} } }] }];
 Object.assign(LABELS, { photo_source_mode: 'Photo source', photo_album_url: 'Album link', apps: 'Apps (drag to reorder, pencil to edit)', person: 'Person (empty = the logged-in user)', fallback_person: 'Fallback person (no match)', ring_color: 'Avatar ring colour / gradient',
   morning_start: 'Morning from (hour)', afternoon_start: 'Afternoon from', evening_start: 'Evening from', night_start: 'Night from (empty = evening until morning)', greeting_night: 'Night greeting', greeting_morning: 'Morning greeting', greeting_afternoon: 'Afternoon greeting', greeting_evening: 'Evening greeting',
   wallpaper: 'Wallpaper when there are no photos (any CSS background, e.g. a colour or gradient)', photo_source: 'Media folder (empty = the Wallpanel screensaver\'s, e.g. media-source://media_source/local/)', photo_interval: 'Next photo every', photo_order: 'Order', blur: 'Background blur (px)', dim: 'Edge darkening for text readability (0-0.9)', photo_backdrop: 'Show the current photo, blurred, behind the page', bg_freeze: 'Freeze the blurred background while the Home Screen is showing', bg_transparency: 'Background transparency',
@@ -6397,7 +6398,7 @@ Object.assign(LABELS, { photo_source_mode: 'Photo source', photo_album_url: 'Alb
   assistant_auto_listen: 'Start listening when it opens', assistant_speak: 'Speak the replies', timer_sound: 'Timer alert sound',
   assistant_orb: 'Mic opens a floating orb (tap it for the chat)', assistant_continue: 'Keep listening until dismissed', assistant_dismiss_phrases: 'Phrases that end the conversation', assistant_silence_timeout: 'Close after silence', assistant_end_of_speech_pause: 'Pause before sending', assistant_history_retention: 'Chat history', assistant_quiet_volume_entity: 'Volume sensor of the device (optional)', assistant_quiet_volume_below: 'Quiet when the volume is under',
   assistant_quiet_focus_entity: 'Focus / Do Not Disturb sensor (optional)', assistant_quiet_start: 'Quiet hours from', assistant_quiet_end: 'Quiet hours until',
-  location_name: 'Weather location name (empty = Home Assistant\'s)', weather_sky_header: 'Weather popup: animated sky header (sunny, partly cloudy, cloudy, rain, snow; night sky after sunset)', swipe_screensaver: 'Swipe down for screensaver (grab bar at the top)', ss_hold: 'Keep the screensaver paused while the Home Screen is showing',
+  location_name: 'Weather location name (empty = Home Assistant\'s)', weather_sky_header: 'Weather popup: animated sky header (sunny, partly cloudy, cloudy, rain, snow; night sky after sunset)', swipe_screensaver: 'Swipe down for screensaver (grab bar at the top)', swipe_page: 'Swipe left for this page (button page; it slides in from the right, swipe right to come back, page dots)', ss_hold: 'Keep the screensaver paused while the Home Screen is showing',
   side_tiles: 'Extra tile options, in order (1st = first extra tile): size, fit, tap opens enlarged view' });
 // the Assist pipeline dropdown lists this Home Assistant's pipelines (assist_pipeline/pipeline/list); a removed one stays selectable so nothing is lost
 const hvHubSchemaPipes = r => { if (!r || !Array.isArray(r.pipelines)) return HUB_SCHEMA;
@@ -6497,6 +6498,323 @@ for (const [tag, cls, name, description] of CARDS) {
   if (!window.customCards.some(c => c.type === tag)) window.customCards.push({ type: tag, name, description, preview: true });
 }
 console.info(`%c HOMEVIEW-CARDS %c ${HV_VERSION} `, 'color:#fff;background:#6e5ad2;font-weight:700;border-radius:4px 0 0 4px', 'color:#6e5ad2;background:#ece8ff;border-radius:0 4px 4px 0');
+/* ---------------- My Home page + Home Screen swipe page (1.6.0-dev) ----------------
+   homeview-myhome-card: an Apple Home "My Home" style page in NotHomeView's dark glass: title + clock, summary pills (climate range,
+   lights on, garage doors, media), Cameras row (NotHomeView camera tiles), Scenes, then every Home Assistant device grouped by area.
+   Only entities with an area (own or their device's) are shown; sensors, updates, buttons, config / diagnostic / hidden entities and
+   browser_mod are left out; members of a light group shown in a room are folded into the group tile; same-name duplicates in one room
+   show once. Tap = toggle (lights, switches, fans) or more-info (the rest; garage doors never move on a tap), hold = more-info.
+   The ⋯ menu: N Issues (No Response devices), Home Settings (card editor), Edit Home View (show / hide tiles), Reorder Sections
+   (drag sheet). Order / hidden tiles are kept per dashboard in this browser (localStorage hvMyHome:<dash>:<view>) and, for admins,
+   also written to the card config (section_order / hidden_entities) so every device gets them.
+   Home Screen swipe page: the Home hub's swipe_page (a view of this dashboard) opens with a right-to-left swipe on the Home Screen and
+   slides in from the right; a left-to-right swipe on that page (its Page Grid on the first screen) goes back. Page dots + edge hint. */
+const MH_DOMAINS = ['light', 'switch', 'fan', 'climate', 'cover', 'lock', 'media_player', 'vacuum', 'humidifier', 'water_heater', 'valve', 'alarm_control_panel', 'input_boolean', 'lawn_mower'];
+const MH_TOGGLE = ['light', 'switch', 'fan', 'input_boolean', 'humidifier'];
+const MH_DORDER = { climate: 0, cover: 1, lock: 2, alarm_control_panel: 3, light: 4, switch: 5, fan: 6, media_player: 7 };
+const MH_UNAV = ['unavailable'];
+const mhLs = { get(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } }, set(k, v) { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} } };
+function mhIcon(s, name) { const a = s.attributes || {}, d = s.entity_id.split('.')[0], n = (name || '').toLowerCase(), on = s.state === 'on';
+  if (a.icon) return a.icon;
+  if (d === 'light') return /lamp/.test(n) ? 'mdi:floor-lamp' : /pot|ceiling|recessed/.test(n) ? 'mdi:ceiling-light' : /strip|led/.test(n) ? 'mdi:led-strip-variant' : on ? 'mdi:lightbulb-on' : 'mdi:lightbulb';
+  if (d === 'climate') return 'mdi:thermostat';
+  if (d === 'cover') { const g = ['garage', 'gate'].includes(a.device_class) || /garage/.test(n); return g ? (s.state === 'closed' ? 'mdi:garage' : 'mdi:garage-open') : s.state === 'closed' ? 'mdi:window-shutter' : 'mdi:window-shutter-open'; }
+  if (d === 'lock') return s.state === 'locked' ? 'mdi:lock' : 'mdi:lock-open-variant';
+  if (d === 'fan') return 'mdi:fan';
+  if (d === 'media_player') return /playstation|ps5|xbox/.test(n) ? 'mdi:gamepad-variant' : a.device_class === 'tv' || /\btv\b|bravia|television/.test(n) ? 'mdi:television' : a.device_class === 'receiver' ? 'mdi:audio-video' : 'mdi:speaker';
+  if (d === 'vacuum') return 'mdi:robot-vacuum';
+  if (d === 'switch' || d === 'input_boolean') return /dryer/.test(n) ? 'mdi:tumble-dryer' : /washer/.test(n) ? 'mdi:washing-machine' : /siren/.test(n) ? 'mdi:alarm-light' : /ps5|playstation/.test(n) ? 'mdi:gamepad-variant' : /motion/.test(n) ? 'mdi:motion-sensor' : /fan/.test(n) ? 'mdi:fan' : 'mdi:power-plug';
+  return 'mdi:devices'; }
+const MH_CSS = `:host{display:block;-webkit-tap-highlight-color:transparent}
+.w{font-family:${FONT};color:#fff;padding:6px 4px 40px;position:relative;-webkit-user-select:none;user-select:none}
+.back{display:inline-flex;align-items:center;gap:2px;font-size:15px;color:#d4c9ff;cursor:pointer;background:none;border:0;padding:4px 0;font-family:inherit}
+.back ha-icon{--mdc-icon-size:20px}
+.top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+h1{margin:0;font-size:44px;font-weight:700;letter-spacing:-.5px;line-height:1.15}
+.tr{display:flex;align-items:center;gap:12px;margin-top:6px}.tm{font-size:22px;font-weight:500;font-variant-numeric:tabular-nums}
+.more{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;cursor:pointer;color:#fff;background:linear-gradient(150deg,rgba(255,255,255,.15),rgba(255,255,255,.07));border:1px solid rgba(255,255,255,.25);box-shadow:inset 0 1px 0 rgba(255,255,255,.25);padding:0}
+.more ha-icon{--mdc-icon-size:22px}
+.pills{display:flex;gap:10px;margin:10px -10px -8px;padding:6px 10px 14px;overflow-x:auto;scrollbar-width:none}.pills::-webkit-scrollbar{display:none}
+.pill{flex:none;height:46px;min-width:104px;padding:0 18px;border-radius:23px;display:flex;align-items:center;justify-content:center;gap:8px;font-size:20px;font-weight:500;cursor:default}
+.g{background:linear-gradient(150deg,rgba(255,255,255,.15) 0%,rgba(255,255,255,.07) 100%);border:1px solid rgba(255,255,255,.25);box-shadow:inset 0 1px 0 rgba(255,255,255,.25),inset 0 0 0 .5px rgba(255,255,255,.06),0 10px 28px rgba(6,8,60,.26);-webkit-backdrop-filter:blur(26px) saturate(180%);backdrop-filter:blur(26px) saturate(180%)}
+.on{background:linear-gradient(150deg,rgba(196,182,255,.46) 0%,rgba(160,140,250,.34) 100%)!important;border-color:rgba(225,215,255,.42)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.35),inset 0 0 0 .5px rgba(255,255,255,.12),0 10px 28px rgba(50,30,160,.30)!important}
+.pill ha-icon{--mdc-icon-size:24px}
+.sec h2{font-size:19px;font-weight:600;margin:22px 0 10px;display:flex;align-items:center;gap:6px}.sec h2 ha-icon{--mdc-icon-size:20px;color:rgba(255,255,255,.5)}.sec h2 small{font-size:14px;font-weight:400;color:rgba(255,255,255,.66)}
+.cams{display:flex;gap:12px;overflow-x:auto;scrollbar-width:none;scroll-snap-type:x mandatory}.cams::-webkit-scrollbar{display:none}
+.cam{flex:none;width:min(46%,560px);height:236px;border-radius:22px;overflow:hidden;position:relative;scroll-snap-align:start}.cam.s{width:min(27%,330px)}
+.cam>*{display:block;position:absolute;inset:0;width:100%;height:100%}
+.scenes{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+.sc{border-radius:16px;height:58px;display:flex;align-items:center;gap:10px;padding:0 14px;font-size:15px;font-weight:600;cursor:pointer;min-width:0}
+.sc .i{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;background:rgba(255,255,255,.16);flex:none}.sc .i ha-icon{--mdc-icon-size:19px}
+.sc span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.devs{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+.dv{position:relative;border-radius:16px;height:64px;display:flex;align-items:center;gap:10px;padding:0 12px;min-width:0;cursor:pointer;touch-action:manipulation}
+.dv .i{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:rgba(255,255,255,.14);flex:none}.dv .i ha-icon{--mdc-icon-size:21px}
+.dv.on .i{background:#fff;color:#e8a92c}.dv.on.climate .i{color:#ff9f0a}
+.dv .t{min-width:0;flex:1}.dv .n{font-size:14.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dv .s{font-size:13px;color:rgba(255,255,255,.66);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dv.on .s{color:rgba(255,255,255,.85)}.dv.un{opacity:.55}.dv.un .s{color:#ffb4a6}
+.dv.wide{grid-column:span 2}.dv .tp{font-size:22px;font-weight:300;flex:none}
+.dv .eye{display:none;position:absolute;top:-6px;left:-6px;width:24px;height:24px;border-radius:50%;background:#ff453a;color:#fff;place-items:center;box-shadow:0 2px 6px rgba(0,0,0,.4)}
+.dv .eye ha-icon{--mdc-icon-size:16px}
+.w.hiding .dv .eye{display:grid}.w.hiding .dv.hid{opacity:.35}.w.hiding .dv.hid .eye{background:#30d158}
+.w.hiding .dv{animation:mhw .28s ease-in-out infinite alternate}@keyframes mhw{from{transform:rotate(-.6deg)}to{transform:rotate(.6deg)}}
+.donebar{display:none;position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:6;gap:10px;padding:8px;border-radius:26px;align-items:center;font-size:14px}
+.w.hiding .donebar{display:flex}.donebar span{padding:0 8px;color:rgba(255,255,255,.8)}
+.btn{height:36px;padding:0 18px;border-radius:18px;border:0;font:600 15px ${FONT};cursor:pointer;background:rgba(255,255,255,.9);color:#111}.btn.p{background:#0a84ff;color:#fff}
+.empty{color:rgba(255,255,255,.6);font-size:14px;padding:6px 2px}
+:host([narrow]) h1{font-size:34px}:host([narrow]) .cam{width:86%;height:200px}:host([narrow]) .cam.s{width:60%}:host([narrow]) .devs{grid-template-columns:1fr 1fr}:host([narrow]) .scenes{grid-template-columns:1fr 1fr}`;
+const MH_POP_CSS = `.mhov{position:fixed;inset:0;z-index:7;font-family:${FONT};color:#fff;-webkit-user-select:none;user-select:none}
+.mhmenu{position:absolute;min-width:260px;border-radius:26px;padding:8px 0;background:linear-gradient(150deg,rgba(120,100,190,.55),rgba(60,50,110,.55));border:1px solid rgba(255,255,255,.22);box-shadow:inset 0 1px 0 rgba(255,255,255,.25),0 20px 50px rgba(0,0,0,.45);-webkit-backdrop-filter:blur(30px) saturate(170%);backdrop-filter:blur(30px) saturate(170%);transform-origin:top right;animation:mhin .16s ease-out}
+@keyframes mhin{from{opacity:0;transform:scale(.92)}to{opacity:1;transform:none}}
+.mhmenu button{display:flex;align-items:center;gap:16px;width:100%;padding:12px 22px;background:none;border:0;color:#fff;font:400 18px ${FONT};text-align:left;cursor:pointer}
+.mhmenu button:active{background:rgba(255,255,255,.12)}.mhmenu ha-icon{--mdc-icon-size:24px}.mhmenu hr{border:0;border-top:1px solid rgba(255,255,255,.18);margin:6px 18px}
+.mhsheet{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(500px,calc(100vw - 32px));max-height:calc(100vh - 60px);display:flex;flex-direction:column;border-radius:30px;background:rgba(28,28,30,.96);box-shadow:0 30px 80px rgba(0,0,0,.6);animation:mhin .18s ease-out}
+.mhsheet .hd{display:flex;justify-content:space-between;align-items:center;padding:14px 14px 10px}
+.mhsheet .hd b{font-size:17px;font-weight:600}
+.cb{width:40px;height:40px;border-radius:50%;border:0;display:grid;place-items:center;background:rgba(255,255,255,.18);color:#fff;cursor:pointer;padding:0}.cb ha-icon{--mdc-icon-size:24px}.cb.ok{background:#0a84ff}
+.mhlist{margin:0 16px 16px;border-radius:18px;background:#2c2c2e;overflow-y:auto;position:relative;touch-action:pan-y}
+.row{display:flex;align-items:center;justify-content:space-between;height:46px;padding:0 4px 0 16px;font-size:16px;border-bottom:1px solid rgba(255,255,255,.1);background:#2c2c2e;position:relative}
+.row:last-child{border-bottom:0}.row .h{width:52px;height:46px;display:grid;place-items:center;color:rgba(255,255,255,.55);cursor:grab;touch-action:none}.row .h ha-icon{--mdc-icon-size:22px}
+.row.drag{z-index:2;background:#3a3a3c;box-shadow:0 10px 26px rgba(0,0,0,.5);border-radius:12px;transition:none}.row.mv{transition:transform .18s ease}
+.row small{color:#ff9f8a;font-size:13px}`;
+class HVMyHomeCard extends HTMLElement {
+  constructor() { super(); this.attachShadow({ mode: 'open' }); this._cams = new Map(); }
+  static get defaults() { return { title: 'My Home', back_label: 'Home Screen', back_path: '', show_back: true, show_clock: true, show_pills: true, show_cameras: true, show_scenes: true, show_unavailable: true, group_members: 'hide', tap_toggles: true, show_menu: true, cameras: [], scenes: [], room_order: [], hidden_areas: [], hidden_entities: [], section_order: [] }; }
+  static getStubConfig(hass) { const sc = Object.keys((hass && hass.states) || {}).filter(k => k.startsWith('scene.')).slice(0, 6); return { scenes: sc.map(entity => ({ entity })) }; }
+  static getConfigElement() { const e = document.createElement('homeview-card-editor'); e.cardClass = HVMyHomeCard; return e; }
+  getCardSize() { return 12; }
+  getGridOptions() { return { columns: 'full', rows: 'auto' }; }
+  setConfig(c) { if (!c) throw new Error('Invalid configuration'); this._raw = c; this._hvRaw = c; this._config = Object.assign({}, HVMyHomeCard.defaults, c); this._sig = null; this._render(); }
+  set hass(h) { this._hass = h; this._render(); for (const el of this._cams.values()) el.hass = h; }
+  get hass() { return this._hass; }
+  connectedCallback() { if (!this._iv) this._iv = setInterval(() => { const t = this.shadowRoot.querySelector('.tm'); if (t) t.textContent = this._time(); }, 15000);
+    if (window.ResizeObserver && !this._ro) { this._ro = new ResizeObserver(() => this.toggleAttribute('narrow', this.clientWidth < 620)); this._ro.observe(this); } this._render(); }
+  disconnectedCallback() { clearInterval(this._iv); this._iv = null; this._closePop(); }
+  _time() { const h = this._hass, d = new Date(); try { return d.toLocaleTimeString((h && h.locale && h.locale.language) || undefined, { hour: 'numeric', minute: '2-digit' }).replace(/\s?[AP]M$/i, ''); } catch (e) { return d.getHours() % 12 + ':' + String(d.getMinutes()).padStart(2, '0'); } }
+  _key() { return `hvMyHome:${ssDash() || 'lovelace'}`; } // per dashboard (the page may also show as a sheet over the Home Screen)
+  _local() { return mhLs.get(this._key()) || {}; }
+  _order() { const l = this._local(); return (l.section_order && l.section_order.length ? l.section_order : this._config.section_order) || []; }
+  _hiddenEnt() { const l = this._local(); return new Set(Array.isArray(l.hidden_entities) ? l.hidden_entities : this._config.hidden_entities || []); }
+  _backPath() { const c = this._config; if (c.back_path) return c.back_path.startsWith('/') ? c.back_path : `/${ssDash() || 'lovelace'}/${c.back_path}`;
+    const p = hvSwipe.pairs()[0]; return p ? p.home : `/${ssDash() || 'lovelace'}/main`; }
+  // ---- data
+  _model() { const h = this._hass, c = this._config, S = h.states, E = h.entities || {}, D = h.devices || {}, A = h.areas || {};
+    const areaOf = id => { const e = E[id]; if (!e) return null; return e.area_id || (e.device_id && D[e.device_id] && D[e.device_id].area_id) || null; };
+    const hidA = new Set(c.hidden_areas || []), hidE = this._hiddenEnt(), rooms = new Map(), cams = [];
+    const ok = (id, s) => { const e = E[id]; if (!e || e.hidden || e.entity_category || e.platform === 'browser_mod' || /browser_mod/.test(id)) return false; return true; };
+    for (const id of Object.keys(S)) { const d = id.split('.')[0], s = S[id]; if (d !== 'camera' && !MH_DOMAINS.includes(d)) continue; if (!ok(id, s)) continue;
+      const a = areaOf(id); if (!a || !A[a] || hidA.has(a)) continue;
+      if (d === 'camera') { if (!MH_UNAV.includes(s.state)) cams.push(id); continue; }
+      if (MH_UNAV.includes(s.state) && c.show_unavailable === false) continue;
+      if (!rooms.has(a)) rooms.set(a, []); rooms.get(a).push(id); }
+    // group members: a light / switch group shown in a room hides its members everywhere
+    const grouped = new Set(); if (c.group_members !== 'show') for (const ids of rooms.values()) for (const id of ids) { const m = S[id].attributes.entity_id; if (Array.isArray(m) && ['light', 'switch', 'fan', 'group'].includes(id.split('.')[0])) m.forEach(x => { if (x !== id) grouped.add(x); }); }
+    const nm = (id, a) => { let n = S[id].attributes.friendly_name || (E[id] && E[id].name) || id; const an = A[a] && A[a].name, l = n.toLowerCase(), al = an ? an.toLowerCase() : '';
+      if (an && l.endsWith(' ' + al) && n.length > an.length + 1) n = n.slice(0, n.length - an.length - 1); // "Garage Door Garage" -> "Garage Door"
+      else if (an && l.startsWith(al + ' ') && n.length > an.length + 1) n = n.slice(an.length + 1); return n.trim(); };
+    const rank = s => (MH_UNAV.includes(s.state) ? 2 : ['on', 'playing', 'paused', 'idle', 'open', 'heat', 'cool'].includes(s.state) ? 0 : 1);
+    const out = []; for (const [a, ids] of rooms) { const seen = new Map();
+      for (const id of ids) { if (grouped.has(id)) continue; const d = id.split('.')[0], key = d + '|' + (S[id].attributes.friendly_name || id).toLowerCase(), p = seen.get(key);
+        if (!p || rank(S[id]) < rank(S[p])) seen.set(key, id); }
+      const items = [...seen.values()].map(id => ({ id, d: id.split('.')[0], s: S[id], name: nm(id, a) }));
+      items.sort((x, y) => (MH_UNAV.includes(x.s.state) - MH_UNAV.includes(y.s.state)) || ((MH_DORDER[x.d] ?? 9) - (MH_DORDER[y.d] ?? 9)) || x.name.localeCompare(y.name));
+      if (items.length) out.push({ key: 'area:' + a, area: a, name: A[a].name, items }); }
+    const ro = c.room_order || []; out.sort((x, y) => { const i = ro.indexOf(x.area), j = ro.indexOf(y.area); return (i < 0 ? 999 : i) - (j < 0 ? 999 : j) || x.name.localeCompare(y.name); });
+    let camIds = (c.cameras && c.cameras.length ? c.cameras.map(x => typeof x === 'string' ? x : x.entity) : cams).filter(id => S[id] && !MH_UNAV.includes(S[id].state));
+    const pref = ['front', 'door', 'porch']; camIds.sort((x, y) => (pref.some(p => y.includes(p)) - pref.some(p => x.includes(p))));
+    let scenes = (c.scenes || []).map(x => typeof x === 'string' ? { entity: x } : x).filter(x => x && x.entity && S[x.entity]);
+    const secs = [];
+    if (c.show_cameras !== false && camIds.length) secs.push({ key: 'cameras', name: 'Cameras', cams: camIds });
+    if (c.show_scenes !== false && scenes.length) secs.push({ key: 'scenes', name: 'Scenes', scenes });
+    secs.push(...out);
+    const ord = this._order(); if (ord.length) { const pos = k => { const i = ord.indexOf(k); return i < 0 ? 1000 + secs.findIndex(s => s.key === k) : i; }; secs.sort((x, y) => pos(x.key) - pos(y.key)); }
+    // summary (all shown rooms, hidden tiles included)
+    const all = out.flatMap(r => r.items), U = (h.config && h.config.unit_system && h.config.unit_system.temperature) || '°';
+    const temps = all.filter(i => i.d === 'climate' && i.s.attributes.current_temperature != null).map(i => Number(i.s.attributes.current_temperature));
+    const lightsOn = Object.keys(S).filter(id => id.startsWith('light.') && S[id].state === 'on' && !Array.isArray(S[id].attributes.entity_id) && ok(id) && areaOf(id) && !hidA.has(areaOf(id))).length
+      || all.filter(i => i.d === 'light' && i.s.state === 'on').length;
+    const gar = all.filter(i => i.d === 'cover' && (['garage', 'gate'].includes(i.s.attributes.device_class) || /garage/i.test(i.name)));
+    const media = all.filter(i => i.d === 'media_player' && i.s.state === 'playing');
+    const issues = all.filter(i => MH_UNAV.includes(i.s.state));
+    return { secs, temps, lightsOn, gar, media, issues, hidE, U }; }
+  _state(i) { const h = this._hass, s = i.s, a = s.attributes, f = (st) => h.formatEntityState ? h.formatEntityState(s, st) : st;
+    if (MH_UNAV.includes(s.state)) return { t: 'No Response', on: false };
+    if (i.d === 'light') return s.state === 'on' ? { t: a.brightness != null ? Math.round(a.brightness / 2.55) + '%' : 'On', on: true } : { t: 'Off', on: false };
+    if (i.d === 'climate') { const tg = a.temperature != null ? a.temperature : a.target_temp_low; return { t: s.state === 'off' ? 'Off' : `${f(s.state)}${tg != null ? ' to ' + tg + '°' : ''}`, on: a.hvac_action === 'heating' || a.hvac_action === 'cooling', tp: a.current_temperature }; }
+    if (i.d === 'media_player') return { t: s.state === 'playing' ? (a.media_title || 'Playing') : f(s.state), on: s.state === 'playing' };
+    if (i.d === 'cover') return { t: f(s.state), on: s.state !== 'closed' };
+    if (i.d === 'lock') return { t: f(s.state), on: s.state !== 'locked' };
+    return { t: f(s.state), on: ['on', 'cleaning', 'mowing'].includes(s.state) }; }
+  // ---- render
+  _render() { const h = this._hass, c = this._config; if (!h || !c || !this.isConnected) return; const M = this._model();
+    const sig = JSON.stringify([M.secs.map(s => [s.key, s.cams, s.scenes && s.scenes.map(x => [x.entity, x.name, x.icon]), s.items && s.items.map(i => [i.id, i.name, i.s.state, i.s.attributes.brightness, i.s.attributes.current_temperature, i.s.attributes.temperature, i.s.attributes.hvac_action, i.s.attributes.media_title])]), M.temps, M.lightsOn, M.gar.map(g => g.s.state), M.media.length, [...M.hidE], this._hiding, c.title, c.show_back, c.show_pills, c.show_menu]);
+    if (sig === this._sig) return; this._sig = sig; this._M = M;
+    const R = this.shadowRoot; let w = R.querySelector('.w');
+    if (!w) { R.innerHTML = `<style>${MH_CSS}</style><div class="w"></div>`; w = R.querySelector('.w');
+      w.addEventListener('click', e => this._click(e)); this._holdBind(w); }
+    for (const el of this._cams.values()) el.remove(); // keep the camera elements, re-attach below
+    const tmin = M.temps.length ? Math.floor(Math.min(...M.temps)) : null, tmax = M.temps.length ? Math.round(Math.max(...M.temps)) : null;
+    const gOpen = M.gar.filter(g => g.s.state !== 'closed').length;
+    const pills = c.show_pills === false ? '' : `<div class="pills">${tmin != null ? `<div class="pill g" style="color:#64d2ff"><ha-icon icon="mdi:fan"></ha-icon>${tmin === tmax ? tmin : tmin + '–' + tmax}°</div>` : ''}
+      <div class="pill g" style="color:#ffd60a"><ha-icon icon="mdi:lightbulb${M.lightsOn ? '-on' : ''}"></ha-icon>${M.lightsOn}</div>
+      ${M.gar.length ? `<div class="pill g" style="color:${gOpen ? '#ff9f0a' : '#66d4cf'}"><ha-icon icon="mdi:garage${gOpen ? '-open' : ''}"></ha-icon>${gOpen ? gOpen + ' open' : M.gar.length}</div>` : ''}
+      <div class="pill g"><ha-icon icon="mdi:speaker${M.media.length ? '-play' : ''}"></ha-icon>${M.media.length ? M.media.length : ''}</div></div>`;
+    const secHtml = s => { if (s.cams) return `<div class="sec" data-sec="cameras"><h2>Cameras<ha-icon icon="mdi:chevron-right"></ha-icon></h2><div class="cams">${s.cams.map((id, k) => `<div class="cam${k ? ' s' : ''}" data-cam="${esc(id)}"></div>`).join('')}</div></div>`;
+      if (s.scenes) return `<div class="sec" data-sec="scenes"><h2>Scenes<ha-icon icon="mdi:chevron-right"></ha-icon></h2><div class="scenes">${s.scenes.map(x => { const st = h.states[x.entity];
+        return `<div class="sc g" data-scene="${esc(x.entity)}"><span class="i"><ha-icon icon="${esc(x.icon || st.attributes.icon || 'mdi:palette')}"></ha-icon></span><span>${esc(x.name || st.attributes.friendly_name || x.entity)}</span></div>`; }).join('')}</div></div>`;
+      const vis = s.items.filter(i => this._hiding || !M.hidE.has(i.id)); if (!vis.length) return '';
+      const on = vis.filter(i => this._state(i).on).length;
+      return `<div class="sec" data-sec="${esc(s.key)}"><h2>${esc(s.name)}<ha-icon icon="mdi:chevron-right"></ha-icon>${on ? `<small>${on} on</small>` : ''}</h2><div class="devs">${vis.map(i => { const st = this._state(i), un = MH_UNAV.includes(i.s.state);
+        return `<div class="dv g ${i.d}${st.on ? ' on' : ''}${un ? ' un' : ''}${i.d === 'climate' && !un ? ' wide' : ''}${M.hidE.has(i.id) ? ' hid' : ''}" data-e="${esc(i.id)}"><span class="eye"><ha-icon icon="mdi:${M.hidE.has(i.id) ? 'plus' : 'minus'}"></ha-icon></span><span class="i"><ha-icon icon="${esc(mhIcon(i.s, i.name))}"></ha-icon></span><div class="t"><div class="n">${esc(i.name)}</div><div class="s">${esc(st.t)}</div></div>${st.tp != null && !un ? `<span class="tp">${esc(st.tp)}°</span>` : ''}</div>`; }).join('')}</div></div>`; };
+    w.innerHTML = `${c.show_back !== false ? `<button class="back" data-a="back"><ha-icon icon="mdi:chevron-left"></ha-icon>${esc(c.back_label || 'Home Screen')}</button>` : ''}
+      <div class="top"><h1>${esc(c.title || 'My Home')}</h1><div class="tr">${c.show_clock !== false ? `<span class="tm">${this._time()}</span>` : ''}${c.show_menu !== false ? `<button class="more" data-a="menu" aria-label="More"><ha-icon icon="mdi:dots-horizontal"></ha-icon></button>` : ''}</div></div>
+      ${pills}${M.secs.map(secHtml).join('')}
+      <div class="donebar g"><span>Tap tiles to hide or show them</span><button class="btn" data-a="hcancel">Cancel</button><button class="btn p" data-a="hdone">Done</button></div>`;
+    w.classList.toggle('hiding', !!this._hiding);
+    const used = new Set(); w.querySelectorAll('.cam').forEach(box => { const id = box.dataset.cam; used.add(id); let el = this._cams.get(id);
+      if (!el) { el = document.createElement('homeview-camera-card'); try { el.setConfig({ type: 'custom:homeview-camera-card', entity: id }); } catch (e) {} this._cams.set(id, el); }
+      el.hass = h; box.appendChild(el); });
+    for (const [id, el] of this._cams) if (!used.has(id)) this._cams.delete(id); }
+  // ---- interaction
+  _holdBind(w) { let t = null, held = false;
+    w.addEventListener('pointerdown', e => { const d = e.target.closest && e.target.closest('.dv'); held = false; clearTimeout(t); if (!d || this._hiding) return;
+      t = setTimeout(() => { held = true; fire(this, 'hass-more-info', { entityId: d.dataset.e }); }, 520); });
+    const stop = () => clearTimeout(t); w.addEventListener('pointerup', stop); w.addEventListener('pointercancel', stop); w.addEventListener('pointermove', e => { if (Math.abs(e.movementX) + Math.abs(e.movementY) > 6) stop(); });
+    w.addEventListener('click', e => { if (held) { e.stopImmediatePropagation(); held = false; } }, true); w.addEventListener('contextmenu', e => { if (e.target.closest && e.target.closest('.dv')) e.preventDefault(); }); }
+  _click(e) { const h = this._hass, c = this._config, t = e.target, a = t.closest && t.closest('[data-a]');
+    if (a) { const k = a.dataset.a;
+      if (k === 'back') { const L = hvSheetLayer(this), x = L && L.querySelector('.x'); if (x) x.click(); else hvSwipe.go(this._backPath(), 1); return; }
+      if (k === 'menu') { this._menu(a); return; }
+      if (k === 'hdone') { this._saveHidden(this._hidDraft); this._hiding = false; this._hidDraft = null; this._sig = null; this._render(); return; }
+      if (k === 'hcancel') { this._hiding = false; this._hidDraft = null; this._localSet({ hidden_entities: this._hidPrev }); this._sig = null; this._render(); return; } }
+    const d = t.closest && t.closest('.dv');
+    if (d) { const id = d.dataset.e, dom = id.split('.')[0];
+      if (this._hiding) { const s = new Set(this._hidDraft || []); s.has(id) ? s.delete(id) : s.add(id); this._hidDraft = [...s]; this._localSet({ hidden_entities: this._hidDraft }); this._sig = null; this._render(); return; }
+      if (c.tap_toggles !== false && MH_TOGGLE.includes(dom) && !MH_UNAV.includes((h.states[id] || {}).state)) h.callService(dom, 'toggle', { entity_id: id });
+      else fire(this, 'hass-more-info', { entityId: id }); return; }
+    const sc = t.closest && t.closest('.sc'); if (sc) { const id = sc.dataset.scene, dom = id.split('.')[0];
+      h.callService(['scene', 'script'].includes(dom) ? dom : 'homeassistant', 'turn_on', { entity_id: id }); sc.classList.add('on'); setTimeout(() => sc.classList.remove('on'), 900); } }
+  _localSet(patch) { const k = this._key(), cur = mhLs.get(k) || {}; Object.assign(cur, patch); for (const x of Object.keys(cur)) if (cur[x] == null) delete cur[x]; mhLs.set(k, Object.keys(cur).length ? cur : null); }
+  // admins: write to the card config as well (every device), then drop the local copy; others keep it in this browser
+  async _persist(patch) { this._localSet(patch); const root = hvFindRoot(this), lv = root && root.lovelace, h = this._hass;
+    if (!(h && h.user && h.user.is_admin && lv && lv.config && lv.mode !== 'yaml' && typeof lv.saveConfig === 'function')) { hvToast('Saved on this device'); return; }
+    const path = hvCardPath(lv.config, o => o && o.type === 'custom:homeview-myhome-card' && JSON.stringify(o) === JSON.stringify(this._raw), root._curView);
+    if (!path) { hvToast('Saved on this device'); return; }
+    const cfg = JSON.parse(JSON.stringify(lv.config)), vw = cfg.views[path[0]], arr = path.length === 3 ? vw.sections[path[1]].cards : vw.cards, card = arr[path[path.length - 1]];
+    for (const [k, v] of Object.entries(patch)) { if (v == null || (Array.isArray(v) && !v.length)) delete card[k]; else card[k] = v; }
+    try { await lv.saveConfig(cfg); this._raw = Object.assign({}, card); delete this._raw.view_layout; this._raw = card; const nk = Object.keys(patch).reduce((o, k) => (o[k] = null, o), {}); this._localSet(nk); hvToast('Saved'); } catch (e) { hvToast('Saved on this device (' + (e && e.message || e) + ')'); } }
+  _saveHidden(list) { this._persist({ hidden_entities: list || [] }); }
+  _closePop() { if (this._pop) { this._pop.remove(); this._pop = null; } }
+  _overlay() { this._closePop(); const ov = document.createElement('div'); ov.className = 'mhov'; const sr = ov.attachShadow ? null : null;
+    const host = document.createElement('div'); host.style.cssText = 'position:fixed;inset:0;z-index:50'; const s = host.attachShadow({ mode: 'open' }); s.innerHTML = `<style>${MH_POP_CSS}</style>`; s.appendChild(ov);
+    (hvSheetLayer(this) || document.body).appendChild(host); this._pop = host; return { ov, s }; }
+  _menu(btn) { const M = this._M || this._model(), { ov } = this._overlay(), r = btn.getBoundingClientRect(), n = M.issues.length, admin = !!(this._hass.user && this._hass.user.is_admin);
+    ov.innerHTML = `<div class="mhmenu" style="top:${Math.round(r.bottom + 10)}px;right:${Math.round(innerWidth - r.right)}px">
+      <button data-m="issues"><ha-icon icon="mdi:alert-circle-outline"></ha-icon>${n} Issue${n === 1 ? '' : 's'}</button><hr>
+      ${admin ? '<button data-m="settings"><ha-icon icon="mdi:cog-outline"></ha-icon>Home Settings</button>' : ''}
+      <button data-m="edit"><ha-icon icon="mdi:view-grid-outline"></ha-icon>Edit Home View</button>
+      <button data-m="reorder"><ha-icon icon="mdi:order-bool-ascending-variant"></ha-icon>Reorder Sections</button></div>`;
+    ov.addEventListener('click', e => { const b = e.target.closest('[data-m]'); if (!b) { this._closePop(); return; } const m = b.dataset.m; this._closePop();
+      if (m === 'issues') this._issues(M);
+      if (m === 'settings') hvPopEdit(this, { card: this });
+      if (m === 'edit') { this._hiding = true; this._hidPrev = this._local().hidden_entities; this._hidDraft = [...this._hiddenEnt()]; this._sig = null; this._render(); }
+      if (m === 'reorder') this._reorder(); }); }
+  _issues(M) { const { ov } = this._overlay();
+    ov.innerHTML = `<div class="mhsheet"><div class="hd"><button class="cb" data-x><ha-icon icon="mdi:close"></ha-icon></button><b>${M.issues.length} Issue${M.issues.length === 1 ? '' : 's'}</b><span style="width:40px"></span></div>
+      <div class="mhlist">${M.issues.length ? M.issues.map(i => `<div class="row" data-e="${esc(i.id)}" style="cursor:pointer"><span>${esc(i.name)}<br><small>No Response · ${esc((this._hass.areas[(this._hass.entities[i.id] || {}).area_id] || {}).name || this._roomOf(M, i.id))}</small></span><ha-icon icon="mdi:chevron-right" style="color:rgba(255,255,255,.4);padding-right:12px"></ha-icon></div>`).join('') : '<div class="row">No issues</div>'}</div></div>`;
+    ov.querySelectorAll('.row[data-e]').forEach(r => r.style.height = '58px');
+    ov.addEventListener('click', e => { const r = e.target.closest('.row[data-e]'); if (r) { this._closePop(); fire(this, 'hass-more-info', { entityId: r.dataset.e }); return; } if (e.target.closest('[data-x]') || e.target === ov) this._closePop(); }); }
+  _roomOf(M, id) { const s = M.secs.find(x => x.items && x.items.some(i => i.id === id)); return s ? s.name : ''; }
+  _reorder() { const M = this._M || this._model(), { ov } = this._overlay(); const keys = M.secs.map(s => s.key), names = Object.fromEntries(M.secs.map(s => [s.key, s.name]));
+    ov.innerHTML = `<div class="mhsheet"><div class="hd"><button class="cb" data-x aria-label="Cancel"><ha-icon icon="mdi:close"></ha-icon></button><b>Reorder Sections</b><button class="cb ok" data-ok aria-label="Save"><ha-icon icon="mdi:check"></ha-icon></button></div>
+      <div class="mhlist">${keys.map(k => `<div class="row" data-k="${esc(k)}"><span>${esc(names[k])}</span><span class="h"><ha-icon icon="mdi:drag-horizontal-variant"></ha-icon></span></div>`).join('')}</div></div>`;
+    const list = ov.querySelector('.mhlist'); let dr = null;
+    const rows = () => [...list.querySelectorAll('.row')];
+    const down = e => { const hd = e.target.closest('.h'); if (!hd) return; e.preventDefault(); const row = hd.closest('.row'); const rs = rows(), H = row.offsetHeight;
+      dr = { row, y0: e.clientY, i: rs.indexOf(row), to: rs.indexOf(row), H, n: rs.length, id: e.pointerId }; row.classList.add('drag'); rs.forEach(r => { if (r !== row) r.classList.add('mv'); });
+      try { hd.setPointerCapture(e.pointerId); } catch (x) {} };
+    const move = e => { if (!dr || e.pointerId !== dr.id) return; e.preventDefault(); const dy = e.clientY - dr.y0; dr.row.style.transform = `translateY(${dy}px)`;
+      const to = Math.max(0, Math.min(dr.n - 1, dr.i + Math.round(dy / dr.H))); dr.to = to;
+      rows().forEach((r, k) => { if (r === dr.row) return; let sh = 0; if (dr.i < to && k > dr.i && k <= to) sh = -dr.H; if (dr.i > to && k >= to && k < dr.i) sh = dr.H; r.style.transform = sh ? `translateY(${sh}px)` : ''; });
+      const lr = list.getBoundingClientRect(); if (e.clientY < lr.top + 30) list.scrollTop -= 8; else if (e.clientY > lr.bottom - 30) list.scrollTop += 8; };
+    const up = e => { if (!dr || e.pointerId !== dr.id) return; const rs = rows(); rs.forEach(r => { r.style.transform = ''; r.classList.remove('mv', 'drag'); });
+      if (dr.to !== dr.i) { const ref = rs.filter(r => r !== dr.row)[dr.to]; if (ref) list.insertBefore(dr.row, ref); else list.appendChild(dr.row); } dr = null; };
+    list.addEventListener('pointerdown', down); list.addEventListener('pointermove', move); list.addEventListener('pointerup', up); list.addEventListener('pointercancel', up);
+    ov.addEventListener('click', e => { if (e.target.closest('[data-x]')) { this._closePop(); return; }
+      if (e.target.closest('[data-ok]')) { const order = rows().map(r => r.dataset.k); this._closePop(); this._persist({ section_order: order }); this._sig = null; this._render(); } }); }
+}
+HVMyHomeCard.layoutSection = false; HVMyHomeCard.sizePresets = false;
+HVMyHomeCard.schema = [
+  { type: 'grid', name: '', schema: [{ name: 'title', selector: { text: {} } }, { name: 'back_label', selector: { text: {} } }] },
+  { name: 'back_path', selector: { navigation: {} } },
+  { name: 'scenes', selector: { object: { multiple: true, label_field: 'name', description_field: 'entity', fields: {
+    entity: { label: 'Scene or script', required: true, selector: { entity: { domain: ['scene', 'script'] } } },
+    name: { label: 'Name (optional)', selector: { text: {} } }, icon: { label: 'Icon (optional)', selector: { icon: {} } } } } } },
+  { name: 'cameras', selector: { entity: { domain: 'camera', multiple: true } } },
+  { name: 'room_order', selector: { area: { multiple: true } } },
+  { name: 'hidden_areas', selector: { area: { multiple: true } } },
+  { name: 'hidden_entities', selector: { entity: { multiple: true } } },
+  { type: 'expandable', name: '', flatten: true, title: 'Show', icon: 'mdi:eye-outline', schema: [
+    { type: 'grid', name: '', schema: [{ name: 'show_pills', selector: { boolean: {} } }, { name: 'show_cameras', selector: { boolean: {} } }, { name: 'show_scenes', selector: { boolean: {} } },
+      { name: 'show_clock', selector: { boolean: {} } }, { name: 'show_back', selector: { boolean: {} } }, { name: 'show_menu', selector: { boolean: {} } },
+      { name: 'show_unavailable', selector: { boolean: {} } }, { name: 'tap_toggles', selector: { boolean: {} } }] },
+    { name: 'group_members', selector: { select: { mode: 'dropdown', options: [{ value: 'hide', label: 'Hide lights that are in a group shown in the room' }, { value: 'show', label: 'Show every light' }] } } }] }];
+HVMyHomeCard.editorDefaults = true;
+Object.assign(LABELS, { back_label: 'Back link text', back_path: 'Back link goes to (empty = the Home Screen)', scenes: 'Scenes (in this order)', cameras: 'Cameras (empty = every camera with a room)',
+  room_order: 'Room order (rooms not listed follow, A–Z)', hidden_areas: 'Hide these rooms', hidden_entities: 'Hide these devices', show_pills: 'Summary pills', show_cameras: 'Cameras', show_scenes: 'Scenes',
+  show_clock: 'Clock', show_back: 'Back link', show_menu: '⋯ menu', show_unavailable: 'Devices with No Response', tap_toggles: 'Tap toggles lights / switches / fans', group_members: 'Light groups' });
+Object.assign(HELPERS, { hidden_entities: 'Also set from the page: ⋯ › Edit Home View.', room_order: 'Reorder Sections (⋯ menu) overrides this order for the whole page.' });
+if (!customElements.get('homeview-myhome-card')) customElements.define('homeview-myhome-card', HVMyHomeCard);
+if (!window.customCards.some(c => c.type === 'homeview-myhome-card')) window.customCards.push({ type: 'homeview-myhome-card', name: 'NotHomeView My Home', description: 'Apple Home style "My Home" page: summary pills, cameras, scenes and every device grouped by room.', preview: false });
+
+/* Home Screen swipe page: pairs come from the dashboard config (any Home hub card with swipe_page), so it also works when the
+   page was opened directly. Touch only (iPad / phones); the edge hint can be tapped with a mouse. */
+const hvSwipe = (() => {
+  let cache = { cfg: null, pairs: [] }, st = null, hint = null;
+  const norm = p => (p || '').replace(/[?#].*$/, '').replace(/\/$/, '');
+  const root = () => { const r = HVKM.root && HVKM.root.isConnected ? HVKM.root : hvFindRootDeep(); HVKM.root = r; return r; };
+  const pairs = () => { const r = root(), lv = r && r.lovelace, cfg = lv && lv.config; if (!cfg) return []; if (cache.cfg === cfg) return cache.pairs;
+    const dash = (lv.urlPath) || ssDash() || 'lovelace', out = [];
+    (cfg.views || []).forEach((v, i) => { const walk = (o, d) => { if (!o || typeof o !== 'object' || d > 10) return; if (Array.isArray(o)) { o.forEach(x => walk(x, d + 1)); return; }
+        if (o.type === 'custom:homeview-hub-card' && o.swipe_page) { const sp = String(o.swipe_page); out.push({ home: `/${dash}/${v.path != null && v.path !== '' ? v.path : i}`, page: norm(sp.startsWith('/') ? sp : `/${dash}/${sp}`) }); }
+        for (const k of ['sections', 'cards', 'card']) if (o[k]) walk(o[k], d + 1); }; walk(v, 0); });
+    cache = { cfg, pairs: out }; return out; };
+  const where = () => { const p = norm(location.pathname); for (const x of pairs()) { if (p === x.home) return { x, at: 'home' }; if (p === x.page) return { x, at: 'page' }; } return null; };
+  const busy = () => { const r = root(), lv = r && r.lovelace; return !!(lv && lv.editMode) || hvEdOpen() || hvFhBusy() || hvDialogOpen() || document.body.querySelector('.hvmh-block'); };
+  const app = () => document.querySelector('home-assistant');
+  // slide: dir -1 = new page comes from the right (forward), +1 = from the left (back)
+  const go = (path, dir) => { const a = app(); if (!a) { hvNavigate(path); return; }
+    a.style.transition = 'transform .16s ease-in, opacity .16s ease-in'; a.style.transform = `translateX(${dir < 0 ? -18 : 18}%)`; a.style.opacity = '0.2';
+    setTimeout(() => { a.style.transition = 'none'; a.style.transform = `translateX(${dir < 0 ? 40 : -40}%)`; hvNavigate(path);
+      requestAnimationFrame(() => requestAnimationFrame(() => { a.style.transition = 'transform .3s cubic-bezier(.2,.8,.2,1), opacity .3s ease-out'; a.style.transform = ''; a.style.opacity = '';
+        setTimeout(() => { a.style.transition = ''; a.style.transform = ''; a.style.opacity = ''; paint(); }, 340); })); }, 160); };
+  const scrollerBlocks = (e, toLeft) => { for (const n of e.composedPath ? e.composedPath() : []) { if (!(n instanceof Element)) continue; if (n.scrollWidth > n.clientWidth + 2) { const cs = getComputedStyle(n);
+        if (/(auto|scroll)/.test(cs.overflowX)) { if (toLeft ? n.scrollLeft + n.clientWidth < n.scrollWidth - 2 : n.scrollLeft > 2) return true; } } } return false; };
+  const ts = e => { st = null; if (e.touches.length !== 1 || hvInUi(e) || busy()) return; const w = where(); if (!w) return; const t = e.touches[0];
+    if (t.clientX <= 24) return; // HA sidebar edge swipe
+    st = { w, x: t.clientX, y: t.clientY, t: Date.now(), blockL: scrollerBlocks(e, true), blockR: scrollerBlocks(e, false) }; };
+  const te = e => { if (!st) return; const t = e.changedTouches[0], dx = t.clientX - st.x, dy = t.clientY - st.y, s = st; st = null;
+    if (Math.abs(dx) < 70 || Math.abs(dy) > Math.abs(dx) * 0.6 || Date.now() - s.t > 900) return;
+    if (s.w.at === 'home' && dx < 0 && !s.blockL) go(s.w.x.page, -1);
+    else if (s.w.at === 'page' && dx > 0 && !s.blockR) go(s.w.x.home, 1); };
+  addEventListener('touchstart', ts, { capture: true, passive: true }); addEventListener('touchend', te, { capture: true, passive: true }); addEventListener('touchcancel', () => { st = null; }, true);
+  // page dots (Home Screen) + edge hint (both pages)
+  const paint = () => { const w = where(), show = w && !busy();
+    if (!show) { if (hint) hint.style.display = 'none'; return; }
+    if (!hint) { hint = document.createElement('div'); hint.id = 'hv-swipe-hint'; const s = hint.attachShadow({ mode: 'open' });
+      s.innerHTML = `<style>:host{position:fixed;inset:auto;z-index:2;pointer-events:none}
+.d{position:fixed;left:50%;bottom:calc(10px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);display:flex;gap:7px;pointer-events:none}
+.d i{width:7px;height:7px;border-radius:4px;background:rgba(255,255,255,.38)}.d i.a{width:18px;background:rgba(255,255,255,.95)}
+.e{position:fixed;top:50%;margin-top:-28px;width:22px;height:56px;border-radius:11px;display:grid;place-items:center;color:rgba(255,255,255,.6);background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);pointer-events:auto;cursor:pointer;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+.e svg{width:20px;height:20px;fill:currentColor}.r{right:6px}.l{left:6px}</style><div class="d"><i class="a"></i><i></i></div><div class="e"><svg viewBox="0 0 24 24"><path d=""/></svg></div>`;
+      s.querySelector('.e').addEventListener('click', () => { const w2 = where(); if (w2) go(w2.at === 'home' ? w2.x.page : w2.x.home, w2.at === 'home' ? -1 : 1); });
+      document.body.appendChild(hint); }
+    const s = hint.shadowRoot; hint.style.display = ''; s.querySelector('.d').style.display = w.at === 'home' ? '' : 'none';
+    const e = s.querySelector('.e'); e.className = 'e ' + (w.at === 'home' ? 'r' : 'l'); e.setAttribute('aria-label', w.at === 'home' ? 'Next page' : 'Home Screen');
+    s.querySelector('path').setAttribute('d', w.at === 'home' ? 'M8.59 16.58 13.17 12 8.59 7.41 10 6l6 6-6 6z' : 'M15.41 16.58 10.83 12l4.58-4.59L14 6l-6 6 6 6z'); };
+  addEventListener('location-changed', () => setTimeout(paint, 60)); addEventListener('popstate', () => setTimeout(paint, 60)); setInterval(paint, 1000);
+  return { pairs, go, paint };
+})();
 /* ---------------- House card (1.31.0) ----------------
    A drawn house with corner labels (weather, garage, lights, climate, lock), for the Home Screen's picture tile. No pictures,
    no plugins: labels only for the entities you set; the windows glow when lights are on after dark; the garage door follows
