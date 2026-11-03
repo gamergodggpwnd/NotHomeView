@@ -1760,6 +1760,19 @@ ha-card.many .ctl{gap:clamp(8px,3.2cqw,34px)} ha-card.many .ctl .c{min-width:56p
 .ctl .talk button{width:80px;height:80px;margin-top:0;background:rgba(120,180,255,.3);border-color:rgba(170,210,255,.8);box-shadow:0 0 0 8px rgba(120,180,255,.13),0 10px 30px rgba(0,0,0,.35)}
 .ctl .talk ha-icon{--mdc-icon-size:36px} .ctl .talk b{font-size:15px} .ctl small{font-size:11px;font-weight:500;opacity:.78;margin-top:-4px;white-space:nowrap}
 .ctl .c.on button{background:rgba(255,255,255,.9);color:#1c1c1e;border-color:rgba(255,255,255,.9)}
+/* 1.6.0: narrow phones (large view under 560 px wide, e.g. 360-430 px portrait): the row is shared evenly (Talk a little wider for its big button),
+   captions wrap to two centred lines instead of running off the edge; iPad / landscape keep the spaced row above */
+@container (max-width:560px){
+ :host([large]) .ctl{gap:0;justify-content:space-evenly;padding:0 6px}
+ :host([large]) .ctl .c,:host([large]) ha-card.many .ctl .c{flex:1 1 0;min-width:0;max-width:120px}
+ :host([large]) .ctl .c.talk{flex-grow:1.4;max-width:140px}
+ :host([large]) .ctl b{line-height:1.2;overflow-wrap:break-word;max-width:100%}
+ :host([large]) .ctl small{white-space:normal;line-height:1.2;overflow-wrap:break-word;max-width:100%;padding:0 2px;box-sizing:border-box}
+ /* a wrapped caption makes the row a line taller: lift the event chips / chip row by that line */
+ :host([large]) ha-card.hasctl .ev{bottom:calc(var(--p) + env(safe-area-inset-bottom,0px) * var(--hv-cam-safe,0) + 146px)}
+ :host([large]) ha-card.hasctl .row{bottom:calc(var(--p) + env(safe-area-inset-bottom,0px) * var(--hv-cam-safe,0) + 146px)}
+ :host([large]) ha-card.hasctl.hasev .row{bottom:calc(var(--p) + env(safe-area-inset-bottom,0px) * var(--hv-cam-safe,0) + 190px)}
+}
 :host([large]) ha-card.hasctl .row{bottom:calc(var(--p) + env(safe-area-inset-bottom,0px) * var(--hv-cam-safe,0) + 132px)}
 :host([large]) ha-card.hasctl.hasev .row{bottom:calc(var(--p) + env(safe-area-inset-bottom,0px) * var(--hv-cam-safe,0) + 176px)}
 .grab{position:absolute;z-index:6;left:50%;top:calc(env(safe-area-inset-top,0px) * var(--hv-cam-safe,0) + 7px);width:38px;height:5px;margin-left:-19px;border-radius:3px;
