@@ -3760,7 +3760,7 @@ const hvEcl = { host: null, sr: null, lay: null, ctl: new WeakMap(), timer: null
   start() { if (this.timer) return; this.timer = setInterval(() => this.tick(), 150); this.kick(); },
   tick() { for (const g of hvGridCards) if (g._arr && !g.isConnected) this.arrange(g, false, true);
     const gs = [...hvGridCards].filter(g => g.isConnected && (g._edit || g._arr) && g._kids && hvEclOK(g)); 
-    if (!gs.length && hvHubArr.hub) { clearInterval(this.timer); this.timer = null; return; }
+    if (!gs.length && (hvHubArr.hub || (typeof hvMhArr !== 'undefined' && hvMhArr.card))) { clearInterval(this.timer); this.timer = null; return; }
     if (!gs.length) { clearInterval(this.timer); this.timer = null; this.closeMenu(); if (this.drag) this.endDrag(false); if (this.host) { this.host.remove(); this.host = null; this.ctl = new WeakMap(); } this.tmBind(false); return; }
     this.ensure(); this.bar(gs.find(g => g._arr && !g._edit)); { const day = gs.some(g => g.hasAttribute('hv-day')); if (this.host.hasAttribute('day') !== day) this.host.toggleAttribute('day', day); } const vw = document.documentElement.clientWidth || innerWidth, vh = innerHeight, live = new Set();
     for (const g of gs) { if (g._edit) hvEditChrome(g); const root = hvFindRoot(g), hd = root && root.shadowRoot && root.shadowRoot.querySelector('.header'), top = hd ? hd.getBoundingClientRect().bottom : 0, gr = g.getBoundingClientRect();
@@ -6543,12 +6543,14 @@ h1{margin:0;font-size:44px;font-weight:700;letter-spacing:-.5px;line-height:1.15
 .cams{display:flex;gap:12px;overflow-x:auto;scrollbar-width:none;scroll-snap-type:x mandatory}.cams::-webkit-scrollbar{display:none}
 .cam{flex:none;width:min(46%,560px);height:236px;border-radius:22px;overflow:hidden;position:relative;scroll-snap-align:start}.cam.s{width:min(27%,330px)}
 .cam>*{display:block;position:absolute;inset:0;width:100%;height:100%}
-.scenes{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+.scenes{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));grid-auto-flow:dense;gap:10px}
 .sc{border-radius:16px;height:58px;display:flex;align-items:center;gap:10px;padding:0 14px;font-size:15px;font-weight:600;cursor:pointer;min-width:0}
 .sc .i{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;background:rgba(255,255,255,.16);flex:none}.sc .i ha-icon{--mdc-icon-size:19px}
 .sc span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.devs{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
-.dv{position:relative;border-radius:16px;height:64px;display:flex;align-items:center;gap:10px;padding:0 12px;min-width:0;cursor:pointer;touch-action:manipulation}
+.devs{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));grid-auto-rows:64px;grid-auto-flow:dense;gap:10px}
+.dv.r2{flex-direction:column;align-items:flex-start;justify-content:space-between;padding:12px 14px}.dv.r2 .t{flex:none}.dv.r2 .tp{position:absolute;right:14px;top:12px;font-size:28px}
+:host([hv-arr]) .dv.hid{opacity:.35}:host([hv-arr]) .dv,:host([hv-arr]) .sc{pointer-events:none}
+.dv{position:relative;border-radius:16px;height:100%;box-sizing:border-box;display:flex;align-items:center;gap:10px;padding:0 12px;min-width:0;cursor:pointer;touch-action:manipulation}
 .dv .i{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:rgba(255,255,255,.14);flex:none}.dv .i ha-icon{--mdc-icon-size:21px}
 .dv.on .i{background:#fff;color:#e8a92c}.dv.on.climate .i{color:#ff9f0a}
 .dv .t{min-width:0;flex:1}.dv .n{font-size:14.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dv .s{font-size:13px;color:rgba(255,255,255,.66);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -6589,12 +6591,15 @@ class HVMyHomeCard extends HTMLElement {
   get hass() { return this._hass; }
   connectedCallback() { if (!this._iv) this._iv = setInterval(() => { const t = this.shadowRoot.querySelector('.tm'); if (t) t.textContent = this._time(); }, 15000);
     if (window.ResizeObserver && !this._ro) { this._ro = new ResizeObserver(() => this.toggleAttribute('narrow', this.clientWidth < 620)); this._ro.observe(this); } this._render(); }
-  disconnectedCallback() { clearInterval(this._iv); this._iv = null; this._closePop(); }
+  disconnectedCallback() { clearInterval(this._iv); this._iv = null; this._closePop(); if (hvMhArr.card === this) setTimeout(() => { if (!this.isConnected && hvMhArr.card === this) hvMhArr.exit(false); }, 300); }
   _time() { const h = this._hass, d = new Date(); try { return d.toLocaleTimeString((h && h.locale && h.locale.language) || undefined, { hour: 'numeric', minute: '2-digit' }).replace(/\s?[AP]M$/i, ''); } catch (e) { return d.getHours() % 12 + ':' + String(d.getMinutes()).padStart(2, '0'); } }
   _key() { return `hvMyHome:${ssDash() || 'lovelace'}`; } // per dashboard (the page may also show as a sheet over the Home Screen)
   _local() { return mhLs.get(this._key()) || {}; }
   _order() { const l = this._local(); return (l.section_order && l.section_order.length ? l.section_order : this._config.section_order) || []; }
-  _hiddenEnt() { const l = this._local(); return new Set(Array.isArray(l.hidden_entities) ? l.hidden_entities : this._config.hidden_entities || []); }
+  _hiddenEnt() { if (this._draft) return new Set(this._draft.hidden_entities); const l = this._local(); return new Set(Array.isArray(l.hidden_entities) ? l.hidden_entities : this._config.hidden_entities || []); }
+  _opt(k) { if (this._draft) return this._draft[k] || {}; const l = this._local(); return (l[k] && typeof l[k] === 'object' ? l[k] : this._config[k]) || {}; }
+  _size(key, def) { const v = this._opt('tile_sizes')[key]; return HV_RZ[v] ? v : def; }
+  _ord(list, key, id) { const o = this._opt('tile_order')[key]; if (!Array.isArray(o) || !o.length) return list; const p = x => { const i = o.indexOf(id(x)); return i < 0 ? 1e4 + list.indexOf(x) : i; }; return list.slice().sort((a, b) => p(a) - p(b)); }
   _backPath() { const c = this._config; if (c.back_path) return c.back_path.startsWith('/') ? c.back_path : `/${ssDash() || 'lovelace'}/${c.back_path}`;
     const p = hvSwipe.pairs()[0]; return p ? p.home : `/${ssDash() || 'lovelace'}/main`; }
   // ---- data
@@ -6618,12 +6623,13 @@ class HVMyHomeCard extends HTMLElement {
         if (!p || rank(S[id]) < rank(S[p])) seen.set(key, id); }
       const items = [...seen.values()].map(id => ({ id, d: id.split('.')[0], s: S[id], name: nm(id, a) }));
       items.sort((x, y) => (MH_UNAV.includes(x.s.state) - MH_UNAV.includes(y.s.state)) || ((MH_DORDER[x.d] ?? 9) - (MH_DORDER[y.d] ?? 9)) || x.name.localeCompare(y.name));
-      if (items.length) out.push({ key: 'area:' + a, area: a, name: A[a].name, items }); }
+      if (items.length) out.push({ key: 'area:' + a, area: a, name: A[a].name, items: this._ord(items, 'area:' + a, x => x.id) }); }
     const ro = c.room_order || []; out.sort((x, y) => { const i = ro.indexOf(x.area), j = ro.indexOf(y.area); return (i < 0 ? 999 : i) - (j < 0 ? 999 : j) || x.name.localeCompare(y.name); });
     let camIds = (c.cameras && c.cameras.length ? c.cameras.map(x => typeof x === 'string' ? x : x.entity) : cams).filter(id => S[id] && !MH_UNAV.includes(S[id].state));
     const pref = ['front', 'door', 'porch']; camIds.sort((x, y) => (pref.some(p => y.includes(p)) - pref.some(p => x.includes(p))));
     let scenes = (c.scenes || []).map(x => typeof x === 'string' ? { entity: x } : x).filter(x => x && x.entity && S[x.entity]);
     const secs = [];
+    camIds = this._ord(camIds, 'cameras', x => x); scenes = this._ord(scenes, 'scenes', x => x.entity);
     if (c.show_cameras !== false && camIds.length) secs.push({ key: 'cameras', name: 'Cameras', cams: camIds });
     if (c.show_scenes !== false && scenes.length) secs.push({ key: 'scenes', name: 'Scenes', scenes });
     secs.push(...out);
@@ -6647,8 +6653,8 @@ class HVMyHomeCard extends HTMLElement {
     return { t: f(s.state), on: ['on', 'cleaning', 'mowing'].includes(s.state) }; }
   // ---- render
   _render() { const h = this._hass, c = this._config; if (!h || !c || !this.isConnected) return; const M = this._model();
-    const sig = JSON.stringify([M.secs.map(s => [s.key, s.cams, s.scenes && s.scenes.map(x => [x.entity, x.name, x.icon]), s.items && s.items.map(i => [i.id, i.name, i.s.state, i.s.attributes.brightness, i.s.attributes.current_temperature, i.s.attributes.temperature, i.s.attributes.hvac_action, i.s.attributes.media_title])]), M.temps, M.lightsOn, M.gar.map(g => g.s.state), M.media.length, [...M.hidE], this._hiding, c.title, c.show_back, c.show_pills, c.show_menu]);
-    if (sig === this._sig) return; this._sig = sig; this._M = M;
+    const sig = JSON.stringify([M.secs.map(s => [s.key, s.cams, s.scenes && s.scenes.map(x => [x.entity, x.name, x.icon]), s.items && s.items.map(i => [i.id, i.name, i.s.state, i.s.attributes.brightness, i.s.attributes.current_temperature, i.s.attributes.temperature, i.s.attributes.hvac_action, i.s.attributes.media_title])]), M.temps, M.lightsOn, M.gar.map(g => g.s.state), M.media.length, [...M.hidE], this._hiding, this._arr, this._draft && JSON.stringify(this._draft), c.title, c.show_back, c.show_pills, c.show_menu]);
+    if (sig === this._sig) return; this._sig = sig; this._M = M; this.toggleAttribute('hv-arr', !!this._arr);
     const R = this.shadowRoot; let w = R.querySelector('.w');
     if (!w) { R.innerHTML = `<style>${MH_CSS}</style><div class="w"></div>`; w = R.querySelector('.w');
       w.addEventListener('click', e => this._click(e)); this._holdBind(w); }
@@ -6659,13 +6665,14 @@ class HVMyHomeCard extends HTMLElement {
       <div class="pill g" style="color:#ffd60a"><ha-icon icon="mdi:lightbulb${M.lightsOn ? '-on' : ''}"></ha-icon>${M.lightsOn}</div>
       ${M.gar.length ? `<div class="pill g" style="color:${gOpen ? '#ff9f0a' : '#66d4cf'}"><ha-icon icon="mdi:garage${gOpen ? '-open' : ''}"></ha-icon>${gOpen ? gOpen + ' open' : M.gar.length}</div>` : ''}
       <div class="pill g"><ha-icon icon="mdi:speaker${M.media.length ? '-play' : ''}"></ha-icon>${M.media.length ? M.media.length : ''}</div></div>`;
-    const secHtml = s => { if (s.cams) return `<div class="sec" data-sec="cameras"><h2>Cameras<ha-icon icon="mdi:chevron-right"></ha-icon></h2><div class="cams">${s.cams.map((id, k) => `<div class="cam${k ? ' s' : ''}" data-cam="${esc(id)}"></div>`).join('')}</div></div>`;
+    const secHtml = s => { if (s.cams) return `<div class="sec" data-sec="cameras"><h2>Cameras<ha-icon icon="mdi:chevron-right"></ha-icon></h2><div class="cams">${s.cams.map((id, k) => `<div class="cam${this._size('cam:' + id, k ? '2x3' : '2x6') === '2x3' ? ' s' : ''}" data-cam="${esc(id)}"></div>`).join('')}</div></div>`;
       if (s.scenes) return `<div class="sec" data-sec="scenes"><h2>Scenes<ha-icon icon="mdi:chevron-right"></ha-icon></h2><div class="scenes">${s.scenes.map(x => { const st = h.states[x.entity];
-        return `<div class="sc g" data-scene="${esc(x.entity)}"><span class="i"><ha-icon icon="${esc(x.icon || st.attributes.icon || 'mdi:palette')}"></ha-icon></span><span>${esc(x.name || st.attributes.friendly_name || x.entity)}</span></div>`; }).join('')}</div></div>`;
-      const vis = s.items.filter(i => this._hiding || !M.hidE.has(i.id)); if (!vis.length) return '';
+        const z = HV_RZ[this._size(x.entity, '2x3')]; return `<div class="sc g" data-scene="${esc(x.entity)}" style="grid-column:span ${z[0]}"><span class="i"><ha-icon icon="${esc(x.icon || st.attributes.icon || 'mdi:palette')}"></ha-icon></span><span>${esc(x.name || st.attributes.friendly_name || x.entity)}</span></div>`; }).join('')}</div></div>`;
+      const vis = s.items.filter(i => this._hiding || this._arr || !M.hidE.has(i.id)); if (!vis.length) return '';
       const on = vis.filter(i => this._state(i).on).length;
       return `<div class="sec" data-sec="${esc(s.key)}"><h2>${esc(s.name)}<ha-icon icon="mdi:chevron-right"></ha-icon>${on ? `<small>${on} on</small>` : ''}</h2><div class="devs">${vis.map(i => { const st = this._state(i), un = MH_UNAV.includes(i.s.state);
-        return `<div class="dv g ${i.d}${st.on ? ' on' : ''}${un ? ' un' : ''}${i.d === 'climate' && !un ? ' wide' : ''}${M.hidE.has(i.id) ? ' hid' : ''}" data-e="${esc(i.id)}"><span class="eye"><ha-icon icon="mdi:${M.hidE.has(i.id) ? 'plus' : 'minus'}"></ha-icon></span><span class="i"><ha-icon icon="${esc(mhIcon(i.s, i.name))}"></ha-icon></span><div class="t"><div class="n">${esc(i.name)}</div><div class="s">${esc(st.t)}</div></div>${st.tp != null && !un ? `<span class="tp">${esc(st.tp)}°</span>` : ''}</div>`; }).join('')}</div></div>`; };
+        const z = HV_RZ[this._size(i.id, i.d === 'climate' && !un ? '2x6' : '2x3')];
+        return `<div class="dv g ${i.d}${st.on ? ' on' : ''}${un ? ' un' : ''}${z[0] > 1 ? ' wide' : ''}${z[1] > 1 ? ' r2' : ''}${M.hidE.has(i.id) ? ' hid' : ''}" data-e="${esc(i.id)}" style="grid-column:span ${z[0]};grid-row:span ${z[1]}"><span class="eye"><ha-icon icon="mdi:${M.hidE.has(i.id) ? 'plus' : 'minus'}"></ha-icon></span><span class="i"><ha-icon icon="${esc(mhIcon(i.s, i.name))}"></ha-icon></span><div class="t"><div class="n">${esc(i.name)}</div><div class="s">${esc(st.t)}</div></div>${st.tp != null && !un ? `<span class="tp">${esc(st.tp)}°</span>` : ''}</div>`; }).join('')}</div></div>`; };
     w.innerHTML = `${c.show_back !== false ? `<button class="back" data-a="back"><ha-icon icon="mdi:chevron-left"></ha-icon>${esc(c.back_label || 'Home Screen')}</button>` : ''}
       <div class="top"><h1>${esc(c.title || 'My Home')}</h1><div class="tr">${c.show_clock !== false ? `<span class="tm">${this._time()}</span>` : ''}${c.show_menu !== false ? `<button class="more" data-a="menu" aria-label="More"><ha-icon icon="mdi:dots-horizontal"></ha-icon></button>` : ''}</div></div>
       ${pills}${M.secs.map(secHtml).join('')}
@@ -6717,7 +6724,7 @@ class HVMyHomeCard extends HTMLElement {
     ov.addEventListener('click', e => { const b = e.target.closest('[data-m]'); if (!b) { this._closePop(); return; } const m = b.dataset.m; this._closePop();
       if (m === 'issues') this._issues(M);
       if (m === 'settings') hvPopEdit(this, { card: this });
-      if (m === 'edit') { this._hiding = true; this._hidPrev = this._local().hidden_entities; this._hidDraft = [...this._hiddenEnt()]; this._sig = null; this._render(); }
+      if (m === 'edit') hvMhArr.enter(this);
       if (m === 'reorder') this._reorder(); }); }
   _issues(M) { const { ov } = this._overlay();
     ov.innerHTML = `<div class="mhsheet"><div class="hd"><button class="cb" data-x><ha-icon icon="mdi:close"></ha-icon></button><b>${M.issues.length} Issue${M.issues.length === 1 ? '' : 's'}</b><span style="width:40px"></span></div>
@@ -6767,6 +6774,122 @@ Object.assign(HELPERS, { hidden_entities: 'Also set from the page: ⋯ › Edit 
 if (!customElements.get('homeview-myhome-card')) customElements.define('homeview-myhome-card', HVMyHomeCard);
 if (!window.customCards.some(c => c.type === 'homeview-myhome-card')) window.customCards.push({ type: 'homeview-myhome-card', name: 'NotHomeView My Home', description: 'Apple Home style "My Home" page: summary pills, cameras, scenes and every device grouped by room.', preview: false });
 
+/* My Home arrange (Edit Home View): the Page Grid / Home Screen arrange controls on the device, scene and camera tiles (same layer, look
+   and gestures: dashed outline, ⋯ menu, resize corner, "Hold to move · drag a corner to resize" bar). Moves stay inside a tile's
+   section; sizes snap to the tile sizes (devices: 2 × 3 / 2 × 6 / 4 × 6 / 4 × 3; scenes and cameras: 2 × 3 / 2 × 6). Done saves
+   tile_order / tile_sizes / hidden_entities like Reorder Sections (this browser; admins also the card). */
+const hvMhArr = { card: null, ctl: new Map(), timer: null, drag: null, rs: null, dirty: false,
+  enter(card) { if (this.card) this.exit(false); this.card = card; const cp = k => JSON.parse(JSON.stringify(card._opt(k)));
+    card._draft = { tile_order: cp('tile_order'), tile_sizes: cp('tile_sizes'), hidden_entities: [...card._hiddenEnt()] }; card._arr = true; this.dirty = false;
+    card._sig = null; card._render(); this.layer(); this.timer = setInterval(() => this.tick(), 150); this._k = () => this.tick();
+    addEventListener('scroll', this._k, { capture: true, passive: true }); addEventListener('resize', this._k); this.tick(); },
+  layer() { hvEcl.ensure(); const L = hvSheetLayer(this.card), h = hvEcl.host; if (L && h.parentNode !== L) { L.appendChild(h); h.style.cssText = 'position:fixed;inset:0;z-index:60;pointer-events:none'; } },
+  exit(save) { const c = this.card; if (!c) return; hvEcl.closeMenu(); this.endDrag(false); this.endResize(); clearInterval(this.timer); this.timer = null;
+    removeEventListener('scroll', this._k, true); removeEventListener('resize', this._k); for (const x of this.ctl.values()) x.remove(); this.ctl.clear();
+    const b = hvEcl.lay && hvEcl.lay.querySelector('.abar.mh'); if (b) b.remove();
+    if (hvEcl.host && hvEcl.host.parentNode !== document.body) { hvEcl.host.remove(); hvEcl.host = null; hvEcl.ctl = new WeakMap(); }
+    const d = c._draft; c._draft = null; c._arr = false; this.card = null;
+    if (save && this.dirty) c._persist({ tile_order: d.tile_order, tile_sizes: d.tile_sizes, hidden_entities: d.hidden_entities });
+    c._sig = null; c._render(); hvEcl.kick(); },
+  change(fn) { fn(this.card._draft); this.dirty = true; this.card._sig = null; this.card._render(); [40, 200].forEach(t => setTimeout(() => this.tick(), t)); },
+  bar() { const lay = hvEcl.lay; if (!lay || lay.querySelector('.abar.mh')) return; const b = document.createElement('div'); b.className = 'abar mh';
+    b.innerHTML = '<span>Hold to move · drag a corner to resize</span><button class="no">Cancel</button><button class="ok">Done</button>'; lay.appendChild(b);
+    b.querySelector('.no').onclick = e => { e.stopPropagation(); this.exit(false); }; b.querySelector('.ok').onclick = e => { e.stopPropagation(); this.exit(true); }; },
+  items() { const R = this.card && this.card.shadowRoot, out = []; if (!R) return out;
+    R.querySelectorAll('.sec').forEach(sec => { const k = sec.dataset.sec;
+      sec.querySelectorAll('.dv').forEach(el => out.push({ kind: 'dev', sec: k, id: el.dataset.e, key: el.dataset.e, el }));
+      sec.querySelectorAll('.sc').forEach(el => out.push({ kind: 'scene', sec: 'scenes', id: el.dataset.scene, key: el.dataset.scene, el }));
+      sec.querySelectorAll('.cam').forEach(el => out.push({ kind: 'cam', sec: 'cameras', id: el.dataset.cam, key: 'cam:' + el.dataset.cam, el })); });
+    return out; },
+  find(key) { return this.items().find(x => x.key === key); },
+  sizes(it) { return it.kind === 'dev' ? ['2x3', '2x6', '4x6', '4x3'] : ['2x3', '2x6']; },
+  cur(it) { const el = it.el; if (it.kind === 'cam') return el.classList.contains('s') ? '2x3' : '2x6';
+    const cs = getComputedStyle(el), w = /span (\d)/.exec(cs.gridColumnStart + ' ' + cs.gridColumnEnd), h = /span (\d)/.exec(cs.gridRowStart + ' ' + cs.gridRowEnd), a = w ? +w[1] : 1, b = h ? +h[1] : 1;
+    return Object.keys(HV_RZ).find(k => HV_RZ[k][0] === a && HV_RZ[k][1] === b) || '2x3'; },
+  label(it) { const n = it.el.querySelector('.n, span:last-child'); return it.kind === 'cam' ? ((this.card._hass.states[it.id] || {}).attributes || {}).friendly_name || it.id : n ? n.textContent : it.id; },
+  tick() { const c = this.card; if (!c) return; if (!c.isConnected) { this.exit(false); return; } this.layer(); this.bar(); const lay = hvEcl.lay, live = new Set(), vh = innerHeight;
+    if (hvEcl.host.hasAttribute('day')) hvEcl.host.removeAttribute('day');
+    for (const it of this.items()) { let x = this.ctl.get(it.key);
+      if (!x || !x.isConnected) { x = document.createElement('div'); x.className = 'c arr hc'; const key = it.key;
+        x.innerHTML = '<div class="cv"></div><button class="b m" aria-label="Options" aria-haspopup="menu" title="Options"><i><ha-icon icon="mdi:dots-horizontal"></ha-icon></i></button><div class="rz" role="button" aria-label="Resize (drag the corner)" title="Drag to resize"><i></i></div>';
+        x.querySelector('.cv').addEventListener('pointerdown', e => { const y = this.find(key); if (y) this.press(y, e); });
+        x.querySelector('.rz').addEventListener('pointerdown', e => { const y = this.find(key); if (y) this.resize(y, e); });
+        x.querySelector('.m').addEventListener('click', e => { e.stopPropagation(); const y = this.find(key); if (y) this.menu(y, x.querySelector('.m')); });
+        lay.appendChild(x); this.ctl.set(key, x); }
+      live.add(x); const r = it.el.getBoundingClientRect(), vis = r.width > 0 && r.bottom > 0 && r.top < vh; x.style.display = vis ? '' : 'none'; if (!vis) continue;
+      const bs = Math.max(28, Math.min(40, Math.round(Math.min(r.width, r.height) * 0.5))), bi = Math.max(22, bs - 10);
+      x.style.setProperty('--bs', bs + 'px'); x.style.setProperty('--bi', bi + 'px'); x.style.setProperty('--rr', getComputedStyle(it.el).borderTopLeftRadius || '16px');
+      x.style.width = r.width + 'px'; x.style.height = r.height + 'px'; x.style.transform = `translate(${Math.round(r.left)}px,${Math.round(r.top)}px)`;
+      x.classList.toggle('off', !!(this.rs && this.rs.key === it.key) || !!(this.drag && this.drag.key === it.key)); }
+    for (const [k, x] of [...this.ctl]) if (!live.has(x)) { x.remove(); this.ctl.delete(k); } },
+  scroller() { let n = this.card; for (let i = 0; i < 40 && n; i++) { if (n instanceof Element && n.scrollHeight > n.clientHeight + 2 && /(auto|scroll)/.test(getComputedStyle(n).overflowY)) return n; n = n.parentNode || n.host; } return null; },
+  // tap = menu; hold = drag inside the section; slide = scroll the page
+  press(it, e) { if ((e.button != null && e.button > 0) || this.drag || this.rs) return; e.preventDefault(); e.stopPropagation(); hvEcl.closeMenu();
+    const cv = e.currentTarget, key = it.key, sc = this.scroller(), p = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, mode: '', sy: sc ? sc.scrollTop : (window.scrollY || 0), sx: 0 };
+    const hs = it.kind === 'cam' ? it.el.parentNode : null; if (hs) p.sx = hs.scrollLeft;
+    try { cv.setPointerCapture(p.id); } catch (x) {}
+    const off = () => { clearTimeout(p.t); cv.removeEventListener('pointermove', mv); cv.removeEventListener('pointerup', up); cv.removeEventListener('pointercancel', up); };
+    const mv = ev => { if (ev.pointerId !== p.id) return; p.x = ev.clientX; p.y = ev.clientY; if (!p.mode && Math.hypot(p.x - p.x0, p.y - p.y0) > 8) { clearTimeout(p.t); p.mode = 'scroll'; }
+      if (p.mode === 'scroll') { if (hs && Math.abs(p.x - p.x0) > Math.abs(p.y - p.y0)) hs.scrollLeft = p.sx - (p.x - p.x0); else if (sc) sc.scrollTop = p.sy - (p.y - p.y0); else window.scrollTo(0, p.sy - (p.y - p.y0)); this.tick(); } };
+    const up = ev => { if (ev.pointerId !== p.id) return; off(); try { cv.releasePointerCapture(p.id); } catch (x) {}
+      if (!p.mode && ev.type === 'pointerup') { const y = this.find(key), c = this.ctl.get(key); if (y && c) this.menu(y, c.querySelector('.m')); } };
+    cv.addEventListener('pointermove', mv); cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+    p.t = setTimeout(() => { if (p.mode) return; p.mode = 'drag'; off(); const y = this.find(key); if (y) this.startDrag(y, cv, p); }, 260); },
+  startDrag(it, cv, p) { const r = it.el.getBoundingClientRect(), lay = hvEcl.lay, rr = getComputedStyle(it.el).borderTopLeftRadius;
+    const d = this.drag = { it, key: it.key, sec: it.sec, id: p.id, x0: p.x0, y0: p.y0, x: p.x, y: p.y, cv, over: null };
+    const mk = cls => { const n = document.createElement('div'); n.className = cls; if (rr) n.style.setProperty('--rr', rr); lay.appendChild(n); return n; };
+    d.dim = mk('dim'); hvEcl.pos(d.dim, r); d.drop = mk('drop'); d.drop.style.display = 'none'; d.gh = mk('ghost'); d.gh.innerHTML = '<ha-icon></ha-icon><span></span>';
+    const ic = it.el.querySelector('ha-icon'); d.gh.querySelector('ha-icon').setAttribute('icon', (ic && ic.getAttribute('icon')) || 'mdi:cctv'); d.gh.querySelector('span').textContent = this.label(it);
+    hvEcl.pos(d.gh, r); d.gh.style.transform = 'scale(1.06)';
+    d.mv = ev => { if (ev.pointerId !== d.id) return; ev.preventDefault(); d.x = ev.clientX; d.y = ev.clientY; this.moveDrag(); };
+    d.up = ev => { if (ev.pointerId !== d.id) return; this.endDrag(ev.type === 'pointerup'); };
+    try { cv.setPointerCapture(p.id); } catch (x) {} cv.addEventListener('pointermove', d.mv); cv.addEventListener('pointerup', d.up); cv.addEventListener('pointercancel', d.up);
+    if (navigator.vibrate) try { navigator.vibrate(12); } catch (x) {} this.moveDrag(); this.tick(); },
+  moveDrag() { const d = this.drag; if (!d) return; d.gh.style.transform = `translate(${d.x - d.x0}px,${d.y - d.y0}px) scale(1.06)`; let over = null, orect = null;
+    for (const it of this.items()) { if (it.sec !== d.sec || it.key === d.key) continue; const b = it.el.getBoundingClientRect(); if (d.x >= b.left && d.x <= b.right && d.y >= b.top && d.y <= b.bottom) { over = it; orect = b; break; } }
+    d.over = over; if (orect) { hvEcl.pos(d.drop, orect); d.drop.style.display = ''; } else d.drop.style.display = 'none'; },
+  endDrag(ok) { const d = this.drag; if (!d) return; this.drag = null; try { d.cv.releasePointerCapture(d.id); } catch (x) {}
+    d.cv.removeEventListener('pointermove', d.mv); d.cv.removeEventListener('pointerup', d.up); d.cv.removeEventListener('pointercancel', d.up); [d.dim, d.drop].forEach(n => n.remove());
+    d.gh.style.transition = 'all .16s ease-out'; d.gh.style.opacity = '0'; d.gh.style.transform = 'scale(1)'; setTimeout(() => d.gh.remove(), 200);
+    if (ok && d.over) this.move(d.it, d.over.id); this.tick(); },
+  // order of one section: its tiles as shown now, then the moved one goes to the target's place
+  move(it, toId) { const ids = this.items().filter(x => x.sec === it.sec).map(x => x.id), i = ids.indexOf(it.id), j = ids.indexOf(toId); if (i < 0 || j < 0 || i === j) return;
+    ids.splice(i, 1); ids.splice(j, 0, it.id); this.change(D => { D.tile_order = Object.assign({}, D.tile_order, { [it.sec]: ids }); }); },
+  step(it, dir) { const ids = this.items().filter(x => x.sec === it.sec).map(x => x.id), i = ids.indexOf(it.id), j = i + dir; if (j >= 0 && j < ids.length) this.move(it, ids[j]); },
+  setSize(it, k) { if (this.cur(it) === k) return; this.change(D => { D.tile_sizes = Object.assign({}, D.tile_sizes, { [it.key]: k }); }); },
+  resize(it, e) { if ((e.button != null && e.button > 0) || this.drag || this.rs) return; e.preventDefault(); e.stopPropagation(); hvEcl.closeMenu();
+    const r0 = it.el.getBoundingClientRect(), k0 = this.cur(it), z0 = HV_RZ[k0], gap = 10, U = (r0.width - gap * (z0[0] - 1)) / z0[0], V = (r0.height - gap * (z0[1] - 1)) / z0[1], h0 = e.currentTarget, lay = hvEcl.lay, opts = this.sizes(it);
+    const d = this.rs = { it, key: it.key, k: k0, id: e.pointerId, o0: r0, x: e.clientX, y: e.clientY, zones: [], h0 };
+    try { h0.setPointerCapture(e.pointerId); } catch (x) {}
+    const mk = cls => { const n = document.createElement('div'); n.className = cls; n.style.setProperty('--rr', getComputedStyle(it.el).borderTopLeftRadius); lay.appendChild(n); return n; };
+    for (const k of opts) { const z = mk('tgt'); z.dataset.k = k; z.textContent = k.replace('x', ' × '); d.zones.push(z); } d.live = mk('live'); d.lbl = mk('szl');
+    const geo = k => { const z = HV_RZ[k]; return it.kind === 'cam' ? { left: r0.left, top: r0.top, width: k === '2x6' ? r0.width * (k0 === '2x6' ? 1 : 1.7) : r0.width * (k0 === '2x6' ? 0.59 : 1), height: r0.height } : { left: r0.left, top: r0.top, width: z[0] * U + (z[0] - 1) * gap, height: z[1] * V + (z[1] - 1) * gap }; };
+    const paint = () => { for (const z of d.zones) { hvEcl.pos(z, geo(z.dataset.k)); z.classList.toggle('on', z.dataset.k === d.k); } const y = this.find(d.key); if (y) hvEcl.pos(d.live, y.el.getBoundingClientRect());
+      d.lbl.textContent = `${d.k.replace('x', ' × ')} · ${HV_RZ_N[d.k]}`; const lw = d.lbl.offsetWidth || 120, vw = document.documentElement.clientWidth || innerWidth;
+      d.lbl.style.left = Math.max(8, Math.min(vw - lw - 8, d.x - lw / 2)) + 'px'; d.lbl.style.top = Math.max(8, d.y - 64) + 'px'; };
+    d.iv = setInterval(paint, 60); paint();
+    d.mv = ev => { if (ev.pointerId !== d.id) return; ev.preventDefault(); d.x = ev.clientX; d.y = ev.clientY;
+      const wide = d.x - r0.left > (it.kind === 'cam' ? r0.width * (k0 === '2x6' ? 0.8 : 1.3) : U * 1.5 + gap / 2), tall = it.kind === 'dev' && d.y - r0.top > V * 1.5 + gap / 2;
+      const k = tall ? (wide ? '4x6' : '4x3') : wide ? '2x6' : '2x3';
+      if (opts.includes(k) && k !== d.k) { d.k = k; const y = this.find(d.key); if (y) this.setSize(y, k); d.live.classList.remove('pulse'); void d.live.offsetWidth; d.live.classList.add('pulse'); } paint(); };
+    d.up = ev => { if (ev.pointerId !== d.id) return; this.endResize(); };
+    addEventListener('pointermove', d.mv, true); addEventListener('pointerup', d.up, true); addEventListener('pointercancel', d.up, true); this.tick(); },
+  endResize() { const d = this.rs; if (!d) return; this.rs = null; clearInterval(d.iv); removeEventListener('pointermove', d.mv, true); removeEventListener('pointerup', d.up, true); removeEventListener('pointercancel', d.up, true);
+    try { d.h0.releasePointerCapture(d.id); } catch (x) {} [...d.zones, d.live, d.lbl].forEach(n => n && n.remove()); this.tick(); },
+  menu(it, anchor) { hvEcl.closeMenu(); this.layer(); const wrap = hvEcl.menu = document.createElement('div'); wrap.innerHTML = '<div class="scrim"></div><div class="menu" role="menu"></div>';
+    const m = wrap.querySelector('.menu'), close = () => hvEcl.closeMenu(), t0 = Date.now(), ids = this.items().filter(x => x.sec === it.sec).map(x => x.id), i = ids.indexOf(it.id);
+    const item = (ic, txt, fn, cls, dis) => { const b = document.createElement('button'); b.setAttribute('role', 'menuitem'); if (cls) b.className = cls; if (dis) b.disabled = true;
+      b.innerHTML = '<ha-icon></ha-icon><span></span>'; b.querySelector('ha-icon').setAttribute('icon', ic); b.querySelector('span').textContent = txt; b.addEventListener('click', e => { e.stopPropagation(); if (Date.now() - t0 < 400) return; fn(); }); m.appendChild(b); return b; };
+    const sep = () => { const s = document.createElement('div'); s.className = 'sep'; m.appendChild(s); };
+    const head = document.createElement('div'); head.className = 't'; head.textContent = this.label(it); m.appendChild(head);
+    if (it.kind === 'dev') { const hid = this.card._draft.hidden_entities.includes(it.id);
+      item(hid ? 'mdi:eye-outline' : 'mdi:eye-off-outline', hid ? 'Show tile' : 'Hide tile', () => { close(); this.change(D => { const s = new Set(D.hidden_entities); hid ? s.delete(it.id) : s.add(it.id); D.hidden_entities = [...s]; }); }); sep(); }
+    item('mdi:arrow-left', 'Move earlier', () => { close(); this.step(it, -1); }, '', i <= 0);
+    item('mdi:arrow-right', 'Move later', () => { close(); this.step(it, 1); }, '', i >= ids.length - 1); sep();
+    const cur = this.cur(it); for (const k of this.sizes(it)) item(cur === k ? 'mdi:check' : 'mdi:square-rounded-outline', `${k.replace('x', ' × ')} · ${HV_RZ_N[k]}`, () => { close(); this.setSize(it, k); });
+    wrap.querySelector('.scrim').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); close(); });
+    hvEcl.lay.appendChild(wrap); hvEcl.place(m, anchor); }
+};
 /* Home Screen swipe page: pairs come from the dashboard config (any Home hub card with swipe_page), so it also works when the
    page was opened directly. Touch only (iPad / phones); the edge hint can be tapped with a mouse. */
 const hvSwipe = (() => {
@@ -6806,12 +6929,9 @@ const hvSwipe = (() => {
 .d{position:fixed;left:50%;bottom:calc(10px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);display:flex;gap:7px;pointer-events:none}
 .d i{width:7px;height:7px;border-radius:4px;background:rgba(255,255,255,.38)}.d i.a{width:18px;background:rgba(255,255,255,.95)}
 .e{position:fixed;top:50%;margin-top:-28px;width:22px;height:56px;border-radius:11px;display:grid;place-items:center;color:rgba(255,255,255,.6);background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);pointer-events:auto;cursor:pointer;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
-.e svg{width:20px;height:20px;fill:currentColor}.r{right:6px}.l{left:6px}</style><div class="d"><i class="a"></i><i></i></div><div class="e"><svg viewBox="0 0 24 24"><path d=""/></svg></div>`;
-      s.querySelector('.e').addEventListener('click', () => { const w2 = where(); if (w2) go(w2.at === 'home' ? w2.x.page : w2.x.home, w2.at === 'home' ? -1 : 1); });
+.e svg{width:20px;height:20px;fill:currentColor}.r{right:6px}.l{left:6px}</style><div class="d"><i class="a"></i><i></i></div>`;
       document.body.appendChild(hint); }
-    const s = hint.shadowRoot; hint.style.display = ''; s.querySelector('.d').style.display = w.at === 'home' ? '' : 'none';
-    const e = s.querySelector('.e'); e.className = 'e ' + (w.at === 'home' ? 'r' : 'l'); e.setAttribute('aria-label', w.at === 'home' ? 'Next page' : 'Home Screen');
-    s.querySelector('path').setAttribute('d', w.at === 'home' ? 'M8.59 16.58 13.17 12 8.59 7.41 10 6l6 6-6 6z' : 'M15.41 16.58 10.83 12l4.58-4.59L14 6l-6 6 6 6z'); };
+    hint.style.display = w.at === 'home' ? '' : 'none'; }; // page dots on the Home Screen only (no edge handles)
   addEventListener('location-changed', () => setTimeout(paint, 60)); addEventListener('popstate', () => setTimeout(paint, 60)); setInterval(paint, 1000);
   return { pairs, go, paint };
 })();
