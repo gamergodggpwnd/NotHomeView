@@ -6525,7 +6525,7 @@ function mhIcon(s, name) { const a = s.attributes || {}, d = s.entity_id.split('
   if (d === 'vacuum') return 'mdi:robot-vacuum';
   if (d === 'switch' || d === 'input_boolean') return /dryer/.test(n) ? 'mdi:tumble-dryer' : /washer/.test(n) ? 'mdi:washing-machine' : /siren/.test(n) ? 'mdi:alarm-light' : /ps5|playstation/.test(n) ? 'mdi:gamepad-variant' : /motion/.test(n) ? 'mdi:motion-sensor' : /fan/.test(n) ? 'mdi:fan' : 'mdi:power-plug';
   return 'mdi:devices'; }
-const MH_CSS = `:host{display:block;-webkit-tap-highlight-color:transparent}
+const MH_CSS = `:host{display:block;-webkit-tap-highlight-color:transparent} :host([hv-arr]){position:relative}
 .w{font-family:${FONT};color:#fff;padding:6px 4px 40px;position:relative;-webkit-user-select:none;user-select:none}
 .back{display:inline-flex;align-items:center;gap:2px;font-size:15px;color:#d4c9ff;cursor:pointer;background:none;border:0;padding:4px 0;font-family:inherit}
 .back ha-icon{--mdc-icon-size:20px}
@@ -6777,21 +6777,31 @@ if (!window.customCards.some(c => c.type === 'homeview-myhome-card')) window.cus
 /* My Home arrange (Edit Home View): the Page Grid / Home Screen arrange controls on the device, scene and camera tiles (same layer, look
    and gestures: dashed outline, ⋯ menu, resize corner, "Hold to move · drag a corner to resize" bar). Moves stay inside a tile's
    section; sizes snap to the tile sizes (devices: 2 × 3 / 2 × 6 / 4 × 6 / 4 × 3; scenes and cameras: 2 × 3 / 2 × 6). Done saves
-   tile_order / tile_sizes / hidden_entities like Reorder Sections (this browser; admins also the card). */
+   tile_order / tile_sizes / hidden_entities like Reorder Sections (this browser; admins also the card).
+   The per-tile outlines live in a track inside the card itself (not in the fixed edit layer), so they scroll natively with the tiles:
+   no repositioning on scroll, nothing lags or jumps. Finger: native pan-y scrolling; a still hold of HV_MH_HOLD ms lifts the tile
+   (moving > 10 px first is a scroll); while lifted the page cannot scroll and auto-scrolls near the edges. The fixed layer keeps
+   only the bar, menus, the lifted tile and resize targets. */
+const HV_MH_HOLD = 420;
+const HV_MH_TRK_CSS = `.lay{position:absolute;left:0;top:0;right:auto;bottom:auto;width:0;height:0;overflow:visible;z-index:4}
+.c{position:absolute} .c.mh .cv{touch-action:pan-y} .c.mh.lift .cv{opacity:.25}`;
 const hvMhArr = { card: null, ctl: new Map(), timer: null, drag: null, rs: null, dirty: false,
   enter(card) { if (this.card) this.exit(false); this.card = card; const cp = k => JSON.parse(JSON.stringify(card._opt(k)));
     card._draft = { tile_order: cp('tile_order'), tile_sizes: cp('tile_sizes'), hidden_entities: [...card._hiddenEnt()] }; card._arr = true; this.dirty = false;
-    card._sig = null; card._render(); this.layer(); this.timer = setInterval(() => this.tick(), 150); this._k = () => this.tick();
-    addEventListener('scroll', this._k, { capture: true, passive: true }); addEventListener('resize', this._k); this.tick(); },
-  layer() { hvEcl.ensure(); const L = hvSheetLayer(this.card), h = hvEcl.host; if (L && h.parentNode !== L) { L.appendChild(h); h.style.cssText = 'position:fixed;inset:0;z-index:60;pointer-events:none'; } },
+    card._sig = null; card._render(); this.layer(); this.timer = setInterval(() => this.tick(), 150); this._k = () => { if (!this._raf) this._raf = requestAnimationFrame(() => { this._raf = 0; this.tick(); }); };
+    addEventListener('resize', this._k); this.tick(); },
+  layer() { hvEcl.ensure(); const L = hvSheetLayer(this.card), h = hvEcl.host; if (L && h.parentNode !== L) { L.appendChild(h); h.style.cssText = 'position:fixed;inset:0;z-index:60;pointer-events:none'; }
+    const R = this.card.shadowRoot; if (R && (!this.trk || this.trk.parentNode !== R)) { if (this.trk) this.trk.remove(); const t = this.trk = document.createElement('div'); t.className = 'hvtrk';
+      t.style.cssText = 'position:absolute;left:0;top:0;width:0;height:0;z-index:4;pointer-events:none'; const sr = t.attachShadow({ mode: 'open' });
+      sr.innerHTML = `<style>${HV_ECL_CSS}\n${HV_MH_TRK_CSS}</style><div class="lay"></div>`; this.tl = sr.querySelector('.lay'); R.appendChild(t); for (const x of this.ctl.values()) x.remove(); this.ctl.clear(); } },
   exit(save) { const c = this.card; if (!c) return; hvEcl.closeMenu(); this.endDrag(false); this.endResize(); clearInterval(this.timer); this.timer = null;
-    removeEventListener('scroll', this._k, true); removeEventListener('resize', this._k); for (const x of this.ctl.values()) x.remove(); this.ctl.clear();
+    removeEventListener('resize', this._k); if (this._hs) this._hs.removeEventListener('scroll', this._k); for (const x of this.ctl.values()) x.remove(); this.ctl.clear(); if (this.trk) this.trk.remove(); this.trk = this.tl = null; this._hs = null;
     const b = hvEcl.lay && hvEcl.lay.querySelector('.abar.mh'); if (b) b.remove();
     if (hvEcl.host && hvEcl.host.parentNode !== document.body) { hvEcl.host.remove(); hvEcl.host = null; hvEcl.ctl = new WeakMap(); }
     const d = c._draft; c._draft = null; c._arr = false; this.card = null;
     if (save && this.dirty) c._persist({ tile_order: d.tile_order, tile_sizes: d.tile_sizes, hidden_entities: d.hidden_entities });
     c._sig = null; c._render(); hvEcl.kick(); },
-  change(fn) { fn(this.card._draft); this.dirty = true; this.card._sig = null; this.card._render(); [40, 200].forEach(t => setTimeout(() => this.tick(), t)); },
+  change(fn) { fn(this.card._draft); this.dirty = true; this.card._sig = null; this.card._render(); this.tick(); [40, 200].forEach(t => setTimeout(() => this.tick(), t)); },
   bar() { const lay = hvEcl.lay; if (!lay || lay.querySelector('.abar.mh')) return; const b = document.createElement('div'); b.className = 'abar mh';
     b.innerHTML = '<span>Hold to move · drag a corner to resize</span><button class="no">Cancel</button><button class="ok">Done</button>'; lay.appendChild(b);
     b.querySelector('.no').onclick = e => { e.stopPropagation(); this.exit(false); }; b.querySelector('.ok').onclick = e => { e.stopPropagation(); this.exit(true); }; },
@@ -6807,48 +6817,57 @@ const hvMhArr = { card: null, ctl: new Map(), timer: null, drag: null, rs: null,
     const cs = getComputedStyle(el), w = /span (\d)/.exec(cs.gridColumnStart + ' ' + cs.gridColumnEnd), h = /span (\d)/.exec(cs.gridRowStart + ' ' + cs.gridRowEnd), a = w ? +w[1] : 1, b = h ? +h[1] : 1;
     return Object.keys(HV_RZ).find(k => HV_RZ[k][0] === a && HV_RZ[k][1] === b) || '2x3'; },
   label(it) { const n = it.el.querySelector('.n, span:last-child'); return it.kind === 'cam' ? ((this.card._hass.states[it.id] || {}).attributes || {}).friendly_name || it.id : n ? n.textContent : it.id; },
-  tick() { const c = this.card; if (!c) return; if (!c.isConnected) { this.exit(false); return; } this.layer(); this.bar(); const lay = hvEcl.lay, live = new Set(), vh = innerHeight;
+  tick() { const c = this.card; if (!c) return; if (!c.isConnected) { this.exit(false); return; } this.layer(); this.bar(); const lay = this.tl, live = new Set(), cr = c.getBoundingClientRect();
+    const hs = c.shadowRoot.querySelector('.cams'); if (hs !== this._hs) { if (this._hs) this._hs.removeEventListener('scroll', this._k); this._hs = hs; if (hs) hs.addEventListener('scroll', this._k, { passive: true }); }
+    const hr = hs && hs.getBoundingClientRect();
     if (hvEcl.host.hasAttribute('day')) hvEcl.host.removeAttribute('day');
     for (const it of this.items()) { let x = this.ctl.get(it.key);
-      if (!x || !x.isConnected) { x = document.createElement('div'); x.className = 'c arr hc'; const key = it.key;
+      if (!x || !x.isConnected) { x = document.createElement('div'); x.className = 'c arr hc mh'; x.dataset.k = it.key; const key = it.key;
         x.innerHTML = '<div class="cv"></div><button class="b m" aria-label="Options" aria-haspopup="menu" title="Options"><i><ha-icon icon="mdi:dots-horizontal"></ha-icon></i></button><div class="rz" role="button" aria-label="Resize (drag the corner)" title="Drag to resize"><i></i></div>';
         x.querySelector('.cv').addEventListener('pointerdown', e => { const y = this.find(key); if (y) this.press(y, e); });
         x.querySelector('.rz').addEventListener('pointerdown', e => { const y = this.find(key); if (y) this.resize(y, e); });
         x.querySelector('.m').addEventListener('click', e => { e.stopPropagation(); const y = this.find(key); if (y) this.menu(y, x.querySelector('.m')); });
         lay.appendChild(x); this.ctl.set(key, x); }
-      live.add(x); const r = it.el.getBoundingClientRect(), vis = r.width > 0 && r.bottom > 0 && r.top < vh; x.style.display = vis ? '' : 'none'; if (!vis) continue;
+      live.add(x); const r = it.el.getBoundingClientRect(); let vis = r.width > 0, clip = '';
+      if (vis && it.kind === 'cam' && hr) { vis = r.right > hr.left + 1 && r.left < hr.right - 1; const l = Math.max(0, hr.left - r.left), rr = Math.max(0, r.right - hr.right); if (l || rr) clip = `inset(-20px ${rr}px -20px ${l}px)`; }
+      x.style.display = vis ? '' : 'none'; if (!vis) continue; x.style.clipPath = clip;
       const bs = Math.max(28, Math.min(40, Math.round(Math.min(r.width, r.height) * 0.5))), bi = Math.max(22, bs - 10);
       x.style.setProperty('--bs', bs + 'px'); x.style.setProperty('--bi', bi + 'px'); x.style.setProperty('--rr', getComputedStyle(it.el).borderTopLeftRadius || '16px');
-      x.style.width = r.width + 'px'; x.style.height = r.height + 'px'; x.style.transform = `translate(${Math.round(r.left)}px,${Math.round(r.top)}px)`;
-      x.classList.toggle('off', !!(this.rs && this.rs.key === it.key) || !!(this.drag && this.drag.key === it.key)); }
+      x.style.width = r.width + 'px'; x.style.height = r.height + 'px'; x.style.transform = `translate(${Math.round(r.left - cr.left)}px,${Math.round(r.top - cr.top)}px)`;
+      x.classList.toggle('off', !!(this.rs && this.rs.key === it.key)); x.classList.toggle('lift', !!(this.drag && this.drag.key === it.key)); }
     for (const [k, x] of [...this.ctl]) if (!live.has(x)) { x.remove(); this.ctl.delete(k); } },
   scroller() { let n = this.card; for (let i = 0; i < 40 && n; i++) { if (n instanceof Element && n.scrollHeight > n.clientHeight + 2 && /(auto|scroll)/.test(getComputedStyle(n).overflowY)) return n; n = n.parentNode || n.host; } return null; },
   // tap = menu; hold = drag inside the section; slide = scroll the page
-  press(it, e) { if ((e.button != null && e.button > 0) || this.drag || this.rs) return; e.preventDefault(); e.stopPropagation(); hvEcl.closeMenu();
-    const cv = e.currentTarget, key = it.key, sc = this.scroller(), p = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, mode: '', sy: sc ? sc.scrollTop : (window.scrollY || 0), sx: 0 };
-    const hs = it.kind === 'cam' ? it.el.parentNode : null; if (hs) p.sx = hs.scrollLeft;
-    try { cv.setPointerCapture(p.id); } catch (x) {}
+  // tap = menu; a still hold (HV_MH_HOLD ms) lifts the tile; moving > 10 px first = a normal scroll (the browser's own, pan-y)
+  press(it, e) { if ((e.button != null && e.button > 0) || this.drag || this.rs) return; if (e.pointerType === 'mouse') e.preventDefault(); e.stopPropagation(); hvEcl.closeMenu();
+    const cv = e.currentTarget, key = it.key, p = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, mode: '' };
     const off = () => { clearTimeout(p.t); cv.removeEventListener('pointermove', mv); cv.removeEventListener('pointerup', up); cv.removeEventListener('pointercancel', up); };
-    const mv = ev => { if (ev.pointerId !== p.id) return; p.x = ev.clientX; p.y = ev.clientY; if (!p.mode && Math.hypot(p.x - p.x0, p.y - p.y0) > 8) { clearTimeout(p.t); p.mode = 'scroll'; }
-      if (p.mode === 'scroll') { if (hs && Math.abs(p.x - p.x0) > Math.abs(p.y - p.y0)) hs.scrollLeft = p.sx - (p.x - p.x0); else if (sc) sc.scrollTop = p.sy - (p.y - p.y0); else window.scrollTo(0, p.sy - (p.y - p.y0)); this.tick(); } };
-    const up = ev => { if (ev.pointerId !== p.id) return; off(); try { cv.releasePointerCapture(p.id); } catch (x) {}
-      if (!p.mode && ev.type === 'pointerup') { const y = this.find(key), c = this.ctl.get(key); if (y && c) this.menu(y, c.querySelector('.m')); } };
+    const mv = ev => { if (ev.pointerId !== p.id) return; p.x = ev.clientX; p.y = ev.clientY; if (!p.mode && Math.hypot(p.x - p.x0, p.y - p.y0) > 10) { p.mode = 'scroll'; off(); } };
+    const up = ev => { if (ev.pointerId !== p.id) return; off(); if (!p.mode && ev.type === 'pointerup') { const y = this.find(key), c = this.ctl.get(key); if (y && c) this.menu(y, c.querySelector('.m')); } };
     cv.addEventListener('pointermove', mv); cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
-    p.t = setTimeout(() => { if (p.mode) return; p.mode = 'drag'; off(); const y = this.find(key); if (y) this.startDrag(y, cv, p); }, 260); },
+    p.t = setTimeout(() => { if (p.mode) return; p.mode = 'drag'; off(); const y = this.find(key); if (y) this.startDrag(y, cv, p); }, HV_MH_HOLD); },
   startDrag(it, cv, p) { const r = it.el.getBoundingClientRect(), lay = hvEcl.lay, rr = getComputedStyle(it.el).borderTopLeftRadius;
-    const d = this.drag = { it, key: it.key, sec: it.sec, id: p.id, x0: p.x0, y0: p.y0, x: p.x, y: p.y, cv, over: null };
+    const d = this.drag = { it, key: it.key, sec: it.sec, id: p.id, x0: p.x0, y0: p.y0, x: p.x, y: p.y, cv, over: null, sc: this.scroller() };
     const mk = cls => { const n = document.createElement('div'); n.className = cls; if (rr) n.style.setProperty('--rr', rr); lay.appendChild(n); return n; };
     d.dim = mk('dim'); hvEcl.pos(d.dim, r); d.drop = mk('drop'); d.drop.style.display = 'none'; d.gh = mk('ghost'); d.gh.innerHTML = '<ha-icon></ha-icon><span></span>';
     const ic = it.el.querySelector('ha-icon'); d.gh.querySelector('ha-icon').setAttribute('icon', (ic && ic.getAttribute('icon')) || 'mdi:cctv'); d.gh.querySelector('span').textContent = this.label(it);
     hvEcl.pos(d.gh, r); d.gh.style.transform = 'scale(1.06)';
+    // the lifted tile owns the finger: no page scroll / pull while it moves (cancelable touchmoves only; a scroll that already started is never interrupted)
+    d.tm = ev => { if (ev.cancelable) ev.preventDefault(); }; document.addEventListener('touchmove', d.tm, { passive: false, capture: true });
     d.mv = ev => { if (ev.pointerId !== d.id) return; ev.preventDefault(); d.x = ev.clientX; d.y = ev.clientY; this.moveDrag(); };
     d.up = ev => { if (ev.pointerId !== d.id) return; this.endDrag(ev.type === 'pointerup'); };
     try { cv.setPointerCapture(p.id); } catch (x) {} cv.addEventListener('pointermove', d.mv); cv.addEventListener('pointerup', d.up); cv.addEventListener('pointercancel', d.up);
+    // auto-scroll while the finger is near the top / bottom edge of the scrolling page
+    const as = () => { if (this.drag !== d) return; const sc = d.sc, vr = sc ? sc.getBoundingClientRect() : { top: 0, bottom: innerHeight }, top = Math.max(0, vr.top), bot = Math.min(innerHeight, vr.bottom), E = 72;
+      let v = 0; if (d.y < top + E) v = -Math.ceil(14 * (1 - Math.max(0, d.y - top) / E)); else if (d.y > bot - E) v = Math.ceil(14 * (1 - Math.max(0, bot - d.y) / E));
+      if (v) { if (sc) sc.scrollTop += v; else window.scrollBy(0, v); this.moveDrag(); } d.raf = requestAnimationFrame(as); }; d.raf = requestAnimationFrame(as);
     if (navigator.vibrate) try { navigator.vibrate(12); } catch (x) {} this.moveDrag(); this.tick(); },
   moveDrag() { const d = this.drag; if (!d) return; d.gh.style.transform = `translate(${d.x - d.x0}px,${d.y - d.y0}px) scale(1.06)`; let over = null, orect = null;
+    const me = this.find(d.key); if (me) hvEcl.pos(d.dim, me.el.getBoundingClientRect());
     for (const it of this.items()) { if (it.sec !== d.sec || it.key === d.key) continue; const b = it.el.getBoundingClientRect(); if (d.x >= b.left && d.x <= b.right && d.y >= b.top && d.y <= b.bottom) { over = it; orect = b; break; } }
     d.over = over; if (orect) { hvEcl.pos(d.drop, orect); d.drop.style.display = ''; } else d.drop.style.display = 'none'; },
-  endDrag(ok) { const d = this.drag; if (!d) return; this.drag = null; try { d.cv.releasePointerCapture(d.id); } catch (x) {}
+  endDrag(ok) { const d = this.drag; if (!d) return; this.drag = null; cancelAnimationFrame(d.raf); document.removeEventListener('touchmove', d.tm, { passive: false, capture: true });
+    try { d.cv.releasePointerCapture(d.id); } catch (x) {}
     d.cv.removeEventListener('pointermove', d.mv); d.cv.removeEventListener('pointerup', d.up); d.cv.removeEventListener('pointercancel', d.up); [d.dim, d.drop].forEach(n => n.remove());
     d.gh.style.transition = 'all .16s ease-out'; d.gh.style.opacity = '0'; d.gh.style.transform = 'scale(1)'; setTimeout(() => d.gh.remove(), 200);
     if (ok && d.over) this.move(d.it, d.over.id); this.tick(); },
