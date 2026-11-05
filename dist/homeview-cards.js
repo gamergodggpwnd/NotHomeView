@@ -166,10 +166,19 @@ function hvCardPath(cfg, match, pref) { if (!cfg || !Array.isArray(cfg.views)) r
 const hvDeepFind = (r, test, d = 0) => { if (!r || d > 14) return null; for (const n of r.querySelectorAll('*')) { if (test(n)) return n; if (n.shadowRoot) { const x = hvDeepFind(n.shadowRoot, test, d + 1); if (x) return x; } } return null; };
 // open Home Assistant's card editor for the card at `path` (it listens for ll-edit-card on the section / view layout); false = not on screen
 function hvOpenCardEditor(root, path) { const v = path[0];
-  const host = path.length === 3 ? hvDeepFind(root.shadowRoot, n => n.tagName === 'HUI-SECTION' && n.index === path[1] && n.viewIndex === v)
-    : hvDeepFind(root.shadowRoot, n => n.tagName === 'HUI-VIEW' && n.index === v);
-  const le = host && host._layoutElement; if (!le) return false;
-  le.dispatchEvent(new CustomEvent('ll-edit-card', { detail: { path } })); return true; }
+  // HA 2025.10+: HUI-SECTION no longer has index/viewIndex; it exposes .path = ['views', v, 'sections', si].
+  // Keep the old index/viewIndex match for older frontends.
+  const secMatch = (n, si) => n.tagName === 'HUI-SECTION' && ((n.index === si && n.viewIndex === v)
+    || (Array.isArray(n.path) && n.path[0] === 'views' && n.path[1] === v && n.path[2] === 'sections' && n.path[3] === si));
+  const viewMatch = n => n.tagName === 'HUI-VIEW' && (n.index === v || (Array.isArray(n.path) && n.path[0] === 'views' && n.path[1] === v));
+  let host = path.length === 3 ? hvDeepFind(root.shadowRoot, n => secMatch(n, path[1]))
+    : hvDeepFind(root.shadowRoot, viewMatch);
+  if (!host && path.length === 3 && root.shadowRoot) { // one visible section on this view: use it
+    const all = []; const collect = (r, d = 0) => { if (!r || d > 14) return; for (const n of r.querySelectorAll('*')) { if (n.tagName === 'HUI-SECTION') all.push(n); if (n.shadowRoot) collect(n.shadowRoot, d + 1); } };
+    collect(root.shadowRoot); const m = all.filter(n => secMatch(n, path[1]) || ((!n.path && n.index == null) || (Array.isArray(n.path) && n.path[1] === v)));
+    host = m.find(n => secMatch(n, path[1])) || (m.length === 1 ? m[0] : m[path[1]]) || null; }
+  const le = host && (host._layoutElement || host); if (!le) return false;
+  le.dispatchEvent(new CustomEvent('ll-edit-card', { detail: { path }, bubbles: true, composed: true })); return true; }
 // target: { card: element } (its own card editor) or { view: 'path', dash } (that page in edit mode)
 function hvPopEdit(from, target) { const root = hvFindRoot((target && target.card) || from), lv = root && root.lovelace, dash = (lv && lv.urlPath) || ssDash();
   if (target && target.view != null) { hvPenPage(target.dash || dash, target.view); return; }
@@ -4052,9 +4061,13 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
     addEventListener('pointermove', d.mv, true); addEventListener('pointerup', d.up, true); addEventListener('pointercancel', d.up, true); this.tick(); },
   endResize() { const d = this.rs; if (!d) return; this.rs = null; clearInterval(d.iv); removeEventListener('pointermove', d.mv, true); removeEventListener('pointerup', d.up, true); removeEventListener('pointercancel', d.up, true);
     try { d.h0.releasePointerCapture(d.id); } catch (x) {} [...d.zones, d.live, d.lbl].forEach(n => n && n.remove()); this.tick(); },
-  async openEditor() { const h = this.hub; if (!(await this.exit(true))) return; const root = hvFindRoot(h), lv = root && root.lovelace; if (!lv) return; const sig = JSON.stringify(h._hvRaw || {});
-    const path = hvCardPath(lv.config, o => o && o.type === 'custom:homeview-hub-card' && JSON.stringify(o) === sig, root._curView); if (path && hvOpenCardEditor(root, path)) return;
-    hvToast('Open the dashboard editor (pencil) and tap the Home Screen card to edit it'); },
+  async openEditor() { const h = this.hub; if (!(await this.exit(true))) return; const root = hvFindRoot(h), lv = root && root.lovelace; if (!lv) return;
+    // Same path as the popup pencil: open this Home Screen card's editor when we can find it; otherwise enter dashboard edit mode.
+    const sig = JSON.stringify(h._hvRaw || {});
+    const path = hvCardPath(lv.config, o => o && o.type === 'custom:homeview-hub-card' && (JSON.stringify(o) === sig || (hvCfgMatch(h)(o))), root._curView);
+    if (path && hvOpenCardEditor(root, path)) return;
+    if (path) { const vw = lv.config.views[path[0]] || {}; hvPenPage((lv.urlPath || ssDash()), vw.path != null && vw.path !== '' ? vw.path : path[0]); return; }
+    hvPopEdit(h, { card: h }); },
   menu(it, anchor) { hvEcl.closeMenu(); hvEcl.ensure(); const wrap = hvEcl.menu = document.createElement('div'); wrap.innerHTML = '<div class="scrim"></div><div class="menu" role="menu"></div>';
     const m = wrap.querySelector('.menu'), close = () => hvEcl.closeMenu(), t0 = Date.now(), n = this.items().filter(x => x.kind === it.kind).length;
     const item = (ic, txt, fn, cls, dis) => { const b = document.createElement('button'); b.setAttribute('role', 'menuitem'); if (cls) b.className = cls; if (dis) b.disabled = true;
