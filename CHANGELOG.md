@@ -4,6 +4,7 @@
 
 ### Changes
 * **Doorbell / motion pop-up:** only on the Home - Pixel dashboard (`home-vertical-tablet`). Other dashboards never show it.
+* **Camera large view:** hide the *Card setting* / *Tile on this device* button by default (`show_device_live: false`). History, Talk and Pop-ups stay.
 * **Card editor:** open the visual editor again on Home Assistant 2025.10+ (HUI-SECTION dropped `index`/`viewIndex`; match on `.path` instead). The Home Screen arrange "Edit" action no longer dies on a toast.
 
 ### New features
