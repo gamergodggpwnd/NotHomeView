@@ -2,6 +2,9 @@
 
 ## Unreleased (next after v1.5, in development as 1.6.0-dev)
 
+### Changes
+* **Doorbell / motion pop-up:** only on the Home - Pixel dashboard (`home-vertical-tablet`). Other dashboards never show it.
+
 ### New features
 * **My Home page** (`custom:homeview-myhome-card`, NotHomeView My Home): an Apple Home style "My Home" page in the dark glass look: big title and clock, summary pills (climate range, lights on, garage doors, media playing), a Cameras row (NotHomeView camera tiles), Scenes (a list you pick in the editor: scene / script, optional name and icon) and then every Home Assistant device grouped by room (area). Only devices with a room are shown; sensors, updates, buttons, config / diagnostic / hidden entities and browser_mod are left out; lights that belong to a light group shown in the same room are folded into the group tile, same-name duplicates in a room show once. Tap toggles lights / switches / fans (more-info for the rest, garage doors never move on a tap), hold = more-info. Point the Home Screen's Home app at the view with this card (it opens as a sheet over the Home Screen, always dark).
   The **⋯ menu**: *N Issues* (devices with No Response, tap one for its details), *Home Settings* (the card editor: scenes, cameras, room order, hidden rooms / devices, what to show), *Edit Home View* (tap tiles to hide / show them, Done / Cancel) and *Reorder Sections* (a sheet with every section, Cameras, Scenes and each room: drag the handle (touch or mouse) to move a whole section with its tiles, ✕ cancels, ✓ saves). Order and hidden tiles are kept per dashboard in this browser (`localStorage` `hvMyHome:<dashboard>`, works for every user); for admins they are also written to the card (`section_order`, `hidden_entities`) so every device gets them.

@@ -1,10 +1,10 @@
 # Doorbell & motion pop-up
 
-NotHomeView dashboards can show a doorbell camera live when someone rings, and (during the screensaver) when the camera sees motion.
+On the **Home - Pixel** dashboard only (`url_path` `home-vertical-tablet`), NotHomeView can show a doorbell camera live when someone rings, and (during the screensaver) when the camera sees motion. Every other dashboard ignores the event (no pop-up).
 
 | Situation | What appears |
 |---|---|
-| Doorbell rings, screen awake | The camera live, **full screen** over any NotHomeView dashboard (purple), closes after 60 s, or with ✕ / *Dismiss*. *Muted* turns the stream's sound on. |
+| Doorbell rings, screen awake | On Home - Pixel: the camera live, **full screen** (purple), closes after 60 s, or with ✕ / *Dismiss*. *Muted* turns the stream's sound on. |
 | Doorbell rings during the Wallpanel screensaver | A small **corner pop-up** (top right, purple). Tap it for full screen (the screensaver stays); waking the screen also opens it full screen. |
 | Motion / person during the screensaver | The corner pop-up in **orange**, muted, closes 45 s after the last motion event; then no motion pop-up for 5 minutes. |
 | Motion while the screen is awake | Nothing. |
@@ -74,4 +74,4 @@ actions:
 
 Test without ringing: *Developer tools → Events*, event type `nothomeview_doorbell`, data `kind: ring` and `camera: camera.front_door`. In the browser console, `NotHomeView.doorbell.status()` shows what the dashboard received and why it did or didn't show a pop-up; `NotHomeView.doorbell.show('ring', 'camera.front_door')` previews the pop-up on that device only.
 
-Notes: the pop-up appears on every device that has a NotHomeView dashboard open, so each of them starts its own stream (Nest limits streams per account). "Motion stops" means no new motion event from the camera; most cameras send a new event at most every 30-60 s while motion continues.
+Notes: the pop-up appears only when Home - Pixel is open on that device (other dashboards never show it). Nest limits streams per account. "Motion stops" means no new motion event from the camera; most cameras send a new event at most every 30-60 s while motion continues.
