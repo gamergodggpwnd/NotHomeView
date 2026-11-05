@@ -62,6 +62,37 @@ asks for the screensaver but Wallpanel is missing.
 Tested with Home Assistant 2026.10, card-mod 4.2.1, layout-card 2.4.7, button-card 7.0.1, browser_mod 3.3.0, kiosk-mode 15.0.0
 and Wallpanel 4.67.2.
 
+## What's new in v1.6
+
+**My Home page.** An Apple Home style page (`custom:homeview-myhome-card`) opened from the Home Screen's Home app: summary pills, cameras,
+scenes and every device grouped by room. Its ⋯ menu has *Issues*, *Home Settings*, *Edit Home View* (move, resize, hide / show tiles with Cancel / Done)
+and *Reorder Sections*. On the Home Screen, swipe right‑to‑left to reach a second page (`swipe_page`), with page dots underneath.
+
+| My Home (tablet) | My Home (phone) |
+|---|---|
+| ![My Home page on a tablet (demo data)](docs/images/v1.6/my_home.png) | ![My Home page on a phone (demo data)](docs/images/v1.6/my_home_phone.png) |
+
+**Doorbell & motion pop‑up** (only on the *Home - Pixel* dashboard, `home-vertical-tablet`; see [docs/doorbell-popup.md](docs/doorbell-popup.md)).
+A ring shows the camera live full screen; during the screensaver a corner pop‑up appears instead (orange for motion). A still picture shows while the stream starts.
+
+| Doorbell ring, full screen | Motion during the screensaver |
+|---|---|
+| ![Doorbell full-screen pop-up (demo camera frame)](docs/images/v1.6/doorbell_full_screen.png) | ![Orange motion corner pop-up over the screensaver (demo)](docs/images/v1.6/motion_corner_popup_screensaver.png) |
+
+**Screensaver styles and colours.** Four new full‑screen clocks next to the Photo clock (still the default), picked in the screensaver settings,
+each with optional colours (picker, hex field, swatches, *Reset to default colors*).
+
+| Info dashboard | Abstract fluid | Modern typographic | Whimsical minimalist |
+|---|---|---|---|
+| ![Info dashboard screensaver](docs/images/v1.6/screensaver_1_info_dashboard.png) | ![Abstract fluid screensaver](docs/images/v1.6/screensaver_2_abstract_fluid.png) | ![Modern typographic screensaver](docs/images/v1.6/screensaver_3_modern_typographic.png) | ![Whimsical minimalist screensaver](docs/images/v1.6/screensaver_4_whimsical_minimalist.png) |
+
+| Style picker | Colour picker | Custom colours |
+|---|---|---|
+| ![Screensaver style picker](docs/images/v1.6/screensaver_style_picker.png) | ![Screensaver colour picker](docs/images/v1.6/screensaver_color_picker.png) | ![Modern typographic with custom colours](docs/images/v1.6/screensaver_custom_colors.png) |
+
+*All v1.6 pictures are demo / sample data: a throwaway test Home Assistant with made‑up entities, a generated camera frame and generated album art.*
+Full list of changes and fixes: [CHANGELOG.md](CHANGELOG.md).
+
 ## What's new in v1.5
 
 **Voice assistant (Assist).** Tap the mic beside the avatar (or the Assistant app) and talk or type; the floating orb shows when it's listening.
