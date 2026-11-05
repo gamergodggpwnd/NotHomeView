@@ -6400,6 +6400,7 @@ const HUB_SCHEMA = [
     { name: 'full_height_popups', selector: { boolean: {} } },
     { name: 'popup_edit', selector: { boolean: {} } },
     { name: 'screensaver_style', selector: { select: { mode: 'dropdown', options: [{ value: 'photo', label: 'Photo clock (default)' }, { value: 'info', label: 'Info dashboard' }, { value: 'fluid', label: 'Abstract fluid' }, { value: 'typo', label: 'Modern typographic' }, { value: 'whimsy', label: 'Whimsical minimalist' }] } } },
+    { name: 'screensaver_colors', selector: { object: {} } },
     { name: 'swipe_screensaver', selector: { select: { mode: 'dropdown', options: [{ value: 'auto', label: 'Auto (when the screensaver is on here)' }, { value: 'on', label: 'On' }, { value: 'off', label: 'Off' }] } } }, { name: 'ss_hold', selector: { boolean: {} } }, { name: 'swipe_page', selector: { navigation: {} } }] }];
 Object.assign(LABELS, { photo_source_mode: 'Photo source', photo_album_url: 'Album link', apps: 'Apps (drag to reorder, pencil to edit)', person: 'Person (empty = the logged-in user)', fallback_person: 'Fallback person (no match)', ring_color: 'Avatar ring colour / gradient',
   morning_start: 'Morning from (hour)', afternoon_start: 'Afternoon from', evening_start: 'Evening from', night_start: 'Night from (empty = evening until morning)', greeting_night: 'Night greeting', greeting_morning: 'Morning greeting', greeting_afternoon: 'Afternoon greeting', greeting_evening: 'Evening greeting',
@@ -7487,13 +7488,16 @@ window.NotHomeView = Object.assign(window.NotHomeView || {}, { doorbell: {
     if (!v || UNAVAILABLE.includes(v)) return; const age = Date.now() - Date.parse(st.last_changed || 0); if (!(age < 300000)) return; // late states after a reconnect: ignored after 5 min
     const [kind, camera, id, type] = String(v).split('|'); dbIn({ kind, camera, id, type }, 'helper'); }, 600); })();
 
+
+
 /* ---------------- 1.6.0: screensaver styles ----------------
    Photo clock (Wallpanel's photos + clock, the default) or one of four full-screen live clocks: Info dashboard, Abstract fluid, Modern typographic,
    Whimsical minimalist. Picked in the screensaver settings popup (thumbnail radio list, applies at once). Stored like the My Home settings: per dashboard
    in this browser (localStorage hvSsStyle:<dash>) for everyone, and for admins also as `screensaver_style` on the dashboard's Home Screen card (editable
-   in its visual editor; a value changed there wins over an older browser copy). Wallpanel still runs the idle timer / tap to stop: the clock face is a
-   pointer-events:none layer right above <wallpanel-view>, shown only while its screensaver runs (fades with it). Doorbell pop-ups use the top layer, so
-   they stay on top. Nothing changes for a dashboard where no style was chosen. */
+   in its visual editor; a value changed there wins over an older browser copy). Optional per-style colours (popup colour pickers + swatches; Reset to defaults)
+   live in localStorage hvSsColors:<dash> and, for admins, as `screensaver_colors` on the same Home Screen card. Defaults keep the reference designs.
+   Wallpanel still runs the idle timer / tap to stop: the clock face is a pointer-events:none layer right above <wallpanel-view>, shown only while its
+   screensaver runs (fades with it). Doorbell pop-ups use the top layer, so they stay on top. Nothing changes for a dashboard where no style was chosen. */
 const HV_SSS = [
   { v: 'photo', l: 'Photo clock', s: 'Your photos with the clock (default)' },
   { v: 'info', l: 'Info dashboard', s: 'Date, clock, weather and now playing' },
@@ -7501,63 +7505,122 @@ const HV_SSS = [
   { v: 'typo', l: 'Modern typographic', s: 'Oversized numerals, white hands' },
   { v: 'whimsy', l: 'Whimsical minimalist', s: 'Embossed numerals, dusty rose' }];
 const HV_SSS_V = HV_SSS.map(x => x.v);
+// Meaningful colours per style (defaults match the reference designs). Only non-defaults are persisted.
+const HV_SS_COLS = {
+  photo: [{ k: 'text', l: 'Clock / text', d: '#ffffff' }],
+  info: [
+    { k: 'bg', l: 'Background', d: '#97a9af' },
+    { k: 'text', l: 'Light text', d: '#ffffff' },
+    { k: 'clock', l: 'Clock / dark text', d: '#0b0b0c' }],
+  fluid: [
+    { k: 'bg', l: 'Background', d: '#f06aa8' },
+    { k: 'accent', l: 'Accent (blob)', d: '#5b78f0' },
+    { k: 'glass', l: 'Digit glass', d: '#6c7cf2' }],
+  typo: [
+    { k: 'bg', l: 'Background', d: '#5c9a68' },
+    { k: 'text', l: 'Numerals', d: '#060606' },
+    { k: 'hands', l: 'Hands', d: '#ffffff' },
+    { k: 'date', l: 'Date', d: '#0a0a0a' }],
+  whimsy: [
+    { k: 'bg', l: 'Background', d: '#dcbdba' },
+    { k: 'text', l: 'Hands', d: '#6d3431' },
+    { k: 'accent', l: 'Second hand', d: '#ea5ab4' }] };
+const HV_SS_SWATCH = ['#ffffff', '#0b0b0c', '#97a9af', '#5c9a68', '#f06aa8', '#5b78f0', '#6c7cf2', '#dcbdba', '#6d3431', '#ea5ab4', '#ffd166', '#118ab2', '#073b4c', '#ef476f'];
 const hvSsDeep = (root, sel, d = 0) => { if (!root || d > 9) return null; const f = root.querySelector && root.querySelector(sel); if (f) return f;
   for (const el of (root.querySelectorAll ? root.querySelectorAll('*') : [])) if (el.shadowRoot) { const r = hvSsDeep(el.shadowRoot, sel, d + 1); if (r) return r; } return null; };
 const hvSsLv = () => { const p = hvSsDeep(document.querySelector('home-assistant'), 'ha-panel-lovelace'); return p && p.lovelace ? p.lovelace : null; };
+const hvSsHex = v => { const s = String(v || '').trim(); const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(s); if (!m) return null;
+  if (m[1].length === 3) return '#' + [...m[1]].map(c => c + c).join('').toLowerCase(); return ('#' + m[1]).toLowerCase(); };
+const hvSsStrip = (style, cols) => { const defs = HV_SS_COLS[style] || []; const o = {};
+  for (const d of defs) { const h = hvSsHex(cols && cols[d.k]); if (h && h !== d.d) o[d.k] = h; } return Object.keys(o).length ? o : null; };
+const hvSsMerge = (style, cols) => { const defs = HV_SS_COLS[style] || [], o = {}; for (const d of defs) o[d.k] = (hvSsHex(cols && cols[d.k]) || d.d); return o; };
+const hvSsSaveHub = async (hass, mut) => { // mut(hub) → true if changed; returns whether a save ran
+  const admin = !!(hass && hass.user && hass.user.is_admin); if (!admin) return false;
+  const dash = ssDash(), q = { type: 'lovelace/config', force: true }; if (dash) q.url_path = dash;
+  const fresh = JSON.parse(JSON.stringify(await hass.callWS(q))), hub = hvHubCfgOf(fresh);
+  if (!hub || !mut(hub)) return false;
+  const lv = hvSsLv(); if (lv && typeof lv.saveConfig === 'function' && (lv.urlPath || null) === (dash || null)) await lv.saveConfig(fresh);
+  else { const sv = { type: 'lovelace/config/save', config: fresh }; if (dash) sv.url_path = dash; await hass.callWS(sv); }
+  return true; };
 const hvSs = {
   key() { return `hvSsStyle:${ssDash() || 'lovelace'}`; },
   cfgVal() { try { const lv = hvSsLv(), hub = lv && lv.config && hvHubCfgOf(lv.config); const v = hub && hub.screensaver_style; return HV_SSS_V.includes(v) ? v : 'photo'; } catch (e) { return 'photo'; } },
   get() { const c = this.cfgVal(), l = mhLs.get(this.key()); if (l && HV_SSS_V.includes(l.v) && (l.cfg === undefined || l.cfg === c)) return l.v; return c; },
   async set(v, hass) { if (!HV_SSS_V.includes(v)) v = 'photo';
-    let cfgV = this.cfgVal(); const admin = !!(hass && hass.user && hass.user.is_admin); let saved = false;
-    if (admin) { const dash = ssDash(), q = { type: 'lovelace/config', force: true }; if (dash) q.url_path = dash;
-      const fresh = JSON.parse(JSON.stringify(await hass.callWS(q))), hub = hvHubCfgOf(fresh);
-      if (hub) { if (v === 'photo') delete hub.screensaver_style; else hub.screensaver_style = v; // Photo clock = default: the key is removed
-        const lv = hvSsLv(); if (lv && typeof lv.saveConfig === 'function' && (lv.urlPath || null) === (dash || null)) await lv.saveConfig(fresh);
-        else { const sv = { type: 'lovelace/config/save', config: fresh }; if (dash) sv.url_path = dash; await hass.callWS(sv); } cfgV = v; saved = true; } }
-    mhLs.set(this.key(), { v, cfg: cfgV }); hvSsOv.tick(true); return saved; } };
+    let cfgV = this.cfgVal(); mhLs.set(this.key(), { v, cfg: cfgV }); let saved = false;
+    try { saved = await hvSsSaveHub(hass, hub => { if (v === 'photo') { if (!('screensaver_style' in hub)) return false; delete hub.screensaver_style; }
+      else { if (hub.screensaver_style === v) return false; hub.screensaver_style = v; } return true; });
+      if (saved) { cfgV = v; mhLs.set(this.key(), { v, cfg: cfgV }); }
+    } catch (e) { saved = false; }
+    hvSsOv.tick(true); return saved; } };
+const hvSsColors = {
+  key() { return `hvSsColors:${ssDash() || 'lovelace'}`; },
+  cfgAll() { try { const lv = hvSsLv(), hub = lv && lv.config && hvHubCfgOf(lv.config); const o = hub && hub.screensaver_colors; return o && typeof o === 'object' ? o : {}; } catch (e) { return {}; } },
+  cfgSig(all) { try { return JSON.stringify(all || this.cfgAll()); } catch (e) { return ''; } },
+  raw() { // browser copy wins while it still matches the config signature (same pattern as style)
+    const cfg = this.cfgAll(), sig = this.cfgSig(cfg), l = mhLs.get(this.key());
+    if (l && l.colors && typeof l.colors === 'object' && (l.cfg === undefined || l.cfg === sig)) return l.colors;
+    return cfg; },
+  get(style) { return hvSsMerge(style, (this.raw() || {})[style]); },
+  packed() { const raw = this.raw() || {}, out = {}; for (const s of HV_SSS_V) { const p = hvSsStrip(s, raw[s]); if (p) out[s] = p; } return out; },
+  async setStyle(style, cols, hass) { // cols = full map or null to reset this style
+    if (!HV_SSS_V.includes(style)) return false;
+    const next = Object.assign({}, this.raw()); const stripped = cols ? hvSsStrip(style, cols) : null;
+    if (stripped) next[style] = stripped; else delete next[style];
+    for (const s of Object.keys(next)) { if (!HV_SSS_V.includes(s) || !next[s] || !Object.keys(next[s]).length) delete next[s]; }
+    // Always keep the browser copy first (works for non-admins; survives a blocked/failed admin save).
+    let cfg = this.cfgAll(); mhLs.set(this.key(), { colors: next, cfg: this.cfgSig(cfg) });
+    let saved = false;
+    try { saved = await hvSsSaveHub(hass, hub => {
+      const cur = hub.screensaver_colors && typeof hub.screensaver_colors === 'object' ? hub.screensaver_colors : {};
+      const want = Object.keys(next).length ? next : null;
+      if (!want) { if (!('screensaver_colors' in hub)) return false; delete hub.screensaver_colors; cfg = {}; return true; }
+      if (JSON.stringify(cur) === JSON.stringify(want)) return false; hub.screensaver_colors = want; cfg = want; return true; });
+      if (saved) mhLs.set(this.key(), { colors: next, cfg: this.cfgSig(cfg) });
+    } catch (e) { saved = false; }
+    hvSsOv.tick(true); return saved; } };
 // ---- faces (sized with container units, so one renderer draws the full screen and the picker thumbnails)
 const HV_SS_FACE_CSS = `
 .f{position:absolute;inset:0;container-type:size;overflow:hidden;font-family:${FONT};-webkit-font-smoothing:antialiased;user-select:none}
 .stg{position:absolute;top:50%;left:50%;height:100cqh;width:min(100cqw,128cqh);transform:translate(-50%,-50%);container-type:size}
 /* info */
-.f.info{background:#97a9af}
-.info .dt{position:absolute;left:6cqw;top:7cqh;color:#fff;font-weight:700;font-size:11.5cqh;letter-spacing:-.02em;line-height:1}
-.info .dn{position:absolute;left:6cqw;top:16cqh;color:#0b0b0c;font-weight:600;font-size:39cqh;line-height:1;letter-spacing:-.04em}
+.f.info{background:var(--hv-ss-bg,#97a9af)}
+.info .dt{position:absolute;left:6cqw;top:7cqh;color:var(--hv-ss-text,#fff);font-weight:700;font-size:11.5cqh;letter-spacing:-.02em;line-height:1}
+.info .dn{position:absolute;left:6cqw;top:16cqh;color:var(--hv-ss-clock,#0b0b0c);font-weight:600;font-size:39cqh;line-height:1;letter-spacing:-.04em}
 .info .an{position:absolute;right:5cqw;top:4cqh;width:47cqh;height:47cqh}
 .info .mu{position:absolute;left:6cqw;bottom:6cqh;width:30cqw}
 .info .art{width:23cqh;height:23cqh;border-radius:2.2cqh;background:linear-gradient(160deg,#b9d7ee,#6f9ccc);background-size:cover;background-position:center;box-shadow:0 .6cqh 2cqh rgba(0,0,0,.18)}
-.info .tt{margin-top:2.6cqh;color:#25282b;font-weight:700;font-size:3.6cqh;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.info .ar{color:rgba(40,44,48,.6);font-size:3.4cqh;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.info .pb{display:inline-flex;align-items:center;gap:1.4cqh;margin-top:1.6cqh;padding:1.2cqh 3.4cqh 1.2cqh 2.6cqh;border-radius:99cqh;background:rgba(60,72,78,.22);color:#202326;font-weight:600;font-size:3.8cqh}
-.info .pb i{width:0;height:0;border-left:2.4cqh solid #202326;border-top:1.5cqh solid transparent;border-bottom:1.5cqh solid transparent}
+.info .tt{margin-top:2.6cqh;color:var(--hv-ss-clock,#25282b);font-weight:700;font-size:3.6cqh;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.info .ar{color:color-mix(in srgb,var(--hv-ss-clock,#282c30) 60%,transparent);font-size:3.4cqh;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.info .pb{display:inline-flex;align-items:center;gap:1.4cqh;margin-top:1.6cqh;padding:1.2cqh 3.4cqh 1.2cqh 2.6cqh;border-radius:99cqh;background:rgba(60,72,78,.22);color:var(--hv-ss-clock,#202326);font-weight:600;font-size:3.8cqh}
+.info .pb i{width:0;height:0;border-left:2.4cqh solid var(--hv-ss-clock,#202326);border-top:1.5cqh solid transparent;border-bottom:1.5cqh solid transparent}
 .info .nt{position:absolute;left:38cqw;top:57cqh;width:7cqh;height:7cqh}
 .info .wx{position:absolute;left:50cqw;top:54cqh;right:3cqw}
-.info .ct{color:#fff;font-weight:700;font-size:4.6cqh;display:flex;align-items:center;gap:1cqh;white-space:nowrap}
+.info .ct{color:var(--hv-ss-text,#fff);font-weight:700;font-size:4.6cqh;display:flex;align-items:center;gap:1cqh;white-space:nowrap}
 .info .ct svg{width:3.2cqh;height:3.2cqh}
-.info .tp{color:#0b0b0c;font-weight:500;font-size:18cqh;line-height:1.02;letter-spacing:-.03em}
+.info .tp{color:var(--hv-ss-clock,#0b0b0c);font-weight:500;font-size:18cqh;line-height:1.02;letter-spacing:-.03em}
 .info .ci{width:6cqh;height:5cqh;margin-top:1cqh}
-.info .cn,.info .hl{color:#1f2326;font-weight:500;font-size:3.8cqh;line-height:1.3}
+.info .cn,.info .hl{color:var(--hv-ss-clock,#1f2326);font-weight:500;font-size:3.8cqh;line-height:1.3}
 /* fluid */
-.f.fluid{background:radial-gradient(ellipse 70% 75% at 50% 50%,#f06aa8 0%,#f0a2cc 40%,#d9c3ea 75%,#cbc5ec 100%)}
-.fluid .bl{position:absolute;left:18cqw;top:14cqh;width:64cqw;height:72cqh;background:radial-gradient(circle at 40% 45%,#5b78f0 0%,#4f8bf0 35%,rgba(90,150,240,.6) 60%,rgba(240,110,180,0) 75%);
+.f.fluid{background:radial-gradient(ellipse 70% 75% at 50% 50%,var(--hv-ss-bg,#f06aa8) 0%,color-mix(in srgb,var(--hv-ss-bg,#f06aa8) 55%,#fff) 40%,color-mix(in srgb,var(--hv-ss-accent,#5b78f0) 35%,#fff) 75%,color-mix(in srgb,var(--hv-ss-accent,#5b78f0) 55%,#e8e4ff) 100%)}
+.fluid .bl{position:absolute;left:18cqw;top:14cqh;width:64cqw;height:72cqh;background:radial-gradient(circle at 40% 45%,var(--hv-ss-accent,#5b78f0) 0%,color-mix(in srgb,var(--hv-ss-accent,#5b78f0) 80%,#4f8bf0) 35%,color-mix(in srgb,var(--hv-ss-accent,#5b78f0) 55%,transparent) 60%,rgba(240,110,180,0) 75%);
  filter:blur(2.5cqh);border-radius:46% 54% 41% 59%/52% 38% 62% 48%;animation:hvssm 26s ease-in-out infinite alternate}
 @keyframes hvssm{0%{border-radius:46% 54% 41% 59%/52% 38% 62% 48%;transform:rotate(0deg) scale(1)}50%{border-radius:60% 40% 55% 45%/40% 60% 40% 60%;transform:rotate(14deg) scale(1.06)}100%{border-radius:40% 60% 48% 52%/58% 46% 54% 42%;transform:rotate(-10deg) scale(.97)}}
 .fluid .dg{position:absolute;width:24cqw;height:39cqh}
 .fluid .sh{position:absolute;box-sizing:border-box;overflow:hidden;border:.25cqh solid rgba(255,255,255,.55);
- background:linear-gradient(200deg,rgba(255,255,255,.55) 0%,rgba(150,190,255,.9) 18%,#6c7cf2 45%,#7d86f4 62%,#f3a0cf 86%,#ffc4e2 100%);
+ background:linear-gradient(200deg,rgba(255,255,255,.55) 0%,color-mix(in srgb,var(--hv-ss-glass,#6c7cf2) 55%,#fff) 18%,var(--hv-ss-glass,#6c7cf2) 45%,color-mix(in srgb,var(--hv-ss-glass,#6c7cf2) 70%,#7d86f4) 62%,color-mix(in srgb,var(--hv-ss-bg,#f06aa8) 70%,#fff) 86%,#ffc4e2 100%);
  box-shadow:inset 0 1.2cqh 2cqh rgba(255,255,255,.45),inset 0 -1.5cqh 2.5cqh rgba(255,170,215,.65),0 1.5cqh 4cqh rgba(80,60,170,.25)}
 .fluid .sh::after{content:'';position:absolute;left:12%;top:6%;width:42%;height:18%;border-radius:50%;background:linear-gradient(180deg,rgba(255,255,255,.7),rgba(255,255,255,0));filter:blur(.4cqh)}
 /* typographic */
-.f.typo{background:#5c9a68}
-.typo .n{position:absolute;color:#060606;font-weight:300;font-family:"Helvetica Neue",Helvetica,Arial,${FONT};line-height:.8;letter-spacing:-.04em;font-size:50cqh}
+.f.typo{background:var(--hv-ss-bg,#5c9a68)}
+.typo .n{position:absolute;color:var(--hv-ss-text,#060606);font-weight:300;font-family:"Helvetica Neue",Helvetica,Arial,${FONT};line-height:.8;letter-spacing:-.04em;font-size:50cqh}
 .typo .n12{left:50%;top:9cqh;transform:translateX(-52%)} .typo .n6{left:50%;top:51cqh;transform:translateX(-50%)}
 .typo .n9{left:4cqw;top:31cqh} .typo .n3{right:4cqw;top:31cqh}
 .typo svg.h{position:absolute;inset:0;width:100%;height:100%}
-.typo .dc{position:absolute;left:5.5cqw;bottom:6cqh;color:#0a0a0a;font-weight:600;font-size:4.6cqh;letter-spacing:.01em}
+.typo .dc{position:absolute;left:5.5cqw;bottom:6cqh;color:var(--hv-ss-date,#0a0a0a);font-weight:600;font-size:4.6cqh;letter-spacing:.01em}
 /* whimsy */
-.f.whimsy{background:linear-gradient(160deg,#dcbdba 0%,#d2b2b1 55%,#c9a9aa 100%)}
-.whimsy .n{position:absolute;font-family:"Avenir Next","Helvetica Neue",${FONT};font-weight:400;font-size:15cqh;line-height:1;color:#d2b3b1;transform:translate(-50%,-50%);
+.f.whimsy{background:linear-gradient(160deg,var(--hv-ss-bg,#dcbdba) 0%,color-mix(in srgb,var(--hv-ss-bg,#dcbdba) 85%,#000) 55%,color-mix(in srgb,var(--hv-ss-bg,#dcbdba) 75%,#000) 100%)}
+.whimsy .n{position:absolute;font-family:"Avenir Next","Helvetica Neue",${FONT};font-weight:400;font-size:15cqh;line-height:1;color:var(--hv-ss-bg,#d2b3b1);transform:translate(-50%,-50%);
  text-shadow:-.25cqh -.25cqh .3cqh rgba(110,70,72,.55),.25cqh .25cqh .35cqh rgba(255,240,238,.9);transition:opacity 1.2s ease}
 .whimsy svg.h{position:absolute;inset:0;width:100%;height:100%}
 `;
@@ -7576,35 +7639,35 @@ const HV_SS_COND = { 'clear-night': 'Clear', cloudy: 'Cloudy', exceptional: 'Exc
   pouring: 'Pouring', rainy: 'Rain', snowy: 'Snow', 'snowy-rainy': 'Sleet', sunny: 'Sunny', windy: 'Windy', 'windy-variant': 'Windy' };
 class HVSsFace {
   constructor(style, thumb) { this.s = style; this.thumb = !!thumb; const f = document.createElement('div'); f.className = 'f ' + style; this.el = f; this['_b_' + style](); }
+  applyColors(cols) { const defs = HV_SS_COLS[this.s] || []; for (const d of defs) {
+    const v = hvSsHex(cols && cols[d.k]); if (v && v !== d.d) this.el.style.setProperty('--hv-ss-' + d.k, v); else this.el.style.removeProperty('--hv-ss-' + d.k); } }
   _svg(vb) { const s = document.createElementNS(hvSsSvgNS, 'svg'); s.setAttribute('viewBox', vb); s.setAttribute('class', 'h'); return s; }
   _ln(s, a) { const l = document.createElementNS(hvSsSvgNS, a.t || 'line'); for (const k of Object.keys(a)) if (k !== 't') l.setAttribute(k, a[k]); s.appendChild(l); return l; }
   // ---- info dashboard
   _b_info() { const f = this.el; f.innerHTML = `<div class="stg"><div class="dt"></div><div class="dn"></div><div class="an"></div>
-    <svg class="nt" viewBox="0 0 24 24"><path fill="#fff" d="M21 3v12.5a3.5 3.5 0 1 1-2-3.16V7H9v10.5A3.5 3.5 0 1 1 7 14.34V3h14z"/></svg>
+    <svg class="nt" viewBox="0 0 24 24"><path fill="var(--hv-ss-text,#fff)" d="M21 3v12.5a3.5 3.5 0 1 1-2-3.16V7H9v10.5A3.5 3.5 0 1 1 7 14.34V3h14z"/></svg>
     <div class="mu"><div class="art"></div><div class="tt"></div><div class="ar"></div><div class="pb"><i></i><span>Play</span></div></div>
-    <div class="wx"><div class="ct"><span class="cy"></span><svg viewBox="0 0 24 24"><path fill="#fff" d="M21 3 3 10.5l7.5 3L13.5 21z"/></svg></div><div class="tp"></div>
-    <svg class="ci" viewBox="0 0 30 24"><circle cx="19" cy="8" r="5" fill="#2b2f33"/><g stroke="#2b2f33" stroke-width="1.6" stroke-linecap="round"><path d="M19 0.5v1.8M26.5 8h-1.8M24.3 2.7l-1.3 1.3M13.7 2.7 15 4"/></g><path fill="#2b2f33" stroke="#97a9af" stroke-width="1.4" d="M7 22a5 5 0 0 1-.6-9.96A7 7 0 0 1 19.6 14 4 4 0 0 1 19 22z"/></svg>
+    <div class="wx"><div class="ct"><span class="cy"></span><svg viewBox="0 0 24 24"><path fill="var(--hv-ss-text,#fff)" d="M21 3 3 10.5l7.5 3L13.5 21z"/></svg></div><div class="tp"></div>
+    <svg class="ci" viewBox="0 0 30 24"><circle cx="19" cy="8" r="5" fill="var(--hv-ss-clock,#2b2f33)"/><g stroke="var(--hv-ss-clock,#2b2f33)" stroke-width="1.6" stroke-linecap="round"><path d="M19 0.5v1.8M26.5 8h-1.8M24.3 2.7l-1.3 1.3M13.7 2.7 15 4"/></g><path fill="var(--hv-ss-clock,#2b2f33)" stroke="var(--hv-ss-bg,#97a9af)" stroke-width="1.4" d="M7 22a5 5 0 0 1-.6-9.96A7 7 0 0 1 19.6 14 4 4 0 0 1 19 22z"/></svg>
     <div class="cn"></div><div class="hl"></div></div></div>`;
     const s = this._svg('0 0 200 200'); s.style.cssText = 'width:100%;height:100%'; s.removeAttribute('class');
     for (let i = 0; i < 60; i++) { const a = i * Math.PI / 30, big = i % 5 === 0; if (big) continue; const r1 = 93, r2 = 88;
-      this._ln(s, { x1: 100 + r1 * Math.sin(a), y1: 100 - r1 * Math.cos(a), x2: 100 + r2 * Math.sin(a), y2: 100 - r2 * Math.cos(a), stroke: '#1a1d20', 'stroke-width': 1.3 }); }
-    for (let h = 1; h <= 12; h++) { const a = h * Math.PI / 6, t = this._ln(s, { t: 'text', x: 100 + 76 * Math.sin(a), y: 100 - 76 * Math.cos(a) + 7.5, 'text-anchor': 'middle', 'font-size': 21, 'font-weight': 500, fill: '#111', 'font-family': FONT }); t.textContent = h; }
-    this._hh = this._ln(s, { x1: 100, y1: 100, x2: 100, y2: 58, stroke: '#111', 'stroke-width': 5.5, 'stroke-linecap': 'round' });
-    this._mh = this._ln(s, { x1: 100, y1: 100, x2: 100, y2: 22, stroke: '#111', 'stroke-width': 4, 'stroke-linecap': 'round' });
-    this._sh = this._ln(s, { x1: 100, y1: 118, x2: 100, y2: 14, stroke: '#fff', 'stroke-width': 1.4, 'stroke-linecap': 'round' });
-    this._ln(s, { t: 'circle', cx: 100, cy: 100, r: 3.2, fill: '#111', stroke: '#fff', 'stroke-width': 1.2 });
+      this._ln(s, { x1: 100 + r1 * Math.sin(a), y1: 100 - r1 * Math.cos(a), x2: 100 + r2 * Math.sin(a), y2: 100 - r2 * Math.cos(a), stroke: 'var(--hv-ss-clock,#1a1d20)', 'stroke-width': 1.3 }); }
+    for (let h = 1; h <= 12; h++) { const a = h * Math.PI / 6, t = this._ln(s, { t: 'text', x: 100 + 76 * Math.sin(a), y: 100 - 76 * Math.cos(a) + 7.5, 'text-anchor': 'middle', 'font-size': 21, 'font-weight': 500, fill: 'var(--hv-ss-clock,#111)', 'font-family': FONT }); t.textContent = h; }
+    this._hh = this._ln(s, { x1: 100, y1: 100, x2: 100, y2: 58, stroke: 'var(--hv-ss-clock,#111)', 'stroke-width': 5.5, 'stroke-linecap': 'round' });
+    this._mh = this._ln(s, { x1: 100, y1: 100, x2: 100, y2: 22, stroke: 'var(--hv-ss-clock,#111)', 'stroke-width': 4, 'stroke-linecap': 'round' });
+    this._sh = this._ln(s, { x1: 100, y1: 118, x2: 100, y2: 14, stroke: 'var(--hv-ss-text,#fff)', 'stroke-width': 1.4, 'stroke-linecap': 'round' });
+    this._ln(s, { t: 'circle', cx: 100, cy: 100, r: 3.2, fill: 'var(--hv-ss-clock,#111)', stroke: 'var(--hv-ss-text,#fff)', 'stroke-width': 1.2 });
     f.querySelector('.an').appendChild(s); }
   _u_info(d, hass) { const f = this.el, L = (hass && hass.locale && hass.locale.language) || undefined, q = c => f.querySelector(c);
     const wd = d.toLocaleDateString(L, { weekday: 'short' }), mo = d.toLocaleDateString(L, { month: 'short' }); q('.dt').textContent = `${wd} ${mo}`.replace(/\./g, ''); q('.dn').textContent = d.getDate();
     this._hands(d, 100, 100);
-    // now playing (playing first, then paused); fallback: Nothing playing
     const S = (hass && hass.states) || {}, mp = Object.keys(S).filter(k => k.startsWith('media_player.') && (S[k].attributes.media_title || S[k].attributes.entity_picture));
     const pick = mp.find(k => S[k].state === 'playing') || mp.find(k => S[k].state === 'paused'), a = pick ? S[pick].attributes : null;
     q('.tt').textContent = a ? (a.media_title || '') : (this.thumb ? 'Fever Dream' : 'Nothing playing'); q('.ar').textContent = a ? (a.media_artist || a.media_album_name || a.friendly_name || '') : (this.thumb ? 'Artist' : 'Music');
     const pic = a && (a.entity_picture_local || a.entity_picture), art = q('.art'), url = pic ? (pic.startsWith('http') ? pic : (hass.hassUrl ? hass.hassUrl(pic) : pic)) : '';
     if (art.dataset.u !== url) { art.dataset.u = url; art.style.backgroundImage = url ? `url("${url.replace(/"/g, '%22')}")` : ''; }
     q('.pb span').textContent = pick && S[pick].state === 'playing' ? 'Playing' : 'Play'; q('.pb i').style.display = '';
-    // weather: hub card's weather_entity, else the first weather.*
     let we = null; try { const lv = hvSsLv(), hub = lv && lv.config && hvHubCfgOf(lv.config); we = (hub && hub.weather_entity) || null; } catch (e) { /* none */ }
     if (!we || !S[we]) we = Object.keys(S).find(k => k.startsWith('weather.')) || null; const w = we && S[we] && !['unavailable', 'unknown'].includes(S[we].state) ? S[we] : null;
     let city = ''; try { const lv = hvSsLv(), hub = lv && lv.config && hvHubCfgOf(lv.config); city = (hub && hub.location_name) || ''; } catch (e) { /* none */ }
@@ -7625,46 +7688,61 @@ class HVSsFace {
   // ---- modern typographic
   _b_typo() { const f = this.el; f.innerHTML = '<div class="stg"><div class="n n12">12</div><div class="n n9">9</div><div class="n n3">3</div><div class="n n6">6</div><div class="dc"></div></div>';
     const s = this._svg('0 0 128 100'); s.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-    this._hh = this._ln(s, { x1: 64, y1: 50, x2: 64, y2: 27, stroke: '#fff', 'stroke-width': 3.2, 'stroke-linecap': 'round' });
-    this._mh = this._ln(s, { x1: 64, y1: 50, x2: 64, y2: 12, stroke: '#fff', 'stroke-width': 3.2, 'stroke-linecap': 'round' });
-    this._ln(s, { t: 'circle', cx: 64, cy: 50, r: 2.4, fill: '#fff' });
-    this._sh = this._ln(s, { x1: 64, y1: 92, x2: 64, y2: 10, stroke: '#fff', 'stroke-width': .45 }); this._ln(s, { t: 'circle', cx: 64, cy: 50, r: 1.4, fill: '#fff', stroke: '#5c9a68', 'stroke-width': .7 });
+    this._hh = this._ln(s, { x1: 64, y1: 50, x2: 64, y2: 27, stroke: 'var(--hv-ss-hands,#fff)', 'stroke-width': 3.2, 'stroke-linecap': 'round' });
+    this._mh = this._ln(s, { x1: 64, y1: 50, x2: 64, y2: 12, stroke: 'var(--hv-ss-hands,#fff)', 'stroke-width': 3.2, 'stroke-linecap': 'round' });
+    this._ln(s, { t: 'circle', cx: 64, cy: 50, r: 2.4, fill: 'var(--hv-ss-hands,#fff)' });
+    this._sh = this._ln(s, { x1: 64, y1: 92, x2: 64, y2: 10, stroke: 'var(--hv-ss-hands,#fff)', 'stroke-width': .45 }); this._ln(s, { t: 'circle', cx: 64, cy: 50, r: 1.4, fill: 'var(--hv-ss-hands,#fff)', stroke: 'var(--hv-ss-bg,#5c9a68)', 'stroke-width': .7 });
     f.querySelector('.stg').appendChild(s); }
   _u_typo(d, hass) { this._hands(d, 64, 50); const L = (hass && hass.locale && hass.locale.language) || undefined;
     this.el.querySelector('.dc').textContent = (d.toLocaleDateString(L, { weekday: 'short' }).replace(/\./g, '') + ' ' + d.getDate()).toUpperCase(); }
   // ---- whimsical minimalist
   _b_whimsy() { const f = this.el; f.innerHTML = '<div class="stg"></div>'; const st = f.querySelector('.stg'); this._nums = [];
-    const tilt = [0, 12, 26, 8, -12, 18, 0, -16, 6, -10, 0, -22]; // hand-placed: a little playful
+    const tilt = [0, 12, 26, 8, -12, 18, 0, -16, 6, -10, 0, -22];
     for (let h = 1; h <= 12; h++) { const a = h * Math.PI / 6, n = document.createElement('div'); n.className = 'n'; n.textContent = h; const sx = Math.sin(a), cy = -Math.cos(a), k = Math.max(Math.abs(sx), Math.abs(cy));
       n.style.left = (50 + 38 * (sx / Math.pow(k, .55)) * .82) + 'cqw'; n.style.top = (50 + 40 * (cy / Math.pow(k, .55))) + 'cqh';
       n.style.transform = `translate(-50%,-50%) rotate(${tilt[h - 1]}deg)`; st.appendChild(n); this._nums.push(n); }
     const s = this._svg('0 0 128 100'); s.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-    const hand = (len, w) => { const g = document.createElementNS(hvSsSvgNS, 'g'); this._ln(g, { x1: 64, y1: 50, x2: 64, y2: 45, stroke: '#5e2c2a', 'stroke-width': 1.1, 'stroke-linecap': 'round' });
-      this._ln(g, { x1: 64, y1: 45, x2: 64, y2: 50 - len, stroke: '#6d3431', 'stroke-width': w, 'stroke-linecap': 'round' }); s.appendChild(g); return g; };
+    const hand = (len, w) => { const g = document.createElementNS(hvSsSvgNS, 'g'); this._ln(g, { x1: 64, y1: 50, x2: 64, y2: 45, stroke: 'var(--hv-ss-text,#5e2c2a)', 'stroke-width': 1.1, 'stroke-linecap': 'round' });
+      this._ln(g, { x1: 64, y1: 45, x2: 64, y2: 50 - len, stroke: 'var(--hv-ss-text,#6d3431)', 'stroke-width': w, 'stroke-linecap': 'round' }); s.appendChild(g); return g; };
     this._hh = hand(24, 3); this._mh = hand(38, 3);
-    this._sh = this._ln(s, { x1: 64, y1: 92, x2: 64, y2: 8, stroke: '#ea5ab4', 'stroke-width': .5 });
-    this._ln(s, { t: 'circle', cx: 64, cy: 50, r: 1.5, fill: '#ea5ab4', stroke: '#6d3431', 'stroke-width': .5 }); st.appendChild(s); }
-  _u_whimsy(d) { const ha = this._hands(d, 64, 50), ma = d.getMinutes() * 6; // numerals near the hands come forward, the rest fade back
+    this._sh = this._ln(s, { x1: 64, y1: 92, x2: 64, y2: 8, stroke: 'var(--hv-ss-accent,#ea5ab4)', 'stroke-width': .5 });
+    this._ln(s, { t: 'circle', cx: 64, cy: 50, r: 1.5, fill: 'var(--hv-ss-accent,#ea5ab4)', stroke: 'var(--hv-ss-text,#6d3431)', 'stroke-width': .5 }); st.appendChild(s); }
+  _u_whimsy(d) { const ha = this._hands(d, 64, 50), ma = d.getMinutes() * 6;
     this._nums.forEach((n, i) => { const a = (i + 1) * 30, dist = x => { const v = Math.abs(((a - x) % 360 + 540) % 360 - 180); return v; }, m = Math.min(dist(ha), dist(ma));
       n.style.opacity = String(m <= 75 ? 1 : m <= 110 ? 0.45 : 0.08); }); }
   update(hass, d) { d = d || new Date(); try { this['_u_' + this.s](d, hass); } catch (e) { /* keep the last frame */ } }
 }
+// Photo clock: tint Wallpanel's clock overlay only (never recolour photos)
+const hvSsPhotoTint = {
+  el: null,
+  apply(hex) { const c = hvSsHex(hex); const def = HV_SS_COLS.photo[0].d;
+    if (!c || c === def) { this.clear(); return; }
+    if (!this.el || !this.el.isConnected) { this.el = document.createElement('style'); this.el.id = 'hv-ss-photo-tint'; document.documentElement.appendChild(this.el); }
+    // Wallpanel clock overlay only — photos are never recoloured
+    this.el.textContent = `wallpanel-view ha-card, wallpanel-view .clock, wallpanel-view hui-clock-card, wallpanel-view hui-digital-clock,
+wallpanel-view .digital-clock, wallpanel-view .time, wallpanel-view .date { color: ${c} !important; --primary-text-color: ${c} !important; --secondary-text-color: ${c} !important; }`; },
+  clear() { if (this.el) { try { this.el.remove(); } catch (e) {} this.el = null; }
+    document.querySelectorAll('#hv-ss-photo-tint').forEach(n => n.remove()); } };
 // ---- full-screen layer over Wallpanel while its screensaver runs
 const hvSsOv = {
-  host: null, face: null, style: null, iv: null,
+  host: null, face: null, style: null, colKey: null, iv: null,
   hass() { const ha = document.querySelector('home-assistant'); return ha && ha.hass; },
-  hide() { if (this.host) { this.host.remove(); } this.host = null; this.face = null; this.style = null; },
+  hide() { if (this.host) { this.host.remove(); } this.host = null; this.face = null; this.style = null; this.colKey = null; },
   tick(force) { const w = ssWallpanel(); let run = false; try { run = !!(w && w.screensaverRunning && w.screensaverRunning()); } catch (e) { run = false; }
-    const st = run ? hvSs.get() : 'photo'; if (!run || st === 'photo') { this.hide(); return; }
-    if (!this.host || this.style !== st || !this.host.isConnected || this.host.parentNode !== w.parentNode) { this.hide();
+    if (!run) { this.hide(); hvSsPhotoTint.clear(); return; }
+    const st = hvSs.get(), cols = hvSsColors.get(st), colKey = st + ':' + JSON.stringify(hvSsStrip(st, cols) || {});
+    if (st === 'photo') { this.hide(); hvSsPhotoTint.apply(cols.text); return; }
+    hvSsPhotoTint.clear();
+    if (!this.host || this.style !== st || this.colKey !== colKey || !this.host.isConnected || this.host.parentNode !== w.parentNode) { this.hide();
       const h = document.createElement('div'); h.id = 'hv-ss-style'; h.setAttribute('aria-hidden', 'true'); const sr = h.attachShadow({ mode: 'open' }); sr.innerHTML = `<style>${HV_SS_FACE_CSS}</style>`;
-      this.face = new HVSsFace(st); sr.appendChild(this.face.el); this.style = st; this.host = h; w.parentNode.appendChild(h); }
+      this.face = new HVSsFace(st); this.face.applyColors(cols); sr.appendChild(this.face.el); this.style = st; this.colKey = colKey; this.host = h; w.parentNode.appendChild(h); }
+    else if (this.face) this.face.applyColors(cols);
     let z = parseInt(getComputedStyle(w).zIndex, 10); if (!(z > 0)) z = 1000; z = Math.max(z, 2147482000); /* above page hints; doorbell pop-ups use the top layer */ const op = Number(getComputedStyle(w).opacity);
     this.host.style.cssText = `position:fixed;inset:0;z-index:${z + 1};pointer-events:none;opacity:${isFinite(op) ? op : 1};transition:opacity .4s linear`;
     this.face.update(this.hass(), new Date()); },
   start() { if (this.iv) return; this.iv = setInterval(() => { try { this.tick(); } catch (e) { /* next tick */ } }, 250); } };
 if (!window.__hvSsStyles) { window.__hvSsStyles = true; hvSsOv.start(); }
-// ---- picker in the screensaver settings popup
+// ---- picker + colour controls in the screensaver settings popup
 const HV_SS_PICK_CSS = `
 .sp{margin:2px 0 16px}.sp .lb{font-size:13px;font-weight:600;color:rgba(255,255,255,.55);letter-spacing:.04em;text-transform:uppercase;margin:6px 6px 8px}
 .sp .ls{border-radius:14px;overflow:hidden;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08)}
@@ -7678,24 +7756,86 @@ const HV_SS_PICK_CSS = `
 .sp .rd{width:22px;height:22px;border-radius:50%;border:2px solid rgba(255,255,255,.35);flex:none;box-sizing:border-box;display:flex;align-items:center;justify-content:center}
 .sp .it[aria-checked="true"] .rd{border:0;background:#0a84ff}.sp .rd svg{display:none;width:14px;height:14px}.sp .it[aria-checked="true"] .rd svg{display:block}
 .sp .note{font-size:12px;color:rgba(255,255,255,.5);margin:8px 6px 0}
+.sp .co{margin:14px 0 0;padding:12px 14px 14px;border-radius:14px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08)}
+.sp .co .cl{font-size:13px;font-weight:600;color:rgba(255,255,255,.7);margin:0 0 10px}
+.sp .row{display:flex;align-items:center;gap:12px;margin:8px 0;flex-wrap:wrap}
+.sp .rn{flex:0 0 118px;font-size:13px;color:rgba(255,255,255,.78)}
+.sp .pick{width:42px;height:32px;padding:0;border:1px solid rgba(255,255,255,.25);border-radius:8px;background:transparent;cursor:pointer}
+.sp .pick::-webkit-color-swatch-wrapper{padding:2px}.sp .pick::-webkit-color-swatch{border:none;border-radius:5px}
+.sp .hex{width:92px;font:600 12px ui-monospace,SFMono-Regular,Menlo,monospace;color:#fff;background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.18);border-radius:8px;padding:6px 8px}
+.sp .sw{display:flex;flex-wrap:wrap;gap:6px;flex:1;min-width:140px}
+.sp .sw b{all:unset;cursor:pointer;width:22px;height:22px;border-radius:50%;box-sizing:border-box;border:2px solid rgba(255,255,255,.35);box-shadow:inset 0 0 0 1px rgba(0,0,0,.25)}
+.sp .sw b[aria-current="true"]{border-color:#fff;box-shadow:0 0 0 2px #0a84ff}
+.sp .rst{all:unset;cursor:pointer;margin-top:10px;display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:10px;background:rgba(255,255,255,.08);color:#fff;font:600 13px ${FONT}}
+.sp .rst:hover{background:rgba(255,255,255,.14)}
+.sp .co .hint{font-size:12px;color:rgba(255,255,255,.48);margin:8px 0 0}
 ${HV_SS_FACE_CSS}`;
+function hvSsColorPanel(card, getStyle, onFacePaint) {
+  const box = document.createElement('div'); box.className = 'co';
+  const paint = () => {
+    const style = getStyle(), defs = HV_SS_COLS[style] || [], cols = hvSsColors.get(style);
+    const name = (HV_SSS.find(x => x.v === style) || {}).l || style;
+    box.innerHTML = `<div class="cl">Colors · ${name}</div>`;
+    if (!defs.length) { box.innerHTML += '<div class="hint">No colour options for this style.</div>'; return; }
+    for (const d of defs) {
+      const row = document.createElement('div'); row.className = 'row'; row.dataset.k = d.k;
+      const cur = cols[d.k] || d.d;
+      row.innerHTML = `<div class="rn">${d.l}</div><input class="pick" type="color" value="${cur}" aria-label="${d.l}"/><input class="hex" maxlength="7" value="${cur}" spellcheck="false"/><div class="sw"></div>`;
+      const sw = row.querySelector('.sw'), pick = row.querySelector('.pick'), hex = row.querySelector('.hex');
+      const marks = Array.from(new Set([d.d, ...HV_SS_SWATCH]));
+      for (const c of marks) { const b = document.createElement('b'); b.style.background = c; b.title = c; b.setAttribute('aria-label', c); if (c.toLowerCase() === cur.toLowerCase()) b.setAttribute('aria-current', 'true');
+        b.addEventListener('click', () => applyOne(d.k, c)); sw.appendChild(b); }
+      const sync = v => { const h = hvSsHex(v); if (!h) return; pick.value = h; hex.value = h; for (const b of sw.children) b.setAttribute('aria-current', String(b.title.toLowerCase() === h)); };
+      pick.addEventListener('input', () => applyOne(d.k, pick.value, false));
+      pick.addEventListener('change', () => applyOne(d.k, pick.value, true));
+      hex.addEventListener('change', () => { const h = hvSsHex(hex.value); if (h) applyOne(d.k, h, true); else hex.value = pick.value; });
+      box.appendChild(row);
+    }
+    const rst = document.createElement('button'); rst.className = 'rst'; rst.type = 'button'; rst.textContent = 'Reset to default colors';
+    rst.addEventListener('click', async () => { card._status('Resetting colors…');
+      try { const saved = await hvSsColors.setStyle(style, null, card._hass); paint(); onFacePaint && onFacePaint();
+        card._status(`Default colors ✓ ${saved ? 'Saved for this dashboard.' : 'Saved in this browser.'}`, 'ok'); }
+      catch (e) { card._status('Colors not reset: ' + (e && (e.message || e.code) || e), 'err'); } });
+    box.appendChild(rst);
+    box.insertAdjacentHTML('beforeend', `<div class="hint">${style === 'photo' ? 'Tints the Wallpanel clock overlay only — photos stay as they are.' : 'Optional. Empty / default keeps the reference look.'}</div>`);
+  };
+  const applyOne = async (k, v, persist = true) => {
+    const style = getStyle(), next = Object.assign({}, hvSsColors.get(style), { [k]: v });
+    onFacePaint && onFacePaint(style, next);
+    // live-update rows
+    const row = box.querySelector(`.row[data-k="${k}"]`); if (row) { const h = hvSsHex(v) || v; row.querySelector('.pick').value = h; row.querySelector('.hex').value = h;
+      for (const b of row.querySelectorAll('.sw b')) b.setAttribute('aria-current', String(b.title.toLowerCase() === String(h).toLowerCase())); }
+    if (!persist) return;
+    card._status('Saving colors…');
+    try { const saved = await hvSsColors.setStyle(style, next, card._hass);
+      card._status(`Colors ✓ ${saved ? 'Saved for this dashboard.' : 'Saved in this browser.'}`, 'ok'); }
+    catch (e) { card._status('Colors not saved: ' + (e && (e.message || e.code) || e), 'err'); paint(); onFacePaint && onFacePaint(); }
+  };
+  paint(); box._repaint = paint; return box;
+}
 function hvSsPicker(card) {
   const p = document.createElement('div'); p.className = 'sp'; p.setAttribute('role', 'radiogroup'); p.setAttribute('aria-label', 'Screensaver style');
-  p.innerHTML = `<style>${HV_SS_PICK_CSS}</style><div class="lb">Screensaver style</div><div class="ls"></div><div class="note"></div>`; const ls = p.querySelector('.ls'), faces = [];
+  p.innerHTML = `<style>${HV_SS_PICK_CSS}</style><div class="lb">Screensaver style</div><div class="ls"></div><div class="colors-host"></div><div class="note"></div>`;
+  const ls = p.querySelector('.ls'), host = p.querySelector('.colors-host'), faces = [];
   const cur = () => hvSs.get();
+  const paintFaces = (style, cols) => { const st = style || cur(), c = cols || hvSsColors.get(st);
+    for (const f of faces) { if (f.s === st) f.applyColors(c); else f.applyColors(hvSsColors.get(f.s)); } };
   for (const o of HV_SSS) { const b = document.createElement('button'); b.className = 'it'; b.dataset.v = o.v; b.setAttribute('role', 'radio');
     b.innerHTML = `<div class="th${o.v === 'photo' ? ' ph' : ''}">${o.v === 'photo' ? '<span class="pt"></span>' : ''}</div><div class="tx"><div class="nm">${o.l}<span class="cur">Current</span></div><div class="sb">${o.s}</div></div><div class="rd"><svg viewBox="0 0 24 24"><path fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>`;
-    if (o.v !== 'photo') { const f = new HVSsFace(o.v, true); b.querySelector('.th').appendChild(f.el); faces.push(f); }
-    b.addEventListener('click', async () => { if (b.getAttribute('aria-checked') === 'true') return; const prev = cur(); paint(o.v); card._status('Saving style…');
+    if (o.v !== 'photo') { const f = new HVSsFace(o.v, true); f.applyColors(hvSsColors.get(o.v)); b.querySelector('.th').appendChild(f.el); faces.push(f); }
+    b.addEventListener('click', async () => { if (b.getAttribute('aria-checked') === 'true') return; const prev = cur(); paint(o.v); colors._repaint(); card._status('Saving style…');
       try { const saved = await hvSs.set(o.v, card._hass); card._status(`Style: ${o.l} ✓ ${saved ? 'Saved for this dashboard.' : 'Saved in this browser.'}`, 'ok'); }
-      catch (e) { paint(prev); card._status('Style not saved: ' + (e && (e.message || e.code) || e), 'err'); } });
+      catch (e) { paint(prev); colors._repaint(); card._status('Style not saved: ' + (e && (e.message || e.code) || e), 'err'); } });
     ls.appendChild(b); }
   const paint = v => { for (const b of ls.children) b.setAttribute('aria-checked', String(b.dataset.v === v)); };
+  const colors = hvSsColorPanel(card, cur, paintFaces); host.appendChild(colors);
   const upd = () => { const d = new Date(); faces.forEach(f => f.update(card._hass, d)); const pt = p.querySelector('.pt'); if (pt) pt.textContent = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }).replace(/\s?[AP]M$/i, ''); };
   p.querySelector('.note').textContent = card._hass && card._hass.user && card._hass.user.is_admin ? 'Applies at once, for this dashboard (also kept on its Home Screen card). Preview shows it.' : 'Applies at once, for this dashboard in this browser.';
-  paint(cur()); upd(); const iv = setInterval(() => { if (!p.isConnected) { clearInterval(iv); return; } upd(); }, 1000);
+  paint(cur()); paintFaces(); upd(); const iv = setInterval(() => { if (!p.isConnected) { clearInterval(iv); return; } upd(); }, 1000);
   return p; }
 { const orig = HVScreensaverCard.prototype._renderForm;
   HVScreensaverCard.prototype._renderForm = function () { orig.call(this); if (!this._form) return;
     if (!this._ssPick || !this._ssPick.isConnected) { this._ssPick = hvSsPicker(this); this._bd.insertBefore(this._ssPick, this._form); } }; }
-Object.assign(LABELS, { screensaver_style: 'Screensaver style (also in the screensaver settings)' });
+Object.assign(LABELS, { screensaver_style: 'Screensaver style (also in the screensaver settings)',
+  screensaver_colors: 'Screensaver colors (optional; also in the screensaver settings)' });
+Object.assign(HELPERS, { screensaver_colors: 'Per-style colour map, e.g. { "typo": { "bg": "#1b4332", "hands": "#ffe8a3" } }. Only non-defaults are stored. Prefer the colour pickers in Screensaver settings.' });
