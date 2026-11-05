@@ -4,6 +4,7 @@
 
 ### Changes
 * **Doorbell / motion pop-up:** only on the Home - Pixel dashboard (`home-vertical-tablet`). Other dashboards never show it.
+* **Card editor:** open the visual editor again on Home Assistant 2025.10+ (HUI-SECTION dropped `index`/`viewIndex`; match on `.path` instead). The Home Screen arrange "Edit" action no longer dies on a toast.
 
 ### New features
 * **My Home page** (`custom:homeview-myhome-card`, NotHomeView My Home): an Apple Home style "My Home" page in the dark glass look: big title and clock, summary pills (climate range, lights on, garage doors, media playing), a Cameras row (NotHomeView camera tiles), Scenes (a list you pick in the editor: scene / script, optional name and icon) and then every Home Assistant device grouped by room (area). Only devices with a room are shown; sensors, updates, buttons, config / diagnostic / hidden entities and browser_mod are left out; lights that belong to a light group shown in the same room are folded into the group tile, same-name duplicates in a room show once. Tap toggles lights / switches / fans (more-info for the rest, garage doors never move on a tap), hold = more-info. Point the Home Screen's Home app at the view with this card (it opens as a sheet over the Home Screen, always dark).
