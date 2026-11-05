@@ -6399,6 +6399,7 @@ const HUB_SCHEMA = [
     { type: 'grid', name: '', schema: [{ name: 'edge_sidebar', selector: { boolean: {} } }, { name: 'block_pull_refresh', selector: { boolean: {} } }] },
     { name: 'full_height_popups', selector: { boolean: {} } },
     { name: 'popup_edit', selector: { boolean: {} } },
+    { name: 'screensaver_style', selector: { select: { mode: 'dropdown', options: [{ value: 'photo', label: 'Photo clock (default)' }, { value: 'info', label: 'Info dashboard' }, { value: 'fluid', label: 'Abstract fluid' }, { value: 'typo', label: 'Modern typographic' }, { value: 'whimsy', label: 'Whimsical minimalist' }] } } },
     { name: 'swipe_screensaver', selector: { select: { mode: 'dropdown', options: [{ value: 'auto', label: 'Auto (when the screensaver is on here)' }, { value: 'on', label: 'On' }, { value: 'off', label: 'Off' }] } } }, { name: 'ss_hold', selector: { boolean: {} } }, { name: 'swipe_page', selector: { navigation: {} } }] }];
 Object.assign(LABELS, { photo_source_mode: 'Photo source', photo_album_url: 'Album link', apps: 'Apps (drag to reorder, pencil to edit)', person: 'Person (empty = the logged-in user)', fallback_person: 'Fallback person (no match)', ring_color: 'Avatar ring colour / gradient',
   morning_start: 'Morning from (hour)', afternoon_start: 'Afternoon from', evening_start: 'Evening from', night_start: 'Night from (empty = evening until morning)', greeting_night: 'Night greeting', greeting_morning: 'Morning greeting', greeting_afternoon: 'Afternoon greeting', greeting_evening: 'Evening greeting',
@@ -7485,3 +7486,216 @@ window.NotHomeView = Object.assign(window.NotHomeView || {}, { doorbell: {
     const st = h.states[DB_HELPER], v = st ? st.state : null; if (last === undefined) { last = v; return; } if (v === last) return; last = v;
     if (!v || UNAVAILABLE.includes(v)) return; const age = Date.now() - Date.parse(st.last_changed || 0); if (!(age < 300000)) return; // late states after a reconnect: ignored after 5 min
     const [kind, camera, id, type] = String(v).split('|'); dbIn({ kind, camera, id, type }, 'helper'); }, 600); })();
+
+/* ---------------- 1.6.0: screensaver styles ----------------
+   Photo clock (Wallpanel's photos + clock, the default) or one of four full-screen live clocks: Info dashboard, Abstract fluid, Modern typographic,
+   Whimsical minimalist. Picked in the screensaver settings popup (thumbnail radio list, applies at once). Stored like the My Home settings: per dashboard
+   in this browser (localStorage hvSsStyle:<dash>) for everyone, and for admins also as `screensaver_style` on the dashboard's Home Screen card (editable
+   in its visual editor; a value changed there wins over an older browser copy). Wallpanel still runs the idle timer / tap to stop: the clock face is a
+   pointer-events:none layer right above <wallpanel-view>, shown only while its screensaver runs (fades with it). Doorbell pop-ups use the top layer, so
+   they stay on top. Nothing changes for a dashboard where no style was chosen. */
+const HV_SSS = [
+  { v: 'photo', l: 'Photo clock', s: 'Your photos with the clock (default)' },
+  { v: 'info', l: 'Info dashboard', s: 'Date, clock, weather and now playing' },
+  { v: 'fluid', l: 'Abstract fluid', s: 'Glassy shapes on a soft gradient' },
+  { v: 'typo', l: 'Modern typographic', s: 'Oversized numerals, white hands' },
+  { v: 'whimsy', l: 'Whimsical minimalist', s: 'Embossed numerals, dusty rose' }];
+const HV_SSS_V = HV_SSS.map(x => x.v);
+const hvSsDeep = (root, sel, d = 0) => { if (!root || d > 9) return null; const f = root.querySelector && root.querySelector(sel); if (f) return f;
+  for (const el of (root.querySelectorAll ? root.querySelectorAll('*') : [])) if (el.shadowRoot) { const r = hvSsDeep(el.shadowRoot, sel, d + 1); if (r) return r; } return null; };
+const hvSsLv = () => { const p = hvSsDeep(document.querySelector('home-assistant'), 'ha-panel-lovelace'); return p && p.lovelace ? p.lovelace : null; };
+const hvSs = {
+  key() { return `hvSsStyle:${ssDash() || 'lovelace'}`; },
+  cfgVal() { try { const lv = hvSsLv(), hub = lv && lv.config && hvHubCfgOf(lv.config); const v = hub && hub.screensaver_style; return HV_SSS_V.includes(v) ? v : 'photo'; } catch (e) { return 'photo'; } },
+  get() { const c = this.cfgVal(), l = mhLs.get(this.key()); if (l && HV_SSS_V.includes(l.v) && (l.cfg === undefined || l.cfg === c)) return l.v; return c; },
+  async set(v, hass) { if (!HV_SSS_V.includes(v)) v = 'photo';
+    let cfgV = this.cfgVal(); const admin = !!(hass && hass.user && hass.user.is_admin); let saved = false;
+    if (admin) { const dash = ssDash(), q = { type: 'lovelace/config', force: true }; if (dash) q.url_path = dash;
+      const fresh = JSON.parse(JSON.stringify(await hass.callWS(q))), hub = hvHubCfgOf(fresh);
+      if (hub) { if (v === 'photo') delete hub.screensaver_style; else hub.screensaver_style = v; // Photo clock = default: the key is removed
+        const lv = hvSsLv(); if (lv && typeof lv.saveConfig === 'function' && (lv.urlPath || null) === (dash || null)) await lv.saveConfig(fresh);
+        else { const sv = { type: 'lovelace/config/save', config: fresh }; if (dash) sv.url_path = dash; await hass.callWS(sv); } cfgV = v; saved = true; } }
+    mhLs.set(this.key(), { v, cfg: cfgV }); hvSsOv.tick(true); return saved; } };
+// ---- faces (sized with container units, so one renderer draws the full screen and the picker thumbnails)
+const HV_SS_FACE_CSS = `
+.f{position:absolute;inset:0;container-type:size;overflow:hidden;font-family:${FONT};-webkit-font-smoothing:antialiased;user-select:none}
+.stg{position:absolute;top:50%;left:50%;height:100cqh;width:min(100cqw,128cqh);transform:translate(-50%,-50%);container-type:size}
+/* info */
+.f.info{background:#97a9af}
+.info .dt{position:absolute;left:6cqw;top:7cqh;color:#fff;font-weight:700;font-size:11.5cqh;letter-spacing:-.02em;line-height:1}
+.info .dn{position:absolute;left:6cqw;top:16cqh;color:#0b0b0c;font-weight:600;font-size:39cqh;line-height:1;letter-spacing:-.04em}
+.info .an{position:absolute;right:5cqw;top:4cqh;width:47cqh;height:47cqh}
+.info .mu{position:absolute;left:6cqw;bottom:6cqh;width:30cqw}
+.info .art{width:23cqh;height:23cqh;border-radius:2.2cqh;background:linear-gradient(160deg,#b9d7ee,#6f9ccc);background-size:cover;background-position:center;box-shadow:0 .6cqh 2cqh rgba(0,0,0,.18)}
+.info .tt{margin-top:2.6cqh;color:#25282b;font-weight:700;font-size:3.6cqh;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.info .ar{color:rgba(40,44,48,.6);font-size:3.4cqh;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.info .pb{display:inline-flex;align-items:center;gap:1.4cqh;margin-top:1.6cqh;padding:1.2cqh 3.4cqh 1.2cqh 2.6cqh;border-radius:99cqh;background:rgba(60,72,78,.22);color:#202326;font-weight:600;font-size:3.8cqh}
+.info .pb i{width:0;height:0;border-left:2.4cqh solid #202326;border-top:1.5cqh solid transparent;border-bottom:1.5cqh solid transparent}
+.info .nt{position:absolute;left:38cqw;top:57cqh;width:7cqh;height:7cqh}
+.info .wx{position:absolute;left:50cqw;top:54cqh;right:3cqw}
+.info .ct{color:#fff;font-weight:700;font-size:4.6cqh;display:flex;align-items:center;gap:1cqh;white-space:nowrap}
+.info .ct svg{width:3.2cqh;height:3.2cqh}
+.info .tp{color:#0b0b0c;font-weight:500;font-size:18cqh;line-height:1.02;letter-spacing:-.03em}
+.info .ci{width:6cqh;height:5cqh;margin-top:1cqh}
+.info .cn,.info .hl{color:#1f2326;font-weight:500;font-size:3.8cqh;line-height:1.3}
+/* fluid */
+.f.fluid{background:radial-gradient(ellipse 70% 75% at 50% 50%,#f06aa8 0%,#f0a2cc 40%,#d9c3ea 75%,#cbc5ec 100%)}
+.fluid .bl{position:absolute;left:18cqw;top:14cqh;width:64cqw;height:72cqh;background:radial-gradient(circle at 40% 45%,#5b78f0 0%,#4f8bf0 35%,rgba(90,150,240,.6) 60%,rgba(240,110,180,0) 75%);
+ filter:blur(2.5cqh);border-radius:46% 54% 41% 59%/52% 38% 62% 48%;animation:hvssm 26s ease-in-out infinite alternate}
+@keyframes hvssm{0%{border-radius:46% 54% 41% 59%/52% 38% 62% 48%;transform:rotate(0deg) scale(1)}50%{border-radius:60% 40% 55% 45%/40% 60% 40% 60%;transform:rotate(14deg) scale(1.06)}100%{border-radius:40% 60% 48% 52%/58% 46% 54% 42%;transform:rotate(-10deg) scale(.97)}}
+.fluid .dg{position:absolute;width:24cqw;height:39cqh}
+.fluid .sh{position:absolute;box-sizing:border-box;overflow:hidden;border:.25cqh solid rgba(255,255,255,.55);
+ background:linear-gradient(200deg,rgba(255,255,255,.55) 0%,rgba(150,190,255,.9) 18%,#6c7cf2 45%,#7d86f4 62%,#f3a0cf 86%,#ffc4e2 100%);
+ box-shadow:inset 0 1.2cqh 2cqh rgba(255,255,255,.45),inset 0 -1.5cqh 2.5cqh rgba(255,170,215,.65),0 1.5cqh 4cqh rgba(80,60,170,.25)}
+.fluid .sh::after{content:'';position:absolute;left:12%;top:6%;width:42%;height:18%;border-radius:50%;background:linear-gradient(180deg,rgba(255,255,255,.7),rgba(255,255,255,0));filter:blur(.4cqh)}
+/* typographic */
+.f.typo{background:#5c9a68}
+.typo .n{position:absolute;color:#060606;font-weight:300;font-family:"Helvetica Neue",Helvetica,Arial,${FONT};line-height:.8;letter-spacing:-.04em;font-size:50cqh}
+.typo .n12{left:50%;top:9cqh;transform:translateX(-52%)} .typo .n6{left:50%;top:51cqh;transform:translateX(-50%)}
+.typo .n9{left:4cqw;top:31cqh} .typo .n3{right:4cqw;top:31cqh}
+.typo svg.h{position:absolute;inset:0;width:100%;height:100%}
+.typo .dc{position:absolute;left:5.5cqw;bottom:6cqh;color:#0a0a0a;font-weight:600;font-size:4.6cqh;letter-spacing:.01em}
+/* whimsy */
+.f.whimsy{background:linear-gradient(160deg,#dcbdba 0%,#d2b2b1 55%,#c9a9aa 100%)}
+.whimsy .n{position:absolute;font-family:"Avenir Next","Helvetica Neue",${FONT};font-weight:400;font-size:15cqh;line-height:1;color:#d2b3b1;transform:translate(-50%,-50%);
+ text-shadow:-.25cqh -.25cqh .3cqh rgba(110,70,72,.55),.25cqh .25cqh .35cqh rgba(255,240,238,.9);transition:opacity 1.2s ease}
+.whimsy svg.h{position:absolute;inset:0;width:100%;height:100%}
+`;
+const hvSsSvgNS = 'http://www.w3.org/2000/svg';
+// glassy digit shapes (box 100 x 140): [x, y, w, h, radius, rotate]
+const HV_SS_DG = { 0: [[0, 0, 100, 140, 46]], 1: [[0, 8, 32, 32, 16], [46, 0, 40, 140, 20]], 2: [[0, 0, 100, 66, 33], [34, 28, 34, 112, 17, 38], [0, 106, 100, 34, 17]],
+  3: [[0, 0, 96, 66, 33], [4, 74, 96, 66, 33]], 4: [[0, 0, 34, 92, 17], [0, 62, 100, 32, 16], [64, 0, 36, 140, 18]], 5: [[0, 0, 100, 32, 16], [0, 0, 34, 76, 17], [0, 52, 100, 88, 44]],
+  6: [[0, 0, 36, 104, 18], [0, 50, 100, 90, 45]], 7: [[0, 0, 100, 34, 17], [36, 14, 38, 128, 19, 22]], 8: [[10, 0, 80, 64, 32], [0, 58, 100, 82, 41]],
+  9: [[0, 0, 100, 90, 45], [64, 36, 36, 104, 18]] };
+const hvSsWx = { e: null, f: null, unsub: null, at: 0 };
+function hvSsForecast(hass, e) { // daily high / low (read-only subscription; no services), refreshed hourly
+  if (!hass || !hass.connection || (hvSsWx.e === e && Date.now() - hvSsWx.at < 3600e3)) return; hvSsWx.e = e; hvSsWx.at = Date.now();
+  if (hvSsWx.unsub) { try { hvSsWx.unsub.then(u => u && u()); } catch (x) { /* gone */ } }
+  hvSsWx.unsub = hass.connection.subscribeMessage(m => { hvSsWx.f = (m && m.forecast) || null; }, { type: 'weather/subscribe_forecast', entity_id: e, forecast_type: 'daily' }).catch(() => null); }
+const HV_SS_COND = { 'clear-night': 'Clear', cloudy: 'Cloudy', exceptional: 'Exceptional', fog: 'Fog', hail: 'Hail', lightning: 'Lightning', 'lightning-rainy': 'Thunderstorms', partlycloudy: 'Partly Cloudy',
+  pouring: 'Pouring', rainy: 'Rain', snowy: 'Snow', 'snowy-rainy': 'Sleet', sunny: 'Sunny', windy: 'Windy', 'windy-variant': 'Windy' };
+class HVSsFace {
+  constructor(style, thumb) { this.s = style; this.thumb = !!thumb; const f = document.createElement('div'); f.className = 'f ' + style; this.el = f; this['_b_' + style](); }
+  _svg(vb) { const s = document.createElementNS(hvSsSvgNS, 'svg'); s.setAttribute('viewBox', vb); s.setAttribute('class', 'h'); return s; }
+  _ln(s, a) { const l = document.createElementNS(hvSsSvgNS, a.t || 'line'); for (const k of Object.keys(a)) if (k !== 't') l.setAttribute(k, a[k]); s.appendChild(l); return l; }
+  // ---- info dashboard
+  _b_info() { const f = this.el; f.innerHTML = `<div class="stg"><div class="dt"></div><div class="dn"></div><div class="an"></div>
+    <svg class="nt" viewBox="0 0 24 24"><path fill="#fff" d="M21 3v12.5a3.5 3.5 0 1 1-2-3.16V7H9v10.5A3.5 3.5 0 1 1 7 14.34V3h14z"/></svg>
+    <div class="mu"><div class="art"></div><div class="tt"></div><div class="ar"></div><div class="pb"><i></i><span>Play</span></div></div>
+    <div class="wx"><div class="ct"><span class="cy"></span><svg viewBox="0 0 24 24"><path fill="#fff" d="M21 3 3 10.5l7.5 3L13.5 21z"/></svg></div><div class="tp"></div>
+    <svg class="ci" viewBox="0 0 30 24"><circle cx="19" cy="8" r="5" fill="#2b2f33"/><g stroke="#2b2f33" stroke-width="1.6" stroke-linecap="round"><path d="M19 0.5v1.8M26.5 8h-1.8M24.3 2.7l-1.3 1.3M13.7 2.7 15 4"/></g><path fill="#2b2f33" stroke="#97a9af" stroke-width="1.4" d="M7 22a5 5 0 0 1-.6-9.96A7 7 0 0 1 19.6 14 4 4 0 0 1 19 22z"/></svg>
+    <div class="cn"></div><div class="hl"></div></div></div>`;
+    const s = this._svg('0 0 200 200'); s.style.cssText = 'width:100%;height:100%'; s.removeAttribute('class');
+    for (let i = 0; i < 60; i++) { const a = i * Math.PI / 30, big = i % 5 === 0; if (big) continue; const r1 = 93, r2 = 88;
+      this._ln(s, { x1: 100 + r1 * Math.sin(a), y1: 100 - r1 * Math.cos(a), x2: 100 + r2 * Math.sin(a), y2: 100 - r2 * Math.cos(a), stroke: '#1a1d20', 'stroke-width': 1.3 }); }
+    for (let h = 1; h <= 12; h++) { const a = h * Math.PI / 6, t = this._ln(s, { t: 'text', x: 100 + 76 * Math.sin(a), y: 100 - 76 * Math.cos(a) + 7.5, 'text-anchor': 'middle', 'font-size': 21, 'font-weight': 500, fill: '#111', 'font-family': FONT }); t.textContent = h; }
+    this._hh = this._ln(s, { x1: 100, y1: 100, x2: 100, y2: 58, stroke: '#111', 'stroke-width': 5.5, 'stroke-linecap': 'round' });
+    this._mh = this._ln(s, { x1: 100, y1: 100, x2: 100, y2: 22, stroke: '#111', 'stroke-width': 4, 'stroke-linecap': 'round' });
+    this._sh = this._ln(s, { x1: 100, y1: 118, x2: 100, y2: 14, stroke: '#fff', 'stroke-width': 1.4, 'stroke-linecap': 'round' });
+    this._ln(s, { t: 'circle', cx: 100, cy: 100, r: 3.2, fill: '#111', stroke: '#fff', 'stroke-width': 1.2 });
+    f.querySelector('.an').appendChild(s); }
+  _u_info(d, hass) { const f = this.el, L = (hass && hass.locale && hass.locale.language) || undefined, q = c => f.querySelector(c);
+    const wd = d.toLocaleDateString(L, { weekday: 'short' }), mo = d.toLocaleDateString(L, { month: 'short' }); q('.dt').textContent = `${wd} ${mo}`.replace(/\./g, ''); q('.dn').textContent = d.getDate();
+    this._hands(d, 100, 100);
+    // now playing (playing first, then paused); fallback: Nothing playing
+    const S = (hass && hass.states) || {}, mp = Object.keys(S).filter(k => k.startsWith('media_player.') && (S[k].attributes.media_title || S[k].attributes.entity_picture));
+    const pick = mp.find(k => S[k].state === 'playing') || mp.find(k => S[k].state === 'paused'), a = pick ? S[pick].attributes : null;
+    q('.tt').textContent = a ? (a.media_title || '') : (this.thumb ? 'Fever Dream' : 'Nothing playing'); q('.ar').textContent = a ? (a.media_artist || a.media_album_name || a.friendly_name || '') : (this.thumb ? 'Artist' : 'Music');
+    const pic = a && (a.entity_picture_local || a.entity_picture), art = q('.art'), url = pic ? (pic.startsWith('http') ? pic : (hass.hassUrl ? hass.hassUrl(pic) : pic)) : '';
+    if (art.dataset.u !== url) { art.dataset.u = url; art.style.backgroundImage = url ? `url("${url.replace(/"/g, '%22')}")` : ''; }
+    q('.pb span').textContent = pick && S[pick].state === 'playing' ? 'Playing' : 'Play'; q('.pb i').style.display = '';
+    // weather: hub card's weather_entity, else the first weather.*
+    let we = null; try { const lv = hvSsLv(), hub = lv && lv.config && hvHubCfgOf(lv.config); we = (hub && hub.weather_entity) || null; } catch (e) { /* none */ }
+    if (!we || !S[we]) we = Object.keys(S).find(k => k.startsWith('weather.')) || null; const w = we && S[we] && !['unavailable', 'unknown'].includes(S[we].state) ? S[we] : null;
+    let city = ''; try { const lv = hvSsLv(), hub = lv && lv.config && hvHubCfgOf(lv.config); city = (hub && hub.location_name) || ''; } catch (e) { /* none */ }
+    q('.cy').textContent = city || (hass && hass.config && hass.config.location_name) || 'Home';
+    if (w) { hvSsForecast(hass, we); const t = w.attributes.temperature; q('.tp').textContent = t != null ? Math.round(t) + '°' : '--°'; q('.cn').textContent = HV_SS_COND[w.state] || w.state;
+      const fc = hvSsWx.e === we && hvSsWx.f && hvSsWx.f[0]; q('.hl').textContent = fc && fc.temperature != null ? `H:${Math.round(fc.temperature)}°${fc.templow != null ? ' L:' + Math.round(fc.templow) + '°' : ''}` : ''; q('.ci').style.display = ''; }
+    else { q('.tp').textContent = this.thumb ? '12°' : '--°'; q('.cn').textContent = this.thumb ? 'Partly Cloudy' : 'No weather'; q('.hl').textContent = ''; } }
+  _hands(d, cx, cy) { const h = d.getHours() % 12, m = d.getMinutes(), s = d.getSeconds(), rot = (el, deg) => el && el.setAttribute('transform', `rotate(${deg} ${cx} ${cy})`);
+    rot(this._hh, (h + m / 60) * 30); rot(this._mh, (m + s / 60) * 6); rot(this._hh2, (h + m / 60) * 30); rot(this._mh2, (m + s / 60) * 6); rot(this._sh, s * 6); return (h + m / 60) * 30; }
+  // ---- abstract fluid
+  _b_fluid() { const f = this.el; f.innerHTML = '<div class="bl"></div><div class="stg"></div>'; this._dg = [];
+    const pos = [[23, 9], [52, 9], [23, 53], [52, 53]], st = f.querySelector('.stg');
+    for (const [x, y] of pos) { const g = document.createElement('div'); g.className = 'dg'; g.style.left = x + 'cqw'; g.style.top = y + 'cqh'; st.appendChild(g); this._dg.push(g); } }
+  _u_fluid(d, hass) { const h = d.getHours(), h12 = (hass && hass.locale && hass.locale.time_format === '24') ? h : (h % 12 || 12), t = String(h12).padStart(2, '0') + String(d.getMinutes()).padStart(2, '0');
+    if (this._t === t) return; this._t = t;
+    t.split('').forEach((c, i) => { const g = this._dg[i]; g.innerHTML = ''; for (const [x, y, w, hh, r, rot] of HV_SS_DG[c]) { const e = document.createElement('div'); e.className = 'sh';
+      e.style.cssText = `left:${x}%;top:${y / 1.4}%;width:${w}%;height:${hh / 1.4}%;border-radius:${Math.min(r / w * 100, 50)}% / ${Math.min(r / hh * 100, 50)}%;${rot ? `transform:rotate(${rot}deg)` : ''}`; g.appendChild(e); } }); }
+  // ---- modern typographic
+  _b_typo() { const f = this.el; f.innerHTML = '<div class="stg"><div class="n n12">12</div><div class="n n9">9</div><div class="n n3">3</div><div class="n n6">6</div><div class="dc"></div></div>';
+    const s = this._svg('0 0 128 100'); s.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+    this._hh = this._ln(s, { x1: 64, y1: 50, x2: 64, y2: 27, stroke: '#fff', 'stroke-width': 3.2, 'stroke-linecap': 'round' });
+    this._mh = this._ln(s, { x1: 64, y1: 50, x2: 64, y2: 12, stroke: '#fff', 'stroke-width': 3.2, 'stroke-linecap': 'round' });
+    this._ln(s, { t: 'circle', cx: 64, cy: 50, r: 2.4, fill: '#fff' });
+    this._sh = this._ln(s, { x1: 64, y1: 92, x2: 64, y2: 10, stroke: '#fff', 'stroke-width': .45 }); this._ln(s, { t: 'circle', cx: 64, cy: 50, r: 1.4, fill: '#fff', stroke: '#5c9a68', 'stroke-width': .7 });
+    f.querySelector('.stg').appendChild(s); }
+  _u_typo(d, hass) { this._hands(d, 64, 50); const L = (hass && hass.locale && hass.locale.language) || undefined;
+    this.el.querySelector('.dc').textContent = (d.toLocaleDateString(L, { weekday: 'short' }).replace(/\./g, '') + ' ' + d.getDate()).toUpperCase(); }
+  // ---- whimsical minimalist
+  _b_whimsy() { const f = this.el; f.innerHTML = '<div class="stg"></div>'; const st = f.querySelector('.stg'); this._nums = [];
+    const tilt = [0, 12, 26, 8, -12, 18, 0, -16, 6, -10, 0, -22]; // hand-placed: a little playful
+    for (let h = 1; h <= 12; h++) { const a = h * Math.PI / 6, n = document.createElement('div'); n.className = 'n'; n.textContent = h; const sx = Math.sin(a), cy = -Math.cos(a), k = Math.max(Math.abs(sx), Math.abs(cy));
+      n.style.left = (50 + 38 * (sx / Math.pow(k, .55)) * .82) + 'cqw'; n.style.top = (50 + 40 * (cy / Math.pow(k, .55))) + 'cqh';
+      n.style.transform = `translate(-50%,-50%) rotate(${tilt[h - 1]}deg)`; st.appendChild(n); this._nums.push(n); }
+    const s = this._svg('0 0 128 100'); s.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+    const hand = (len, w) => { const g = document.createElementNS(hvSsSvgNS, 'g'); this._ln(g, { x1: 64, y1: 50, x2: 64, y2: 45, stroke: '#5e2c2a', 'stroke-width': 1.1, 'stroke-linecap': 'round' });
+      this._ln(g, { x1: 64, y1: 45, x2: 64, y2: 50 - len, stroke: '#6d3431', 'stroke-width': w, 'stroke-linecap': 'round' }); s.appendChild(g); return g; };
+    this._hh = hand(24, 3); this._mh = hand(38, 3);
+    this._sh = this._ln(s, { x1: 64, y1: 92, x2: 64, y2: 8, stroke: '#ea5ab4', 'stroke-width': .5 });
+    this._ln(s, { t: 'circle', cx: 64, cy: 50, r: 1.5, fill: '#ea5ab4', stroke: '#6d3431', 'stroke-width': .5 }); st.appendChild(s); }
+  _u_whimsy(d) { const ha = this._hands(d, 64, 50), ma = d.getMinutes() * 6; // numerals near the hands come forward, the rest fade back
+    this._nums.forEach((n, i) => { const a = (i + 1) * 30, dist = x => { const v = Math.abs(((a - x) % 360 + 540) % 360 - 180); return v; }, m = Math.min(dist(ha), dist(ma));
+      n.style.opacity = String(m <= 75 ? 1 : m <= 110 ? 0.45 : 0.08); }); }
+  update(hass, d) { d = d || new Date(); try { this['_u_' + this.s](d, hass); } catch (e) { /* keep the last frame */ } }
+}
+// ---- full-screen layer over Wallpanel while its screensaver runs
+const hvSsOv = {
+  host: null, face: null, style: null, iv: null,
+  hass() { const ha = document.querySelector('home-assistant'); return ha && ha.hass; },
+  hide() { if (this.host) { this.host.remove(); } this.host = null; this.face = null; this.style = null; },
+  tick(force) { const w = ssWallpanel(); let run = false; try { run = !!(w && w.screensaverRunning && w.screensaverRunning()); } catch (e) { run = false; }
+    const st = run ? hvSs.get() : 'photo'; if (!run || st === 'photo') { this.hide(); return; }
+    if (!this.host || this.style !== st || !this.host.isConnected || this.host.parentNode !== w.parentNode) { this.hide();
+      const h = document.createElement('div'); h.id = 'hv-ss-style'; h.setAttribute('aria-hidden', 'true'); const sr = h.attachShadow({ mode: 'open' }); sr.innerHTML = `<style>${HV_SS_FACE_CSS}</style>`;
+      this.face = new HVSsFace(st); sr.appendChild(this.face.el); this.style = st; this.host = h; w.parentNode.appendChild(h); }
+    let z = parseInt(getComputedStyle(w).zIndex, 10); if (!(z > 0)) z = 1000; z = Math.max(z, 2147482000); /* above page hints; doorbell pop-ups use the top layer */ const op = Number(getComputedStyle(w).opacity);
+    this.host.style.cssText = `position:fixed;inset:0;z-index:${z + 1};pointer-events:none;opacity:${isFinite(op) ? op : 1};transition:opacity .4s linear`;
+    this.face.update(this.hass(), new Date()); },
+  start() { if (this.iv) return; this.iv = setInterval(() => { try { this.tick(); } catch (e) { /* next tick */ } }, 250); } };
+if (!window.__hvSsStyles) { window.__hvSsStyles = true; hvSsOv.start(); }
+// ---- picker in the screensaver settings popup
+const HV_SS_PICK_CSS = `
+.sp{margin:2px 0 16px}.sp .lb{font-size:13px;font-weight:600;color:rgba(255,255,255,.55);letter-spacing:.04em;text-transform:uppercase;margin:6px 6px 8px}
+.sp .ls{border-radius:14px;overflow:hidden;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08)}
+.sp .it{all:unset;box-sizing:border-box;cursor:pointer;width:100%;display:flex;align-items:center;gap:16px;padding:12px 16px;border-top:1px solid rgba(255,255,255,.08);transition:background .15s}
+.sp .it:first-child{border-top:0} .sp .it[aria-checked="true"]{background:rgba(70,110,170,.22)}
+.sp .th{position:relative;width:76px;height:52px;flex:none;border-radius:9px;overflow:hidden;background:#000;border:1px solid rgba(255,255,255,.12)}
+.sp .th.ph{background:linear-gradient(180deg,#5d7088,#26303c);display:flex;align-items:flex-end;padding:0 0 6px 7px;box-sizing:border-box;color:#fff;font:700 12px ${FONT}}
+.sp .tx{flex:1;min-width:0}.sp .nm{font-size:16px;font-weight:500;color:#fff;line-height:1.25;display:flex;align-items:center;gap:8px}
+.sp .cur{display:none;font-size:11px;font-weight:600;color:#4cd07d;background:rgba(76,208,125,.16);border-radius:6px;padding:2px 7px}.sp .it[aria-checked="true"] .cur{display:inline-block}
+.sp .sb{font-size:13px;color:rgba(255,255,255,.55);line-height:1.3;margin-top:2px}
+.sp .rd{width:22px;height:22px;border-radius:50%;border:2px solid rgba(255,255,255,.35);flex:none;box-sizing:border-box;display:flex;align-items:center;justify-content:center}
+.sp .it[aria-checked="true"] .rd{border:0;background:#0a84ff}.sp .rd svg{display:none;width:14px;height:14px}.sp .it[aria-checked="true"] .rd svg{display:block}
+.sp .note{font-size:12px;color:rgba(255,255,255,.5);margin:8px 6px 0}
+${HV_SS_FACE_CSS}`;
+function hvSsPicker(card) {
+  const p = document.createElement('div'); p.className = 'sp'; p.setAttribute('role', 'radiogroup'); p.setAttribute('aria-label', 'Screensaver style');
+  p.innerHTML = `<style>${HV_SS_PICK_CSS}</style><div class="lb">Screensaver style</div><div class="ls"></div><div class="note"></div>`; const ls = p.querySelector('.ls'), faces = [];
+  const cur = () => hvSs.get();
+  for (const o of HV_SSS) { const b = document.createElement('button'); b.className = 'it'; b.dataset.v = o.v; b.setAttribute('role', 'radio');
+    b.innerHTML = `<div class="th${o.v === 'photo' ? ' ph' : ''}">${o.v === 'photo' ? '<span class="pt"></span>' : ''}</div><div class="tx"><div class="nm">${o.l}<span class="cur">Current</span></div><div class="sb">${o.s}</div></div><div class="rd"><svg viewBox="0 0 24 24"><path fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>`;
+    if (o.v !== 'photo') { const f = new HVSsFace(o.v, true); b.querySelector('.th').appendChild(f.el); faces.push(f); }
+    b.addEventListener('click', async () => { if (b.getAttribute('aria-checked') === 'true') return; const prev = cur(); paint(o.v); card._status('Saving style…');
+      try { const saved = await hvSs.set(o.v, card._hass); card._status(`Style: ${o.l} ✓ ${saved ? 'Saved for this dashboard.' : 'Saved in this browser.'}`, 'ok'); }
+      catch (e) { paint(prev); card._status('Style not saved: ' + (e && (e.message || e.code) || e), 'err'); } });
+    ls.appendChild(b); }
+  const paint = v => { for (const b of ls.children) b.setAttribute('aria-checked', String(b.dataset.v === v)); };
+  const upd = () => { const d = new Date(); faces.forEach(f => f.update(card._hass, d)); const pt = p.querySelector('.pt'); if (pt) pt.textContent = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }).replace(/\s?[AP]M$/i, ''); };
+  p.querySelector('.note').textContent = card._hass && card._hass.user && card._hass.user.is_admin ? 'Applies at once, for this dashboard (also kept on its Home Screen card). Preview shows it.' : 'Applies at once, for this dashboard in this browser.';
+  paint(cur()); upd(); const iv = setInterval(() => { if (!p.isConnected) { clearInterval(iv); return; } upd(); }, 1000);
+  return p; }
+{ const orig = HVScreensaverCard.prototype._renderForm;
+  HVScreensaverCard.prototype._renderForm = function () { orig.call(this); if (!this._form) return;
+    if (!this._ssPick || !this._ssPick.isConnected) { this._ssPick = hvSsPicker(this); this._bd.insertBefore(this._ssPick, this._form); } }; }
+Object.assign(LABELS, { screensaver_style: 'Screensaver style (also in the screensaver settings)' });
