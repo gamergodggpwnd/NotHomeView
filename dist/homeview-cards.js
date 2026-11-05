@@ -1867,7 +1867,7 @@ function camWhen(h, v) { // event entity state (ISO time) -> "8:42 PM" today, "Y
 }
 class HVCameraCard extends HTMLElement {
   constructor() { super(); this.attachShadow({ mode: 'open' }); }
-  static get defaults() { return { camera_view: 'live', size: '2x3', show_name: true, show_status: true, tap_opens: true, popup_style: 'fullscreen', swipe_to_close: true, show_history: true, show_sound: true, show_preview: true, live_pause: true, live_pause_min: 30, show_device_live: true, show_device_popup: true }; }
+  static get defaults() { return { camera_view: 'live', size: '2x3', show_name: true, show_status: true, tap_opens: true, popup_style: 'fullscreen', swipe_to_close: true, show_history: true, show_sound: true, show_preview: true, live_pause: true, live_pause_min: 30, show_device_live: false, show_device_popup: true }; }
   static getStubConfig(hass) { const ids = Object.keys(hass.states).filter(k => k.startsWith('camera.')); return { entity: ids.find(k => !UNAVAILABLE.includes(hass.states[k].state)) || ids[0] || 'camera.example' }; }
   static getConfigElement() { const e = document.createElement('homeview-card-editor'); e.cardClass = this; return e; }
   // the Size dropdown writes grid_options (sections grid cells) when it is changed
@@ -2242,7 +2242,7 @@ Object.assign(HELPERS, {
   tap_opens: 'Needs browser_mod. Off = tap opens the camera’s more-info.',
   live_tile: 'Always live plays the muted stream while at least half the tile is on screen. It stops when you scroll away, the page is hidden, the screensaver runs or the large view is open, keeps the last frame, and reconnects by itself (Tap for live after repeated failures). Each device can override this from the large view.',
   live_pause: 'Always live only: stop the stream after this many minutes with no touch, click or key on this device; any touch resumes it.',
-  show_device_live: 'Cycles Card setting → Always live → Tap for live for this camera’s tiles on this device only (saved in this browser), e.g. always live on the wall tablet, tap for live on a phone.',
+  show_device_live: 'Off by default. When on: a large-view button cycles Card setting → Always live → Tap for live for this camera’s tiles on this device only (saved in this browser).',
   show_device_popup: 'Doorbell & motion pop-up (needs the nothomeview_doorbell automation, see docs/doorbell-popup.md): cycles Pop-ups on → Doorbell only → Motion only → Pop-ups off for this camera on this device only (saved in this browser). Shown when the camera has a doorbell or motion event entity.',
   events: 'Event entities (doorbell press, motion …): each shows a chip with the time of its last event.',
   talk_app: 'Home Assistant can’t do two-way talk for Nest or Ring: the large view’s Talk button opens the maker’s app, where you talk.',
