@@ -7278,7 +7278,7 @@ function hvSetupEditorBtn(ed) { if (ed.querySelector('.hv-setup-btn')) return; c
   w.querySelector('button').addEventListener('click', () => { if (ed._hass) hvSetupDialog(ed._hass, { force: true }); }); ed.appendChild(w); }
 /* ---------------- 1.6.0 Doorbell & motion pop-up ---------------- */
 // A Home Assistant automation fires the event `nothomeview_doorbell` (data: kind: ring | motion, camera: camera.xxx, event_type) when the
-// doorbell rings / the camera sees motion (docs/doorbell-popup.md). Every NotHomeView dashboard listens:
+// doorbell rings / the camera sees motion (docs/doorbell-popup.md). Only the Home - Pixel dashboard (url_path home-vertical-tablet) shows it; every other dashboard ignores the event:
 //  * ring, screen awake: the camera live, full screen over the dashboard (purple), closes after 60 s or on ✕ / Dismiss
 //  * ring during the Wallpanel screensaver: a small corner pop-up, top right (tap = full screen; waking the screen also opens it full screen)
 //  * motion, only during the screensaver: the same corner pop-up in orange, muted, closes 45 s after the last motion event, then 5 min quiet
@@ -7442,12 +7442,16 @@ function dbOnNhv() { const seg = decodeURIComponent(location.pathname.split('/')
   if (!pn || pn.component_name !== 'lovelace') return false;
   const w = r => { for (const e of r.querySelectorAll('*')) { if (e.localName.startsWith('homeview-') && e.localName !== 'homeview-doorbell-popup') return true; if (e.shadowRoot && w(e.shadowRoot)) return true; } return false; };
   try { return w(document); } catch (e) { return true; } }
+// Pop-up only on Home - Pixel (dashboard url_path home-vertical-tablet). Other Lovelace paths never open it.
+const DB_DASH_ONLY = 'home-vertical-tablet';
+function dbDashOk() { return decodeURIComponent(location.pathname.split('/')[1] || '') === DB_DASH_ONLY; }
 function dbIn(d, via) { const rec = { via, kind: d && d.kind, cam: d && d.camera, type: d && d.type };
   if (!d || !['ring', 'motion'].includes(d.kind)) return dbLog(Object.assign(rec, { skip: 'unknown kind' }));
   if (d.id) { if (dbStat.seen.includes(d.id)) return dbLog(Object.assign(rec, { skip: 'duplicate' })); dbStat.seen.push(d.id); if (dbStat.seen.length > 40) dbStat.seen.shift(); }
   const h = hvHaHass(), cam = String(d.camera || ''); if (!h || !/^camera\./.test(cam) || !h.states[cam]) return dbLog(Object.assign(rec, { skip: 'no such camera' }));
   if (!dbAllowed(cam, d.kind)) return dbLog(Object.assign(rec, { skip: 'off on this device' }));
   if (!dbOnNhv()) return dbLog(Object.assign(rec, { skip: 'not a NotHomeView dashboard' }));
+  if (!dbDashOk()) return dbLog(Object.assign(rec, { skip: 'only on Home - Pixel' }));
   if ([...camAlCards].some(c => c.isConnected && c._config && c._config.large && c._config.entity === cam)) return dbLog(Object.assign(rec, { skip: 'large view of this camera open' }));
   const ss = camSsOn();
   if (dbPop && dbPop.isConnected) return dbLog(Object.assign(rec, dbPop.bump(d, ss)));
