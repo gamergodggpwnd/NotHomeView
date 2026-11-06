@@ -1765,10 +1765,13 @@ ha-icon,ha-state-icon{display:flex;color:inherit;--mdc-icon-size:calc(var(--b) *
  bottom:calc(clamp(14px,3cqmin,26px) + env(safe-area-inset-bottom,0px) * var(--hv-cam-safe,0))}
 :host([large]) .ctl:not(:empty){display:flex}
 .ctl .c{display:flex;flex-direction:column;align-items:center;gap:6px;font-size:12px;font-weight:600;color:rgba(255,255,255,.92);text-shadow:0 1px 4px rgba(0,0,0,.45);min-width:64px;text-align:center}
+/* equal columns so the row stays centred: a longer caption ("Pop-ups on this device") used to widen the right item and shift the bigger Talk button left of centre */
+:host([large]) .ctl .c{flex:1 1 0px;min-width:0;max-width:140px;box-sizing:border-box;padding:0 2px}
+:host([large]) .ctl b,:host([large]) .ctl small{max-width:100%;overflow-wrap:break-word;line-height:1.2}
 ha-card.many .ctl{gap:clamp(8px,3.2cqw,34px)} ha-card.many .ctl .c{min-width:56px}
 .ctl button{width:54px;height:54px;margin-top:13px} .ctl button ha-icon{--mdc-icon-size:24px}
 .ctl .talk button{width:80px;height:80px;margin-top:0;background:rgba(120,180,255,.3);border-color:rgba(170,210,255,.8);box-shadow:0 0 0 8px rgba(120,180,255,.13),0 10px 30px rgba(0,0,0,.35)}
-.ctl .talk ha-icon{--mdc-icon-size:36px} .ctl .talk b{font-size:15px} .ctl small{font-size:11px;font-weight:500;opacity:.78;margin-top:-4px;white-space:nowrap}
+.ctl .talk ha-icon{--mdc-icon-size:36px} .ctl .talk b{font-size:15px} .ctl small{font-size:11px;font-weight:500;opacity:.78;margin-top:-4px;white-space:normal}
 .ctl .c.on button{background:rgba(255,255,255,.9);color:#1c1c1e;border-color:rgba(255,255,255,.9)}
 /* 1.6.0: narrow phones (large view under 560 px wide, e.g. 360-430 px portrait): the row is shared evenly (Talk a little wider for its big button),
    captions wrap to two centred lines instead of running off the edge; iPad / landscape keep the spaced row above */
@@ -7314,9 +7317,9 @@ const DB_CSS = `
 .box{position:absolute;overflow:hidden;background:#05070a;pointer-events:auto;box-shadow:0 18px 50px rgba(0,0,0,.45);animation:dbIn .32s cubic-bezier(.2,.8,.2,1);touch-action:manipulation}
 @keyframes dbIn{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:none}}
 :host([mode=full]) .box{top:0;bottom:0;left:0;right:0;border-radius:0;border:none;box-shadow:none}
-:host([mode=corner]) .box{top:calc(20px + env(safe-area-inset-top,0px));right:20px;width:clamp(250px,31vw,420px);aspect-ratio:3/2;border-radius:18px;border:2px solid var(--acc);cursor:pointer;
+:host([mode=corner]) .box{top:calc(20px + env(safe-area-inset-top,0px));right:20px;width:clamp(300px,37vw,504px);aspect-ratio:3/2;border-radius:18px;border:2px solid var(--acc);cursor:pointer;
  box-shadow:0 0 0 1px rgba(0,0,0,.25),0 0 24px color-mix(in srgb,var(--acc) 45%,transparent),0 14px 40px rgba(0,0,0,.4)}
-:host([mode=corner][kind=motion]) .box{width:clamp(270px,34vw,460px)} :host([mode=corner][kind=motion]) .cfoot{font-size:11px}
+:host([mode=corner][kind=motion]) .box{width:clamp(324px,41vw,552px)} :host([mode=corner][kind=motion]) .cfoot{font-size:11px}
 @media (max-width:600px){
  :host([mode=corner]) .box,:host([mode=corner][kind=motion]) .box{top:calc(12px + env(safe-area-inset-top,0px));right:12px;width:min(320px,calc(100vw - 24px))}}
 .media,.media>*{position:absolute;inset:0;width:100%;height:100%}
