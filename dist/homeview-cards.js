@@ -7536,7 +7536,9 @@ const HV_SS_COLS = {
     { k: 'text', l: 'Hands', d: '#6d3431' },
     { k: 'accent', l: 'Second hand', d: '#ea5ab4' }] };
 const HV_SS_SWATCH = ['#ffffff', '#0b0b0c', '#97a9af', '#5c9a68', '#f06aa8', '#5b78f0', '#6c7cf2', '#dcbdba', '#6d3431', '#ea5ab4', '#ffd166', '#118ab2', '#073b4c', '#ef476f'];
-const hvSsDeep = (root, sel, d = 0) => { if (!root || d > 9) return null; const f = root.querySelector && root.querySelector(sel); if (f) return f;
+const hvSsDeep = (root, sel, d = 0) => { if (!root || d > 12) return null;
+  if (root.shadowRoot) { const r = hvSsDeep(root.shadowRoot, sel, d + 1); if (r) return r; }
+  const f = root.querySelector && root.querySelector(sel); if (f) return f;
   for (const el of (root.querySelectorAll ? root.querySelectorAll('*') : [])) if (el.shadowRoot) { const r = hvSsDeep(el.shadowRoot, sel, d + 1); if (r) return r; } return null; };
 const hvSsLv = () => { const p = hvSsDeep(document.querySelector('home-assistant'), 'ha-panel-lovelace'); return p && p.lovelace ? p.lovelace : null; };
 const hvSsHex = v => { const s = String(v || '').trim(); const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(s); if (!m) return null;
@@ -7555,14 +7557,38 @@ const hvSsSaveHub = async (hass, mut) => { // mut(hub) → true if changed; retu
 const hvSs = {
   key() { return `hvSsStyle:${ssDash() || 'lovelace'}`; },
   cfgVal() { try { const lv = hvSsLv(), hub = lv && lv.config && hvHubCfgOf(lv.config); const v = hub && hub.screensaver_style; return HV_SSS_V.includes(v) ? v : 'photo'; } catch (e) { return 'photo'; } },
-  get() { const c = this.cfgVal(), l = mhLs.get(this.key()); if (l && HV_SSS_V.includes(l.v) && (l.cfg === undefined || l.cfg === c)) return l.v; return c; },
+  // `cfg` is the live Home Screen value observed when `v` was stored, not the value we hope
+  // the card will show after a save. Writing cfg:v before the in-memory config refreshes makes
+  // get() treat the pick as stale and return the previous style.
+  get() { const c = this.cfgVal(), l = mhLs.get(this.key()); if (l && HV_SSS_V.includes(l.v) && (l.cfg === undefined || l.cfg === c || l.v === c)) return l.v; return c; },
+  _latest: null, _busy: false,
   async set(v, hass) { if (!HV_SSS_V.includes(v)) v = 'photo';
-    let cfgV = this.cfgVal(); mhLs.set(this.key(), { v, cfg: cfgV }); let saved = false;
-    try { saved = await hvSsSaveHub(hass, hub => { if (v === 'photo') { if (!('screensaver_style' in hub)) return false; delete hub.screensaver_style; }
-      else { if (hub.screensaver_style === v) return false; hub.screensaver_style = v; } return true; });
-      if (saved) { cfgV = v; mhLs.set(this.key(), { v, cfg: cfgV }); }
-    } catch (e) { saved = false; }
-    hvSsOv.tick(true); return saved; } };
+    this._latest = v;
+    mhLs.set(this.key(), { v, cfg: this.cfgVal() });
+    hvSsOv.tick(true);
+    if (this._busy) return this._wait;
+    this._busy = true;
+    this._wait = (async () => {
+      let saved = false;
+      try {
+        while (this._latest != null) {
+          const cur = this._latest; this._latest = null;
+          try { saved = await hvSsSaveHub(hass, hub => { if (cur === 'photo') { if (!('screensaver_style' in hub)) return false; delete hub.screensaver_style; }
+            else { if (hub.screensaver_style === cur) return false; hub.screensaver_style = cur; } return true; }); }
+          catch (e) { saved = false; }
+          // A newer tap may have replaced storage while this save was in flight.
+          const l = mhLs.get(this.key());
+          if (this._latest == null && (!l || l.v === cur)) mhLs.set(this.key(), { v: cur, cfg: this.cfgVal() });
+          hvSsOv.tick(true);
+        }
+      } finally {
+        this._busy = false;
+        const again = this._latest;
+        if (again != null) this.set(again, hass);
+      }
+      return saved;
+    })();
+    return this._wait; } };
 const hvSsColors = {
   key() { return `hvSsColors:${ssDash() || 'lovelace'}`; },
   cfgAll() { try { const lv = hvSsLv(), hub = lv && lv.config && hvHubCfgOf(lv.config); const o = hub && hub.screensaver_colors; return o && typeof o === 'object' ? o : {}; } catch (e) { return {}; } },
@@ -7593,7 +7619,10 @@ const hvSsColors = {
 const HV_SS_FACE_CSS = `
 .f,.f *{pointer-events:none !important}
 .f{position:absolute;inset:0;container-type:size;overflow:hidden;font-family:${FONT};-webkit-font-smoothing:antialiased;user-select:none}
-.stg{position:absolute;top:50%;left:50%;height:100cqh;width:min(100cqw,128cqh);transform:translate(-50%,-50%);container-type:size}
+/* Design canvas is 128×100 (the landscape fit). Contain it in the viewport: a portrait screen
+   letterboxes instead of stretching the canvas to the full height, which overlapped the info clock,
+   clipped fluid digits and collided whimsy numerals. */
+.stg{position:absolute;top:50%;left:50%;width:min(100cqw,128cqh);height:min(100cqh,calc(100cqw * 100 / 128));transform:translate(-50%,-50%);container-type:size}
 /* info */
 .f.info{background:var(--hv-ss-bg,#97a9af)}
 .info .dt{position:absolute;left:6cqw;top:7cqh;color:var(--hv-ss-text,#fff);font-weight:700;font-size:11.5cqh;letter-spacing:-.02em;line-height:1}
@@ -7857,7 +7886,7 @@ function hvSsPicker(card) {
     b.innerHTML = `<div class="th${o.v === 'photo' ? ' ph' : ''}">${o.v === 'photo' ? '<span class="pt"></span>' : ''}</div><div class="tx"><div class="nm">${o.l}<span class="cur">Current</span></div><div class="sb">${o.s}</div></div><div class="rd"><svg viewBox="0 0 24 24"><path fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>`;
     if (o.v !== 'photo') { const f = new HVSsFace(o.v, true); f.applyColors(hvSsColors.get(o.v)); b.querySelector('.th').appendChild(f.el); faces.push(f); }
     b.addEventListener('click', async () => { if (b.getAttribute('aria-checked') === 'true') return; const prev = cur(); paint(o.v); colors._repaint(); card._status('Saving style…');
-      try { const saved = await hvSs.set(o.v, card._hass); card._status(`Style: ${o.l} ✓ ${saved ? 'Saved for this dashboard.' : 'Saved in this browser.'}`, 'ok'); }
+      try { const saved = await hvSs.set(o.v, card._hass); if (p.isConnected) paint(hvSs.get()); card._status(`Style: ${o.l} ✓ ${saved ? 'Saved for this dashboard.' : 'Saved in this browser.'}`, 'ok'); }
       catch (e) { paint(prev); colors._repaint(); card._status('Style not saved: ' + (e && (e.message || e.code) || e), 'err'); } });
     ls.appendChild(b); }
   const paint = v => { for (const b of ls.children) b.setAttribute('aria-checked', String(b.dataset.v === v)); };
