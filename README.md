@@ -631,6 +631,26 @@ buttons:
 Notes: each tile and the large view open their own stream, so several live tiles of one camera means several streams. Cameras
 that can't make a still image (the camera proxy answers 500) show *No snapshot* in snapshot mode; use *Live video* for them.
 
+## Home Screen Calendar app
+
+The Calendar **app** is an icon on the Home Screen, like Home or Weather. It is not the Calendar tile. Tapping it opens a rounded dark calendar (Day, Week, Month, Year) over the dashboard. Swipe sideways for the next day, week, month or year. Events are read from Home Assistant the same way as the Calendar tile (`GET /api/calendars/<entity>`).
+
+Add it on the Home Screen card under **Apps** (What it does → **Calendar popup**), or in YAML:
+
+```yaml
+- name: Calendar
+  icon: hv:calendar          # weekday + today’s date. Any other icon still works.
+  color_from: '#ff453a'
+  color_to: '#d70015'
+  glyph_color: '#ffffff'
+  kind: calendar
+  calendar_entities:         # optional. Empty = the Home Screen card’s calendar_entities, or every calendar.
+    - calendar.example_family
+  calendar_entity: calendar.example_family   # optional. Calendar selected when Add event opens, if it can add events.
+```
+
+**Add event** has a calendar row under Options (name and colour, same list as above). It starts on `calendar_entity` when that calendar can add events, otherwise the first one that can. A calendar Home Assistant marks read-only (`supported_features` without create, such as a holiday or garbage calendar) is shown and can’t be chosen. Save uses the one you picked, through `calendar/event/create`: title, start, end, all-day, location, notes, a URL (stored in the notes) and repeat (`rrule`, when Repeat isn’t Never). If that command isn’t available it falls back to `calendar.create_event` (repeat needs the websocket command). Day and Week blocks show the location under the title, and keep the description when the event already has one. Invitees, alerts, travel time and attachments are on the form only — Home Assistant calendars don’t store them. The existing Calendar tile is left as it is.
+
 ## Adding and editing tiles
 
 Use **Add card** and pick a HomeView card (above). Native cards work too: a tile card set to the vertical content layout

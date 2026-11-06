@@ -58,6 +58,16 @@ views:
         color_to: '#1a73e8'
         kind: weather
         weather_entity: weather.forecast_home
+      - name: Calendar
+        icon: hv:calendar
+        color_from: '#ff453a'
+        color_to: '#d70015'
+        glyph_color: '#ffffff'
+        kind: calendar
+        calendar_entities:
+        - calendar.example_family
+        - calendar.example_holidays
+        calendar_entity: calendar.example_family
       grid_options:
         columns: full
         rows: auto
