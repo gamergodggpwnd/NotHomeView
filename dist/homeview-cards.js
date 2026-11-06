@@ -1177,7 +1177,7 @@ class HVEditButtonCard extends HTMLElement {
   }
   // the Wallpanel button: only when Wallpanel is installed (it defines <wallpanel-view>) and the option is on
   _ssWanted() { const c = this._config || {}; return c.show_screensaver_button !== false && !!customElements.get('wallpanel-view'); }
-  _openScreensaver(e) { e.preventDefault(); e.stopPropagation(); if (this._config.preview_only) return; hvOpenScreensaverSettings(this); }
+  _openScreensaver(e) { if (e) { if (e.type !== 'pointerdown') e.preventDefault(); e.stopPropagation(); } if (this._config.preview_only) return; hvOpenScreensaverSettings(this); }
   _go(e) { e.preventDefault(); e.stopPropagation(); if (this._config.preview_only) return; const u = this.url(); if (this._config.url) location.assign(u); else hvGoEdit(u); }
   _paint() { // in-grid placeholder: visible only in edit mode and in the card editor preview
     if (!this._config) return;
@@ -1207,7 +1207,7 @@ class HVEditButtonCard extends HTMLElement {
     r.innerHTML = this._btnHTML(theme);
     const pen = r.querySelector('.pen'), scr = r.querySelector('.scr');
     if (pen) pen.addEventListener('click', e => this._config.edit_menu === false ? this._go(e) : this._menu(e, r, pen));
-    if (scr) scr.addEventListener('click', e => this._openScreensaver(e));
+    if (scr) { scr.addEventListener('pointerdown', e => this._openScreensaver(e)); scr.addEventListener('click', e => this._openScreensaver(e)); }
     // keep the tap from reaching anything underneath (Wallpanel idle timer still sees the activity on window)
     for (const b of r.querySelectorAll('button')) for (const t of ['pointerdown', 'pointerup', 'touchstart', 'touchend']) b.addEventListener(t, e => e.stopPropagation(), { passive: true });
     document.body.appendChild(host); this._fab = host; this._fabKey = key;
@@ -2519,6 +2519,13 @@ const hvAlbumStatus = (st, url) => { const inf = hvAlbumInfo(url), prov = inf.pr
   if (!st.ok) return `⚠ Recognized: ${nm}. ${String(st.error || '').replace(/^[a-z](?![A-Z])/, c => c.toUpperCase()).replace(/([^.!?])$/, '$1.')} Until it works, the photos come from the media folder.`;
   return `✓ ${nm} “${st.title}”: ${st.count} photo${st.count === 1 ? '' : 's'}${st.via === 'browser' ? ' (read by the browser)' : ' (via the Album Links helper)'}. The list refreshes every 6 hours; Order = Random shuffles it.`; };
 function hvOpenScreensaverSettings(from) {
+  const now = Date.now();
+  if (hvOpenScreensaverSettings._at && now - hvOpenScreensaverSettings._at < 500) return;
+  hvOpenScreensaverSettings._at = now;
+  // The style layer and a still-running Wallpanel sit over this dialog. Drop both before opening
+  // so the menu is visible, including right after a styled screensaver closes.
+  try { const w = ssWallpanel(); if (w && w.screensaverRunning && w.screensaverRunning() && typeof w.stopScreensaver === 'function') w.stopScreensaver(); } catch (e) {}
+  try { hvSsOv.hide(); } catch (e) {}
   const content = { type: 'custom:homeview-screensaver-card', dashboard: ssDash(), large: true, height: SS_POPUP_HEIGHT };
   if (window.browser_mod) { fire(from, 'll-custom', { action: 'fire-dom-event', browser_mod: { service: 'browser_mod.popup',
     data: { content, dismissable: true, initial_style: 'hvss', style_sequence: ['hvss'], popup_styles: [{ style: 'hvss', styles: SS_POPUP_CSS }] } } }); return; }
@@ -7584,6 +7591,7 @@ const hvSsColors = {
     hvSsOv.tick(true); return saved; } };
 // ---- faces (sized with container units, so one renderer draws the full screen and the picker thumbnails)
 const HV_SS_FACE_CSS = `
+.f,.f *{pointer-events:none !important}
 .f{position:absolute;inset:0;container-type:size;overflow:hidden;font-family:${FONT};-webkit-font-smoothing:antialiased;user-select:none}
 .stg{position:absolute;top:50%;left:50%;height:100cqh;width:min(100cqw,128cqh);transform:translate(-50%,-50%);container-type:size}
 /* info */
@@ -7728,19 +7736,41 @@ wallpanel-view .digital-clock, wallpanel-view .time, wallpanel-view .date { colo
     document.querySelectorAll('#hv-ss-photo-tint').forEach(n => n.remove()); } };
 // ---- full-screen layer over Wallpanel while its screensaver runs
 const hvSsOv = {
-  host: null, face: null, style: null, colKey: null, iv: null,
+  host: null, face: null, style: null, colKey: null, iv: null, _up: false,
   hass() { const ha = document.querySelector('home-assistant'); return ha && ha.hass; },
-  hide() { if (this.host) { this.host.remove(); } this.host = null; this.face = null; this.style = null; this.colKey = null; },
-  tick(force) { const w = ssWallpanel(); let run = false; try { run = !!(w && w.screensaverRunning && w.screensaverRunning()); } catch (e) { run = false; }
-    if (!run) { this.hide(); hvSsPhotoTint.clear(); return; }
+  // #hv-ss-style lives in Wallpanel's shadow parent, so a document getElementById misses orphans
+  _sweep(root, d) { if (!root || d > 14 || !root.querySelectorAll) return;
+    root.querySelectorAll('#hv-ss-style').forEach(n => { try { n.remove(); } catch (e) {} });
+    for (const el of root.querySelectorAll('*')) if (el.shadowRoot) this._sweep(el.shadowRoot, d + 1); },
+  hide() { const h = this.host; this.host = null; this.face = null; this.style = null; this.colKey = null; this._up = false;
+    if (h) { try { h.remove(); } catch (e) {} } try { this._sweep(document, 0); } catch (e) {} },
+  // Wallpanel can still report "running" after it has faded out (opacity 0 / visibility hidden / pointer-events none).
+  // The style layer must not stay up then: it covers the screensaver settings dialog.
+  showing(w) { if (!w) return false; let run = false; try { run = !!(w.screensaverRunning && w.screensaverRunning()); } catch (e) { return false; } if (!run) return false;
+    let cs; try { cs = getComputedStyle(w); } catch (e) { return false; }
+    if (cs.visibility === 'hidden' || cs.display === 'none' || cs.pointerEvents === 'none') return false;
+    const op = Number(cs.opacity); return isFinite(op) && op >= 0.05; },
+  tick(force) { const w = ssWallpanel();
+    if (!this.showing(w)) {
+      let run = false; try { run = !!(w && w.screensaverRunning && w.screensaverRunning()); } catch (e) { run = false; }
+      // Only a layer that is marked visible and hit-testable but fully transparent. A start that is still
+      // loading stays visibility:hidden / pointer-events:none and must not be stopped.
+      let ghost = false;
+      if (run && w) { try { const cs = getComputedStyle(w); ghost = cs.visibility !== 'hidden' && cs.display !== 'none' && cs.pointerEvents !== 'none' && !(Number(cs.opacity) >= 0.05); } catch (e) { ghost = false; } }
+      if (ghost) { this._ghost = this._ghost || Date.now(); if (Date.now() - this._ghost > 1200 && typeof w.stopScreensaver === 'function') { try { w.stopScreensaver(); } catch (e) {} } }
+      else this._ghost = 0;
+      if (this.host || this._up) this.hide();
+      hvSsPhotoTint.clear(); return; }
+    this._ghost = 0;
     const st = hvSs.get(), cols = hvSsColors.get(st), colKey = st + ':' + JSON.stringify(hvSsStrip(st, cols) || {});
     if (st === 'photo') { this.hide(); hvSsPhotoTint.apply(cols.text); return; }
     hvSsPhotoTint.clear();
     if (!this.host || this.style !== st || this.colKey !== colKey || !this.host.isConnected || this.host.parentNode !== w.parentNode) { this.hide();
-      const h = document.createElement('div'); h.id = 'hv-ss-style'; h.setAttribute('aria-hidden', 'true'); const sr = h.attachShadow({ mode: 'open' }); sr.innerHTML = `<style>${HV_SS_FACE_CSS}</style>`;
-      this.face = new HVSsFace(st); this.face.applyColors(cols); sr.appendChild(this.face.el); this.style = st; this.colKey = colKey; this.host = h; w.parentNode.appendChild(h); }
+      const h = document.createElement('div'); h.id = 'hv-ss-style'; h.setAttribute('aria-hidden', 'true'); h.inert = true; const sr = h.attachShadow({ mode: 'open' }); sr.innerHTML = `<style>${HV_SS_FACE_CSS}</style>`;
+      this.face = new HVSsFace(st); this.face.applyColors(cols); sr.appendChild(this.face.el); this.style = st; this.colKey = colKey; this.host = h; this._up = true; w.parentNode.appendChild(h); }
     else if (this.face) this.face.applyColors(cols);
-    let z = parseInt(getComputedStyle(w).zIndex, 10); if (!(z > 0)) z = 1000; z = Math.max(z, 2147482000); /* above page hints; doorbell pop-ups use the top layer */ const op = Number(getComputedStyle(w).opacity);
+    // Just above Wallpanel (page hints sit under it). A 2147482000 z-index painted over the settings dialog, so the button looked dead.
+    let z = parseInt(getComputedStyle(w).zIndex, 10); if (!(z > 0)) z = 1000; const op = Number(getComputedStyle(w).opacity);
     this.host.style.cssText = `position:fixed;inset:0;z-index:${z + 1};pointer-events:none;opacity:${isFinite(op) ? op : 1};transition:opacity .4s linear`;
     this.face.update(this.hass(), new Date()); },
   start() { if (this.iv) return; this.iv = setInterval(() => { try { this.tick(); } catch (e) { /* next tick */ } }, 250); } };
