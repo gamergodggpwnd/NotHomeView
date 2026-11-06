@@ -646,10 +646,10 @@ Add it on the Home Screen card under **Apps** (What it does → **Calendar popup
   kind: calendar
   calendar_entities:         # optional. Empty = the Home Screen card’s calendar_entities, or every calendar.
     - calendar.example_family
-  calendar_entity: calendar.example_family   # optional. Where new events are saved. Empty = the first calendar.
+  calendar_entity: calendar.example_family   # optional. Calendar selected when Add event opens, if it can add events.
 ```
 
-**Add event** saves with Home Assistant’s `calendar/event/create`: title, start, end, all-day, location, notes, a URL (stored in the notes) and repeat (`rrule`, when Repeat isn’t Never). If that command isn’t available it falls back to `calendar.create_event` (repeat needs the websocket command). Day and Week blocks show the location under the title, and keep the description when the event already has one. Invitees, alerts, travel time and attachments are on the form only — Home Assistant calendars don’t store them. The existing Calendar tile is left as it is.
+**Add event** has a calendar row under Options (name and colour, same list as above). It starts on `calendar_entity` when that calendar can add events, otherwise the first one that can. A calendar Home Assistant marks read-only (`supported_features` without create, such as a holiday or garbage calendar) is shown and can’t be chosen. Save uses the one you picked, through `calendar/event/create`: title, start, end, all-day, location, notes, a URL (stored in the notes) and repeat (`rrule`, when Repeat isn’t Never). If that command isn’t available it falls back to `calendar.create_event` (repeat needs the websocket command). Day and Week blocks show the location under the title, and keep the description when the event already has one. Invitees, alerts, travel time and attachments are on the form only — Home Assistant calendars don’t store them. The existing Calendar tile is left as it is.
 
 ## Adding and editing tiles
 

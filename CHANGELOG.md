@@ -3,7 +3,7 @@
 ## Unreleased
 
 ### New features
-* **Home Screen Calendar app** (`kind: calendar`): a red date icon (`hv:calendar`, weekday + today’s number) opens an iPad-style calendar popup (Day, Week, Month, Year, swipe between them, search, list). Events come from the Home Screen’s calendars (or the app’s `calendar_entities`). Day and Week blocks show a location in the description, and keep the event’s own description. Add event writes through `calendar/event/create` (title, start/end, all-day, location, notes, URL in the notes, repeat as `rrule`). The Calendar tile is unchanged. In the visual editor: Apps → What it does → Calendar popup.
+* **Home Screen Calendar app** (`kind: calendar`): a red date icon (`hv:calendar`, weekday + today’s number) opens an iPad-style calendar popup (Day, Week, Month, Year, swipe between them, search, list). Events come from the Home Screen’s calendars (or the app’s `calendar_entities`). Day and Week blocks show a location in the description, and keep the event’s own description. Add event writes through `calendar/event/create` (title, start/end, all-day, location, notes, URL in the notes, repeat as `rrule`) onto the calendar chosen in the form. The list is the app’s calendars (or the Home Screen card’s). `calendar_entity` is the one selected first when that calendar can add events; calendars whose `supported_features` omit create (holidays and other read-only sources) are shown disabled. The Calendar tile is unchanged. In the visual editor: Apps → What it does → Calendar popup.
 
 ## 1.6.0 – 2026-11-05 (tag `v1.6`)
 

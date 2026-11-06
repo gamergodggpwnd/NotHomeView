@@ -5667,6 +5667,22 @@ function hvCalFmtTime(h, d, withMin) { const o = { hour: 'numeric' }; if (withMi
 function hvCalFmtRange(h, e) { return hvCalFmtTime(h, e._s) + ' – ' + hvCalFmtTime(h, e._e); }
 function hvCalWd(h, d) { try { return d.toLocaleDateString(hvCalLang(h), { weekday: 'short' }).replace(/\./g, '').slice(0, 3).toUpperCase(); } catch (e) { return ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][d.getDay()]; } }
 function hvCalFg(hex) { const n = parseInt(String(hex).slice(1), 16); if (!isFinite(n)) return '#fff'; const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255; return (r * 299 + g * 587 + b * 114) / 1000 > 170 ? '#1c1c1e' : '#fff'; }
+// CalendarEntityFeature.CREATE_EVENT is bit 1 of attributes.supported_features. null = the state doesn't say (still offered). false = read-only.
+function hvCalCanCreate(state) {
+  if (!state || !state.attributes || state.attributes.supported_features == null || state.attributes.supported_features === '') return null;
+  return !!(Number(state.attributes.supported_features) & 1);
+}
+function hvCalName(state, id) {
+  const n = state && state.attributes && (state.attributes.friendly_name || state.attributes.name);
+  if (n) return String(n);
+  const raw = String(id || '').replace(/^calendar\./, '').replace(/[_-]+/g, ' ').trim();
+  return raw ? raw.replace(/\b\w/g, c => c.toUpperCase()) : 'Calendar';
+}
+function hvCalWriteTarget(ids, states, preferred) {
+  const list = (ids || []).filter(Boolean), ok = id => hvCalCanCreate(states && states[id]) !== false;
+  if (preferred && list.includes(preferred) && ok(preferred)) return preferred;
+  return list.find(ok) || '';
+}
 function hvHubCalGlyph(a, hass) {
   if (!(a && (a.icon === 'hv:calendar' || (a.kind === 'calendar' && (!a.icon || a.icon === 'mdi:calendar'))))) return `<ha-icon icon="${esc(a && a.icon || 'mdi:apps')}"></ha-icon>`;
   const d = new Date();
@@ -5698,8 +5714,8 @@ function hvOpenCalApp(hub, app) {
   const idsOf = () => { const a = app || {}, c = hub._config || {}, h = hub._hass;
     const raw = (a.calendar_entities && a.calendar_entities.length) ? a.calendar_entities : (c.calendar_entities && c.calendar_entities.length) ? c.calendar_entities : Object.keys((h && h.states) || {}).filter(k => k.startsWith('calendar.'));
     return raw.map(x => typeof x === 'string' ? x : x && x.entity).filter(Boolean); };
-  const writeId = list => { const want = app && app.calendar_entity; if (want && (!list.length || list.includes(want))) return want; return list[0] || ''; };
-  const nameOf = id => { const s = hub._hass.states[id]; return (s && (s.attributes.friendly_name || s.attributes.name)) || id; };
+  const writeId = list => hvCalWriteTarget(list, hub._hass && hub._hass.states, app && app.calendar_entity);
+  const nameOf = id => hvCalName(hub._hass && hub._hass.states[id], id);
   const colorOf = id => { const list = idsOf(); let i = list.indexOf(id); if (i < 0) { let n = 0; for (let k = 0; k < id.length; k++) n = (n + id.charCodeAt(k)) % HV_CAL_PAL.length; i = n; } return HV_CAL_PAL[i % HV_CAL_PAL.length]; };
   const st = { mode: 'month', gridMode: 'month', anchor: startOfDay(new Date()), events: null, q: '', hidden: new Set(), add: null, addRev: 0, addPainted: -1, detail: null, filt: false, loadedKey: '', seq: 0, calSig: '', timeY: null, err: '', saving: false };
   const css = `<style>
@@ -5810,6 +5826,17 @@ function hvOpenCalApp(hub, app) {
 .form .warn{color:#ffb4a8;font-size:13px;margin:8px 2px 0}
 .calpick{display:flex;align-items:center;gap:8px}
 .calpick i{width:10px;height:10px;border-radius:50%}
+.calrow{all:unset;cursor:pointer;box-sizing:border-box;display:grid;grid-template-columns:28px 1fr 18px;align-items:center;width:100%;min-height:44px;margin:4px 0 8px;padding:0 12px;border-radius:12px;background:#2c2c2e;font:600 16px ${FONT};color:#fff}
+.calrow .dots{display:flex;align-items:center}.calrow .dots i{width:11px;height:11px;border-radius:50%;box-shadow:0 0 0 2px #2c2c2e}.calrow .dots i+i{margin-left:-5px}
+.calrow .nm{text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.calrow ha-icon{--mdc-icon-size:18px;display:flex;justify-self:end;opacity:.75}
+.callist{margin:-2px 0 10px;border-radius:12px;background:#2c2c2e;overflow:hidden}
+.calopt{all:unset;cursor:pointer;box-sizing:border-box;display:flex;align-items:center;gap:10px;width:100%;min-height:44px;padding:8px 12px;color:#fff;font:500 16px ${FONT};border-top:1px solid rgba(255,255,255,.08)}
+.calopt:first-child{border-top:0}.calopt i{width:12px;height:12px;border-radius:50%;flex:none}
+.calopt span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.calopt small{font-size:12px;font-weight:500;color:rgba(255,255,255,.45)}
+.calopt.on{background:rgba(255,255,255,.08)}.calopt:disabled{cursor:default;opacity:.5}
+.calopt ha-icon{--mdc-icon-size:18px;display:flex}
 .dbox{width:min(420px,100%);margin:10vh auto;background:linear-gradient(150deg,rgba(60,58,110,.9),rgba(22,22,28,.94));border:1px solid rgba(255,255,255,.16);border-radius:22px;padding:20px 20px 16px;position:relative}
 .dbox h2{margin:8px 0;font-size:22px}
 .dbox p{margin:6px 0;display:flex;gap:8px;align-items:flex-start;line-height:1.35}
@@ -5953,7 +5980,14 @@ function hvOpenCalApp(hub, app) {
   function paintAdd() {
     if (!st.add) { addEl.hidden = true; addEl.innerHTML = ''; return; }
     addEl.hidden = false; if (st.addPainted === st.addRev) return; st.addPainted = st.addRev;
-    const f = st.add, ids = idsOf(), cal = f.calendar || writeId(ids), c = colorOf(cal || 'calendar'), rep = HV_CAL_REPEATS.map(r => `<option value="${r[0]}"${f.repeat === r[0] ? ' selected' : ''}>${r[1]}</option>`).join('');
+    const f = st.add, ids = idsOf();
+    if (!ids.includes(f.calendar) || hvCalCanCreate(hub._hass.states[f.calendar]) === false) f.calendar = writeId(ids);
+    const cal = f.calendar, c = colorOf(cal || ids[0] || 'calendar'), rep = HV_CAL_REPEATS.map(r => `<option value="${r[0]}"${f.repeat === r[0] ? ' selected' : ''}>${r[1]}</option>`).join('');
+    const calName = cal ? nameOf(cal) : (ids.length ? 'No calendar can add events' : 'No calendar');
+    const dots = [cal].concat(ids.filter(id => id !== cal && hvCalCanCreate(hub._hass.states[id]) !== false)).filter(Boolean).slice(0, 2).map(id => `<i style="background:${colorOf(id)}"></i>`).join('');
+    const calRows = ids.map(id => { const ro = hvCalCanCreate(hub._hass.states[id]) === false, on = id === cal;
+      return `<button type="button" class="calopt${on ? ' on' : ''}" role="option" aria-selected="${on}" data-pick="${esc(id)}"${ro ? ' disabled' : ''}><i style="background:${colorOf(id)}"></i><span>${esc(nameOf(id))}</span>${ro ? '<small>Can’t add events</small>' : on ? '<ha-icon icon="mdi:check"></ha-icon>' : ''}</button>`; }).join('');
+    const calBlock = `<button type="button" class="calrow" data-act="cals" aria-expanded="${f.calOpen ? 'true' : 'false'}" aria-label="Calendar, ${esc(calName)}"><span class="dots">${dots}</span><span class="nm">${esc(calName)}</span><ha-icon icon="mdi:chevron-${f.calOpen ? 'down' : 'right'}"></ha-icon></button>${f.calOpen ? `<div class="callist" role="listbox" aria-label="Calendars">${calRows}</div>` : ''}`;
     const reminder = f.kind === 'reminder';
     const times = reminder ? '' : `<div class="row"><span class="k">Ends</span><input type="date" name="endDate" value="${hvCalYmd(f.end)}" aria-label="End date">${f.allDay ? '' : `<input type="time" name="endTime" value="${hvCalPad(f.end.getHours())}:${hvCalPad(f.end.getMinutes())}" aria-label="End time">`}</div>
 <div class="row"><span class="k">All-day</span><input class="sw" type="checkbox" name="allDay" ${f.allDay ? 'checked' : ''} aria-label="All-day"></div>
@@ -5962,20 +5996,20 @@ function hvOpenCalApp(hub, app) {
 <div class="sec">Invitees</div><div class="row"><input type="text" name="invitees" placeholder="Invitees" value="${esc(f.invitees)}" style="flex:1" aria-label="Invitees"></div>`;
     addEl.innerHTML = `<div class="sheet"><div class="ah"><button type="button" class="ck" data-act="add-close" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button>
 <div class="seg"><button type="button" data-kind="event" aria-pressed="${!reminder}">Event</button><button type="button" data-kind="reminder" aria-pressed="${reminder}">Reminder</button></div>
-<button type="button" class="ck" data-act="save" aria-label="Add event" ${reminder || f.saving ? 'disabled' : ''}><ha-icon icon="mdi:check"></ha-icon></button></div>
+<button type="button" class="ck" data-act="save" aria-label="Add event" ${reminder || f.saving || !cal ? 'disabled' : ''}><ha-icon icon="mdi:check"></ha-icon></button></div>
 <div class="trow" style="--c:${c}"><i class="accent"></i><input name="title" placeholder="Title or Describe Event" value="${esc(f.title)}" aria-label="Title"></div>
 <div class="form"><div class="row"><span class="k">Starts</span><input type="date" name="startDate" value="${hvCalYmd(f.start)}" aria-label="Start date">${f.allDay && !reminder ? '' : `<input type="time" name="startTime" value="${hvCalPad(f.start.getHours())}:${hvCalPad(f.start.getMinutes())}" aria-label="Start time">`}</div>
 ${times}
 <div class="sec">Options</div>
-<div class="row"><span class="k">Calendar</span><label class="calpick"><i style="background:${c}"></i><select name="calendar" aria-label="Calendar">${(ids.length ? ids : [cal]).filter(Boolean).map(id => `<option value="${esc(id)}"${id === cal ? ' selected' : ''}>${esc(nameOf(id))}</option>`).join('') || '<option value="">No calendar</option>'}</select></label></div>
+${calBlock}
 <div class="row"><span class="k">Alert</span><select name="alert" aria-label="Alert">${['None', 'At time of event', '5 minutes before', '15 minutes before', '30 minutes before', '1 hour before', '1 day before'].map(x => `<option${f.alert === x ? ' selected' : ''}>${x}</option>`).join('')}</select></div>
 <div class="row"><span class="k">Travel Time</span><select name="travel" aria-label="Travel time">${['None', '5 minutes', '15 minutes', '30 minutes', '1 hour'].map(x => `<option${f.travel === x ? ' selected' : ''}>${x}</option>`).join('')}</select></div>
 <div class="sec">Details</div><textarea name="notes" placeholder="Notes" aria-label="Notes">${esc(f.notes)}</textarea>
 <button type="button" class="row" data-act="attach" style="width:100%;background:none;color:inherit;cursor:pointer"><span class="k">Add attachment…</span></button>
 <div class="row"><span class="k">URL</span><input type="url" name="url" placeholder="URL" value="${esc(f.url)}" aria-label="URL"></div>
-<p class="note">Saved to Home Assistant: title, start and end, all-day, repeat, location, notes and URL. Invitees, alerts, travel time and attachments stay on this form only.</p>
+<p class="note">Saved on the calendar named above: title, start and end, all-day, repeat, location, notes and URL. Invitees, alerts, travel time and attachments stay on this form only.</p>
 ${reminder ? '<p class="warn">Reminders aren’t stored on a Home Assistant calendar. Switch to Event to save.</p>' : ''}${f.attachNote ? '<p class="warn">Home Assistant calendars can’t store attachments.</p>' : ''}${f.error ? `<p class="warn">${esc(f.error)}</p>` : ''}</div></div>`;
-    const t = addEl.querySelector('[name=title]'); if (t) t.focus();
+    if (!f._focused) { const t = addEl.querySelector('[name=title]'); if (t) t.focus(); f._focused = true; }
   }
   function paintDetail() {
     if (!st.detail) { detEl.hidden = true; detEl.innerHTML = ''; st.detailKey = ''; return; }
@@ -5999,11 +6033,11 @@ ${reminder ? '<p class="warn">Reminders aren’t stored on a Home Assistant cale
     if (stt && stt.value) { const [hh, mm] = stt.value.split(':').map(Number); f.start.setHours(hh || 0, mm || 0, 0, 0); }
     if (ed && ed.value) { const d = hvCalParseYmd(ed.value); if (d) { if (!f.end) f.end = new Date(f.start); f.end.setFullYear(d.getFullYear(), d.getMonth(), d.getDate()); } }
     if (et && et.value) { const [hh, mm] = et.value.split(':').map(Number); f.end.setHours(hh || 0, mm || 0, 0, 0); }
-    ['title', 'location', 'invitees', 'notes', 'url', 'repeat', 'alert', 'travel', 'calendar'].forEach(k => { const el = g(k); if (el) f[k] = el.value; });
+    ['title', 'location', 'invitees', 'notes', 'url', 'repeat', 'alert', 'travel'].forEach(k => { const el = g(k); if (el) f[k] = el.value; });
     const ad = g('allDay'); if (ad) f.allDay = ad.checked; }
   async function saveAdd() { const f = st.add; if (!f || f.saving || f.kind === 'reminder') return; readAdd(); f.error = '';
     let event; try { event = hvCalEventPayload(f); } catch (e) { f.error = hvCalErr(e); st.addRev++; paintAdd(); return; }
-    if (!f.calendar) { f.error = 'Pick a calendar to save to.'; st.addRev++; paintAdd(); return; }
+    if (!f.calendar || hvCalCanCreate(hub._hass.states[f.calendar]) === false) { f.error = f.calendar ? 'That calendar can’t add events. Choose another.' : 'None of these calendars can add events.'; st.addRev++; paintAdd(); return; }
     f.saving = true; st.addRev++; paintAdd();
     try {
       await hvCalCreate(hub._hass, f.calendar, event);
@@ -6029,7 +6063,11 @@ ${reminder ? '<p class="warn">Reminders aren’t stored on a Home Assistant cale
   sr.querySelector('.x').addEventListener('click', close);
   search.addEventListener('input', () => { st.q = search.value; paintBody(); });
   fpop.addEventListener('change', e => { const id = e.target && e.target.dataset && e.target.dataset.cal; if (!id) return; if (e.target.checked) st.hidden.delete(id); else st.hidden.add(id); paintBody(); });
-  addEl.addEventListener('click', e => { const b = e.target.closest('[data-act],[data-kind]'); if (!b) return; if (b.dataset.kind) { readAdd(); st.add.kind = b.dataset.kind; st.addRev++; paintAdd(); return; } if (b.dataset.act === 'add-close') { st.add = null; st.addRev++; paintAdd(); } else if (b.dataset.act === 'save') saveAdd(); else if (b.dataset.act === 'attach') { readAdd(); st.add.attachNote = true; st.addRev++; paintAdd(); } });
+  addEl.addEventListener('click', e => { const b = e.target.closest('[data-act],[data-kind],[data-pick]'); if (!b) return;
+    if (b.dataset.pick) { if (b.disabled || b.hasAttribute('disabled')) return; readAdd(); const id = b.dataset.pick; if (hvCalCanCreate(hub._hass.states[id]) === false) return; st.add.calendar = id; st.add.calOpen = false; st.addRev++; paintAdd(); return; }
+    if (b.dataset.kind) { readAdd(); st.add.kind = b.dataset.kind; st.addRev++; paintAdd(); return; }
+    if (b.dataset.act === 'cals') { readAdd(); st.add.calOpen = !st.add.calOpen; st.addRev++; paintAdd(); return; }
+    if (b.dataset.act === 'add-close') { st.add = null; st.addRev++; paintAdd(); } else if (b.dataset.act === 'save') saveAdd(); else if (b.dataset.act === 'attach') { readAdd(); st.add.attachNote = true; st.addRev++; paintAdd(); } });
   addEl.addEventListener('change', e => { if (!st.add || !e.target.name) return; if (e.target.name === 'allDay') { readAdd(); st.addRev++; paintAdd(); } });
   detEl.addEventListener('click', e => { if (e.target === detEl || e.target.closest('[data-act="detail-close"]')) { st.detail = null; paintDetail(); } });
   win.addEventListener('click', e => { if (addEl.contains(e.target) || detEl.contains(e.target)) return; const b = e.target.closest('[data-act],[data-mode],[data-ev],[data-day],[data-slot],[data-month]'); if (!b) { if (st.filt && !fpop.contains(e.target)) { st.filt = false; paintChrome(); } return; }
@@ -6049,7 +6087,7 @@ ${reminder ? '<p class="warn">Reminders aren’t stored on a Home Assistant cale
   paint(); ensure();
   return api;
 }
-try { window.HVCal = { blockDesc: hvCalBlockDesc, eventPayload: hvCalEventPayload, columns: hvCalColumns, ymd: hvCalYmd, addDays: hvCalAddDays, addMonths: hvCalAddMonths, startOfWeek: hvCalStartOfWeek, iso: hvCalIso, create: hvCalCreate }; } catch (e) {}
+try { window.HVCal = { blockDesc: hvCalBlockDesc, eventPayload: hvCalEventPayload, columns: hvCalColumns, ymd: hvCalYmd, addDays: hvCalAddDays, addMonths: hvCalAddMonths, startOfWeek: hvCalStartOfWeek, iso: hvCalIso, create: hvCalCreate, canCreate: hvCalCanCreate, writeTarget: hvCalWriteTarget, name: hvCalName }; } catch (e) {}
 
 class HVHubCard extends HTMLElement {
   constructor() { super(); this.attachShadow({ mode: 'open' }); this._layer = 0; }
