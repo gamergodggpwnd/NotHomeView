@@ -1177,7 +1177,7 @@ class HVEditButtonCard extends HTMLElement {
   }
   // the Wallpanel button: only when Wallpanel is installed (it defines <wallpanel-view>) and the option is on
   _ssWanted() { const c = this._config || {}; return c.show_screensaver_button !== false && !!customElements.get('wallpanel-view'); }
-  _openScreensaver(e) { e.preventDefault(); e.stopPropagation(); if (this._config.preview_only) return; hvOpenScreensaverSettings(this); }
+  _openScreensaver(e) { if (e) { if (e.type !== 'pointerdown') e.preventDefault(); e.stopPropagation(); } if (this._config.preview_only) return; hvOpenScreensaverSettings(this); }
   _go(e) { e.preventDefault(); e.stopPropagation(); if (this._config.preview_only) return; const u = this.url(); if (this._config.url) location.assign(u); else hvGoEdit(u); }
   _paint() { // in-grid placeholder: visible only in edit mode and in the card editor preview
     if (!this._config) return;
@@ -1207,7 +1207,7 @@ class HVEditButtonCard extends HTMLElement {
     r.innerHTML = this._btnHTML(theme);
     const pen = r.querySelector('.pen'), scr = r.querySelector('.scr');
     if (pen) pen.addEventListener('click', e => this._config.edit_menu === false ? this._go(e) : this._menu(e, r, pen));
-    if (scr) scr.addEventListener('click', e => this._openScreensaver(e));
+    if (scr) { scr.addEventListener('pointerdown', e => this._openScreensaver(e)); scr.addEventListener('click', e => this._openScreensaver(e)); }
     // keep the tap from reaching anything underneath (Wallpanel idle timer still sees the activity on window)
     for (const b of r.querySelectorAll('button')) for (const t of ['pointerdown', 'pointerup', 'touchstart', 'touchend']) b.addEventListener(t, e => e.stopPropagation(), { passive: true });
     document.body.appendChild(host); this._fab = host; this._fabKey = key;
@@ -1765,10 +1765,13 @@ ha-icon,ha-state-icon{display:flex;color:inherit;--mdc-icon-size:calc(var(--b) *
  bottom:calc(clamp(14px,3cqmin,26px) + env(safe-area-inset-bottom,0px) * var(--hv-cam-safe,0))}
 :host([large]) .ctl:not(:empty){display:flex}
 .ctl .c{display:flex;flex-direction:column;align-items:center;gap:6px;font-size:12px;font-weight:600;color:rgba(255,255,255,.92);text-shadow:0 1px 4px rgba(0,0,0,.45);min-width:64px;text-align:center}
+/* equal columns so the row stays centred: a longer caption ("Pop-ups on this device") used to widen the right item and shift the bigger Talk button left of centre */
+:host([large]) .ctl .c{flex:1 1 0px;min-width:0;max-width:140px;box-sizing:border-box;padding:0 2px}
+:host([large]) .ctl b,:host([large]) .ctl small{max-width:100%;overflow-wrap:break-word;line-height:1.2}
 ha-card.many .ctl{gap:clamp(8px,3.2cqw,34px)} ha-card.many .ctl .c{min-width:56px}
 .ctl button{width:54px;height:54px;margin-top:13px} .ctl button ha-icon{--mdc-icon-size:24px}
 .ctl .talk button{width:80px;height:80px;margin-top:0;background:rgba(120,180,255,.3);border-color:rgba(170,210,255,.8);box-shadow:0 0 0 8px rgba(120,180,255,.13),0 10px 30px rgba(0,0,0,.35)}
-.ctl .talk ha-icon{--mdc-icon-size:36px} .ctl .talk b{font-size:15px} .ctl small{font-size:11px;font-weight:500;opacity:.78;margin-top:-4px;white-space:nowrap}
+.ctl .talk ha-icon{--mdc-icon-size:36px} .ctl .talk b{font-size:15px} .ctl small{font-size:11px;font-weight:500;opacity:.78;margin-top:-4px;white-space:normal}
 .ctl .c.on button{background:rgba(255,255,255,.9);color:#1c1c1e;border-color:rgba(255,255,255,.9)}
 /* 1.6.0: narrow phones (large view under 560 px wide, e.g. 360-430 px portrait): the row is shared evenly (Talk a little wider for its big button),
    captions wrap to two centred lines instead of running off the edge; iPad / landscape keep the spaced row above */
@@ -2516,6 +2519,13 @@ const hvAlbumStatus = (st, url) => { const inf = hvAlbumInfo(url), prov = inf.pr
   if (!st.ok) return `⚠ Recognized: ${nm}. ${String(st.error || '').replace(/^[a-z](?![A-Z])/, c => c.toUpperCase()).replace(/([^.!?])$/, '$1.')} Until it works, the photos come from the media folder.`;
   return `✓ ${nm} “${st.title}”: ${st.count} photo${st.count === 1 ? '' : 's'}${st.via === 'browser' ? ' (read by the browser)' : ' (via the Album Links helper)'}. The list refreshes every 6 hours; Order = Random shuffles it.`; };
 function hvOpenScreensaverSettings(from) {
+  const now = Date.now();
+  if (hvOpenScreensaverSettings._at && now - hvOpenScreensaverSettings._at < 500) return;
+  hvOpenScreensaverSettings._at = now;
+  // The style layer and a still-running Wallpanel sit over this dialog. Drop both before opening
+  // so the menu is visible, including right after a styled screensaver closes.
+  try { const w = ssWallpanel(); if (w && w.screensaverRunning && w.screensaverRunning() && typeof w.stopScreensaver === 'function') w.stopScreensaver(); } catch (e) {}
+  try { hvSsOv.hide(); } catch (e) {}
   const content = { type: 'custom:homeview-screensaver-card', dashboard: ssDash(), large: true, height: SS_POPUP_HEIGHT };
   if (window.browser_mod) { fire(from, 'll-custom', { action: 'fire-dom-event', browser_mod: { service: 'browser_mod.popup',
     data: { content, dismissable: true, initial_style: 'hvss', style_sequence: ['hvss'], popup_styles: [{ style: 'hvss', styles: SS_POPUP_CSS }] } } }); return; }
@@ -7314,9 +7324,9 @@ const DB_CSS = `
 .box{position:absolute;overflow:hidden;background:#05070a;pointer-events:auto;box-shadow:0 18px 50px rgba(0,0,0,.45);animation:dbIn .32s cubic-bezier(.2,.8,.2,1);touch-action:manipulation}
 @keyframes dbIn{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:none}}
 :host([mode=full]) .box{top:0;bottom:0;left:0;right:0;border-radius:0;border:none;box-shadow:none}
-:host([mode=corner]) .box{top:calc(20px + env(safe-area-inset-top,0px));right:20px;width:clamp(250px,31vw,420px);aspect-ratio:3/2;border-radius:18px;border:2px solid var(--acc);cursor:pointer;
+:host([mode=corner]) .box{top:calc(20px + env(safe-area-inset-top,0px));right:20px;width:clamp(300px,37vw,504px);aspect-ratio:3/2;border-radius:18px;border:2px solid var(--acc);cursor:pointer;
  box-shadow:0 0 0 1px rgba(0,0,0,.25),0 0 24px color-mix(in srgb,var(--acc) 45%,transparent),0 14px 40px rgba(0,0,0,.4)}
-:host([mode=corner][kind=motion]) .box{width:clamp(270px,34vw,460px)} :host([mode=corner][kind=motion]) .cfoot{font-size:11px}
+:host([mode=corner][kind=motion]) .box{width:clamp(324px,41vw,552px)} :host([mode=corner][kind=motion]) .cfoot{font-size:11px}
 @media (max-width:600px){
  :host([mode=corner]) .box,:host([mode=corner][kind=motion]) .box{top:calc(12px + env(safe-area-inset-top,0px));right:12px;width:min(320px,calc(100vw - 24px))}}
 .media,.media>*{position:absolute;inset:0;width:100%;height:100%}
@@ -7526,7 +7536,9 @@ const HV_SS_COLS = {
     { k: 'text', l: 'Hands', d: '#6d3431' },
     { k: 'accent', l: 'Second hand', d: '#ea5ab4' }] };
 const HV_SS_SWATCH = ['#ffffff', '#0b0b0c', '#97a9af', '#5c9a68', '#f06aa8', '#5b78f0', '#6c7cf2', '#dcbdba', '#6d3431', '#ea5ab4', '#ffd166', '#118ab2', '#073b4c', '#ef476f'];
-const hvSsDeep = (root, sel, d = 0) => { if (!root || d > 9) return null; const f = root.querySelector && root.querySelector(sel); if (f) return f;
+const hvSsDeep = (root, sel, d = 0) => { if (!root || d > 12) return null;
+  if (root.shadowRoot) { const r = hvSsDeep(root.shadowRoot, sel, d + 1); if (r) return r; }
+  const f = root.querySelector && root.querySelector(sel); if (f) return f;
   for (const el of (root.querySelectorAll ? root.querySelectorAll('*') : [])) if (el.shadowRoot) { const r = hvSsDeep(el.shadowRoot, sel, d + 1); if (r) return r; } return null; };
 const hvSsLv = () => { const p = hvSsDeep(document.querySelector('home-assistant'), 'ha-panel-lovelace'); return p && p.lovelace ? p.lovelace : null; };
 const hvSsHex = v => { const s = String(v || '').trim(); const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(s); if (!m) return null;
@@ -7545,14 +7557,38 @@ const hvSsSaveHub = async (hass, mut) => { // mut(hub) → true if changed; retu
 const hvSs = {
   key() { return `hvSsStyle:${ssDash() || 'lovelace'}`; },
   cfgVal() { try { const lv = hvSsLv(), hub = lv && lv.config && hvHubCfgOf(lv.config); const v = hub && hub.screensaver_style; return HV_SSS_V.includes(v) ? v : 'photo'; } catch (e) { return 'photo'; } },
-  get() { const c = this.cfgVal(), l = mhLs.get(this.key()); if (l && HV_SSS_V.includes(l.v) && (l.cfg === undefined || l.cfg === c)) return l.v; return c; },
+  // `cfg` is the live Home Screen value observed when `v` was stored, not the value we hope
+  // the card will show after a save. Writing cfg:v before the in-memory config refreshes makes
+  // get() treat the pick as stale and return the previous style.
+  get() { const c = this.cfgVal(), l = mhLs.get(this.key()); if (l && HV_SSS_V.includes(l.v) && (l.cfg === undefined || l.cfg === c || l.v === c)) return l.v; return c; },
+  _latest: null, _busy: false,
   async set(v, hass) { if (!HV_SSS_V.includes(v)) v = 'photo';
-    let cfgV = this.cfgVal(); mhLs.set(this.key(), { v, cfg: cfgV }); let saved = false;
-    try { saved = await hvSsSaveHub(hass, hub => { if (v === 'photo') { if (!('screensaver_style' in hub)) return false; delete hub.screensaver_style; }
-      else { if (hub.screensaver_style === v) return false; hub.screensaver_style = v; } return true; });
-      if (saved) { cfgV = v; mhLs.set(this.key(), { v, cfg: cfgV }); }
-    } catch (e) { saved = false; }
-    hvSsOv.tick(true); return saved; } };
+    this._latest = v;
+    mhLs.set(this.key(), { v, cfg: this.cfgVal() });
+    hvSsOv.tick(true);
+    if (this._busy) return this._wait;
+    this._busy = true;
+    this._wait = (async () => {
+      let saved = false;
+      try {
+        while (this._latest != null) {
+          const cur = this._latest; this._latest = null;
+          try { saved = await hvSsSaveHub(hass, hub => { if (cur === 'photo') { if (!('screensaver_style' in hub)) return false; delete hub.screensaver_style; }
+            else { if (hub.screensaver_style === cur) return false; hub.screensaver_style = cur; } return true; }); }
+          catch (e) { saved = false; }
+          // A newer tap may have replaced storage while this save was in flight.
+          const l = mhLs.get(this.key());
+          if (this._latest == null && (!l || l.v === cur)) mhLs.set(this.key(), { v: cur, cfg: this.cfgVal() });
+          hvSsOv.tick(true);
+        }
+      } finally {
+        this._busy = false;
+        const again = this._latest;
+        if (again != null) this.set(again, hass);
+      }
+      return saved;
+    })();
+    return this._wait; } };
 const hvSsColors = {
   key() { return `hvSsColors:${ssDash() || 'lovelace'}`; },
   cfgAll() { try { const lv = hvSsLv(), hub = lv && lv.config && hvHubCfgOf(lv.config); const o = hub && hub.screensaver_colors; return o && typeof o === 'object' ? o : {}; } catch (e) { return {}; } },
@@ -7581,8 +7617,12 @@ const hvSsColors = {
     hvSsOv.tick(true); return saved; } };
 // ---- faces (sized with container units, so one renderer draws the full screen and the picker thumbnails)
 const HV_SS_FACE_CSS = `
+.f,.f *{pointer-events:none !important}
 .f{position:absolute;inset:0;container-type:size;overflow:hidden;font-family:${FONT};-webkit-font-smoothing:antialiased;user-select:none}
-.stg{position:absolute;top:50%;left:50%;height:100cqh;width:min(100cqw,128cqh);transform:translate(-50%,-50%);container-type:size}
+/* Design canvas is 128×100 (the landscape fit). Contain it in the viewport: a portrait screen
+   letterboxes instead of stretching the canvas to the full height, which overlapped the info clock,
+   clipped fluid digits and collided whimsy numerals. */
+.stg{position:absolute;top:50%;left:50%;width:min(100cqw,128cqh);height:min(100cqh,calc(100cqw * 100 / 128));transform:translate(-50%,-50%);container-type:size}
 /* info */
 .f.info{background:var(--hv-ss-bg,#97a9af)}
 .info .dt{position:absolute;left:6cqw;top:7cqh;color:var(--hv-ss-text,#fff);font-weight:700;font-size:11.5cqh;letter-spacing:-.02em;line-height:1}
@@ -7725,19 +7765,41 @@ wallpanel-view .digital-clock, wallpanel-view .time, wallpanel-view .date { colo
     document.querySelectorAll('#hv-ss-photo-tint').forEach(n => n.remove()); } };
 // ---- full-screen layer over Wallpanel while its screensaver runs
 const hvSsOv = {
-  host: null, face: null, style: null, colKey: null, iv: null,
+  host: null, face: null, style: null, colKey: null, iv: null, _up: false,
   hass() { const ha = document.querySelector('home-assistant'); return ha && ha.hass; },
-  hide() { if (this.host) { this.host.remove(); } this.host = null; this.face = null; this.style = null; this.colKey = null; },
-  tick(force) { const w = ssWallpanel(); let run = false; try { run = !!(w && w.screensaverRunning && w.screensaverRunning()); } catch (e) { run = false; }
-    if (!run) { this.hide(); hvSsPhotoTint.clear(); return; }
+  // #hv-ss-style lives in Wallpanel's shadow parent, so a document getElementById misses orphans
+  _sweep(root, d) { if (!root || d > 14 || !root.querySelectorAll) return;
+    root.querySelectorAll('#hv-ss-style').forEach(n => { try { n.remove(); } catch (e) {} });
+    for (const el of root.querySelectorAll('*')) if (el.shadowRoot) this._sweep(el.shadowRoot, d + 1); },
+  hide() { const h = this.host; this.host = null; this.face = null; this.style = null; this.colKey = null; this._up = false;
+    if (h) { try { h.remove(); } catch (e) {} } try { this._sweep(document, 0); } catch (e) {} },
+  // Wallpanel can still report "running" after it has faded out (opacity 0 / visibility hidden / pointer-events none).
+  // The style layer must not stay up then: it covers the screensaver settings dialog.
+  showing(w) { if (!w) return false; let run = false; try { run = !!(w.screensaverRunning && w.screensaverRunning()); } catch (e) { return false; } if (!run) return false;
+    let cs; try { cs = getComputedStyle(w); } catch (e) { return false; }
+    if (cs.visibility === 'hidden' || cs.display === 'none' || cs.pointerEvents === 'none') return false;
+    const op = Number(cs.opacity); return isFinite(op) && op >= 0.05; },
+  tick(force) { const w = ssWallpanel();
+    if (!this.showing(w)) {
+      let run = false; try { run = !!(w && w.screensaverRunning && w.screensaverRunning()); } catch (e) { run = false; }
+      // Only a layer that is marked visible and hit-testable but fully transparent. A start that is still
+      // loading stays visibility:hidden / pointer-events:none and must not be stopped.
+      let ghost = false;
+      if (run && w) { try { const cs = getComputedStyle(w); ghost = cs.visibility !== 'hidden' && cs.display !== 'none' && cs.pointerEvents !== 'none' && !(Number(cs.opacity) >= 0.05); } catch (e) { ghost = false; } }
+      if (ghost) { this._ghost = this._ghost || Date.now(); if (Date.now() - this._ghost > 1200 && typeof w.stopScreensaver === 'function') { try { w.stopScreensaver(); } catch (e) {} } }
+      else this._ghost = 0;
+      if (this.host || this._up) this.hide();
+      hvSsPhotoTint.clear(); return; }
+    this._ghost = 0;
     const st = hvSs.get(), cols = hvSsColors.get(st), colKey = st + ':' + JSON.stringify(hvSsStrip(st, cols) || {});
     if (st === 'photo') { this.hide(); hvSsPhotoTint.apply(cols.text); return; }
     hvSsPhotoTint.clear();
     if (!this.host || this.style !== st || this.colKey !== colKey || !this.host.isConnected || this.host.parentNode !== w.parentNode) { this.hide();
-      const h = document.createElement('div'); h.id = 'hv-ss-style'; h.setAttribute('aria-hidden', 'true'); const sr = h.attachShadow({ mode: 'open' }); sr.innerHTML = `<style>${HV_SS_FACE_CSS}</style>`;
-      this.face = new HVSsFace(st); this.face.applyColors(cols); sr.appendChild(this.face.el); this.style = st; this.colKey = colKey; this.host = h; w.parentNode.appendChild(h); }
+      const h = document.createElement('div'); h.id = 'hv-ss-style'; h.setAttribute('aria-hidden', 'true'); h.inert = true; const sr = h.attachShadow({ mode: 'open' }); sr.innerHTML = `<style>${HV_SS_FACE_CSS}</style>`;
+      this.face = new HVSsFace(st); this.face.applyColors(cols); sr.appendChild(this.face.el); this.style = st; this.colKey = colKey; this.host = h; this._up = true; w.parentNode.appendChild(h); }
     else if (this.face) this.face.applyColors(cols);
-    let z = parseInt(getComputedStyle(w).zIndex, 10); if (!(z > 0)) z = 1000; z = Math.max(z, 2147482000); /* above page hints; doorbell pop-ups use the top layer */ const op = Number(getComputedStyle(w).opacity);
+    // Just above Wallpanel (page hints sit under it). A 2147482000 z-index painted over the settings dialog, so the button looked dead.
+    let z = parseInt(getComputedStyle(w).zIndex, 10); if (!(z > 0)) z = 1000; const op = Number(getComputedStyle(w).opacity);
     this.host.style.cssText = `position:fixed;inset:0;z-index:${z + 1};pointer-events:none;opacity:${isFinite(op) ? op : 1};transition:opacity .4s linear`;
     this.face.update(this.hass(), new Date()); },
   start() { if (this.iv) return; this.iv = setInterval(() => { try { this.tick(); } catch (e) { /* next tick */ } }, 250); } };
@@ -7824,7 +7886,7 @@ function hvSsPicker(card) {
     b.innerHTML = `<div class="th${o.v === 'photo' ? ' ph' : ''}">${o.v === 'photo' ? '<span class="pt"></span>' : ''}</div><div class="tx"><div class="nm">${o.l}<span class="cur">Current</span></div><div class="sb">${o.s}</div></div><div class="rd"><svg viewBox="0 0 24 24"><path fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>`;
     if (o.v !== 'photo') { const f = new HVSsFace(o.v, true); f.applyColors(hvSsColors.get(o.v)); b.querySelector('.th').appendChild(f.el); faces.push(f); }
     b.addEventListener('click', async () => { if (b.getAttribute('aria-checked') === 'true') return; const prev = cur(); paint(o.v); colors._repaint(); card._status('Saving style…');
-      try { const saved = await hvSs.set(o.v, card._hass); card._status(`Style: ${o.l} ✓ ${saved ? 'Saved for this dashboard.' : 'Saved in this browser.'}`, 'ok'); }
+      try { const saved = await hvSs.set(o.v, card._hass); if (p.isConnected) paint(hvSs.get()); card._status(`Style: ${o.l} ✓ ${saved ? 'Saved for this dashboard.' : 'Saved in this browser.'}`, 'ok'); }
       catch (e) { paint(prev); colors._repaint(); card._status('Style not saved: ' + (e && (e.message || e.code) || e), 'err'); } });
     ls.appendChild(b); }
   const paint = v => { for (const b of ls.children) b.setAttribute('aria-checked', String(b.dataset.v === v)); };
