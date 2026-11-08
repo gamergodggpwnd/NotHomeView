@@ -5321,16 +5321,76 @@ const ASSIST_CSS = `:host{position:fixed;inset:0;z-index:11;font-family:${FONT};
 .cap .a{font-size:17px;line-height:1.35;font-weight:500;white-space:pre-wrap;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:7;overflow:hidden}
 .cap.er .a{font-size:15px;color:#ffb4ab}
 .cap .mt{margin-top:10px;display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:11px;opacity:.65} .cap .mt span{display:flex;align-items:center;gap:4px} .cap .mt ha-icon{--mdc-icon-size:13px;display:flex}
+/* 1.6.x: the full-screen page is a reading page like a HomePod's: white by day, near-black at night (no frosted wash). [read] = the current
+   answer is the page (heading + body, event capsules, or an article with bold key terms); the chat thread is one tap away (history button) */
+.bg{background:#fff;backdrop-filter:none;-webkit-backdrop-filter:none;box-shadow:none;filter:none} :host([night]) .bg{background:#0b0b0d}
+.rd{display:none} .ax:empty{display:none} .cal .ev ha-icon{display:none}
+.src{display:inline-flex;align-items:center;gap:6px;margin-top:18px;padding:8px 14px 8px 11px;border-radius:999px;background:var(--inp);color:var(--fg);font-size:14px;font-weight:600;text-decoration:none} .src ha-icon{--mdc-icon-size:17px;display:flex;color:var(--fg2)}
+.ax img{display:block;max-width:min(100%,560px);max-height:42vh;margin-top:18px;border-radius:22px;object-fit:cover}
+.hb{all:unset;cursor:pointer;flex:none;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--inp);color:var(--fg2)} .hb[hidden]{display:none} .hb ha-icon{--mdc-icon-size:20px;display:flex}
+:host([read]) .col{max-width:960px} :host([read]) .hd{position:relative;min-height:72px}:host([read]) .hd .grab,:host([read]) .hd .ti{visibility:hidden}:host([read]) .hd .orb{position:absolute;left:50%;top:14px;width:48px;height:48px;transform:translateX(-50%) scale(var(--lv,1));z-index:1;cursor:pointer;pointer-events:auto}:host([read]) .wrap,:host([read]) .cd{box-shadow:none;filter:none;outline:none}
+:host([read]) .log > :not(.cur),:host([read]) .jump{display:none !important}
+:host([read]) .bd{padding:14px 10px 26px}
+:host([read]) .m.a.cur{width:100%;max-width:none;animation:hvmi .32s ease both}
+:host([read]) .m.a .re{font-size:clamp(26px,3.8vmin,36px);font-weight:600;line-height:1.25} :host([read]) .m.a.rich .re{display:none}
+:host([read]) .m.a.rich .rd{display:block;font-size:clamp(26px,3.8vmin,36px);font-weight:600;line-height:1.25;letter-spacing:-.015em;overflow-wrap:anywhere}
+:host([read]) .rd p{margin:0} :host([read]) .rd p+p{margin-top:.7em} :host([read]) .rd b{font-weight:700}
+:host([read]) .m.a.rich.lst .rd{font-size:clamp(25px,3.5vmin,33px);font-weight:700;line-height:1.22}
+:host([read]) .m.a.rich.art .rd{font-size:clamp(21px,2.9vmin,27px);font-weight:400;line-height:1.5;letter-spacing:0}
+:host([read]) .rows{gap:10px;margin-top:22px}
+:host([read]) .sec{font-size:clamp(18px,2.4vmin,21px);font-weight:400;margin:24px 4px 2px} :host([read]) .rows .sec:first-child{margin-top:2px}
+:host([read]) .row{padding:15px 20px;border-radius:999px;font-size:clamp(16px,2.2vmin,19px);gap:12px;border-left:0}
+:host([read]) .row.b{position:relative;padding-left:30px} :host([read]) .row.b ha-icon{display:none} :host([read]) .row.b::before{content:'';position:absolute;left:16px;top:11px;bottom:11px;width:4px;border-radius:2px;background:#0a84ff}
+:host([read]) .row .rt{font-size:clamp(14px,1.9vmin,16px);font-weight:500}
+:host([read]) .card{margin-top:24px} :host([read]) .card.cal{background:none;border:0;box-shadow:none;padding:0} :host([read]) .m.a:has(.card.cal) .rows{display:none}
+:host([read]) .cal .day{font-size:clamp(18px,2.4vmin,21px);font-weight:400;color:var(--fg);margin:24px 4px 10px} :host([read]) .cal .ct + .day{margin-top:6px}
+:host([read]) .cal .ev{padding:15px 20px;border-radius:999px;font-size:clamp(16px,2.2vmin,19px);gap:12px;margin-bottom:10px;background:#dceafc;color:#0b3d7a}
+:host([read]) .cal .ev i{width:4px;margin:-2px 0;background:#0a84ff} :host([read]) .cal .ev .tm{color:inherit;opacity:.78;font-size:clamp(14px,1.9vmin,16px)}
+:host([read]) .cal .ev.ad{background:#fdebd3;color:#7a4a00} :host([read]) .cal .ev.ad i{display:none} :host([read]) .cal .ev.ad ha-icon{display:flex;--mdc-icon-size:20px;color:#f08c00}
+:host([read][night]) .cal .ev{background:rgba(10,132,255,.22);color:#b9dbff} :host([read][night]) .cal .ev i{background:#409cff} :host([read][night]) .cal .ev.ad{background:rgba(255,159,10,.2);color:#ffd29a} :host([read][night]) .cal .ev.ad ha-icon{color:#ffb340}
+:host([read][night]) .row.b::before{background:#409cff}
+:host([read]) .sug{margin-top:18px} :host([read]) .sug button{font-size:15px;padding:10px 16px}
+:host([read]) .ft{padding-top:6px} :host([read]) .mic{width:44px;height:44px;box-shadow:none} :host([read]) .mic ha-icon{--mdc-icon-size:22px} :host([read]) .in{height:42px}
 @media (prefers-reduced-motion:reduce){.orb::before,.dots i,.m,.m.u .w,.bo span,.ow,.cap{animation:none !important} .wrap{transition:opacity .2s}}`;
-// response text -> intro + rows (markdown lists, "Day:" headings, times, all-day items)
+// response text -> intro + rows (markdown lists, "Day:" headings, times, all-day items). intro = plain text (caption, history, chat);
+// introH = the intro as HTML lines for the reading page (**bold** / __bold__ kept as <b>, bare links taken out); links show their text;
+// images (markdown or a bare .png / .jpg / .gif / .webp link) and sources (links, a "Sources:" line) are only what the reply itself contains
+const HV_ROW_TM = /\d{1,2}(?::\d{2})?\s?(?:[ap]\.?m\.?)?\s?(?:-|–|—|to)\s?\d{1,2}(?::\d{2})?\s?[ap]\.?m\.?|\d{1,2}(?::\d{2})?\s?[ap]\.?m\.?(?![a-z])|\b\d{1,2}:\d{2}\b(?:\s?(?:-|–|—|to)\s?\d{1,2}:\d{2}\b)?/i;
 function hvAssistRows(text) {
-  const lines = String(text || '').replace(/\*\*|__|`/g, '').split(/\n+/).map(x => x.trim()).filter(Boolean); let intro = [], rows = [];
-  for (const l of lines) { const li = l.match(/^(?:[-*•]|\d+[.)])\s+(.*)$/);
-    if (li) rows.push({ t: li[1] }); else if ((rows.length || intro.length) && /:$/.test(l) && l.length < 60) rows.push({ h: l.replace(/:$/, '') }); else if (!rows.length) intro.push(l); else rows.push({ t: l }); }
-  if (!rows.length && intro.length > 1 && intro.slice(1).every(x => /:$/.test(x) || x.length < 90)) { rows = intro.slice(1).map(x => /:$/.test(x) ? { h: x.replace(/:$/, '') } : { t: x }); intro = intro.slice(0, 1); }
+  const imgs = [], srcs = [], plain = l => l.replace(/\*\*|__|`/g, '');
+  const md = l => esc(l.replace(/(^|\s)https?:\/\/[^\s<>"]*[^\s<>".,;:!?)]/g, (m, p) => { srcs.push({ u: m.trim() }); return p; })).replace(/\*\*(.+?)\*\*|__(.+?)__/g, (m, a, b) => `<b>${a || b}</b>`).replace(/\*\*|__|`/g, '');
+  const s = String(text || '').replace(/!\[[^\]]*\]\((https?:\/\/[^\s)]+)\)/g, (m, u) => { imgs.push(u); return ''; })
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (m, t, u) => { srcs.push({ n: plain(t), u }); return t; })
+    .replace(/(^|\s)(https?:\/\/[^\s<>"')]+\.(?:png|jpe?g|gif|webp)(?:\?[^\s<>"')]*)?)(?=[\s).,]|$)/gi, (m, p, u) => { imgs.push(u); return p; });
+  const lines = []; for (let l of s.split(/\n+/)) { l = l.trim().replace(/^#{1,6}\s+/, ''); if (!l) continue;
+    const so = plain(l).match(/^(?:sources?|citations?|references?)\s*:\s*(.+)$/i); // a citation line: the source chip
+    if (so) { so[1].split(/\s*[,;]\s*/).forEach(x => { const u = (x.match(/https?:\/\/\S+/) || [])[0] || '', n = x.replace(/https?:\/\/\S+/, '').trim(); if ((n || u) && !srcs.some(y => y.n && n && y.n.toLowerCase() === n.toLowerCase())) srcs.push({ n, u }); }); continue; }
+    lines.push(l); }
+  let intro = [], rows = [];
+  for (const l of lines) { const p = plain(l), li = p.match(/^(?:[-*•]|\d+[.)])\s+(.*)$/);
+    if (li) rows.push({ t: li[1] }); else if ((rows.length || intro.length) && /:$/.test(p) && p.length < 60) rows.push({ h: p.replace(/:$/, '') }); else if (!rows.length) intro.push({ p, l }); else rows.push({ t: p }); }
+  if (!rows.length && intro.length > 1 && intro.slice(1).every(x => /:$/.test(x.p) || x.p.length < 90)) { rows = intro.slice(1).map(x => /:$/.test(x.p) ? { h: x.p.replace(/:$/, '') } : { t: x.p }); intro = intro.slice(0, 1); }
   const cls = t => /\b\d{1,2}(:\d{2})?\s?(am|pm)\b|\b\d{1,2}:\d{2}\b/i.test(t) && !/all[ -]day/i.test(t) ? 'b' : /all[ -]day|birthday|anniversary|holiday/i.test(t) ? 'o' : 'p';
-  rows = rows.map(r => r.h ? r : Object.assign(r, { c: cls(r.t), i: cls(r.t) === 'o' && /birthday/i.test(r.t) ? 'mdi:cake-variant' : cls(r.t) === 'b' ? 'mdi:clock-outline' : cls(r.t) === 'o' ? 'mdi:calendar' : 'mdi:circle-small' }));
-  return { intro: intro.join('\n'), rows }; }
+  // an event row: its time (or "all-day") on the right, the title on the left
+  const side = r => { if (r.c === 'o') { const t = r.t.replace(/\s*[,(–—-]?\s*\(?\ball[ -]day\b\)?[.,]?/i, '').trim(); return t ? Object.assign(r, { t, r: 'all-day' }) : r; }
+    if (r.c !== 'b') return r; const m = r.t.match(HV_ROW_TM); if (!m) return r;
+    const a = r.t.slice(0, m.index).replace(/\s*(?:\b(?:at|from)\b|@|,|:|–|—|-|\()\s*$/i, ''), b = r.t.slice(m.index + m[0].length).replace(/^\s*(?:\)|,|:|–|—|-)\s*/, ''), t = (a + (a && b ? ' ' : '') + b).trim();
+    return t ? Object.assign(r, { t, r: m[0].trim() }) : r; };
+  rows = rows.map(r => r.h ? r : side(Object.assign(r, { c: cls(r.t), i: cls(r.t) === 'o' && /birthday/i.test(r.t) ? 'mdi:cake-variant' : cls(r.t) === 'b' ? 'mdi:clock-outline' : cls(r.t) === 'o' ? 'mdi:calendar' : 'mdi:circle-small' })));
+  return { intro: intro.map(x => x.p).join('\n'), introH: intro.map(x => md(x.l)), rows, imgs: [...new Set(imgs)], srcs }; }
+// 1.6.x: is the answer long enough for the full-screen reading page? A list (more than one row), a weather / calendar card, more than
+// ~160 characters, three or more lines, several paragraphs or a picture. Short = a sentence or two: it stays on the orb.
+function hvAssistLong(text, card) { if (card) return true; const t = String(text || '').trim(), r = hvAssistRows(t);
+  return r.rows.filter(x => x.t).length > 1 || t.length > 160 || t.split(/\n+/).filter(x => x.trim()).length >= 3 || /\n\s*\n/.test(t) || r.imgs.length > 0; }
+// a source's short name: the site ("en.wikipedia.org" -> "Wikipedia"), else its name from a "Sources:" line
+const hvSrcName = s => { if (!s.u) return s.n || ''; try { const h = new URL(s.u).hostname.replace(/^(www|m)\./, '').split('.'); let i = h.length - 2;
+  if (h.length > 2 && /^[a-z]{2}$/.test(h[0])) i = 1; else if (h.length > 2 && /^(co|com|org|net|gov|ac|edu)$/.test(h[h.length - 2])) i = h.length - 3; const b = h[Math.max(0, i)] || ''; return b.charAt(0).toUpperCase() + b.slice(1); } catch (e) { return s.n || ''; } };
+// the source chip ("Wikipedia +3") and pictures under an answer, only from what the reply contains
+function hvAssistMediaHtml(r) { const seen = new Map(); for (const s of r.srcs || []) { const n = hvSrcName(s); if (n && !seen.has(n.toLowerCase())) seen.set(n.toLowerCase(), { n, u: s.u }); }
+  const L = [...seen.values()]; let h = '';
+  if (L.length) { const f = L[0], tag = f.u ? 'a' : 'span'; h += `<${tag} class="src"${f.u ? ` href="${esc(f.u)}" target="_blank" rel="noopener noreferrer"` : ''}><ha-icon icon="mdi:web"></ha-icon>${esc(f.n)}${L.length > 1 ? ' +' + (L.length - 1) : ''}</${tag}>`; }
+  for (const u of (r.imgs || []).slice(0, 2)) h += `<img src="${esc(u)}" alt="" loading="lazy" referrerpolicy="no-referrer">`;
+  return h; }
 // which answer card fits a request: by the entities the agent touched, else by words in the question
 const HV_WX_Q = /\b(weather|forecast|temperature|degrees|outside|rain(ing|y)?|snow(ing|y)?|sunny|cloudy|wind(y)?|umbrella|jacket|humid(ity)?|storm|frost)\b/i;
 const HV_CAL_Q = /\b(calendar|schedule|agenda|events?|appointments?|meetings?|plans|planned|busy|free tonight|what'?s on|what is on|happening|birthdays?)\b/i;
@@ -5364,13 +5424,13 @@ async function hvAssistCalendar(hub, el, q, keep) {
   const lang = (h.locale && h.locale.language) || navigator.language, tf = h.locale && h.locale.time_format, to12 = tf === '24' ? false : tf === '12' ? true : undefined;
   const evs = []; await Promise.all(ids.map(async (id, k) => { try { const r = await h.callApi('GET', `calendars/${id}?start=${encodeURIComponent(from.toISOString())}&end=${encodeURIComponent(to.toISOString())}`);
     for (const e of r || []) { const ad = !!(e.start && e.start.date && !e.start.dateTime), st = ad ? new Date(e.start.date + 'T00:00:00') : new Date(e.start.dateTime || e.start);
-      evs.push({ st, ad, s: e.summary || '(No title)', col: HV_CAL_COLS[k % HV_CAL_COLS.length] }); } } catch (e) {} }));
-  evs.sort((a, b) => a.st - b.st || (b.ad - a.ad)); const list = evs.slice(0, 10); let html = `<div class="ct"><ha-icon icon="mdi:calendar-month-outline"></ha-icon>${title}</div>`, day = '';
+      const en = ad || !e.end ? null : new Date(e.end.dateTime || e.end); evs.push({ st, en, ad, s: e.summary || '(No title)', col: HV_CAL_COLS[k % HV_CAL_COLS.length] }); } } catch (e) {} }));
+  evs.sort((a, b) => a.st - b.st || (b.ad - a.ad)); const list = evs.filter(e => e.st < to); let html = `<div class="ct"><ha-icon icon="mdi:calendar-month-outline"></ha-icon>${title}</div>`, day = '';
   if (!list.length) html += `<div class="none">Nothing planned.</div>`;
   for (const e of list) { const dk = e.st.toDateString(); if (dk !== day) { day = dk; const dd = Math.round((new Date(e.st.getFullYear(), e.st.getMonth(), e.st.getDate()) - d0) / 864e5);
-      html += `<div class="day">${dd <= 0 ? 'Today' : dd === 1 ? 'Tomorrow' : esc(e.st.toLocaleDateString(lang, { weekday: 'long', month: 'short', day: 'numeric' }))}</div>`; }
-    html += `<div class="ev" style="--cc:${e.col}"><i></i><span class="s">${esc(e.s)}</span><span class="tm">${e.ad ? 'All day' : esc(e.st.toLocaleTimeString(lang, { hour: 'numeric', minute: '2-digit', hour12: to12 }))}</span></div>`; }
-  if (evs.length > list.length) html += `<div class="none">+${evs.length - list.length} more</div>`;
+      html += `<div class="day">${dd <= 0 ? 'Today' : esc(e.st.toLocaleDateString(lang, { weekday: 'long', month: 'long', day: 'numeric' }))}</div>`; } // 1.6.x: "Wednesday, April 1" (Today when it is)
+    const tm = d => d.toLocaleTimeString(lang, { hour: 'numeric', minute: '2-digit', hour12: to12 });
+    html += `<div class="ev ${e.ad ? 'ad' : 'tmd'}" style="--cc:${e.col}"><i></i><ha-icon icon="mdi:calendar"></ha-icon><span class="s">${esc(e.s)}</span><span class="tm">${e.ad ? 'all-day' : esc(tm(e.st) + (e.en && e.en > e.st ? '–' + tm(e.en) : ''))}</span></div>`; }
   card.innerHTML = html; keep(); return true; }
 /* 1.32.0: quiet mode, chosen per device (Off / On / Auto, kept in this browser's localStorage like the timer). Quiet = the reply is not spoken;
  * the request and the answer show as a caption under the orb. Auto: the card's volume sensor when it reports a number (quiet under
@@ -5505,7 +5565,7 @@ function hvAssist(hub, o) {
     <div class="ohint">Tap the orb to see the chat</div><div class="cap" hidden aria-live="polite"><div class="q"></div><div class="a"></div><div class="mt"><span class="why"></span><span>Tap orb for chat</span></div></div></div></div>
     <div class="wrap"><div class="bg"></div>
     <div class="cd" role="dialog" aria-modal="true" aria-label="Assistant"><div class="col" style="flex:1 1 auto">
-    <div class="hd"><div class="grab" aria-hidden="true"></div><div class="orb" aria-hidden="true"></div><div class="ti"><b>Assistant</b><span class="pl"></span></div><button class="qb" aria-label="Quiet mode, wake word and chat history on this device" aria-expanded="false"><ha-icon></ha-icon><span></span></button><button class="x" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button></div>
+    <div class="hd"><div class="grab" aria-hidden="true"></div><div class="orb" aria-hidden="true"></div><div class="ti"><b>Assistant</b><span class="pl"></span></div><button class="hb" aria-label="Show earlier messages" aria-pressed="false" hidden><ha-icon icon="mdi:history"></ha-icon></button><button class="qb" aria-label="Quiet mode, wake word and chat history on this device" aria-expanded="false"><ha-icon></ha-icon><span></span></button><button class="x" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button></div>
     <div class="qp" hidden><div class="qh">Quiet mode · this device</div><div class="seg" role="radiogroup" aria-label="Quiet mode"><button data-q="off" role="radio">Off</button><button data-q="on" role="radio">On</button><button data-q="auto" role="radio">Auto</button></div><div class="qd"></div>
     <div class="qh qh2">Wake word · this device</div><div class="wwb"><div class="wwr"><div class="wwl"><b>Wake word</b><span>“Hey Jarvis”</span></div><button class="tgl" role="switch" aria-checked="false" aria-label="Wake word “Hey Jarvis” on this device"><i></i></button></div>
     <div class="qd wwd">Listens on this device only while the dashboard is open.</div><div class="qd wwx" hidden></div>
@@ -5532,26 +5592,38 @@ function hvAssist(hub, o) {
       dt = setTimeout(() => { if (compact) close(); }, capShown ? Math.max(5000, Math.min(14000, 4000 + n * 55)) : 2500); } };
   // --- the chat: newest at the bottom; follows new content only while the user is at the bottom
   let stick = true; const atEnd = () => bd.scrollHeight - bd.scrollTop - bd.clientHeight < 48;
-  const keep = () => { if (stick) requestAnimationFrame(() => { bd.scrollTop = bd.scrollHeight; }); else jump.classList.add('on'); };
+  const keep = () => { if (host.hasAttribute('read')) return; if (stick) requestAnimationFrame(() => { bd.scrollTop = bd.scrollHeight; }); else jump.classList.add('on'); };
   bd.addEventListener('scroll', () => { stick = atEnd(); if (stick) jump.classList.remove('on'); }, { passive: true });
   jump.addEventListener('click', () => { stick = true; jump.classList.remove('on'); bd.scrollTo({ top: bd.scrollHeight, behavior: 'smooth' }); });
-  const add = (cls, html) => { const m = document.createElement('div'); m.className = 'm ' + cls; if (html != null) m.innerHTML = html; log.appendChild(m); keep(); return m; };
+  // 1.6.x: the full-screen page reads like a HomePod: only the current answer (.cur), from the top; the history button shows the chat thread
+  const hb = $('.hb'); let reading = true;
+  const setRead = () => { const on = !compact && reading; host.toggleAttribute('read', on); if (hb) { hb.hidden = compact || log.children.length < 2; hb.setAttribute('aria-pressed', String(!reading));
+    const hi = hb.querySelector('ha-icon'); if (hi) hi.setAttribute('icon', reading ? 'mdi:history' : 'mdi:text-box-outline'); hb.setAttribute('aria-label', reading ? 'Show earlier messages' : 'Show the answer'); }
+    if (on) bd.scrollTop = 0; else { stick = true; jump.classList.remove('on'); requestAnimationFrame(() => { bd.scrollTop = bd.scrollHeight; }); } };
+  hb.addEventListener('click', () => { reading = !reading; setRead(); });
+  const add = (cls, html) => { const m = document.createElement('div'); m.className = 'm ' + cls; if (html != null) m.innerHTML = html;
+    const cur = /^a\b/.test(cls) && !/\bold\b/.test(cls); if (cur) { log.querySelectorAll('.m.cur').forEach(x => x.classList.remove('cur')); m.classList.add('cur'); reading = true; }
+    log.appendChild(m); if (cur) setRead(); else if (hb) hb.hidden = compact || log.children.length < 2; keep(); return m; };
   const userMsg = text => add('u', esc(text));
   const rowsHtml = list => list.map(x => x.h ? `<div class="sec">${esc(x.h)}</div>` : `<div class="row ${x.c || 'p'}"><ha-icon icon="${esc(x.i || 'mdi:circle-small')}"></ha-icon><span class="tx">${esc(x.t)}</span>${x.r ? `<span class="rt">${esc(x.r)}</span>` : ''}</div>`).join('');
-  const botMsg = () => add('a', '<div class="re"><span class="dots"><i></i><i></i><i></i></span></div><div class="rows"></div>');
+  const botMsg = () => add('a', '<div class="re"><span class="dots"><i></i><i></i><i></i></span></div><div class="rd"></div><div class="rows"></div><div class="ax"></div>');
   const fill = (m, text, extra) => { const r = hvAssistRows(text), re = m.querySelector('.re'); re.textContent = r.intro || (r.rows.length ? '' : text || '');
+    { const rd = m.querySelector('.rd'), ax = m.querySelector('.ax'), n = r.rows.length + (extra || []).length; // the reading page: bold kept, paragraphs, source chip / picture
+      if (rd) { rd.innerHTML = r.introH.map(x => `<p>${x}</p>`).join(''); m.classList.toggle('rich', !!r.introH.length); }
+      if (ax) { ax.innerHTML = hvAssistMediaHtml(r); ax.querySelectorAll('img').forEach(i => i.addEventListener('error', () => i.remove())); }
+      m.classList.toggle('lst', !!n); m.classList.toggle('art', !n && (r.intro.length > 160 || r.introH.length > 1)); }
     if (asked && m !== hello) hvHistAdd(c, 'a', [re.textContent].concat((extra || []).concat(r.rows).filter(x => x.t).map(x => '• ' + x.t + (x.r ? ' · ' + x.r : ''))).filter(Boolean).join('\n'));
     if (compact && asked && capMode) showCap(null, [re.textContent].concat((extra || []).concat(r.rows).filter(x => x.t).map(x => '• ' + x.t + (x.r ? ' · ' + x.r : ''))).filter(Boolean).join('\n'), capWhy || 'Shown as text');
     m.classList.toggle('hi', !r.rows.length && !(extra || []).length && re.textContent.length < 40); m.querySelector('.rows').innerHTML = rowsHtml((extra || []).concat(r.rows)); keep(); };
   const say = (text, extra) => { const m = botMsg(); fill(m, text, extra); return m; };
-  const note = (m, msg) => { if (!msg) return; if (compact) { asked = true; showCap(null, msg, 'Tap orb for details', true); } const e = document.createElement('div'); e.className = 'err'; e.setAttribute('role', 'alert'); e.textContent = msg; (m || add('a', '')).appendChild(e); keep(); };
+  const note = (m, msg) => { if (!msg) return; if (compact) { asked = true; showCap(null, msg, 'Tap orb for details', true); } const e = document.createElement('div'); e.className = 'err'; e.setAttribute('role', 'alert'); e.textContent = msg; (m || log.querySelector('.m.a.cur') || add('a', '')).appendChild(e); keep(); }; // under the answer on screen (the reading page shows only that one)
   // first message + suggestions (they go away with the first request)
   // earlier messages (this device's history), one line per day
   { let day = ''; const fd = t => { const d = new Date(t), n = new Date(), y = new Date(Date.now() - 864e5); return d.toDateString() === n.toDateString() ? 'Today' : d.toDateString() === y.toDateString() ? 'Yesterday' : d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }); };
     for (const h of hvHistLoad(c)) { const dd = fd(h.t); if (dd !== day) { day = dd; const sep = document.createElement('div'); sep.className = 'hdv old'; sep.textContent = dd + ' · ' + new Date(h.t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); log.appendChild(sep); }
       if (h.r === 'u') add('u old', esc(h.x)); else add('a old', `<div class="re">${esc(h.x)}</div>`); } }
   const hello = say('How can I help?'); const sugEl = document.createElement('div'); sugEl.className = 'sug';
-  sugEl.innerHTML = "<button>What time is it?</button><button>What's the weather like?</button><button>What's on my calendar?</button><button>Set a timer for 10 minutes</button>"; hello.appendChild(sugEl);
+  sugEl.innerHTML = "<button>What time is it?</button><button>What's the weather like?</button><button>What's on my calendar?</button><button>Set a timer for 10 minutes</button>"; hello.appendChild(sugEl); setRead();
   // the pipeline (name in the header; which stages it has: no speech-to-text = typing only, no text-to-speech = silent replies)
   const pinfoP = (async () => { try { const r = await h0.callWS({ type: 'assist_pipeline/pipeline/list' }); const id = pipe || r.preferred_pipeline, p = (r.pipelines || []).find(x => x.id === id);
     if (p && !closed) $('.pl').textContent = p.name; if (!p && pipe && !closed) note(null, 'The assistant chosen for this Home Screen no longer exists. Pick another one in the Home Screen settings (Assistant & timer).');
@@ -5573,7 +5645,7 @@ function hvAssist(hub, o) {
   if (!compact) hvFhOpen.add(host);
   // tap the orb (or its caption): the chat; tap anywhere else: close (only the orb is on screen, the dashboard stays clear)
   const expand = () => { if (!compact || closed) return; compact = false; clearTimeout(dt); dt = null; host.removeAttribute('orb'); host.removeAttribute('cap'); host.classList.remove('in'); hvFhOpen.add(host);
-    requestAnimationFrame(() => requestAnimationFrame(() => { host.classList.add('in'); stick = true; bd.scrollTop = bd.scrollHeight; })); };
+    requestAnimationFrame(() => requestAnimationFrame(() => { host.classList.add('in'); stick = true; setRead(); })); };
   ov.addEventListener('click', e => { const p = e.composedPath(); if (p.includes(bo) || p.includes(cap)) { hvSpkUnlock(); expand(); } else close(); });
   hvSwipeClose({ el: wrap, alive: () => host.isConnected && !closed, close, grab: (path, y) => y < $('.hd').getBoundingClientRect().bottom,
     dragOk: path => !path.some(n => n === $('.ft') || n === jump) });
@@ -5613,7 +5685,9 @@ function hvAssist(hub, o) {
         if (bad && !/timer/i.test(text)) note(m, quota ? `${an} couldn't answer: its AI service has hit its usage limit (quota) for now. Try again later, or pick another assistant in the Home Screen settings.`
           : `${an} couldn't answer: its conversation agent reported an error. Check that integration (for example its API key) in Settings → Devices & services, or pick another assistant in the Home Screen settings.`);
         // answer cards: weather / calendar, from this Home Assistant's own states (read only)
-        const kind = hvAssistCardKind(text, r); if (kind === 'weather') hvAssistWeather(hub, m, keep); else if (kind === 'calendar') hvAssistCalendar(hub, m, text, keep);
+        const kind = hvAssistCardKind(text, r); if (kind === 'weather') hvAssistWeather(hub, m, keep); else if (kind === 'calendar') Promise.resolve(hvAssistCalendar(hub, m, text, keep)).then(ok => { if (ok) { const rows = m.querySelector('.rows'); if (rows) rows.innerHTML = ''; } });
+        // 1.6.x: a long answer (list, card, article) opens the full-screen reading page by itself; a short one stays on the orb + caption
+        const card = !!m.querySelector('.card') || kind === 'weather' || kind === 'calendar'; if (card) m.classList.add('lst'); if (compact && !bad && hvAssistLong(shown, card)) expand();
         // the agent itself may have tried a timer (HassStartTimer needs a satellite): fall back to ours
         if (r.response_type === 'error' && /timer/i.test(text)) timerCmd(text);
         if (!speak) done(); }
@@ -5682,11 +5756,11 @@ function hvAssist(hub, o) {
     catch (e) { stopAudio(); micOff(); rec = null; st('idle'); drop(); note(null, "The microphone couldn't start (" + (e && e.message || e) + '). Type your request below.'); return; }
     endRun(); const msg = { type: 'assist_pipeline/run', start_stage: 'stt', end_stage: 'stt', input: { sample_rate: 16000, no_vad: true }, timeout: 90 }; if (pipe) msg.pipeline = pipe;
     const cap_ = () => { if (rec && rec.finish === finish) finish(); };
-    let safety = setTimeout(cap_, 15000); // nothing heard for 15 s: stop (then at most 45 s from the first word)
+    let safety = setTimeout(cap_, compact ? 15000 : 60000); // nothing heard: stop (15 s on the orb, 60 s on the reading page)
     // a follow-up: nobody answers within a few seconds -> stop listening (the orb closes)
     let heard = false; const quietEnd = () => { clearTimeout(sil); if (closed) return; if (rec && rec.finish === finish) rec.stop(); rec = null; keepCap = false; micOff(); if (compact) close(); else st('idle'); };
     const silT = (Number(c.assistant_silence_timeout) > 0 ? Number(c.assistant_silence_timeout) : 5) * 1000;
-    const sil = fol ? setTimeout(() => { if (!heard && tok === runTok) quietEnd(); }, silT) : null; // nothing said after a reply: the assistant closes (mic off)
+    const sil = fol ? setTimeout(() => { if (!heard && tok === runTok) quietEnd(); }, compact ? silT : Math.max(silT, 60000)) : null; // after a reply: 5 s on the orb, 60 s on the reading page
     const fail = m => { clearTimeout(safety); clearTimeout(sil); if (fol && !heard) { quietEnd(); return; } finish(); rec = null; endRun(); st('idle'); drop(); micOff(); note(null, m); };
     // speech started (card VAD): the "nothing said" close (assistant_silence_timeout) no longer applies to this turn
     onSpeech = () => { if (tok !== runTok || heard) return; heard = true; clearTimeout(sil); clearTimeout(safety); safety = setTimeout(cap_, 45000); if (lt) lt.textContent = 'Hearing you…'; };
@@ -5726,6 +5800,7 @@ function hvAssist(hub, o) {
     if (h) { try { localStorage.setItem(HV_HKEEP_LS, h.dataset.h); } catch (e2) {} hvHistLoad(c); qPaint(); } // prunes at once
     if (p.includes(qp.querySelector('.hcl'))) { hvHistSave([]); log.querySelectorAll('.old').forEach(x => x.remove()); qPaint(); } }); qPaint();
   $('.x').addEventListener('click', close); hvPen($('.x'), hub._penFn(), { gap: 8 }); mic.addEventListener('click', () => { hvSpkUnlock(); listen(); });
+  if (orb) { orb.removeAttribute('aria-hidden'); orb.setAttribute('role', 'button'); orb.setAttribute('aria-label', 'Speak'); orb.addEventListener('click', () => { hvSpkUnlock(); listen(); }); }
   $('form').addEventListener('submit', e => { e.preventDefault(); const t = inp.value.trim(); if (!t) return; hvSpkUnlock(); stopRec(); inp.value = ''; ask(t); });
   addEventListener('keydown', key); st('idle');
   (hub.shadowRoot || document.body).appendChild(host); requestAnimationFrame(() => requestAnimationFrame(() => host.classList.add('in')));
