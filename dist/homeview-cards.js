@@ -4012,7 +4012,7 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
     const d = this.drag = { it, el: it.el, kind: it.kind, i: it.i, id: p.id, x0: p.x0, y0: p.y0, x: p.x, y: p.y, cv, over: -1 };
     const mk = cls => { const n = document.createElement('div'); n.className = cls; if (rr) n.style.setProperty('--rr', rr); lay.appendChild(n); return n; };
     d.dim = mk('dim'); hvEcl.pos(d.dim, r); d.drop = mk('drop'); d.drop.style.display = 'none'; d.gh = mk('ghost'); d.gh.innerHTML = '<ha-icon></ha-icon><span></span>';
-    const a = it.kind === 'app' && this.hub._config.apps[it.i]; d.gh.querySelector('ha-icon').setAttribute('icon', a ? (a.icon === 'hv:home' ? 'mdi:home' : a.icon || 'mdi:apps') : 'mdi:card-outline');
+    const a = it.kind === 'app' && this.hub._config.apps[it.i]; d.gh.querySelector('ha-icon').setAttribute('icon', a ? (a.icon === 'hv:home' ? 'mdi:home' : a.icon === 'hv:calendar' ? 'mdi:calendar' : a.icon || 'mdi:apps') : 'mdi:card-outline');
     d.gh.querySelector('span').textContent = this.label(it); hvEcl.pos(d.gh, r); d.gh.style.transform = 'scale(1.06)'; d.r = r;
     d.mv = ev => { if (ev.pointerId !== d.id) return; ev.preventDefault(); d.x = ev.clientX; d.y = ev.clientY; this.moveDrag(); };
     d.up = ev => { if (ev.pointerId !== d.id) return; this.endDrag(ev.type === 'pointerup'); };
@@ -4435,7 +4435,7 @@ const hvHaRoot = () => document.querySelector('home-assistant');
 
 /* 1.32.0: touches inside Home Assistant's dialogs (card editor, more-info, browser_mod popups) and the card editor preview never start a
    Home Screen / Page Grid gesture (pull-down screensaver, swipe back, edge sidebar, pull-to-refresh block): those dialogs scroll on their own. */
-const HV_UI_RX = /^(HA-DIALOG|HA-MD-DIALOG|HA-WA-DIALOG|HA-ADAPTIVE-DIALOG|HA-BOTTOM-SHEET|WA-DIALOG|WA-DRAWER|DIALOG|HA-MORE-INFO-DIALOG|BROWSER-MOD-POPUP|HUI-CARD-PREVIEW|HUI-CARD-ELEMENT-EDITOR|HUI-DIALOG-[A-Z-]+|[A-Z-]+-CARD-EDITOR)$/;
+const HV_UI_RX = /^(HA-DIALOG|HA-MD-DIALOG|HA-WA-DIALOG|HA-ADAPTIVE-DIALOG|HA-BOTTOM-SHEET|WA-DIALOG|WA-DRAWER|DIALOG|HA-MORE-INFO-DIALOG|BROWSER-MOD-POPUP|HUI-CARD-PREVIEW|HUI-CARD-ELEMENT-EDITOR|HUI-DIALOG-[A-Z-]+|[A-Z-]+-CARD-EDITOR|HOMEVIEW-CALENDAR-APP)$/;
 const HV_ED_RX = /^(HUI-DIALOG-[A-Z-]+|HUI-CARD-PREVIEW|HUI-CARD-ELEMENT-EDITOR|HUI-SECTION-EDITOR|[A-Z-]+-CARD-EDITOR)$/;
 const hvPathHas = (e, rx) => { try { for (const n of (e.composedPath ? e.composedPath() : [])) if (n && n.tagName && rx.test(n.tagName)) return true; } catch (x) {} return false; };
 const hvInUi = e => hvPathHas(e, HV_UI_RX);
@@ -4726,7 +4726,10 @@ const HUB_CSS = `:host{display:block;position:relative;font-family:${FONT};color
 .sst{font-size:min(40vh,27vw);font-weight:500;line-height:1;letter-spacing:-.005em} .ssd{display:none}
 .wpn{position:fixed;left:50%;bottom:calc(10px + var(--hv-safe-bottom, env(safe-area-inset-bottom, 0px)));transform:translateX(-50%);z-index:3;max-width:calc(100vw - 32px);box-sizing:border-box;
  padding:5px 12px;border-radius:999px;font-size:12px;line-height:1.3;text-align:center;color:rgba(255,255,255,.85);background:rgba(0,0,0,.30);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);pointer-events:none}
-:host([contained]) .wpn{position:absolute}`;
+:host([contained]) .wpn{position:absolute}
+.ico .calico{display:flex;flex-direction:column;align-items:center;justify-content:center;width:86%;height:86%;line-height:.85;color:inherit;font-family:${ROUND}}
+.ico .calico b{font-size:calc(var(--I,110px) * .15);font-weight:700;letter-spacing:.08em}
+.ico .calico i{font-style:normal;font-size:calc(var(--I,110px) * .44);font-weight:560;letter-spacing:-.03em;margin-top:2%}`;
 const hubWeatherBg = (cond, night) => {
   const n = night, g = { sunny: ['#2f86e0', '#8cc8f5'], 'clear-night': ['#0b1736', '#2a3d75'], partlycloudy: n ? ['#141d3a', '#3a4a72'] : ['#3d7fd0', '#9cc3e8'],
     cloudy: n ? ['#1d2333', '#40485c'] : ['#5d7190', '#a9b7c9'], rainy: ['#33445c', '#6c7d93'], pouring: ['#2a3446', '#5b6a80'], lightning: ['#252a3d', '#555b78'], 'lightning-rainy': ['#252a3d', '#555b78'],
@@ -5613,6 +5616,489 @@ function hvAssist(hub, o) {
   return { close, listen, ask, host, expand }; }
 
 try { if (typeof localStorage !== 'undefined' && localStorage.getItem(HVTM.KEY)) setTimeout(() => HVTM.load(), 0); } catch (e) { /* no storage */ }
+/* Home Screen Calendar app (kind: calendar). A rounded iPad-style popup — Day, Week, Month, Year — over the dimmed
+   launch page. Events come from the same calendar REST API as the Calendar tile. New events go through
+   calendar/event/create (title, start/end, all-day, location, description, rrule). The service calendar.create_event
+   is the fallback when that command is missing; it has no rrule field. Day and Week blocks show location in the
+   description line, keeping any real description. Invitees, alerts, travel time and attachments are not stored. */
+const HV_CAL_PAL = ['#5e5ce6', '#0a84ff', '#ff453a', '#30d158', '#ffd60a', '#ff9f0a', '#bf5af2', '#64d2ff', '#ff375f', '#ac8e68'];
+const HV_CAL_HOUR = 56;
+const HV_CAL_REPEATS = [['never', 'Never', ''], ['daily', 'Every Day', 'FREQ=DAILY'], ['weekly', 'Every Week', 'FREQ=WEEKLY'], ['biweekly', 'Every 2 Weeks', 'FREQ=WEEKLY;INTERVAL=2'], ['monthly', 'Every Month', 'FREQ=MONTHLY'], ['yearly', 'Every Year', 'FREQ=YEARLY'], ['weekday', 'Every Weekday', 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR']];
+const hvCalPad = n => String(Math.trunc(Math.abs(n))).padStart(2, '0');
+function hvCalAddDays(d, n) { return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n, d.getHours(), d.getMinutes(), d.getSeconds()); }
+function hvCalAddMonths(d, n) { const day = d.getDate(), x = new Date(d.getFullYear(), d.getMonth() + n, 1, d.getHours(), d.getMinutes(), 0, 0); const dim = new Date(x.getFullYear(), x.getMonth() + 1, 0).getDate(); x.setDate(Math.min(day, dim)); return x; }
+function hvCalStartOfWeek(d) { const x = startOfDay(d); return hvCalAddDays(x, -x.getDay()); }
+function hvCalYmd(d) { return d.getFullYear() + '-' + hvCalPad(d.getMonth() + 1) + '-' + hvCalPad(d.getDate()); }
+function hvCalIso(d) { const off = -d.getTimezoneOffset(), sign = off >= 0 ? '+' : '-'; return hvCalYmd(d) + 'T' + hvCalPad(d.getHours()) + ':' + hvCalPad(d.getMinutes()) + ':' + hvCalPad(d.getSeconds()) + sign + hvCalPad(Math.trunc(Math.abs(off) / 60)) + ':' + hvCalPad(Math.abs(off) % 60); }
+function hvCalParseYmd(s) { const [y, m, d] = String(s || '').split('-').map(Number); return (y && m && d) ? new Date(y, m - 1, d) : null; }
+function hvCalBlockDesc(e) {
+  const desc = String((e && e.description) || '').replace(/<[^>]+>/g, ' ').replace(/\r/g, '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  const loc = String((e && e.location) || '').trim();
+  if (!loc) return desc;
+  if (!desc) return loc;
+  if (desc.toLowerCase().includes(loc.toLowerCase())) return desc;
+  return desc + '\n' + loc;
+}
+function hvCalEventPayload(f) {
+  const summary = String((f && f.title) || '').trim();
+  if (!summary) throw new Error('Add a title.');
+  const notes = String(f.notes || '').trim(), url = String(f.url || '').trim();
+  const description = [notes, url].filter(Boolean).join('\n');
+  const location = String(f.location || '').trim();
+  const event = { summary };
+  if (description) event.description = description;
+  if (location) event.location = location;
+  const rep = HV_CAL_REPEATS.find(r => r[0] === f.repeat);
+  if (rep && rep[2]) event.rrule = rep[2];
+  if (f.allDay) {
+    const s = startOfDay(f.start instanceof Date ? f.start : new Date(f.start));
+    let e = startOfDay(f.end instanceof Date ? f.end : new Date(f.end));
+    if (e < s) throw new Error('The end date is before the start.');
+    event.start = hvCalYmd(s); event.end = hvCalYmd(hvCalAddDays(e, 1));
+  } else {
+    const s = f.start instanceof Date ? f.start : new Date(f.start), e = f.end instanceof Date ? f.end : new Date(f.end);
+    if (!(e > s)) throw new Error('The end time must be after the start.');
+    event.start = hvCalIso(s); event.end = hvCalIso(e);
+  }
+  return event;
+}
+function hvCalColumns(items) {
+  const sorted = items.map((it, i) => ({ i, a: it.startMin, b: Math.max(it.endMin, it.startMin + 1), col: 0, cols: 1 })).sort((x, y) => x.a - y.a || y.b - x.b);
+  const clusters = []; let cur = [], end = -1;
+  for (const it of sorted) { if (!cur.length || it.a < end) { cur.push(it); end = Math.max(end, it.b); } else { clusters.push(cur); cur = [it]; end = it.b; } }
+  if (cur.length) clusters.push(cur);
+  for (const cl of clusters) { const ends = []; for (const it of cl) { let c = 0; while (ends[c] != null && ends[c] > it.a) c++; it.col = c; ends[c] = it.b; } const n = ends.length || 1; cl.forEach(it => { it.cols = n; }); }
+  const out = items.map(() => ({ col: 0, cols: 1 })); sorted.forEach(it => { out[it.i] = { col: it.col, cols: it.cols }; }); return out;
+}
+function hvCalErr(e) { if (!e) return 'Something went wrong.'; if (typeof e === 'string') return e; return e.message || e.code || 'Something went wrong.'; }
+function hvCalLang(h) { return (h && h.locale && h.locale.language) || (typeof navigator !== 'undefined' ? navigator.language : 'en'); }
+function hvCalHour12(h) { const tf = h && h.locale && h.locale.time_format; if (tf === '24') return false; if (tf === '12') return true; return true; }
+function hvCalFmtTime(h, d, withMin) { const o = { hour: 'numeric' }; if (withMin !== false) o.minute = '2-digit'; if (!hvCalHour12(h)) o.hour12 = false; else o.hour12 = true; try { return d.toLocaleTimeString(hvCalLang(h), o); } catch (e) { return d.getHours() + ':' + hvCalPad(d.getMinutes()); } }
+function hvCalFmtRange(h, e) { return hvCalFmtTime(h, e._s) + ' – ' + hvCalFmtTime(h, e._e); }
+function hvCalWd(h, d) { try { return d.toLocaleDateString(hvCalLang(h), { weekday: 'short' }).replace(/\./g, '').slice(0, 3).toUpperCase(); } catch (e) { return ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][d.getDay()]; } }
+function hvCalFg(hex) { const n = parseInt(String(hex).slice(1), 16); if (!isFinite(n)) return '#fff'; const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255; return (r * 299 + g * 587 + b * 114) / 1000 > 170 ? '#1c1c1e' : '#fff'; }
+// CalendarEntityFeature.CREATE_EVENT is bit 1 of attributes.supported_features. null = the state doesn't say (still offered). false = read-only.
+function hvCalCanCreate(state) {
+  if (!state || !state.attributes || state.attributes.supported_features == null || state.attributes.supported_features === '') return null;
+  return !!(Number(state.attributes.supported_features) & 1);
+}
+function hvCalName(state, id) {
+  const n = state && state.attributes && (state.attributes.friendly_name || state.attributes.name);
+  if (n) return String(n);
+  const raw = String(id || '').replace(/^calendar\./, '').replace(/[_-]+/g, ' ').trim();
+  return raw ? raw.replace(/\b\w/g, c => c.toUpperCase()) : 'Calendar';
+}
+function hvCalWriteTarget(ids, states, preferred) {
+  const list = (ids || []).filter(Boolean), ok = id => hvCalCanCreate(states && states[id]) !== false;
+  if (preferred && list.includes(preferred) && ok(preferred)) return preferred;
+  return list.find(ok) || '';
+}
+function hvHubCalGlyph(a, hass) {
+  if (!(a && (a.icon === 'hv:calendar' || (a.kind === 'calendar' && (!a.icon || a.icon === 'mdi:calendar'))))) return `<ha-icon icon="${esc(a && a.icon || 'mdi:apps')}"></ha-icon>`;
+  const d = new Date();
+  return `<span class="calico"><b>${esc(hvCalWd(hass, d))}</b><i>${d.getDate()}</i></span>`;
+}
+async function hvCalCreate(hass, entity, event) {
+  if (!hass) throw new Error('Home Assistant isn’t connected.');
+  const stt = hass.states && hass.states[entity];
+  if (stt && stt.attributes && stt.attributes.supported_features != null && !(Number(stt.attributes.supported_features) & 1)) throw new Error('This calendar can’t add events. Pick one you can edit.');
+  if (hass.callWS) {
+    try { await hass.callWS({ type: 'calendar/event/create', entity_id: entity, event }); return; }
+    catch (err) {
+      const msg = hvCalErr(err), unknown = /unknown_command|unknown command/i.test(msg + ' ' + ((err && err.code) || ''));
+      if (!unknown) throw new Error(msg);
+      if (event.rrule) throw new Error('Repeat can’t be saved on this Home Assistant. Set Repeat to Never, or update Home Assistant.');
+    }
+  }
+  if (!hass.callService) throw new Error('Home Assistant can’t create events from here.');
+  const data = { entity_id: entity, summary: event.summary };
+  if (event.description) data.description = event.description;
+  if (event.location) data.location = event.location;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(event.start)) { data.start_date = event.start; data.end_date = event.end; }
+  else { data.start_date_time = event.start; data.end_date_time = event.end; }
+  await hass.callService('calendar', 'create_event', data);
+}
+function hvOpenCalApp(hub, app) {
+  if (!hub || hub._sheetO || !hub._hass) return null;
+  const host = document.createElement('homeview-calendar-app'); host.attachShadow({ mode: 'open' });
+  const idsOf = () => { const a = app || {}, c = hub._config || {}, h = hub._hass;
+    const raw = (a.calendar_entities && a.calendar_entities.length) ? a.calendar_entities : (c.calendar_entities && c.calendar_entities.length) ? c.calendar_entities : Object.keys((h && h.states) || {}).filter(k => k.startsWith('calendar.'));
+    return raw.map(x => typeof x === 'string' ? x : x && x.entity).filter(Boolean); };
+  const writeId = list => hvCalWriteTarget(list, hub._hass && hub._hass.states, app && app.calendar_entity);
+  const nameOf = id => hvCalName(hub._hass && hub._hass.states[id], id);
+  const colorOf = id => { const list = idsOf(); let i = list.indexOf(id); if (i < 0) { let n = 0; for (let k = 0; k < id.length; k++) n = (n + id.charCodeAt(k)) % HV_CAL_PAL.length; i = n; } return HV_CAL_PAL[i % HV_CAL_PAL.length]; };
+  const st = { mode: 'month', gridMode: 'month', anchor: startOfDay(new Date()), events: null, q: '', hidden: new Set(), add: null, addRev: 0, addPainted: -1, detail: null, filt: false, loadedKey: '', seq: 0, calSig: '', timeY: null, err: '', saving: false };
+  const css = `<style>
+:host{position:fixed;inset:0;z-index:20;font-family:${FONT};color:#fff;-webkit-tap-highlight-color:transparent}
+.scrim{position:absolute;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+.win{position:absolute;left:50%;top:50%;width:min(1180px,calc(100vw - 28px));height:min(860px,calc(100dvh - 20px));transform:translate(-50%,-46%) scale(.985);border-radius:22px;background:#000;box-shadow:0 28px 80px rgba(0,0,0,.55);display:flex;flex-direction:column;overflow:hidden;opacity:0}
+:host(.in) .win{transform:translate(-50%,-50%) scale(1);opacity:1;transition:transform .34s cubic-bezier(.32,.72,0,1),opacity .24s ease}
+.x{all:unset;cursor:pointer;position:absolute;top:12px;right:12px;z-index:8;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(120,120,128,.45);color:#fff}
+.x ha-icon{--mdc-icon-size:18px;display:flex}
+.tb{display:flex;align-items:center;gap:10px;padding:16px 56px 4px 14px;flex:none}
+.left,.right{display:flex;align-items:center;gap:8px;flex:none}
+.mid{flex:1;display:flex;justify-content:center;min-width:0}
+.ib{all:unset;cursor:pointer;width:34px;height:34px;border-radius:50%;background:#2c2c2e;color:#fff;display:flex;align-items:center;justify-content:center}
+.ib[aria-pressed="true"]{background:#48484a}
+.ib ha-icon{--mdc-icon-size:18px;display:flex}
+.seg{display:flex;background:#1c1c1e;border-radius:9px;padding:2px;max-width:100%}
+.seg button{all:unset;cursor:pointer;color:#fff;font:600 13px/1 ${FONT};padding:7px 16px;border-radius:7px;text-align:center}
+.seg button[aria-pressed="true"]{background:#636366}
+.srch{display:flex;align-items:center;gap:4px;background:#1c1c1e;border-radius:10px;padding:0 8px;height:34px;min-width:120px;width:min(220px,28vw);color:rgba(255,255,255,.55)}
+.srch ha-icon{--mdc-icon-size:16px;display:flex;flex:none}
+.srch input{all:unset;flex:1;min-width:0;color:#fff;font:15px ${FONT}}
+.today{all:unset;cursor:pointer;color:#ff453a;font:600 17px ${FONT};padding:6px 4px}
+.ttl{font-size:34px;font-weight:700;letter-spacing:-.4px;margin:0 18px 6px;flex:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.err{margin:-2px 18px 6px;color:#ffb4a8;font-size:13px;flex:none}
+.body{flex:1;min-height:0;position:relative}
+.hsc{display:flex;overflow-x:auto;overflow-y:hidden;height:100%;scroll-snap-type:x mandatory;scrollbar-width:none;overscroll-behavior-x:contain}
+.hsc::-webkit-scrollbar{display:none}
+.pg{flex:0 0 100%;width:100%;height:100%;scroll-snap-align:start;scroll-snap-stop:always;box-sizing:border-box;overflow:hidden;position:relative;display:flex;flex-direction:column}
+.hint{position:absolute;left:0;right:0;bottom:4px;text-align:center;font-size:11px;color:rgba(255,255,255,.32);pointer-events:none;z-index:5}
+.mhead{display:grid;grid-template-columns:repeat(7,1fr);color:rgba(255,255,255,.45);font-size:12px;font-weight:600;text-align:center;padding:2px 0 6px;letter-spacing:.04em}
+.mweeks{flex:1;display:flex;flex-direction:column;min-height:0}
+.wk{flex:1;min-height:0;display:flex;flex-direction:column;border-top:1px solid rgba(255,255,255,.12)}
+.nums,.timed{display:grid;grid-template-columns:repeat(7,1fr)}
+.num{font-size:16px;font-weight:500;padding:4px 0 2px;text-align:center}
+.num button{all:unset;cursor:pointer;min-width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;border-radius:50%}
+.num.out button{color:rgba(255,255,255,.32)}
+.num.tod button{background:#ff3b30;color:#fff}
+.bars{display:grid;grid-template-columns:repeat(7,1fr);gap:2px 3px;padding:0 3px 2px}
+.bar{border:0;border-radius:4px;font:600 11px/16px ${FONT};padding:0 5px;text-align:left;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;cursor:pointer;min-width:0}
+.timed{flex:1;min-height:0;align-items:start}
+.cell{min-width:0;padding:0 3px 2px}
+.pill{all:unset;cursor:pointer;display:flex;gap:4px;align-items:center;width:100%;min-width:0;padding:1px 1px;font:500 12px/1.25 ${FONT}}
+.pill i{width:7px;height:7px;border-radius:50%;flex:none}
+.pill span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.more{all:unset;cursor:pointer;display:block;font:600 11px ${FONT};color:rgba(255,255,255,.55);padding:0 2px}
+.wkh{display:grid;grid-template-columns:52px repeat(7,1fr);flex:none;padding:2px 0 4px}
+.dh{text-align:center}
+.dh .w{font-size:11px;font-weight:650;letter-spacing:.06em;color:rgba(255,255,255,.55)}
+.dh .n{width:32px;height:32px;margin:2px auto 0;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:500;border-radius:50%}
+.dh.tod .w{color:#ff453a}.dh.tod .n{background:#ff3b30;color:#fff}
+.ad{flex:none;display:grid;grid-template-columns:52px repeat(7,1fr);gap:3px 4px;padding:0 4px 6px;max-height:96px;overflow:auto}
+.ad .blk{position:relative;height:auto;min-height:0;width:100%}
+.vsc{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain}
+.tg{position:relative;display:grid;grid-template-columns:52px 1fr;min-height:100%}
+.gutter{position:relative}
+.hl{position:absolute;right:6px;font-size:11px;color:rgba(255,255,255,.42);transform:translateY(-50%)}
+.cols{position:relative;display:grid;background-image:repeating-linear-gradient(to bottom,rgba(255,255,255,.12) 0 1px,transparent 1px ${HV_CAL_HOUR}px)}
+.col{position:relative;min-width:0}
+.col + .col{box-shadow:inset 1px 0 rgba(255,255,255,.08)}
+.col.tod{background:rgba(255,59,48,.05)}
+.slot{position:absolute;left:0;right:0;height:${HV_CAL_HOUR}px;border:0;background:transparent;cursor:pointer;padding:0}
+.blk{position:absolute;box-sizing:border-box;overflow:hidden;border-radius:6px;padding:2px 5px 2px 6px;border:0;border-left:3px solid var(--c);background:color-mix(in srgb,var(--c) 42%,#1c1c1e);color:#fff;text-align:left;cursor:pointer;z-index:2;display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start}
+.ad .blk{position:relative;top:auto;left:auto;width:100%;height:auto}
+.blk .tt{font-weight:650;font-size:12px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.blk .ds{font-size:11px;line-height:1.2;opacity:.92;white-space:pre-line;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+.blk .tm{font-size:11px;line-height:1.2;opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.now{position:absolute;left:0;right:0;border-top:2px solid #ff3b30;z-index:4;pointer-events:none}
+.now i{position:absolute;left:-1px;top:-5px;width:8px;height:8px;border-radius:50%;background:#ff3b30}
+.list{height:100%;overflow:auto;padding:0 18px 24px}
+.lg{margin:0 0 14px}
+.lg h3{margin:0 0 6px;font-size:13px;font-weight:650;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.04em}
+.li{display:flex;gap:10px;width:100%;text-align:left;border:0;background:#1c1c1e;color:#fff;border-radius:10px;padding:8px 10px;margin:0 0 6px;cursor:pointer;font:inherit}
+.li .mk{width:4px;border-radius:4px;background:var(--c);flex:none}
+.li .tt{font-weight:650}
+.li .ds{font-size:13px;opacity:.8;white-space:pre-line}
+.ywrap{height:100%;display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(3,1fr);gap:6px 18px;padding:4px 16px 22px;box-sizing:border-box}
+.mn{all:unset;cursor:pointer;color:#ff453a;font:700 16px ${FONT};display:block;margin:0 0 3px}
+.yg{display:grid;grid-template-columns:repeat(7,1fr);gap:0}
+.yg b{font-weight:600;font-size:9px;color:rgba(255,255,255,.38);text-align:center}
+.yg button{all:unset;cursor:pointer;text-align:center;font-size:11px;line-height:1.7;border-radius:50%}
+.yg button.tod{background:#ff3b30;color:#fff}
+.empty{height:100%;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.55);padding:24px;text-align:center}
+.fpop{position:absolute;top:58px;right:58px;z-index:9;background:#2c2c2e;border-radius:12px;padding:8px;min-width:220px;box-shadow:0 12px 40px rgba(0,0,0,.5)}
+.fpop label{display:flex;gap:8px;align-items:center;padding:6px 8px;font-size:14px;cursor:pointer}
+.fpop i{width:10px;height:10px;border-radius:50%;flex:none}
+.add,.detail{position:absolute;inset:0;background:rgba(0,0,0,.48);z-index:12;overflow:auto;padding:18px 12px;box-sizing:border-box}
+.add[hidden],.detail[hidden]{display:none}
+.sheet{width:min(440px,100%);margin:12px auto;background:#1c1c1e;border-radius:18px;box-shadow:0 24px 70px rgba(0,0,0,.55);overflow:hidden}
+.ah{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px}
+.ah .seg button{padding:6px 14px}
+.ck{all:unset;cursor:pointer;width:32px;height:32px;border-radius:50%;background:#2c2c2e;color:#fff;display:flex;align-items:center;justify-content:center}
+.ck:disabled,.ck[disabled]{opacity:.35;cursor:default}
+.ck ha-icon{--mdc-icon-size:20px}
+.trow{display:flex;align-items:stretch;gap:8px;margin:0 12px 10px;background:#2c2c2e;border-radius:12px;overflow:hidden}
+.trow .accent{width:5px;flex:none;background:var(--c,#5e5ce6)}
+.trow input{all:unset;flex:1;padding:12px 10px;font:17px ${FONT};color:#fff}
+.form{padding:0 12px 16px}
+.form .sec{font-size:13px;font-weight:650;color:rgba(255,255,255,.55);margin:14px 2px 6px}
+.form .row{display:flex;align-items:center;gap:8px;min-height:42px;padding:4px 2px;border-bottom:1px solid rgba(255,255,255,.08);font-size:15px}
+.form .row span.k{flex:1}
+.form input[type=date],.form input[type=time],.form select,.form input[type=text],.form input[type=url]{background:#3a3a3c;color:#fff;border:0;border-radius:8px;padding:6px 8px;font:inherit;color-scheme:dark}
+.form textarea{width:100%;box-sizing:border-box;min-height:64px;background:#2c2c2e;color:#fff;border:0;border-radius:10px;padding:8px;font:inherit;resize:vertical}
+.form .sw{appearance:none;-webkit-appearance:none;width:48px;height:28px;border-radius:99px;background:#39393d;position:relative;border:0;flex:none}
+.form .sw::after{content:'';position:absolute;width:24px;height:24px;border-radius:50%;background:#fff;top:2px;left:2px}
+.form .sw:checked{background:#34c759}
+.form .sw:checked::after{left:22px}
+.form .note{font-size:12px;color:rgba(255,255,255,.48);margin:8px 2px 0;line-height:1.35}
+.form .warn{color:#ffb4a8;font-size:13px;margin:8px 2px 0}
+.calpick{display:flex;align-items:center;gap:8px}
+.calpick i{width:10px;height:10px;border-radius:50%}
+.calrow{all:unset;cursor:pointer;box-sizing:border-box;display:grid;grid-template-columns:28px 1fr 18px;align-items:center;width:100%;min-height:44px;margin:4px 0 8px;padding:0 12px;border-radius:12px;background:#2c2c2e;font:600 16px ${FONT};color:#fff}
+.calrow .dots{display:flex;align-items:center}.calrow .dots i{width:11px;height:11px;border-radius:50%;box-shadow:0 0 0 2px #2c2c2e}.calrow .dots i+i{margin-left:-5px}
+.calrow .nm{text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.calrow ha-icon{--mdc-icon-size:18px;display:flex;justify-self:end;opacity:.75}
+.callist{margin:-2px 0 10px;border-radius:12px;background:#2c2c2e;overflow:hidden}
+.calopt{all:unset;cursor:pointer;box-sizing:border-box;display:flex;align-items:center;gap:10px;width:100%;min-height:44px;padding:8px 12px;color:#fff;font:500 16px ${FONT};border-top:1px solid rgba(255,255,255,.08)}
+.calopt:first-child{border-top:0}.calopt i{width:12px;height:12px;border-radius:50%;flex:none}
+.calopt span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.calopt small{font-size:12px;font-weight:500;color:rgba(255,255,255,.45)}
+.calopt.on{background:rgba(255,255,255,.08)}.calopt:disabled{cursor:default;opacity:.5}
+.calopt ha-icon{--mdc-icon-size:18px;display:flex}
+.dbox{width:min(420px,100%);margin:10vh auto;background:linear-gradient(150deg,rgba(60,58,110,.9),rgba(22,22,28,.94));border:1px solid rgba(255,255,255,.16);border-radius:22px;padding:20px 20px 16px;position:relative}
+.dbox h2{margin:8px 0;font-size:22px}
+.dbox p{margin:6px 0;display:flex;gap:8px;align-items:flex-start;line-height:1.35}
+.dbox .xx{all:unset;cursor:pointer;position:absolute;top:10px;right:10px;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.12)}
+@media (max-width:900px){
+.tb{flex-wrap:wrap;gap:8px}
+.mid{order:5;flex:1 1 100%}
+.seg{width:100%}.seg button{flex:1;padding:7px 4px}
+.ttl{font-size:28px}
+.srch{width:auto;flex:1;max-width:none}
+.ywrap{grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(4,1fr);gap:4px 8px;padding:4px 8px 16px}
+.yg button{font-size:10px}
+}
+@media (prefers-reduced-motion:reduce){:host(.in) .win{transition:none}}
+</style>`;
+  host.shadowRoot.innerHTML = css + `<div class="scrim"></div><div class="win" role="dialog" aria-modal="true" aria-label="Calendar"><button class="x" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button>
+<div class="tb"><div class="left"><button class="ib" type="button" data-act="cal" aria-label="Calendar"><ha-icon icon="mdi:calendar-month"></ha-icon></button><button class="ib" type="button" data-act="list" aria-label="List"><ha-icon icon="mdi:format-list-bulleted"></ha-icon></button><button class="ib" type="button" data-act="add" aria-label="Add event"><ha-icon icon="mdi:plus"></ha-icon></button></div>
+<div class="mid"><div class="seg" role="tablist">${['day', 'week', 'month', 'year'].map(m => `<button type="button" data-mode="${m}" role="tab">${m[0].toUpperCase() + m.slice(1)}</button>`).join('')}</div></div>
+<div class="right"><label class="srch"><ha-icon icon="mdi:magnify"></ha-icon><input type="search" placeholder="Search" aria-label="Search events"></label><button class="ib" type="button" data-act="filter" aria-label="Calendars"><ha-icon icon="mdi:filter-variant"></ha-icon></button><button class="today" type="button" data-act="today">Today</button></div></div>
+<h1 class="ttl"></h1><div class="err" hidden></div><div class="body"></div><div class="fpop" hidden></div><div class="add" hidden></div><div class="detail" hidden></div></div>`;
+  const sr = host.shadowRoot, win = sr.querySelector('.win'), body = sr.querySelector('.body'), titleEl = sr.querySelector('.ttl'), errEl = sr.querySelector('.err'), addEl = sr.querySelector('.add'), detEl = sr.querySelector('.detail'), fpop = sr.querySelector('.fpop'), search = sr.querySelector('.srch input');
+  const launch = [hub.shadowRoot && hub.shadowRoot.querySelector('.bg'), hub._w].filter(Boolean);
+  const fabs = [...document.querySelectorAll('homeview-edit-fab')]; fabs.forEach(f => { f.style.visibility = 'hidden'; });
+  launch.forEach(el => { el.style.transition = 'transform .4s cubic-bezier(.32,.72,0,1), border-radius .4s'; el.style.transformOrigin = '50% 0'; el.style.transform = 'translate3d(0,8px,0) scale(.965)'; el.style.borderRadius = '16px'; });
+  (hub.shadowRoot || document.body).appendChild(host);
+  let closed = false;
+  const close = () => { if (closed) return; closed = true; window.__hvCalOpen = false; removeEventListener('keydown', onKey); clearInterval(st.tick); host.remove();
+    launch.forEach(el => { el.style.transition = ''; el.style.transform = ''; el.style.borderRadius = ''; el.style.transformOrigin = ''; });
+    fabs.forEach(f => { f.style.visibility = ''; }); if (hub._sheetO && hub._sheetO.host === host) hub._sheetO = null; if (hub._layout) hub._layout(); };
+  const api = { host, close, set hass(h) { const sig = idsOf().map(id => { const s = h.states[id]; return s ? s.state + '|' + (s.attributes.message || '') + '|' + (s.attributes.start_time || '') + '|' + (s.attributes.end_time || '') : ''; }).join(';'); if (sig !== st.calSig) { st.calSig = sig; st.loadedKey = ''; ensure(); } } };
+  hub._sheetO = api; window.__hvCalOpen = true;
+  try { const fn = hub._penFn && hub._penFn(); if (fn) hvPen(sr.querySelector('.x'), fn); } catch (e) {}
+  requestAnimationFrame(() => requestAnimationFrame(() => host.classList.add('in')));
+  const shown = () => { const q = st.q.trim().toLowerCase(); st.shown = (st.events || []).filter(e => { if (st.hidden.has(e._cal)) return false; if (!q) return true; return ((e.summary || '') + ' ' + (e.description || '') + ' ' + (e.location || '')).toLowerCase().includes(q); }); return st.shown; };
+  const idxOf = e => st.shown.indexOf(e);
+  const titleFor = d => { const lang = hvCalLang(hub._hass), y = d.getFullYear(), sameY = y === new Date().getFullYear();
+    if (st.mode === 'list') return st.q.trim() ? 'Results' : 'Schedule';
+    if (st.mode === 'year') return String(y);
+    if (st.mode === 'month') return d.toLocaleDateString(lang, { month: 'long', year: 'numeric' });
+    if (st.mode === 'day') return d.toLocaleDateString(lang, sameY ? { weekday: 'long', month: 'long', day: 'numeric' } : { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+    const s = hvCalStartOfWeek(d), e = hvCalAddDays(s, 6), o = { month: 'short', day: 'numeric' };
+    if (s.getMonth() === e.getMonth() && s.getFullYear() === e.getFullYear()) return s.toLocaleDateString(lang, { month: 'short' }) + ' ' + s.getDate() + ' – ' + e.getDate() + ', ' + e.getFullYear();
+    return s.toLocaleDateString(lang, o) + ' – ' + e.toLocaleDateString(lang, o) + ', ' + e.getFullYear(); };
+  const hintFor = () => st.mode === 'day' ? 'Swipe for adjacent days' : st.mode === 'week' ? 'Swipe for adjacent weeks' : st.mode === 'month' ? 'Swipe for adjacent months' : st.mode === 'year' ? 'Swipe for adjacent years' : '';
+  function overlaps(e, day) { const ds = startOfDay(day), de = hvCalAddDays(ds, 1); return e._s < de && e._e > ds; }
+  function blkHtml(e, extra) { const desc = hvCalBlockDesc(e), c = colorOf(e._cal), fg = hvCalFg(c);
+    const time = e._all ? '' : `<div class="tm">${esc(hvCalFmtRange(hub._hass, e))}</div>`;
+    const ds = desc ? `<div class="ds">${esc(desc)}</div>` : '';
+    return `<button type="button" class="blk" data-ev="${idxOf(e)}" style="--c:${c};color:${fg};${extra || ''}"><div class="tt">${esc(e.summary || '(No title)')}</div>${ds}${time}</button>`; }
+  function monthPage(base) { const lang = hvCalLang(hub._hass), first = new Date(base.getFullYear(), base.getMonth(), 1), grid = hvCalStartOfWeek(first);
+    const weeks = []; for (let w = 0; w < 6; w++) { const days = []; for (let i = 0; i < 7; i++) days.push(hvCalAddDays(grid, w * 7 + i)); weeks.push(days); }
+    while (weeks.length > 4 && weeks[weeks.length - 1].every(d => d.getMonth() !== base.getMonth())) weeks.pop();
+    const head = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map(x => `<div>${x}</div>`).join('');
+    const ev = shown(), today = dayKey(new Date());
+    const rows = weeks.map(days => {
+      const ws = days[0], we = hvCalAddDays(days[6], 1);
+      const bars = ev.filter(e => e._all && e._s < we && e._e > ws).map(e => { let c0 = 0, c1 = 0; days.forEach((d, i) => { if (overlaps(e, d)) { if (c0 === 0 && c1 === 0 && !overlaps(e, days[0]) && i === 0) { /* keep */ } c1 = i; if (!days.slice(0, i).some(x => overlaps(e, x))) c0 = i; } }); return { e, c0, c1, lane: 0 }; }).sort((a, b) => a.c0 - b.c0 || b.c1 - a.c1);
+      const laneEnd = []; bars.forEach(it => { let l = 0; while (laneEnd[l] != null && laneEnd[l] >= it.c0) l++; it.lane = l; laneEnd[l] = it.c1; });
+      const showL = Math.min(2, laneEnd.length);
+      const barHtml = bars.filter(it => it.lane < showL).map(it => { const c = colorOf(it.e._cal); return `<button type="button" class="bar" data-ev="${idxOf(it.e)}" style="grid-column:${it.c0 + 1} / ${it.c1 + 2};grid-row:${it.lane + 1};background:${c};color:${hvCalFg(c)}">${esc(it.e.summary || '(No title)')}</button>`; }).join('');
+      const nums = days.map(d => { const out = d.getMonth() !== base.getMonth(), tod = dayKey(d) === today; return `<div class="num${out ? ' out' : ''}${tod ? ' tod' : ''}"><button type="button" data-day="${hvCalYmd(d)}">${d.getDate()}</button></div>`; }).join('');
+      const timed = days.map(d => { const list = ev.filter(e => !e._all && overlaps(e, d)); const vis = list.slice(0, 3), rest = list.length - vis.length;
+        return `<div class="cell">${vis.map(e => { const when = hvCalFmtTime(hub._hass, e._s, e._s.getMinutes() !== 0); return `<button type="button" class="pill" data-ev="${idxOf(e)}"><i style="background:${colorOf(e._cal)}"></i><span>${esc((e.summary || '(No title)') + '  ' + when)}</span></button>`; }).join('')}${rest > 0 ? `<button type="button" class="more" data-day="${hvCalYmd(d)}">+${rest} more</button>` : ''}</div>`; }).join('');
+      const extra = laneEnd.length > showL ? `<button type="button" class="more" data-day="${hvCalYmd(days[0])}" style="grid-column:1 / -1">+${laneEnd.length - showL} more</button>` : '';
+      return `<div class="wk"><div class="nums">${nums}</div>${barHtml || extra ? `<div class="bars" style="grid-template-rows:repeat(${Math.max(showL, 1)},16px)">${barHtml}${extra}</div>` : ''}<div class="timed">${timed}</div></div>`; }).join('');
+    return `<div class="mhead">${head}</div><div class="mweeks">${rows}</div><div class="hint">${esc(hintFor())}</div>`; }
+  function timeGrid(days) { const ev = shown(), todayK = dayKey(new Date()), now = new Date();
+    const heads = days.map(d => { const tod = dayKey(d) === todayK; return `<div class="dh${tod ? ' tod' : ''}"><div class="w">${esc(hvCalWd(hub._hass, d))}</div><button type="button" class="n" data-day="${hvCalYmd(d)}">${d.getDate()}</button></div>`; }).join('');
+    const all = [];
+    days.forEach((d, i) => { ev.forEach(e => { if (e._all && overlaps(e, d) && !days.slice(0, i).some(x => overlaps(e, x))) { let c1 = i; for (let k = i; k < days.length; k++) if (overlaps(e, days[k])) c1 = k; all.push({ e, c0: i, c1 }); } }); });
+    let ad = '';
+    if (all.length) { const lanes = []; all.forEach(it => { let l = 0; while (lanes[l] && lanes[l].some(o => !(it.c1 < o.c0 || it.c0 > o.c1))) l++; (lanes[l] = lanes[l] || []).push(it); it.lane = l; });
+      ad = `<div class="ad" style="grid-template-rows:repeat(${lanes.length},auto)">${all.map(it => blkHtml(it.e, `grid-column:${it.c0 + 2} / ${it.c1 + 3};grid-row:${it.lane + 1}`)).join('')}</div>`; }
+    const hours = []; for (let h = 1; h < 24; h++) { const t = new Date(2000, 0, 1, h, 0, 0); hours.push(`<div class="hl" style="top:${h * HV_CAL_HOUR}px">${esc(hvCalFmtTime(hub._hass, t, false))}</div>`); }
+    const cols = days.map(d => { const ds = startOfDay(d); const items = []; ev.forEach(e => { if (e._all || !overlaps(e, d)) return; const s = new Date(Math.max(e._s.getTime(), ds.getTime())), en = new Date(Math.min(e._e.getTime(), hvCalAddDays(ds, 1).getTime())); if (en <= s) return; items.push({ e, startMin: (s - ds) / 60000, endMin: (en - ds) / 60000 }); });
+      const lay = hvCalColumns(items);
+      const blocks = items.map((it, i) => { const top = it.startMin / 60 * HV_CAL_HOUR, h = Math.max(20, (it.endMin - it.startMin) / 60 * HV_CAL_HOUR - 2); const L = lay[i];
+        return blkHtml(it.e, `top:${top.toFixed(1)}px;height:${h.toFixed(1)}px;left:calc(${L.col} * (100% / ${L.cols}) + 2px);width:calc(100% / ${L.cols} - 4px)`); }).join('');
+      const slots = []; for (let h = 0; h < 24; h++) slots.push(`<button type="button" class="slot" style="top:${h * HV_CAL_HOUR}px" data-slot="${hvCalYmd(d)}|${h}" aria-label="Add event ${hvCalFmtTime(hub._hass, new Date(d.getFullYear(), d.getMonth(), d.getDate(), h), false)}"></button>`);
+      return `<div class="col${dayKey(d) === todayK ? ' tod' : ''}">${slots.join('')}${blocks}</div>`; }).join('');
+    let nowL = '';
+    days.forEach(d => { if (dayKey(d) === todayK) { const top = (now.getHours() * 60 + now.getMinutes()) / 60 * HV_CAL_HOUR; nowL = `<div class="now" style="top:${top.toFixed(1)}px"><i></i></div>`; } });
+    return `<div class="wkh"><div></div>${heads}</div>${ad}<div class="vsc"><div class="tg" style="height:${24 * HV_CAL_HOUR}px"><div class="gutter">${hours.join('')}</div><div class="cols" style="grid-template-columns:repeat(${days.length},1fr)">${cols}${nowL}</div></div></div><div class="hint">${esc(hintFor())}</div>`; }
+  function listPage() { const ev = shown().slice().sort((a, b) => a._s - b._s); if (!ev.length) return `<div class="empty">${st.events == null ? 'Loading…' : 'No events'}</div>`;
+    const groups = []; ev.forEach(e => { const k = dayKey(e._s); let g = groups.find(x => x.k === k); if (!g) groups.push(g = { k, d: startOfDay(e._s), ev: [] }); g.ev.push(e); });
+    const lang = hvCalLang(hub._hass);
+    return `<div class="list">${groups.map(g => `<div class="lg"><h3>${esc(g.d.toLocaleDateString(lang, { weekday: 'long', month: 'long', day: 'numeric' }))}</h3>${g.ev.map(e => { const desc = hvCalBlockDesc(e); return `<button type="button" class="li" data-ev="${idxOf(e)}" style="--c:${colorOf(e._cal)}"><i class="mk"></i><span><div class="tt">${esc(e.summary || '(No title)')}</div><div class="tm">${esc(e._all ? 'All day' : hvCalFmtRange(hub._hass, e))}</div>${desc ? `<div class="ds">${esc(desc)}</div>` : ''}</span></button>`; }).join('')}</div>`).join('')}</div>`; }
+  function yearPage(year) { const lang = hvCalLang(hub._hass), today = dayKey(new Date()), letters = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+    let html = '';
+    for (let m = 0; m < 12; m++) { const first = new Date(year, m, 1), dim = new Date(year, m + 1, 0).getDate(), pad = first.getDay();
+      let cells = letters.map(ch => `<b>${ch}</b>`).join('');
+      for (let i = 0; i < pad; i++) cells += '<b></b>';
+      for (let d = 1; d <= dim; d++) { const dt = new Date(year, m, d), tod = dayKey(dt) === today; cells += `<button type="button" class="${tod ? 'tod' : ''}" data-day="${hvCalYmd(dt)}">${d}</button>`; }
+      html += `<div><button type="button" class="mn" data-month="${year}-${hvCalPad(m + 1)}">${esc(first.toLocaleDateString(lang, { month: 'long' }))}</button><div class="yg">${cells}</div></div>`; }
+    return `<div class="ywrap">${html}</div><div class="hint">${esc(hintFor())}</div>`; }
+  function pageHtml(offset) {
+    if (st.mode === 'list') return listPage();
+    if (!idsOf().length && st.events == null) return `<div class="empty">Add a calendar on the Home Screen card, or set calendar_entities on this app.</div>`;
+    if (st.events == null) return `<div class="empty">Loading…</div>`;
+    if (st.mode === 'month') return monthPage(new Date(st.anchor.getFullYear(), st.anchor.getMonth() + offset, 1));
+    if (st.mode === 'year') return yearPage(st.anchor.getFullYear() + offset);
+    if (st.mode === 'week') { const s = hvCalAddDays(hvCalStartOfWeek(st.anchor), offset * 7); const days = []; for (let i = 0; i < 7; i++) days.push(hvCalAddDays(s, i)); return timeGrid(days); }
+    return timeGrid([hvCalAddDays(startOfDay(st.anchor), offset)]);
+  }
+  function bindScroll(el) {
+    if (!el) return; let lock = true, timer = 0; const page = () => el.clientWidth || 1;
+    const center = () => { el.scrollLeft = page(); };
+    requestAnimationFrame(() => { center(); requestAnimationFrame(() => { lock = false; }); });
+    el.addEventListener('scroll', () => { if (lock) return; const i = Math.round(el.scrollLeft / page()); titleEl.textContent = titleFor(shiftDate(i - 1)); clearTimeout(timer); timer = setTimeout(() => { if (i !== 1 && i >= 0 && i <= 2) { lock = true; shift(i - 1); } }, 90); }, { passive: true });
+    let drag = null;
+    el.addEventListener('pointerdown', e => { if (e.button != null && e.button !== 0) return; if (e.target.closest('input,textarea,select')) return; drag = { x: e.clientX, y: e.clientY, sl: el.scrollLeft, on: false, id: e.pointerId }; });
+    el.addEventListener('pointermove', e => { if (!drag || e.pointerId !== drag.id) return; const dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (!drag.on) { if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return; if (Math.abs(dx) < Math.abs(dy)) { drag = null; return; } drag.on = true; try { el.setPointerCapture(drag.id); } catch (err) {} } el.scrollLeft = drag.sl - dx; });
+    const end = e => { if (!drag || e.pointerId !== drag.id) return; const moved = drag.on; drag = null; if (moved) { const stop = ev => { ev.stopPropagation(); ev.preventDefault(); el.removeEventListener('click', stop, true); }; el.addEventListener('click', stop, true); } };
+    el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
+  }
+  function shiftDate(n) {
+    if (st.mode === 'day') return hvCalAddDays(st.anchor, n);
+    if (st.mode === 'week') return hvCalAddDays(st.anchor, 7 * n);
+    if (st.mode === 'month') return hvCalAddMonths(st.anchor, n);
+    if (st.mode === 'year') return new Date(st.anchor.getFullYear() + n, st.anchor.getMonth(), Math.min(st.anchor.getDate(), 28));
+    return st.anchor;
+  }
+  function shift(n) { if (!n || st.mode === 'list') return; st.anchor = startOfDay(shiftDate(n)); paint(); const y = st.anchor.getFullYear(); if (!st.loadedKey || Number(st.loadedKey.split(':')[0]) !== y) ensure(); }
+  function paintChrome() {
+    titleEl.textContent = titleFor(st.anchor);
+    sr.querySelectorAll('.seg button').forEach(b => b.setAttribute('aria-pressed', String(st.mode !== 'list' && b.dataset.mode === st.mode)));
+    const calB = sr.querySelector('[data-act="cal"]'), listB = sr.querySelector('[data-act="list"]');
+    if (calB) calB.setAttribute('aria-pressed', String(st.mode !== 'list'));
+    if (listB) listB.setAttribute('aria-pressed', String(st.mode === 'list'));
+    errEl.hidden = !st.err; errEl.textContent = st.err || '';
+    if (st.filt) { const ids = idsOf(); fpop.hidden = false; fpop.innerHTML = ids.length ? ids.map(id => `<label><input type="checkbox" data-cal="${esc(id)}" ${st.hidden.has(id) ? '' : 'checked'}><i style="background:${colorOf(id)}"></i><span>${esc(nameOf(id))}</span></label>`).join('') : '<div class="note">No calendars found.</div>'; }
+    else fpop.hidden = true;
+  }
+  function paintBody() {
+    shown();
+    if (st.mode === 'list') body.innerHTML = pageHtml(0);
+    else body.innerHTML = `<div class="hsc">${[-1, 0, 1].map(o => `<section class="pg">${pageHtml(o)}</section>`).join('')}</div>`;
+    bindScroll(body.querySelector('.hsc'));
+    body.querySelectorAll('.vsc').forEach(v => { if (st.timeY == null) { const n = new Date(); st.timeY = Math.max(0, (n.getHours() - 1) * HV_CAL_HOUR); } v.scrollTop = st.timeY; v.addEventListener('scroll', () => { st.timeY = v.scrollTop; }, { passive: true }); });
+  }
+  function paintAdd() {
+    if (!st.add) { addEl.hidden = true; addEl.innerHTML = ''; return; }
+    addEl.hidden = false; if (st.addPainted === st.addRev) return; st.addPainted = st.addRev;
+    const f = st.add, ids = idsOf();
+    if (!ids.includes(f.calendar) || hvCalCanCreate(hub._hass.states[f.calendar]) === false) f.calendar = writeId(ids);
+    const cal = f.calendar, c = colorOf(cal || ids[0] || 'calendar'), rep = HV_CAL_REPEATS.map(r => `<option value="${r[0]}"${f.repeat === r[0] ? ' selected' : ''}>${r[1]}</option>`).join('');
+    const calName = cal ? nameOf(cal) : (ids.length ? 'No calendar can add events' : 'No calendar');
+    const dots = [cal].concat(ids.filter(id => id !== cal && hvCalCanCreate(hub._hass.states[id]) !== false)).filter(Boolean).slice(0, 2).map(id => `<i style="background:${colorOf(id)}"></i>`).join('');
+    const calRows = ids.map(id => { const ro = hvCalCanCreate(hub._hass.states[id]) === false, on = id === cal;
+      return `<button type="button" class="calopt${on ? ' on' : ''}" role="option" aria-selected="${on}" data-pick="${esc(id)}"${ro ? ' disabled' : ''}><i style="background:${colorOf(id)}"></i><span>${esc(nameOf(id))}</span>${ro ? '<small>Can’t add events</small>' : on ? '<ha-icon icon="mdi:check"></ha-icon>' : ''}</button>`; }).join('');
+    const calBlock = `<button type="button" class="calrow" data-act="cals" aria-expanded="${f.calOpen ? 'true' : 'false'}" aria-label="Calendar, ${esc(calName)}"><span class="dots">${dots}</span><span class="nm">${esc(calName)}</span><ha-icon icon="mdi:chevron-${f.calOpen ? 'down' : 'right'}"></ha-icon></button>${f.calOpen ? `<div class="callist" role="listbox" aria-label="Calendars">${calRows}</div>` : ''}`;
+    const reminder = f.kind === 'reminder';
+    const times = reminder ? '' : `<div class="row"><span class="k">Ends</span><input type="date" name="endDate" value="${hvCalYmd(f.end)}" aria-label="End date">${f.allDay ? '' : `<input type="time" name="endTime" value="${hvCalPad(f.end.getHours())}:${hvCalPad(f.end.getMinutes())}" aria-label="End time">`}</div>
+<div class="row"><span class="k">All-day</span><input class="sw" type="checkbox" name="allDay" ${f.allDay ? 'checked' : ''} aria-label="All-day"></div>
+<div class="row"><span class="k">Repeat</span><select name="repeat" aria-label="Repeat">${rep}</select></div>
+<div class="sec">Location</div><div class="row"><input type="text" name="location" placeholder="Location or Video Call" value="${esc(f.location)}" style="flex:1" aria-label="Location"></div>
+<div class="sec">Invitees</div><div class="row"><input type="text" name="invitees" placeholder="Invitees" value="${esc(f.invitees)}" style="flex:1" aria-label="Invitees"></div>`;
+    addEl.innerHTML = `<div class="sheet"><div class="ah"><button type="button" class="ck" data-act="add-close" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button>
+<div class="seg"><button type="button" data-kind="event" aria-pressed="${!reminder}">Event</button><button type="button" data-kind="reminder" aria-pressed="${reminder}">Reminder</button></div>
+<button type="button" class="ck" data-act="save" aria-label="Add event" ${reminder || f.saving || !cal ? 'disabled' : ''}><ha-icon icon="mdi:check"></ha-icon></button></div>
+<div class="trow" style="--c:${c}"><i class="accent"></i><input name="title" placeholder="Title or Describe Event" value="${esc(f.title)}" aria-label="Title"></div>
+<div class="form"><div class="row"><span class="k">Starts</span><input type="date" name="startDate" value="${hvCalYmd(f.start)}" aria-label="Start date">${f.allDay && !reminder ? '' : `<input type="time" name="startTime" value="${hvCalPad(f.start.getHours())}:${hvCalPad(f.start.getMinutes())}" aria-label="Start time">`}</div>
+${times}
+<div class="sec">Options</div>
+${calBlock}
+<div class="row"><span class="k">Alert</span><select name="alert" aria-label="Alert">${['None', 'At time of event', '5 minutes before', '15 minutes before', '30 minutes before', '1 hour before', '1 day before'].map(x => `<option${f.alert === x ? ' selected' : ''}>${x}</option>`).join('')}</select></div>
+<div class="row"><span class="k">Travel Time</span><select name="travel" aria-label="Travel time">${['None', '5 minutes', '15 minutes', '30 minutes', '1 hour'].map(x => `<option${f.travel === x ? ' selected' : ''}>${x}</option>`).join('')}</select></div>
+<div class="sec">Details</div><textarea name="notes" placeholder="Notes" aria-label="Notes">${esc(f.notes)}</textarea>
+<button type="button" class="row" data-act="attach" style="width:100%;background:none;color:inherit;cursor:pointer"><span class="k">Add attachment…</span></button>
+<div class="row"><span class="k">URL</span><input type="url" name="url" placeholder="URL" value="${esc(f.url)}" aria-label="URL"></div>
+<p class="note">Saved on the calendar named above: title, start and end, all-day, repeat, location, notes and URL. Invitees, alerts, travel time and attachments stay on this form only.</p>
+${reminder ? '<p class="warn">Reminders aren’t stored on a Home Assistant calendar. Switch to Event to save.</p>' : ''}${f.attachNote ? '<p class="warn">Home Assistant calendars can’t store attachments.</p>' : ''}${f.error ? `<p class="warn">${esc(f.error)}</p>` : ''}</div></div>`;
+    if (!f._focused) { const t = addEl.querySelector('[name=title]'); if (t) t.focus(); f._focused = true; }
+  }
+  function paintDetail() {
+    if (!st.detail) { detEl.hidden = true; detEl.innerHTML = ''; st.detailKey = ''; return; }
+    const e0 = st.detail, key = (e0.uid || e0.summary || '') + '|' + e0._s.getTime() + '|' + (e0._cal || '');
+    if (st.detailKey === key && !detEl.hidden) return;
+    st.detailKey = key; detEl.hidden = false; const e = e0, lang = hvCalLang(hub._hass), c = colorOf(e._cal);
+    const when = e._all ? 'All day' : hvCalFmtRange(hub._hass, e);
+    const date = e._s.toLocaleDateString(lang, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+    detEl.innerHTML = `<div class="dbox"><button type="button" class="xx" data-act="detail-close" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button>
+<div class="calpick"><i style="background:${c}"></i><span>${esc(nameOf(e._cal))}</span></div><h2>${esc(e.summary || '(No title)')}</h2>
+<p>${esc(date)}</p><p>${esc(when)}</p>${e.location ? `<p>${esc(e.location)}</p>` : ''}${e.description ? `<p style="white-space:pre-wrap">${esc(String(e.description).replace(/<[^>]+>/g, ' ').trim())}</p>` : ''}</div>`;
+  }
+  function paint() { paintChrome(); paintBody(); if (!st.add) { addEl.hidden = true; } else if (st.addPainted !== st.addRev) paintAdd(); paintDetail(); }
+  function openAdd(day, hour) { const ids = idsOf(), base = day ? hvCalParseYmd(day) || startOfDay(st.anchor) : startOfDay(st.anchor); const s = new Date(base), n = new Date();
+    if (hour == null) { if (dayKey(s) === dayKey(n)) s.setHours(n.getHours() + 1, 0, 0, 0); else s.setHours(9, 0, 0, 0); } else s.setHours(hour, 0, 0, 0);
+    const e = new Date(s.getTime() + 3600000);
+    st.add = { kind: 'event', title: '', start: s, end: e, allDay: false, repeat: 'never', location: '', invitees: '', alert: 'None', travel: 'None', notes: '', url: '', calendar: writeId(ids), error: '', saving: false, attachNote: false }; st.addRev++; st.filt = false; paint(); }
+  function readAdd() { const f = st.add; if (!f) return; const g = n => addEl.querySelector(`[name="${n}"]`);
+    const sd = g('startDate'), stt = g('startTime'), ed = g('endDate'), et = g('endTime');
+    if (sd && sd.value) { const d = hvCalParseYmd(sd.value); if (d) { f.start.setFullYear(d.getFullYear(), d.getMonth(), d.getDate()); } }
+    if (stt && stt.value) { const [hh, mm] = stt.value.split(':').map(Number); f.start.setHours(hh || 0, mm || 0, 0, 0); }
+    if (ed && ed.value) { const d = hvCalParseYmd(ed.value); if (d) { if (!f.end) f.end = new Date(f.start); f.end.setFullYear(d.getFullYear(), d.getMonth(), d.getDate()); } }
+    if (et && et.value) { const [hh, mm] = et.value.split(':').map(Number); f.end.setHours(hh || 0, mm || 0, 0, 0); }
+    ['title', 'location', 'invitees', 'notes', 'url', 'repeat', 'alert', 'travel'].forEach(k => { const el = g(k); if (el) f[k] = el.value; });
+    const ad = g('allDay'); if (ad) f.allDay = ad.checked; }
+  async function saveAdd() { const f = st.add; if (!f || f.saving || f.kind === 'reminder') return; readAdd(); f.error = '';
+    let event; try { event = hvCalEventPayload(f); } catch (e) { f.error = hvCalErr(e); st.addRev++; paintAdd(); return; }
+    if (!f.calendar || hvCalCanCreate(hub._hass.states[f.calendar]) === false) { f.error = f.calendar ? 'That calendar can’t add events. Choose another.' : 'None of these calendars can add events.'; st.addRev++; paintAdd(); return; }
+    f.saving = true; st.addRev++; paintAdd();
+    try {
+      await hvCalCreate(hub._hass, f.calendar, event);
+      const local = { summary: event.summary, description: event.description || '', location: event.location || '', _cal: f.calendar, _all: !!f.allDay, _s: new Date(f.allDay ? startOfDay(f.start) : f.start), _e: new Date(f.allDay ? hvCalAddDays(startOfDay(f.end), 1) : f.end) };
+      st.events = (st.events || []).concat(local); st.add = null; st.addRev++; st.anchor = startOfDay(f.start); if (st.mode === 'list') { /* keep */ } else if (f.allDay && st.mode === 'day') st.mode = 'month';
+      st.loadedKey = ''; paint(); ensure();
+    } catch (e) { f.saving = false; f.error = hvCalErr(e); st.addRev++; paintAdd(); }
+  }
+  async function ensure() { const ids = idsOf(), y = st.anchor.getFullYear(), key = y + ':' + ids.join(','); if (!ids.length) { st.events = []; st.loadedKey = key; st.err = ''; paint(); return; } if (st.loadedKey === key) return;
+    const seq = ++st.seq; if (st.events == null) paintBody();
+    const from = new Date(y - 1, 0, 1), to = new Date(y + 2, 0, 1), q = `?start=${encodeURIComponent(from.toISOString())}&end=${encodeURIComponent(to.toISOString())}`;
+    try {
+      const res = await Promise.all(ids.map(id => hub._hass.callApi('GET', `calendars/${id}${q}`).then(r => (r || []).map(e => Object.assign({}, e, { _cal: id }))).catch(() => [])));
+      if (seq !== st.seq || closed) return;
+      const seen = new Set(), list = [];
+      for (const e of res.flat()) { const s = calDate(e.start); let en = calDate(e.end) || s; const all = calAllDay(e); if (!s || !en) continue; if (all && en <= s) en = hvCalAddDays(startOfDay(s), 1); if (!all && en <= s) continue; const k = (e._cal || '') + '|' + (e.uid || e.summary || '') + '|' + s.getTime() + '|' + (e.recurrence_id || ''); if (seen.has(k)) continue; seen.add(k); list.push(Object.assign({}, e, { _s: s, _e: en, _all: all })); }
+      list.sort((a, b) => a._s - b._s); st.events = list; st.loadedKey = key; st.err = ''; st.calSig = ids.map(id => { const s = hub._hass.states[id]; return s ? s.state + '|' + (s.attributes.message || '') + '|' + (s.attributes.start_time || '') + '|' + (s.attributes.end_time || '') : ''; }).join(';');
+    } catch (e) { if (seq !== st.seq || closed) return; st.err = hvCalErr(e); if (!st.events) st.events = []; }
+    if (!closed) paint(); }
+  function onKey(e) { if (closed) return; if (e.key === 'Escape') { if (st.filt) { st.filt = false; paintChrome(); return; } if (st.detail) { st.detail = null; paintDetail(); return; } if (st.add) { st.add = null; st.addRev++; paintAdd(); return; } close(); return; } if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return; if (e.key === 'ArrowLeft') shift(-1); else if (e.key === 'ArrowRight') shift(1); else if (e.key === 't' && !e.metaKey && !e.ctrlKey && !e.altKey) { st.anchor = startOfDay(new Date()); paint(); } }
+  addEventListener('keydown', onKey);
+  sr.querySelector('.scrim').addEventListener('click', close);
+  sr.querySelector('.x').addEventListener('click', close);
+  search.addEventListener('input', () => { st.q = search.value; paintBody(); });
+  fpop.addEventListener('change', e => { const id = e.target && e.target.dataset && e.target.dataset.cal; if (!id) return; if (e.target.checked) st.hidden.delete(id); else st.hidden.add(id); paintBody(); });
+  addEl.addEventListener('click', e => { const b = e.target.closest('[data-act],[data-kind],[data-pick]'); if (!b) return;
+    if (b.dataset.pick) { if (b.disabled || b.hasAttribute('disabled')) return; readAdd(); const id = b.dataset.pick; if (hvCalCanCreate(hub._hass.states[id]) === false) return; st.add.calendar = id; st.add.calOpen = false; st.addRev++; paintAdd(); return; }
+    if (b.dataset.kind) { readAdd(); st.add.kind = b.dataset.kind; st.addRev++; paintAdd(); return; }
+    if (b.dataset.act === 'cals') { readAdd(); st.add.calOpen = !st.add.calOpen; st.addRev++; paintAdd(); return; }
+    if (b.dataset.act === 'add-close') { st.add = null; st.addRev++; paintAdd(); } else if (b.dataset.act === 'save') saveAdd(); else if (b.dataset.act === 'attach') { readAdd(); st.add.attachNote = true; st.addRev++; paintAdd(); } });
+  addEl.addEventListener('change', e => { if (!st.add || !e.target.name) return; if (e.target.name === 'allDay') { readAdd(); st.addRev++; paintAdd(); } });
+  detEl.addEventListener('click', e => { if (e.target === detEl || e.target.closest('[data-act="detail-close"]')) { st.detail = null; paintDetail(); } });
+  win.addEventListener('click', e => { if (addEl.contains(e.target) || detEl.contains(e.target)) return; const b = e.target.closest('[data-act],[data-mode],[data-ev],[data-day],[data-slot],[data-month]'); if (!b) { if (st.filt && !fpop.contains(e.target)) { st.filt = false; paintChrome(); } return; }
+    if (b.dataset.mode) { st.mode = b.dataset.mode; st.gridMode = st.mode; st.filt = false; paint(); return; }
+    const act = b.dataset.act;
+    if (act === 'cal') { st.mode = st.gridMode || 'month'; paint(); return; }
+    if (act === 'list') { st.mode = 'list'; st.filt = false; paint(); return; }
+    if (act === 'add') { openAdd(); return; }
+    if (act === 'today') { st.anchor = startOfDay(new Date()); paint(); const y = st.anchor.getFullYear(); if (!st.loadedKey || Number(st.loadedKey.split(':')[0]) !== y) ensure(); return; }
+    if (act === 'filter') { st.filt = !st.filt; paintChrome(); return; }
+    if (b.dataset.ev != null) { const ev = st.shown[Number(b.dataset.ev)]; if (ev) { st.detail = ev; st.filt = false; paintDetail(); } return; }
+    if (b.dataset.slot) { const [day, hour] = b.dataset.slot.split('|'); openAdd(day, Number(hour)); return; }
+    if (b.dataset.month) { const [y, m] = b.dataset.month.split('-').map(Number); st.anchor = new Date(y, m - 1, 1); st.mode = 'month'; st.gridMode = 'month'; paint(); return; }
+    if (b.dataset.day) { const d = hvCalParseYmd(b.dataset.day); if (d) { st.anchor = d; st.mode = 'day'; st.gridMode = 'day'; paint(); } }
+  });
+  st.tick = setInterval(() => { if (closed || document.hidden) return; if (st.mode === 'day' || st.mode === 'week') paintBody(); }, 60000);
+  paint(); ensure();
+  return api;
+}
+try { window.HVCal = { blockDesc: hvCalBlockDesc, eventPayload: hvCalEventPayload, columns: hvCalColumns, ymd: hvCalYmd, addDays: hvCalAddDays, addMonths: hvCalAddMonths, startOfWeek: hvCalStartOfWeek, iso: hvCalIso, create: hvCalCreate, canCreate: hvCalCanCreate, writeTarget: hvCalWriteTarget, name: hvCalName }; } catch (e) {}
+
 class HVHubCard extends HTMLElement {
   constructor() { super(); this.attachShadow({ mode: 'open' }); this._layer = 0; }
   static get defaults() { return { theme: 'night', person: '', morning_start: 5, afternoon_start: 12, evening_start: 17, greeting_morning: 'Good morning', greeting_afternoon: 'Good afternoon',
@@ -5817,8 +6303,8 @@ class HVHubCard extends HTMLElement {
   // --- render
   _rSig() { const c = this._config, h = this._hass, p = this._person();
     const first = (c.name || (p && p.attributes.friendly_name) || (h.user && h.user.name) || '').trim().split(/\s+/)[0] || '';
-    return JSON.stringify([first, p && p.attributes.entity_picture, this._greeting(), c.apps, c.ring_color, c.photo_label, c.show_calendar, c.assistant_enabled === true && c.assistant_button !== false]); }
-  _appsHtml(c) { const glyph = a => a.icon === 'hv:home' ? HUB_HOME_SVG : `<ha-icon icon="${esc(a.icon || 'mdi:apps')}"></ha-icon>`;
+    const now = new Date(); return JSON.stringify([first, p && p.attributes.entity_picture, this._greeting(), c.apps, c.ring_color, c.photo_label, c.show_calendar, c.assistant_enabled === true && c.assistant_button !== false, now.getFullYear(), now.getMonth(), now.getDate()]); }
+  _appsHtml(c) { const glyph = a => a.icon === 'hv:home' ? HUB_HOME_SVG : hvHubCalGlyph(a, this._hass);
     return c.apps.map((a, i) => `<button class="app" data-app="${i}" aria-label="${esc(a.name || '')}"><span class="ico" style="background:linear-gradient(180deg,${esc(a.color_from || '#8e8e93')} 0%,${esc(a.color_to || a.color_from || '#636366')} 100%);color:${esc(a.glyph_color || '#fff')}">${glyph(a)}</span><span class="lb">${esc(a.name || '')}</span></button>`).join(''); }
   // 1.32.0 Home Screen arrange: a new config applied in place (apps redrawn, side tiles reordered / resized with their elements kept, no rebuild)
   _arrSet(raw) { const old = this._config; this._hvRaw = raw; const nc = Object.assign({}, HVHubCard.defaults, raw); if (!Array.isArray(nc.apps) || !nc.apps.length) nc.apps = HUB_APPS; this._config = nc;
@@ -6015,6 +6501,7 @@ class HVHubCard extends HTMLElement {
       const data = HVMusicCard.prototype.nowPlayingData.call({ _config: Object.assign({}, NP_TILE_DEFAULTS, { entity: ids[0] || def, entities: ids.slice(1) }) });
       fire(this, 'll-custom', { action: 'fire-dom-event', browser_mod: { service: 'browser_mod.popup', data } }); return; }
     if (kind === 'weather') { this._openWeather(a.weather_entity); return; }
+    if (kind === 'calendar') { hvOpenCalApp(this, a); return; }
     if (kind === 'assistant') { this._openAssist(); return; }
     if (kind === 'photos') { this._openPhoto(); return; }
     const cfg = a.tap_action; if (cfg && cfg.action !== 'none') fire(this, 'hass-action', { config: { entity: a.entity, tap_action: cfg }, action: 'tap' }); }
@@ -6331,12 +6818,14 @@ class HVHubCard extends HTMLElement {
 }
 const HUB_APP_FIELDS = {
   name: { label: 'Label', selector: { text: {} } },
-  icon: { label: 'Icon (hv:home = the Home app house)', selector: { text: {} } },
+  icon: { label: 'Icon (hv:home = the Home app house, hv:calendar = today’s date)', selector: { text: {} } },
   color_from: { label: 'Gradient top colour (e.g. #5ec8ff)', selector: { text: {} } },
   color_to: { label: 'Gradient bottom colour', selector: { text: {} } },
   glyph_color: { label: 'Glyph colour (empty = white)', selector: { text: {} } },
   kind: { label: 'What it does', selector: { select: { mode: 'dropdown', options: [{ value: 'navigate', label: 'Open a view' }, { value: 'now_playing', label: 'Now Playing popup' },
-    { value: 'weather', label: 'Weather popup' }, { value: 'assistant', label: 'Assistant (voice / typed)' }, { value: 'photos', label: 'Full-screen photos' }, { value: 'action', label: 'Custom tap action' }] } } },
+    { value: 'weather', label: 'Weather popup' }, { value: 'calendar', label: 'Calendar popup' }, { value: 'assistant', label: 'Assistant (voice / typed)' }, { value: 'photos', label: 'Full-screen photos' }, { value: 'action', label: 'Custom tap action' }] } } },
+  calendar_entities: { label: 'Calendars (Calendar popup; empty = the Home Screen’s calendars)', selector: { entity: { domain: 'calendar', multiple: true } } },
+  calendar_entity: { label: 'Save new events to (Calendar popup; empty = the first calendar)', selector: { entity: { domain: 'calendar' } } },
   navigation_path: { label: 'View (Open a view)', selector: { navigation: {} } },
   open_as: { label: 'Open as (Open a view / Now Playing; empty = Sheet)', selector: { select: { mode: 'dropdown', options: [{ value: 'sheet', label: 'Sheet (slides up over the launch page)' }, { value: 'page', label: 'Page / classic popup' }] } } },
   entity: { label: 'Player (Now Playing) / entity (custom action)', selector: { entity: {} } },
@@ -6440,7 +6929,7 @@ class HVHubEditor extends HTMLElement {
     const data = Object.assign({}, HVHubCard.defaults, { calendar_show_weather: true, apps: HUB_APPS }, this._config);
     if (!this._form) { const f = this._form = document.createElement('ha-form');
       f.computeLabel = s => LABELS[s.name] || s.name;
-      f.computeHelper = s => s.name === 'bg_transparency' ? '0 = solid gradient, 60 = default look, 100 = clear photo. The preview updates while you drag.' : s.name === 'bg_freeze' ? 'On: the background keeps the photo it had when the Home Screen opened (the Photos card still changes); it moves to the current photo only while the page is out of sight (screensaver up, another view, app in the background). Off: it follows the Photos card.' : s.name === 'ss_hold' ? 'On: the screensaver does not start by itself behind the Home Screen (and uses nothing there); swipe the page away to start it, on the photo the Photos card shows. Off: Wallpanel\'s idle timer runs as before.' : s.name === 'blur' ? 'How soft the photo behind the page is. Left at the default it eases to 0 as Background transparency goes from 60 to 100 (a clear, sharp photo); set a value to keep it fixed.' : s.name === 'dim' ? 'Darkens the top and bottom of the page so the text stays readable; also fades out as transparency goes up.' : s.name === 'photo_viewer_add' ? 'The viewer button that opens the gallery (the gallery keeps its own “Add photos” upload button).' : s.name === 'side_sizes' ? hubUnitsNote(this._config) : s.name === 'photo_source' ? 'The photo viewer, the gallery and uploads all use this folder. Empty = the screensaver\'s folder (Media → My media). Uploading needs a media-source:// folder and an administrator.' : s.name === 'apps' ? 'Each app: label, icon, gradient colours and what it does (open a view, Now Playing, Weather, photos, or any tap action).' : undefined;
+      f.computeHelper = s => s.name === 'bg_transparency' ? '0 = solid gradient, 60 = default look, 100 = clear photo. The preview updates while you drag.' : s.name === 'bg_freeze' ? 'On: the background keeps the photo it had when the Home Screen opened (the Photos card still changes); it moves to the current photo only while the page is out of sight (screensaver up, another view, app in the background). Off: it follows the Photos card.' : s.name === 'ss_hold' ? 'On: the screensaver does not start by itself behind the Home Screen (and uses nothing there); swipe the page away to start it, on the photo the Photos card shows. Off: Wallpanel\'s idle timer runs as before.' : s.name === 'blur' ? 'How soft the photo behind the page is. Left at the default it eases to 0 as Background transparency goes from 60 to 100 (a clear, sharp photo); set a value to keep it fixed.' : s.name === 'dim' ? 'Darkens the top and bottom of the page so the text stays readable; also fades out as transparency goes up.' : s.name === 'photo_viewer_add' ? 'The viewer button that opens the gallery (the gallery keeps its own “Add photos” upload button).' : s.name === 'side_sizes' ? hubUnitsNote(this._config) : s.name === 'photo_source' ? 'The photo viewer, the gallery and uploads all use this folder. Empty = the screensaver\'s folder (Media → My media). Uploading needs a media-source:// folder and an administrator.' : s.name === 'apps' ? 'Each app: label, icon, gradient colours and what it does (open a view, Now Playing, Weather, Calendar, photos, or any tap action). Calendar opens an iPad-style popup. hv:calendar draws today’s date. Empty Calendars uses this card’s calendar_entities; Save new events to picks the calendar that stores them.' : undefined;
       { const h1 = f.computeHelper; f.computeHelper = s => s.name === 'assistant_enabled' ? 'Talk to an Assist pipeline with this device\'s microphone (or type). Timers ("set a timer for 15 minutes", "pause / cancel the timer") run right here, full screen.' : s.name === 'assistant_pipeline' ? 'Which assistant answers (Settings → Voice assistants).' : h1(s); }
       { const h3 = f.computeHelper; f.computeHelper = s => s.name === 'assistant_orb' ? 'On: the mic shows only an animated orb near the top (the dashboard stays clear); tap the orb for the chat. Off: the full chat opens.'
         : s.name === 'assistant_continue' ? 'After every reply the mic opens again in the same conversation, until you tap outside the orb, say one of the phrases below, or say nothing for a few seconds (Close after silence).'
@@ -7151,7 +7640,8 @@ function hvSetupBuild(data, url) {
     return k === 'media' ? { name: 'Music', icon: 'mdi:music-note', color_from: a, color_to: b, kind: 'now_playing', entity: player, entities: players.filter(i => i !== player).slice(0, 5) }
       : { name, icon, color_from: a, color_to: b, kind: 'navigate', navigation_path: k }; };
   const apps = [{ name: 'Home', icon: 'hv:home', color_from: '#ffffff', color_to: '#ededf2', kind: 'navigate', navigation_path: 'home' }];
-  for (const k of ['security', 'media', 'weather', 'lights', 'climate', 'garage', 'calendar', 'rooms']) { if (apps.length >= 4) break; const a = app(k); if (a) apps.push(a); }
+  for (const k of ['security', 'media', 'weather', 'lights', 'climate', 'garage', 'rooms']) { if (apps.length >= 4) break; const a = app(k); if (a) apps.push(a); }
+  if (cals.length) apps.push({ name: 'Calendar', icon: 'hv:calendar', color_from: '#ff453a', color_to: '#d70015', glyph_color: '#ffffff', kind: 'calendar' });
   // Home Screen, laid out like the NotHomeView home screen: wallpaper, greeting, apps, photos, now playing, house tile, calendar
   const hub = { type: 'custom:homeview-hub-card', full_width: true, theme: 'auto', apps, wallpaper: HV_SETUP_WALL, bg_transparency: 80, photo_size: 'square', calendar_rows: '2', grid_options: { columns: 'full', rows: 'auto' } };
   if (weather) hub.weather_entity = weather; if (people.length) hub.fallback_person = people[0];
