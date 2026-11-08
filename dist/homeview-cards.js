@@ -5318,7 +5318,7 @@ const ASSIST_CSS = `:host{position:fixed;inset:0;z-index:11;font-family:${FONT};
 .src{display:inline-flex;align-items:center;gap:6px;margin-top:18px;padding:8px 14px 8px 11px;border-radius:999px;background:var(--inp);color:var(--fg);font-size:14px;font-weight:600;text-decoration:none} .src ha-icon{--mdc-icon-size:17px;display:flex;color:var(--fg2)}
 .ax img{display:block;max-width:min(100%,560px);max-height:42vh;margin-top:18px;border-radius:22px;object-fit:cover}
 .hb{all:unset;cursor:pointer;flex:none;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--inp);color:var(--fg2)} .hb[hidden]{display:none} .hb ha-icon{--mdc-icon-size:20px;display:flex}
-:host([read]) .col{max-width:960px} :host([read]) .hd{position:relative;min-height:72px}:host([read]) .hd .grab,:host([read]) .hd .ti{visibility:hidden}:host([read]) .hd .orb{position:absolute;left:50%;top:14px;width:48px;height:48px;transform:translateX(-50%) scale(var(--lv,1));z-index:1}:host([read]) .wrap,:host([read]) .cd{box-shadow:none;filter:none;outline:none}
+:host([read]) .col{max-width:960px} :host([read]) .hd{position:relative;min-height:72px}:host([read]) .hd .grab,:host([read]) .hd .ti{visibility:hidden}:host([read]) .hd .orb{position:absolute;left:50%;top:14px;width:48px;height:48px;transform:translateX(-50%) scale(var(--lv,1));z-index:1;cursor:pointer;pointer-events:auto}:host([read]) .wrap,:host([read]) .cd{box-shadow:none;filter:none;outline:none}
 :host([read]) .log > :not(.cur),:host([read]) .jump{display:none !important}
 :host([read]) .bd{padding:14px 10px 26px}
 :host([read]) .m.a.cur{width:100%;max-width:none;animation:hvmi .32s ease both}
@@ -5588,13 +5588,13 @@ function hvAssist(hub, o) {
   jump.addEventListener('click', () => { stick = true; jump.classList.remove('on'); bd.scrollTo({ top: bd.scrollHeight, behavior: 'smooth' }); });
   // 1.6.x: the full-screen page reads like a HomePod: only the current answer (.cur), from the top; the history button shows the chat thread
   const hb = $('.hb'); let reading = true;
-  const setRead = () => { const on = !compact && reading; host.toggleAttribute('read', on); hb.hidden = compact || log.children.length < 2; hb.setAttribute('aria-pressed', String(!reading));
-    hb.querySelector('ha-icon').setAttribute('icon', reading ? 'mdi:history' : 'mdi:text-box-outline'); hb.setAttribute('aria-label', reading ? 'Show earlier messages' : 'Show the answer');
+  const setRead = () => { const on = !compact && reading; host.toggleAttribute('read', on); if (hb) { hb.hidden = compact || log.children.length < 2; hb.setAttribute('aria-pressed', String(!reading));
+    const hi = hb.querySelector('ha-icon'); if (hi) hi.setAttribute('icon', reading ? 'mdi:history' : 'mdi:text-box-outline'); hb.setAttribute('aria-label', reading ? 'Show earlier messages' : 'Show the answer'); }
     if (on) bd.scrollTop = 0; else { stick = true; jump.classList.remove('on'); requestAnimationFrame(() => { bd.scrollTop = bd.scrollHeight; }); } };
   hb.addEventListener('click', () => { reading = !reading; setRead(); });
   const add = (cls, html) => { const m = document.createElement('div'); m.className = 'm ' + cls; if (html != null) m.innerHTML = html;
     const cur = /^a\b/.test(cls) && !/\bold\b/.test(cls); if (cur) { log.querySelectorAll('.m.cur').forEach(x => x.classList.remove('cur')); m.classList.add('cur'); reading = true; }
-    log.appendChild(m); if (cur) setRead(); else hb.hidden = compact || log.children.length < 2; keep(); return m; };
+    log.appendChild(m); if (cur) setRead(); else if (hb) hb.hidden = compact || log.children.length < 2; keep(); return m; };
   const userMsg = text => add('u', esc(text));
   const rowsHtml = list => list.map(x => x.h ? `<div class="sec">${esc(x.h)}</div>` : `<div class="row ${x.c || 'p'}"><ha-icon icon="${esc(x.i || 'mdi:circle-small')}"></ha-icon><span class="tx">${esc(x.t)}</span>${x.r ? `<span class="rt">${esc(x.r)}</span>` : ''}</div>`).join('');
   const botMsg = () => add('a', '<div class="re"><span class="dots"><i></i><i></i><i></i></span></div><div class="rd"></div><div class="rows"></div><div class="ax"></div>');
@@ -5747,11 +5747,11 @@ function hvAssist(hub, o) {
     catch (e) { stopAudio(); micOff(); rec = null; st('idle'); drop(); note(null, "The microphone couldn't start (" + (e && e.message || e) + '). Type your request below.'); return; }
     endRun(); const msg = { type: 'assist_pipeline/run', start_stage: 'stt', end_stage: 'stt', input: { sample_rate: 16000, no_vad: true }, timeout: 90 }; if (pipe) msg.pipeline = pipe;
     const cap_ = () => { if (rec && rec.finish === finish) finish(); };
-    let safety = setTimeout(cap_, 15000); // nothing heard for 15 s: stop (then at most 45 s from the first word)
+    let safety = setTimeout(cap_, compact ? 15000 : 60000); // nothing heard: stop (15 s on the orb, 60 s on the reading page)
     // a follow-up: nobody answers within a few seconds -> stop listening (the orb closes)
     let heard = false; const quietEnd = () => { clearTimeout(sil); if (closed) return; if (rec && rec.finish === finish) rec.stop(); rec = null; keepCap = false; micOff(); if (compact) close(); else st('idle'); };
     const silT = (Number(c.assistant_silence_timeout) > 0 ? Number(c.assistant_silence_timeout) : 5) * 1000;
-    const sil = fol ? setTimeout(() => { if (!heard && tok === runTok) quietEnd(); }, silT) : null; // nothing said after a reply: the assistant closes (mic off)
+    const sil = fol ? setTimeout(() => { if (!heard && tok === runTok) quietEnd(); }, compact ? silT : Math.max(silT, 60000)) : null; // after a reply: 5 s on the orb, 60 s on the reading page
     const fail = m => { clearTimeout(safety); clearTimeout(sil); if (fol && !heard) { quietEnd(); return; } finish(); rec = null; endRun(); st('idle'); drop(); micOff(); note(null, m); };
     // speech started (card VAD): the "nothing said" close (assistant_silence_timeout) no longer applies to this turn
     onSpeech = () => { if (tok !== runTok || heard) return; heard = true; clearTimeout(sil); clearTimeout(safety); safety = setTimeout(cap_, 45000); if (lt) lt.textContent = 'Hearing you…'; };
@@ -5791,6 +5791,7 @@ function hvAssist(hub, o) {
     if (h) { try { localStorage.setItem(HV_HKEEP_LS, h.dataset.h); } catch (e2) {} hvHistLoad(c); qPaint(); } // prunes at once
     if (p.includes(qp.querySelector('.hcl'))) { hvHistSave([]); log.querySelectorAll('.old').forEach(x => x.remove()); qPaint(); } }); qPaint();
   $('.x').addEventListener('click', close); hvPen($('.x'), hub._penFn(), { gap: 8 }); mic.addEventListener('click', () => { hvSpkUnlock(); listen(); });
+  if (orb) { orb.removeAttribute('aria-hidden'); orb.setAttribute('role', 'button'); orb.setAttribute('aria-label', 'Speak'); orb.addEventListener('click', () => { hvSpkUnlock(); listen(); }); }
   $('form').addEventListener('submit', e => { e.preventDefault(); const t = inp.value.trim(); if (!t) return; hvSpkUnlock(); stopRec(); inp.value = ''; ask(t); });
   addEventListener('keydown', key); st('idle');
   (hub.shadowRoot || document.body).appendChild(host); requestAnimationFrame(() => requestAnimationFrame(() => host.classList.add('in')));
