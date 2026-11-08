@@ -5332,7 +5332,7 @@ const ASSIST_CSS = `:host{position:fixed;inset:0;z-index:11;font-family:${FONT};
 :host([read]) .row{padding:15px 20px;border-radius:999px;font-size:clamp(16px,2.2vmin,19px);gap:12px;border-left:0}
 :host([read]) .row.b{position:relative;padding-left:30px} :host([read]) .row.b ha-icon{display:none} :host([read]) .row.b::before{content:'';position:absolute;left:16px;top:11px;bottom:11px;width:4px;border-radius:2px;background:#0a84ff}
 :host([read]) .row .rt{font-size:clamp(14px,1.9vmin,16px);font-weight:500}
-:host([read]) .card{margin-top:24px} :host([read]) .card.cal{background:none;border:0;box-shadow:none;padding:0}
+:host([read]) .card{margin-top:24px} :host([read]) .card.cal{background:none;border:0;box-shadow:none;padding:0} :host([read]) .m.a:has(.card.cal) .rows{display:none}
 :host([read]) .cal .day{font-size:clamp(18px,2.4vmin,21px);font-weight:400;color:var(--fg);margin:24px 4px 10px} :host([read]) .cal .ct + .day{margin-top:6px}
 :host([read]) .cal .ev{padding:15px 20px;border-radius:999px;font-size:clamp(16px,2.2vmin,19px);gap:12px;margin-bottom:10px;background:#dceafc;color:#0b3d7a}
 :host([read]) .cal .ev i{width:4px;margin:-2px 0;background:#0a84ff} :host([read]) .cal .ev .tm{color:inherit;opacity:.78;font-size:clamp(14px,1.9vmin,16px)}
@@ -5415,13 +5415,12 @@ async function hvAssistCalendar(hub, el, q, keep) {
   const evs = []; await Promise.all(ids.map(async (id, k) => { try { const r = await h.callApi('GET', `calendars/${id}?start=${encodeURIComponent(from.toISOString())}&end=${encodeURIComponent(to.toISOString())}`);
     for (const e of r || []) { const ad = !!(e.start && e.start.date && !e.start.dateTime), st = ad ? new Date(e.start.date + 'T00:00:00') : new Date(e.start.dateTime || e.start);
       const en = ad || !e.end ? null : new Date(e.end.dateTime || e.end); evs.push({ st, en, ad, s: e.summary || '(No title)', col: HV_CAL_COLS[k % HV_CAL_COLS.length] }); } } catch (e) {} }));
-  evs.sort((a, b) => a.st - b.st || (b.ad - a.ad)); const list = evs.slice(0, 10); let html = `<div class="ct"><ha-icon icon="mdi:calendar-month-outline"></ha-icon>${title}</div>`, day = '';
+  evs.sort((a, b) => a.st - b.st || (b.ad - a.ad)); const list = evs.filter(e => e.st < to); let html = `<div class="ct"><ha-icon icon="mdi:calendar-month-outline"></ha-icon>${title}</div>`, day = '';
   if (!list.length) html += `<div class="none">Nothing planned.</div>`;
   for (const e of list) { const dk = e.st.toDateString(); if (dk !== day) { day = dk; const dd = Math.round((new Date(e.st.getFullYear(), e.st.getMonth(), e.st.getDate()) - d0) / 864e5);
       html += `<div class="day">${dd <= 0 ? 'Today' : esc(e.st.toLocaleDateString(lang, { weekday: 'long', month: 'long', day: 'numeric' }))}</div>`; } // 1.6.x: "Wednesday, April 1" (Today when it is)
     const tm = d => d.toLocaleTimeString(lang, { hour: 'numeric', minute: '2-digit', hour12: to12 });
     html += `<div class="ev ${e.ad ? 'ad' : 'tmd'}" style="--cc:${e.col}"><i></i><ha-icon icon="mdi:calendar"></ha-icon><span class="s">${esc(e.s)}</span><span class="tm">${e.ad ? 'all-day' : esc(tm(e.st) + (e.en && e.en > e.st ? '–' + tm(e.en) : ''))}</span></div>`; }
-  if (evs.length > list.length) html += `<div class="none">+${evs.length - list.length} more</div>`;
   card.innerHTML = html; keep(); return true; }
 /* 1.32.0: quiet mode, chosen per device (Off / On / Auto, kept in this browser's localStorage like the timer). Quiet = the reply is not spoken;
  * the request and the answer show as a caption under the orb. Auto: the card's volume sensor when it reports a number (quiet under
@@ -5676,7 +5675,7 @@ function hvAssist(hub, o) {
         if (bad && !/timer/i.test(text)) note(m, quota ? `${an} couldn't answer: its AI service has hit its usage limit (quota) for now. Try again later, or pick another assistant in the Home Screen settings.`
           : `${an} couldn't answer: its conversation agent reported an error. Check that integration (for example its API key) in Settings → Devices & services, or pick another assistant in the Home Screen settings.`);
         // answer cards: weather / calendar, from this Home Assistant's own states (read only)
-        const kind = hvAssistCardKind(text, r); if (kind === 'weather') hvAssistWeather(hub, m, keep); else if (kind === 'calendar') hvAssistCalendar(hub, m, text, keep);
+        const kind = hvAssistCardKind(text, r); if (kind === 'weather') hvAssistWeather(hub, m, keep); else if (kind === 'calendar') Promise.resolve(hvAssistCalendar(hub, m, text, keep)).then(ok => { if (ok) { const rows = m.querySelector('.rows'); if (rows) rows.innerHTML = ''; } });
         // 1.6.x: a long answer (list, card, article) opens the full-screen reading page by itself; a short one stays on the orb + caption
         const card = !!m.querySelector('.card') || kind === 'weather' || kind === 'calendar'; if (card) m.classList.add('lst'); if (compact && !bad && hvAssistLong(shown, card)) expand();
         // the agent itself may have tried a timer (HassStartTimer needs a satellite): fall back to ours
