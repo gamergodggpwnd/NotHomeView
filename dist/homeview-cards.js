@@ -3750,7 +3750,14 @@ const HV_ECL_CSS = `:host{all:initial;--gtx:#fff;--gbg:rgba(28,30,42,.34);--gbi:
 .menu button:hover,.menu button:focus-visible{background:rgba(255,255,255,.14)} :host([day]) .menu button:hover,:host([day]) .menu button:focus-visible{background:rgba(60,60,67,.1)} .menu button[disabled]{opacity:.38;cursor:default;pointer-events:none}
 .menu button ha-icon{--mdc-icon-size:22px;opacity:.85;display:flex} .menu button.del{color:#ff6961} :host([day]) .menu button.del{color:#d70015} .menu button.del ha-icon{opacity:1}
 .menu .sep{height:1px;margin:4px 0;background:rgba(127,127,127,.32)} .menu .q{padding:10px 18px 4px;font-size:15px;line-height:1.35}
-.menu .row{display:flex}.menu .row button{justify-content:center;gap:6px;font-weight:600}`;
+.menu .row{display:flex}.menu .row button{justify-content:center;gap:6px;font-weight:600}
+.abar .add{display:inline-flex;align-items:center;gap:6px;padding:0 16px 0 12px;background:rgba(127,127,127,.16)} .abar .add ha-icon{--mdc-icon-size:18px;display:flex}
+.menu.apk{width:min(340px,calc(100vw - 16px));max-height:min(64vh,520px);overflow-y:auto;overscroll-behavior:contain;transform-origin:bottom center}
+.menu .ai{flex:none;width:36px;height:36px;border-radius:22.5%;display:flex;align-items:center;justify-content:center;overflow:hidden;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.14)}
+.menu .ai svg{width:80%;height:80%} .menu button .ai ha-icon{--mdc-icon-size:21px;opacity:1}
+.menu .ai .calico{display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:.85;font-family:${ROUND}} .menu .ai .calico b{font-size:7px;font-weight:700;letter-spacing:.08em} .menu .ai .calico i{font-style:normal;font-size:17px;font-weight:560;margin-top:1px}
+.menu button .tx{display:flex;flex-direction:column;min-width:0;padding:9px 0} .menu button .tx small{font-size:12.5px;opacity:.7;margin-top:2px;white-space:normal;line-height:1.3}
+.menu .em{padding:12px 18px 16px;font-size:15px;line-height:1.35;opacity:.85}`;
 const HV_RZ = { '2x3': [1, 1], '2x6': [2, 1], '4x6': [2, 2], '4x3': [1, 2] }, HV_RZ_N = { '2x3': 'One tile', '2x6': 'Two wide', '4x6': 'Large', '4x3': 'Tall' };
 const hvEcl = { host: null, sr: null, lay: null, ctl: new WeakMap(), timer: null, drag: null, menu: null, busy: false,
   label(g, i) { const c = g._kids[i] && g._kids[i].cfg, st = c && c.entity && g._hass && g._hass.states[c.entity]; if (!c) return 'Tile';
@@ -3924,7 +3931,8 @@ const hvEcl = { host: null, sr: null, lay: null, ctl: new WeakMap(), timer: null
    glass controls as room pages: tap = options (⋯), hold = pick up and drag (apps among apps, tiles among tiles), corner handle = resize
    (the Home Screen row has two sizes: one tile or two wide). Everything updates in place; one quiet save on Done (no rebuild), Cancel undoes. */
 const hvInDialog = el => { for (let n = el, d = 0; n && d < 40; d++) { if (n.tagName && /DIALOG|HUI-CARD-PREVIEW/.test(n.tagName)) return true; n = n.parentNode || (n.host !== undefined ? n.host : null); } return false; };
-async function hvHubMutate(h, sig0, raw) { const root = hvFindRoot(h), lv = root && root.lovelace;
+// extra(fresh, node): optional further changes to the same saved config (Add App: the page behind a Home / Security icon)
+async function hvHubMutate(h, sig0, raw, extra) { const root = hvFindRoot(h), lv = root && root.lovelace;
   if (!lv) throw new Error('open this from the dashboard to save'); if (lv.mode === 'yaml') throw new Error('this dashboard is in YAML mode: edit it in the YAML');
   const dash = lv.urlPath || ssDash(), q = { type: 'lovelace/config', force: true }; if (dash) q.url_path = dash;
   const fresh = JSON.parse(JSON.stringify(await h._hass.callWS(q))), hubs = [];
@@ -3932,7 +3940,7 @@ async function hvHubMutate(h, sig0, raw) { const root = hvFindRoot(h), lv = root
   walk(fresh.views, 0); const node = hubs.find(o => JSON.stringify(o) === sig0) || (hubs.length === 1 ? hubs[0] : null);
   if (!node) throw new Error('the Home Screen changed since it loaded: reload the page and try again');
   const same = JSON.stringify(fresh) === JSON.stringify(lv.rawConfig || lv.config);
-  for (const k of Object.keys(node)) delete node[k]; Object.assign(node, JSON.parse(JSON.stringify(raw)));
+  for (const k of Object.keys(node)) delete node[k]; Object.assign(node, JSON.parse(JSON.stringify(raw))); if (extra) extra(fresh, node);
   if (typeof lv.saveConfig === 'function' && (lv.urlPath || null) === (dash || null)) { if (same) await hvQuietSave(h, lv, fresh); else await lv.saveConfig(fresh); }
   else { const sv = { type: 'lovelace/config/save', config: fresh }; if (dash) sv.url_path = dash; await h._hass.callWS(sv); } }
 // put list's elements into p in that order, moving only the ones out of place (others, e.g. tiles about to move elsewhere, are skipped over)
@@ -3942,19 +3950,60 @@ const HUB_CAL_SIZES = [['full', 'mdi:view-agenda-outline', 'Full · 2 rows'], ['
 const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: null, rs: null, dirty: false, busy: false,
   ok(h) { return !!(h && h._w && h.isConnected && !h._sheetO && h._config && h._config.arrange !== false && !hvInDialog(h) && hvEclOK(h)); },
   raw() { return JSON.parse(JSON.stringify(this.hub._hvRaw || {})); },
-  enter(h) { if (this.hub || !this.ok(h)) return; this.hub = h; this.orig = JSON.stringify(h._hvRaw || {}); this.dirty = false; hvEcl.ensure(); h.toggleAttribute('hv-arr', true);
+  enter(h) { if (this.hub || !this.ok(h)) return; this.hub = h; this.orig = JSON.stringify(h._hvRaw || {}); this.dirty = false; this.pend = []; hvEcl.ensure(); h.toggleAttribute('hv-arr', true);
     if (navigator.vibrate) try { navigator.vibrate(15); } catch (x) {} this.timer = setInterval(() => this.tick(), 150); this._k = () => this.tick(); addEventListener('scroll', this._k, { capture: true, passive: true }); addEventListener('resize', this._k); this.tick(); },
   exit(save) { const h = this.hub; if (!h) return Promise.resolve(true); hvEcl.closeMenu(); this.endDrag(false); this.endResize();
     const fin = () => { clearInterval(this.timer); this.timer = null; removeEventListener('scroll', this._k, true); removeEventListener('resize', this._k); for (const c of this.ctl.values()) c.remove(); this.ctl.clear(); this.bar(false);
-      h.toggleAttribute('hv-arr', false); this.hub = null; this.dirty = false; if (this.drag) this.endDrag(false); hvEcl.kick(); };
+      h.toggleAttribute('hv-arr', false); this.hub = null; this.dirty = false; this.pend = []; if (this.drag) this.endDrag(false); hvEcl.kick(); };
     if (!save || !this.dirty) { if (this.dirty) h._arrSet(JSON.parse(this.orig)); fin(); return Promise.resolve(true); }
-    if (this.busy) return Promise.resolve(false); this.busy = true; const raw = this.raw();
-    return hvHubMutate(h, this.orig, raw).then(() => { this.busy = false; fin(); hvToast('Saved', 'hv-arrange'); return true; },
-      e => { this.busy = false; hvToast('Could not save: ' + (e && e.message || e), 'hv-arrange'); return false; }); },
+    if (this.busy) return Promise.resolve(false); this.busy = true; const raw = this.raw(), now = (Array.isArray(raw.apps) && raw.apps.length ? raw.apps : HUB_APPS).map(hvHubAppKey);
+    const pend = (this.pend || []).filter(p => now.includes(p.key)); // Add App: the Home / Security pages behind added icons (not ones deleted again)
+    return (async () => { const pg = pend.length ? await hvHubPagesPrep(h, pend) : null; await hvHubMutate(h, this.orig, raw, pg && pg.apply); if (pg) pg.after(); return pg; })()
+      .then(pg => { this.busy = false; fin(); if (pg) h._loadCfg(true); hvToast(pg ? pg.msg() : 'Saved', 'hv-arrange'); return true; },
+        e => { this.busy = false; hvToast('Could not save: ' + (e && e.message || e), 'hv-arrange'); return false; }); },
   change(fn) { const raw = this.raw(); fn(raw); this.dirty = true; this.hub._arrSet(raw); [40, 200, 450].forEach(t => setTimeout(() => this.tick(), t)); },
   bar(on) { const lay = hvEcl.lay; let b = lay && lay.querySelector('.abar.hb'); if (!on) { if (b) b.remove(); return; } if (b || !lay) return;
-    b = document.createElement('div'); b.className = 'abar hb'; b.innerHTML = '<span>Hold to move · drag a corner to resize</span><button class="no">Cancel</button><button class="ok">Done</button>'; lay.appendChild(b);
+    b = document.createElement('div'); b.className = 'abar hb'; b.innerHTML = '<span>Hold to move · drag a corner to resize</span><button class="add" aria-haspopup="menu"><ha-icon icon="mdi:plus"></ha-icon>Add App</button><button class="no">Cancel</button><button class="ok">Done</button>'; lay.appendChild(b);
+    b.querySelector('.add').onclick = e => { e.stopPropagation(); this.picker(b.querySelector('.add')); };
     b.querySelector('.no').onclick = e => { e.stopPropagation(); this.exit(false); }; b.querySelector('.ok').onclick = e => { e.stopPropagation(); this.exit(true); }; },
+  // ---- Add App: put back a built-in app that is not on this Home Screen, with its own icon and popup / sheet; kept until Done like a delete
+  async ctx() { const h = this.hub, cfg = await h._loadCfg(), views = new Map(((cfg && cfg.views) || []).map(v => [String(v.path || ''), v])), c = h._config;
+    const S = (h._hass && h._hass.states) || {}, ids = d => Object.keys(S).filter(k => k.startsWith(d + '.') && S[k].state !== 'unavailable').sort();
+    const apps = c.apps || [], dash = h._dash(), mh = v => !!v && JSON.stringify(v).includes('"custom:homeview-myhome-card"');
+    const players = ids('media_player'), cal = ids('calendar').length || (Array.isArray(c.calendar_entities) && c.calendar_entities.length) || c.calendar_entity;
+    return { views, dash, cal, players, music: players.filter(i => (S[i].attributes || {}).device_class !== 'tv'),
+      have: new Set(apps.map(hvHubAppKey)), abs: apps.some(a => (a.kind || 'navigate') === 'navigate' && String(a.navigation_path || '').startsWith('/')), // write paths like this hub's other apps
+      homePath: views.has('my-home') ? 'my-home' : mh(views.get('home')) ? 'home' : 'my-home',
+      weather: (c.weather_entity && S[c.weather_entity] ? c.weather_entity : '') || (S['weather.forecast_home'] ? 'weather.forecast_home' : ids('weather')[0] || '') }; },
+  // only apps that open something here: pages that exist (Home / Security make theirs), a media player for Music, a weather entity, a calendar
+  avail(x, k) { if (x.views) return x.views.some(p => k.views.has(p)); if (x.key === 'music') return !!k.players.length; if (x.key === 'weather') return !!k.weather; if (x.key === 'calendar') return !!k.cal; return true; },
+  entry(x, k) { const a = hubAppBase(x.key), fmt = p => (k.abs ? `/${k.dash}/${p}` : p);
+    if (a.kind === 'navigate') a.navigation_path = fmt(x.key === 'home' ? k.homePath : (x.views || []).find(p => k.views.has(p)) || x.navigation_path);
+    if (x.key === 'music') { const p = k.music[0] || k.players[0], o = k.players.filter(i => i !== p).slice(0, 5); a.entity = p; if (o.length) a.entities = o; } // same idea as first-run setup
+    if (x.key === 'weather') a.weather_entity = k.weather;
+    return a; },
+  icoHtml(a) { return `<span class="ai" style="background:linear-gradient(180deg,${esc(a.color_from || '#8e8e93')} 0%,${esc(a.color_to || a.color_from || '#636366')} 100%);color:${esc(a.glyph_color || '#fff')}">${a.icon === 'hv:home' ? HUB_HOME_SVG : hvHubCalGlyph(a, this.hub && this.hub._hass)}</span>`; },
+  async picker(anchor) { if (!this.hub || this.busy) return; hvEcl.closeMenu(); hvEcl.ensure(); const k = await this.ctx(); if (!this.hub) return;
+    const wrap = hvEcl.menu = document.createElement('div'); wrap.innerHTML = '<div class="scrim"></div><div class="menu apk" role="menu" aria-label="Add App"></div>';
+    const m = wrap.querySelector('.menu'), close = () => hvEcl.closeMenu();
+    const head = t => { const d = document.createElement('div'); d.className = 't'; d.textContent = t; m.appendChild(d); };
+    const row = (ico, txt, sub, fn) => { const b = document.createElement('button'); b.setAttribute('role', 'menuitem'); b.innerHTML = `${ico}<span class="tx"><span></span>${sub ? '<small></small>' : ''}</span>`;
+      b.querySelector('.tx > span').textContent = txt; if (sub) b.querySelector('small').textContent = sub; b.addEventListener('click', e => { e.stopPropagation(); fn(); }); m.appendChild(b); return b; };
+    const list = () => { m.innerHTML = ''; head('Add App'); const xs = HUB_APP_CATALOG.filter(x => !k.have.has(x.key) && this.avail(x, k));
+      if (!xs.length) { const d = document.createElement('div'); d.className = 'em'; d.textContent = 'All apps are on the Home Screen'; m.appendChild(d); }
+      for (const x of xs) row(this.icoHtml(x), x.name, '', () => { if (x.key === 'home' || x.key === 'security') choose(x); else { close(); this.add(x, k); } });
+      hvEcl.place(m, anchor); const f = m.querySelector('button'); if (f) f.focus({ preventScroll: true }); };
+    // Home and Security: the icon always comes back; the choice is what the page behind it shows
+    const choose = x => { m.innerHTML = ''; head(x.key === 'home' ? 'Home page' : 'Security page'); const home = x.key === 'home';
+      row('<ha-icon icon="mdi:broom"></ha-icon>', 'Start from scratch', home ? 'An empty My Home page. Show tiles again with ⋯ › Edit Home View.' : 'An empty Security page. Page chips and buttons stay.', () => { close(); this.add(x, k, 'scratch'); });
+      row('<ha-icon icon="mdi:playlist-plus"></ha-icon>', 'Add all accessories', home ? 'Every device that has a room, plus cameras and scenes.' : 'Cameras, alarms, locks and door, motion and smoke sensors. Tiles already there stay.', () => { close(); this.add(x, k, 'all'); });
+      const s = document.createElement('div'); s.className = 'sep'; m.appendChild(s); row('<ha-icon icon="mdi:arrow-left"></ha-icon>', 'Back', '', list);
+      hvEcl.place(m, anchor); const f = m.querySelector('button'); if (f) f.focus({ preventScroll: true }); };
+    wrap.querySelector('.scrim').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); close(); });
+    hvEcl.lay.appendChild(wrap); list(); },
+  add(x, k, mode) { const a = this.entry(x, k); this.change(raw => this.edit(raw, 'app', l => l.push(a)));
+    if (mode) this.pend = (this.pend || []).filter(p => p.key !== x.key).concat({ key: x.key, mode, path: x.key === 'home' ? k.homePath : 'security' });
+    hvToast(`${a.name} added · saved when you tap Done`, 'hv-arrange'); },
   items() { const h = this.hub, w = h && h._w, out = []; if (!w) return out;
     w.querySelectorAll('.apps .app').forEach((el, i) => out.push({ kind: 'app', i, el }));
     const ph = w.querySelector('.phw .pw'); if (ph) out.push({ kind: 'photo', i: 0, el: ph });
@@ -4092,6 +4141,58 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
       mk('Cancel', '', close); mk('Delete', 'del', () => { close(); this.change(raw => this.edit(raw, it.kind, a => a.splice(it.i, 1))); }); hvEcl.place(m, anchor); }, 'del', it.kind === 'app' && n <= 1); }
     wrap.querySelector('.scrim').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); close(); });
     hvEcl.lay.appendChild(wrap); hvEcl.place(m, anchor); const f = m.querySelector('button:not([disabled])'); if (f) f.focus({ preventScroll: true }); } };
+/* Add App (Home Screen arrange): the page behind an added Home or Security icon, written in the same save as the Home Screen on Done.
+   Home = the My Home page (custom:homeview-myhome-card), Security = the security page's Page Grid. 'scratch' empties the page (My Home:
+   every tile hidden; Security: no grid tiles) and keeps its chrome; 'all' shows / appends every discovered accessory and keeps what is
+   there. A missing page is created like the dashboard's other device pages (theme, background, style helper, a way back). Config only. */
+const hvMhCardNew = () => ({ type: 'custom:homeview-myhome-card', grid_options: { columns: 'full', rows: 'auto' } });
+const hvGridCardNew = () => ({ type: 'custom:homeview-grid-card', full_width: true, portrait_shape: 'balanced', portrait_rows: 5, auto_rows: true, swipe_back: true, grid_options: { columns: 'full', rows: 'auto' }, cards: [] }); // as first-run setup
+const hvEditBtnNew = () => ({ type: 'custom:homeview-edit-button-card', position: 'top-right', admin_only: true, grid_options: { columns: 'full', rows: 'auto' } });
+// every card of a view (sections and masonry, stacks included): fn(card)
+function hvViewCards(v, fn) { const walk = (arr, d) => { if (!Array.isArray(arr) || d > 6) return; for (const c of arr) { if (!c || typeof c !== 'object') continue; fn(c); if (Array.isArray(c.cards)) walk(c.cards, d + 1); if (c.card) walk([c.card], d + 1); } };
+  (v.sections || []).forEach(s => s && walk(s.cards, 0)); walk(v.cards, 0); }
+const hvHasObj = (o, t, d) => o === t || (!!o && typeof o === 'object' && (d || 0) < 16 && Object.values(o).some(x => hvHasObj(x, t, (d || 0) + 1)));
+// entity ids a list of cards already shows (entity / entity_id / entities, any depth)
+const hvCardEnts = cards => { const out = new Set(), walk = (x, d, ents) => { if (d > 10 || !x) return; if (typeof x === 'string') { if (ents) out.add(x); return; } if (typeof x !== 'object') return;
+    if (Array.isArray(x)) { x.forEach(y => walk(y, d + 1, ents)); return; }
+    for (const [k, v] of Object.entries(x)) { if ((k === 'entity' || k === 'entity_id') && typeof v === 'string') out.add(v); else if (typeof v === 'object') walk(v, d + 1, k === 'entities'); } };
+  walk(cards, 0, false); return out; };
+// every tile the My Home card shows with nothing hidden: room devices, cameras, scenes (its own discovery, _model)
+function hvMhAll(hass, cfg) { const P = HVMyHomeCard.prototype, ctx = { _config: Object.assign({}, HVMyHomeCard.defaults, cfg, { hidden_entities: [] }), _hass: hass, _draft: null,
+    _hiddenEnt: () => new Set(), _opt: () => ({}), _order: () => [], _local: () => ({}), _ord: P._ord };
+  const out = []; for (const s of P._model.call(ctx).secs) { if (s.cams) out.push(...s.cams); else if (s.scenes) out.push(...s.scenes.map(x => x.entity)); else out.push(...s.items.map(i => i.id)); }
+  return [...new Set(out)]; }
+// the security tiles first-run setup would build now (cameras, alarms, locks, SEC_BS binary sensors), as NotHomeView cards
+const hvSecTiles = (data, dash) => { if (!data) return []; const v = hvSetupBuild(data, dash).config.views.find(x => x.path === 'security'); let g = null;
+  if (v) hvViewCards(v, c => { if (!g && c.type === 'custom:homeview-grid-card') g = c; }); return ((g && g.cards) || []).map(c => JSON.parse(JSON.stringify(c))); };
+async function hvHubPagesPrep(h, pend) { const hass = h._hass, root = hvFindRoot(h), lv = root && root.lovelace, dash = (lv && lv.urlPath) || ssDash() || 'lovelace';
+  const data = pend.some(p => p.key === 'security' && p.mode === 'all') ? await hvSetupData(hass) : null, lsHid = [], said = [];
+  const apply = (fresh, node) => { const views = fresh.views || (fresh.views = []), P = p => `/${dash}/${p}`;
+    const hv = views.find(v => hvHasObj(v, node)), hubP = P(hv ? String(hv.path || views.indexOf(hv)) : 'main');
+    const near = views.find(v => v !== hv && v.type === 'sections' && v.subview && Array.isArray(v.sections) && v.sections.length) || null; // a device page to match
+    let style = null; if (near) hvViewCards(near, c => { if (!style && c.type === 'custom:button-card' && c.template === 'homeview_styles') style = c; });
+    const themes = Object.keys((hass.themes && hass.themes.themes) || {});
+    const mkView = (path, title, icon, cards) => { const v = { type: 'sections', max_columns: 1, dense_section_placement: true, title, path, icon, subview: true, back_path: hubP, background: (near && near.background) || HV_SETUP_BG,
+        sections: [{ type: 'grid', cards: [...(style ? [JSON.parse(JSON.stringify(style))] : []), ...cards] }] };
+      if (near && near.theme) v.theme = near.theme; else if (themes.includes('HomeView Glass')) v.theme = 'HomeView Glass'; views.push(v); return v; };
+    // a card into the view's first section, before its edit button
+    const put = (v, card) => { let arr; if (Array.isArray(v.sections)) { if (!v.sections.length) v.sections.push({ type: 'grid', cards: [] }); arr = v.sections[0].cards || (v.sections[0].cards = []); } else arr = v.cards || (v.cards = []);
+      const i = arr.findIndex(c => c && c.type === 'custom:homeview-edit-button-card'); arr.splice(i < 0 ? arr.length : i, 0, card); return card; };
+    for (const p of pend) {
+      if (p.key === 'home') { let v = views.find(x => String(x.path || '') === p.path), card = null;
+        if (!v) v = mkView(p.path, 'My Home', 'mdi:home-variant-outline', [hvMhCardNew(), hvEditBtnNew()]);
+        hvViewCards(v, c => { if (!card && c.type === 'custom:homeview-myhome-card') card = c; }); if (!card) card = put(v, hvMhCardNew());
+        if (p.mode === 'scratch') { const ids = hvMhAll(hass, card); if (ids.length) card.hidden_entities = ids; else delete card.hidden_entities; lsHid.push(ids); said.push(`Home page started from scratch (${ids.length} tiles hidden)`); }
+        else { delete card.hidden_entities; lsHid.push([]); said.push('Home page shows all accessories'); } }
+      if (p.key === 'security') { let v = views.find(x => String(x.path || '') === 'security'); const grids = [];
+        if (!v) v = mkView('security', 'Security', 'mdi:shield-home-outline', [{ type: 'custom:homeview-chips-card', day_light: true, chips: [{ name: 'Home Screen', icon: 'mdi:apps', tap_action: { action: 'navigate', navigation_path: hubP } }], grid_options: { columns: 'full', rows: 'auto' } }, hvGridCardNew(), hvEditBtnNew()]);
+        hvViewCards(v, c => { if (c.type === 'custom:homeview-grid-card') grids.push(c); }); if (!grids.length) grids.push(put(v, hvGridCardNew()));
+        if (p.mode === 'scratch') { grids.forEach(g => { g.cards = []; }); said.push('Security page started from scratch'); }
+        else { const have = hvCardEnts(grids.map(g => g.cards || [])), add = hvSecTiles(data, dash).filter(t => !t.entity || !have.has(t.entity)); grids[0].cards = (grids[0].cards || []).concat(add);
+          said.push(add.length ? `${add.length} accessor${add.length === 1 ? 'y' : 'ies'} added to Security` : 'Security already has every accessory'); } } } };
+  // after the save: this browser's My Home copy of the hidden list follows the config (it is read before the config)
+  const after = () => { if (!lsHid.length) return; const key = `hvMyHome:${ssDash() || 'lovelace'}`, cur = mhLs.get(key) || {}; cur.hidden_entities = lsHid[lsHid.length - 1]; mhLs.set(key, cur); };
+  return { apply, after, msg: () => ['Saved'].concat(said).join(' · ') }; }
 const HV_TILE_ICON = { clock: 'mdi:clock-outline', 'custom:homeview-nav-card': 'mdi:arrow-right-circle-outline', 'custom:homeview-calendar-card': 'mdi:calendar',
   'custom:homeview-house-card': 'mdi:home-outline', 'custom:homeview-group-card': 'mdi:lightbulb-group-outline', 'custom:homeview-thermostat-card': 'mdi:thermostat',
   'custom:homeview-music-card': 'mdi:music', 'custom:homeview-tv-card': 'mdi:television', 'custom:homeview-camera-card': 'mdi:cctv', 'custom:homeview-people-card': 'mdi:account-group-outline' };
@@ -4650,11 +4751,26 @@ const HUB_HOME_SVG = `<svg viewBox="0 0 100 100" aria-hidden="true"><defs><linea
 <path d="M50 13 L88 44.5 Q90 46.3 90 49 L90 83 Q90 88 85 88 L15 88 Q10 88 10 83 L10 49 Q10 46.3 12 44.5 Z" fill="url(#hvh1)"/>
 <path d="M50 30 L75 51 Q76.5 52.3 76.5 54.3 L76.5 78 Q76.5 81 73.5 81 L26.5 81 Q23.5 81 23.5 78 L23.5 54.3 Q23.5 52.3 25 51 Z" fill="url(#hvh2)"/>
 <path d="M50 46 L63 57 L63 75 L37 75 L37 57 Z" fill="#fff3d6"/><rect x="45" y="62" width="10" height="13" rx="2" fill="#ffb340"/></svg>`;
-const HUB_APPS = [
-  { name: 'Home', icon: 'hv:home', color_from: '#ffffff', color_to: '#ededf2', kind: 'navigate', navigation_path: 'home' },
-  { name: 'Security', icon: 'mdi:shield-home', color_from: '#5b8cff', color_to: '#2b3fd6', kind: 'navigate', navigation_path: 'security' },
-  { name: 'Music', icon: 'mdi:music-note', color_from: '#ff6b81', color_to: '#f5163d', kind: 'now_playing' },
-  { name: 'Weather', icon: 'mdi:weather-partly-cloudy', color_from: '#5ec8ff', color_to: '#1a73e8', kind: 'weather' }];
+/* Every built-in Home Screen app in one place: the default four (HUB_APPS), first-run setup and the Add App picker of Home Screen
+   arrange mode. key = how an app on the Home Screen is recognised (hvHubAppKey); views = the pages a navigate app may open (it is only
+   offered when one of them exists on the dashboard; Home and Security create theirs). */
+const HUB_APP_CATALOG = [
+  { key: 'home', name: 'Home', icon: 'hv:home', color_from: '#ffffff', color_to: '#ededf2', kind: 'navigate', navigation_path: 'home' },
+  { key: 'security', name: 'Security', icon: 'mdi:shield-home', color_from: '#5b8cff', color_to: '#2b3fd6', kind: 'navigate', navigation_path: 'security' },
+  { key: 'music', name: 'Music', icon: 'mdi:music-note', color_from: '#ff6b81', color_to: '#f5163d', kind: 'now_playing' },
+  { key: 'weather', name: 'Weather', icon: 'mdi:weather-partly-cloudy', color_from: '#5ec8ff', color_to: '#1a73e8', kind: 'weather' },
+  { key: 'calendar', name: 'Calendar', icon: 'hv:calendar', color_from: '#ff453a', color_to: '#d70015', glyph_color: '#ffffff', kind: 'calendar' },
+  { key: 'assistant', name: 'Assistant', icon: 'mdi:microphone', color_from: '#b06cff', color_to: '#3d7bff', kind: 'assistant' },
+  { key: 'lights', name: 'Lights', icon: 'mdi:lightbulb-group', color_from: '#ffd36b', color_to: '#ff9f0a', kind: 'navigate', navigation_path: 'lights', views: ['lights', 'lights-on'] },
+  { key: 'climate', name: 'Climate', icon: 'mdi:thermostat', color_from: '#ffb37a', color_to: '#ff6a3d', kind: 'navigate', navigation_path: 'climate', views: ['climate'] },
+  { key: 'garage', name: 'Garage', icon: 'mdi:garage-variant', color_from: '#9aa7b8', color_to: '#4d5a6b', kind: 'navigate', navigation_path: 'garage', views: ['garage'] },
+  { key: 'rooms', name: 'Rooms', icon: 'mdi:sofa-outline', color_from: '#c5a3ff', color_to: '#7c4dff', kind: 'navigate', navigation_path: 'rooms', views: ['rooms'] }];
+// a fresh copy of a catalog app as an apps[] entry (no catalog-only keys)
+const hubAppBase = k => { const c = HUB_APP_CATALOG.find(x => x.key === k); if (!c) return null; const a = Object.assign({}, c); delete a.key; delete a.views; return a; };
+// which catalog app an apps[] entry is: its kind (weather, calendar, assistant, Music) or, for a page, the page's last path segment
+const hvHubAppKey = a => { const k = (a && a.kind) || 'navigate'; if (k === 'now_playing') return 'music'; if (k !== 'navigate') return k;
+  const b = String(a.navigation_path || 'home').replace(/[?#].*$/, '').replace(/\/+$/, '').split('/').pop() || 'home'; return b === 'my-home' ? 'home' : b === 'lights-on' ? 'lights' : b; };
+const HUB_APPS = ['home', 'security', 'music', 'weather'].map(hubAppBase);
 const HUB_CSS = `:host{display:block;position:relative;font-family:${FONT};color:#fff;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none}
 .bg{position:fixed;inset:0;z-index:-1;pointer-events:none;overflow:hidden;background:var(--hv-wall,radial-gradient(120% 90% at 20% 10%,#4b3a66 0%,#1c1a33 55%,#0d0f1a 100%))}
 :host([contained]) .bg{position:absolute;border-radius:24px;z-index:0}
@@ -7082,7 +7198,10 @@ const MH_POP_CSS = `.mhov{position:fixed;inset:0;z-index:7;font-family:${FONT};c
 .row{display:flex;align-items:center;justify-content:space-between;height:46px;padding:0 4px 0 16px;font-size:16px;border-bottom:1px solid rgba(255,255,255,.1);background:#2c2c2e;position:relative}
 .row:last-child{border-bottom:0}.row .h{width:52px;height:46px;display:grid;place-items:center;color:rgba(255,255,255,.55);cursor:grab;touch-action:none}.row .h ha-icon{--mdc-icon-size:22px}
 .row.drag{z-index:2;background:#3a3a3c;box-shadow:0 10px 26px rgba(0,0,0,.5);border-radius:12px;transition:none}.row.mv{transition:transform .18s ease}
-.row small{color:#ff9f8a;font-size:13px}`;
+.row small{color:#ff9f8a;font-size:13px}
+.sc{position:relative}.cam>.eye,.sc>.eye{display:none;position:absolute;inset:auto;z-index:2;width:24px;height:24px;border-radius:50%;background:#ff453a;color:#fff;place-items:center;box-shadow:0 2px 6px rgba(0,0,0,.35)}
+.cam>.eye{top:10px;left:10px}.sc>.eye{top:-6px;left:-6px}.cam>.eye ha-icon,.sc>.eye ha-icon{--mdc-icon-size:16px}
+.w.hiding .cam>.eye,.w.hiding .sc>.eye{display:grid}.w.hiding .cam.hid,.w.hiding .sc.hid{opacity:.35}.w.hiding .cam.hid>.eye,.w.hiding .sc.hid>.eye{background:#30d158}.w.hiding .cam>homeview-camera-card{pointer-events:none}`;
 class HVMyHomeCard extends HTMLElement {
   constructor() { super(); this.attachShadow({ mode: 'open' }); this._cams = new Map(); }
   static get defaults() { return { title: 'My Home', back_label: 'Home Screen', back_path: '', show_back: true, show_clock: true, show_pills: true, show_cameras: true, show_scenes: true, show_unavailable: true, group_members: 'hide', tap_toggles: true, show_menu: true, cameras: [], scenes: [], room_order: [], hidden_areas: [], hidden_entities: [], section_order: [] }; }
@@ -7169,9 +7288,13 @@ class HVMyHomeCard extends HTMLElement {
       <div class="pill g" style="color:#ffd60a"><ha-icon icon="mdi:lightbulb${M.lightsOn ? '-on' : ''}"></ha-icon>${M.lightsOn}</div>
       ${M.gar.length ? `<div class="pill g" style="color:${gOpen ? '#ff9f0a' : '#66d4cf'}"><ha-icon icon="mdi:garage${gOpen ? '-open' : ''}"></ha-icon>${gOpen ? gOpen + ' open' : M.gar.length}</div>` : ''}
       <div class="pill g"><ha-icon icon="mdi:speaker${M.media.length ? '-play' : ''}"></ha-icon>${M.media.length ? M.media.length : ''}</div></div>`;
-    const secHtml = s => { if (s.cams) return `<div class="sec" data-sec="cameras"><h2>Cameras<ha-icon icon="mdi:chevron-right"></ha-icon></h2><div class="cams">${s.cams.map((id, k) => `<div class="cam${this._size('cam:' + id, k ? '2x3' : '2x6') === '2x3' ? ' s' : ''}" data-cam="${esc(id)}"></div>`).join('')}</div></div>`;
-      if (s.scenes) return `<div class="sec" data-sec="scenes"><h2>Scenes<ha-icon icon="mdi:chevron-right"></ha-icon></h2><div class="scenes">${s.scenes.map(x => { const st = h.states[x.entity];
-        const z = HV_RZ[this._size(x.entity, '2x3')]; return `<div class="sc g" data-scene="${esc(x.entity)}" style="grid-column:span ${z[0]}"><span class="i"><ha-icon icon="${esc(x.icon || st.attributes.icon || 'mdi:palette')}"></ha-icon></span><span>${esc(x.name || st.attributes.friendly_name || x.entity)}</span></div>`; }).join('')}</div></div>`;
+    // cameras and scenes follow hidden_entities too (Edit Home View shows them with the +/− badge); a section with nothing left is left out
+    const shown = id => this._hiding || this._arr || !M.hidE.has(id), eye = id => `<span class="eye"><ha-icon icon="mdi:${M.hidE.has(id) ? 'plus' : 'minus'}"></ha-icon></span>`;
+    const secHtml = s => { if (s.cams) { const cv = s.cams.filter(shown); if (!cv.length) return '';
+        return `<div class="sec" data-sec="cameras"><h2>Cameras<ha-icon icon="mdi:chevron-right"></ha-icon></h2><div class="cams">${cv.map((id, k) => `<div class="cam${this._size('cam:' + id, k ? '2x3' : '2x6') === '2x3' ? ' s' : ''}${M.hidE.has(id) ? ' hid' : ''}" data-cam="${esc(id)}">${eye(id)}</div>`).join('')}</div></div>`; }
+      if (s.scenes) { const sv = s.scenes.filter(x => shown(x.entity)); if (!sv.length) return '';
+        return `<div class="sec" data-sec="scenes"><h2>Scenes<ha-icon icon="mdi:chevron-right"></ha-icon></h2><div class="scenes">${sv.map(x => { const st = h.states[x.entity];
+        const z = HV_RZ[this._size(x.entity, '2x3')]; return `<div class="sc g${M.hidE.has(x.entity) ? ' hid' : ''}" data-scene="${esc(x.entity)}" style="grid-column:span ${z[0]}">${eye(x.entity)}<span class="i"><ha-icon icon="${esc(x.icon || st.attributes.icon || 'mdi:palette')}"></ha-icon></span><span>${esc(x.name || st.attributes.friendly_name || x.entity)}</span></div>`; }).join('')}</div></div>`; }
       const vis = s.items.filter(i => this._hiding || this._arr || !M.hidE.has(i.id)); if (!vis.length) return '';
       const on = vis.filter(i => this._state(i).on).length;
       return `<div class="sec" data-sec="${esc(s.key)}"><h2>${esc(s.name)}<ha-icon icon="mdi:chevron-right"></ha-icon>${on ? `<small>${on} on</small>` : ''}</h2><div class="devs">${vis.map(i => { const st = this._state(i), un = MH_UNAV.includes(i.s.state);
@@ -7198,6 +7321,8 @@ class HVMyHomeCard extends HTMLElement {
       if (k === 'menu') { this._menu(a); return; }
       if (k === 'hdone') { this._saveHidden(this._hidDraft); this._hiding = false; this._hidDraft = null; this._sig = null; this._render(); return; }
       if (k === 'hcancel') { this._hiding = false; this._hidDraft = null; this._localSet({ hidden_entities: this._hidPrev }); this._sig = null; this._render(); return; } }
+    if (this._hiding) { const x = t.closest && t.closest('.cam,.sc'), id = x && (x.dataset.cam || x.dataset.scene); // Edit Home View: cameras and scenes hide / show like device tiles
+      if (id) { const s = new Set(this._hidDraft || []); s.has(id) ? s.delete(id) : s.add(id); this._hidDraft = [...s]; this._localSet({ hidden_entities: this._hidDraft }); this._sig = null; this._render(); return; } }
     const d = t.closest && t.closest('.dv');
     if (d) { const id = d.dataset.e, dom = id.split('.')[0];
       if (this._hiding) { const s = new Set(this._hidDraft || []); s.has(id) ? s.delete(id) : s.add(id); this._hidDraft = [...s]; this._localSet({ hidden_entities: this._hidDraft }); this._sig = null; this._render(); return; }
@@ -7629,9 +7754,9 @@ function hvSetupBuild(data, url) {
     if (!has(k)) return null; const [name, icon, a, b] = HV_SETUP_APPS[k];
     return k === 'media' ? { name: 'Music', icon: 'mdi:music-note', color_from: a, color_to: b, kind: 'now_playing', entity: player, entities: players.filter(i => i !== player).slice(0, 5) }
       : { name, icon, color_from: a, color_to: b, kind: 'navigate', navigation_path: k }; };
-  const apps = [{ name: 'Home', icon: 'hv:home', color_from: '#ffffff', color_to: '#ededf2', kind: 'navigate', navigation_path: 'home' }];
+  const apps = [hubAppBase('home')];
   for (const k of ['security', 'media', 'weather', 'lights', 'climate', 'garage', 'rooms']) { if (apps.length >= 4) break; const a = app(k); if (a) apps.push(a); }
-  if (cals.length) apps.push({ name: 'Calendar', icon: 'hv:calendar', color_from: '#ff453a', color_to: '#d70015', glyph_color: '#ffffff', kind: 'calendar' });
+  if (cals.length) apps.push(hubAppBase('calendar'));
   // Home Screen, laid out like the NotHomeView home screen: wallpaper, greeting, apps, photos, now playing, house tile, calendar
   const hub = { type: 'custom:homeview-hub-card', full_width: true, theme: 'auto', apps, wallpaper: HV_SETUP_WALL, bg_transparency: 80, photo_size: 'square', calendar_rows: '2', grid_options: { columns: 'full', rows: 'auto' } };
   if (weather) hub.weather_entity = weather; if (people.length) hub.fallback_person = people[0];
