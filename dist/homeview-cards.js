@@ -5313,12 +5313,12 @@ const ASSIST_CSS = `:host{position:fixed;inset:0;z-index:11;font-family:${FONT};
 .cap .mt{margin-top:10px;display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:11px;opacity:.65} .cap .mt span{display:flex;align-items:center;gap:4px} .cap .mt ha-icon{--mdc-icon-size:13px;display:flex}
 /* 1.6.x: the full-screen page is a reading page like a HomePod's: white by day, near-black at night (no frosted wash). [read] = the current
    answer is the page (heading + body, event capsules, or an article with bold key terms); the chat thread is one tap away (history button) */
-.bg{background:#fff;backdrop-filter:none;-webkit-backdrop-filter:none} :host([night]) .bg{background:#0b0b0d}
+.bg{background:#fff;backdrop-filter:none;-webkit-backdrop-filter:none;box-shadow:none;filter:none} :host([night]) .bg{background:#0b0b0d}
 .rd{display:none} .ax:empty{display:none} .cal .ev ha-icon{display:none}
 .src{display:inline-flex;align-items:center;gap:6px;margin-top:18px;padding:8px 14px 8px 11px;border-radius:999px;background:var(--inp);color:var(--fg);font-size:14px;font-weight:600;text-decoration:none} .src ha-icon{--mdc-icon-size:17px;display:flex;color:var(--fg2)}
 .ax img{display:block;max-width:min(100%,560px);max-height:42vh;margin-top:18px;border-radius:22px;object-fit:cover}
 .hb{all:unset;cursor:pointer;flex:none;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--inp);color:var(--fg2)} .hb[hidden]{display:none} .hb ha-icon{--mdc-icon-size:20px;display:flex}
-:host([read]) .col{max-width:960px} :host([read]) .hd .orb,:host([read]) .hd .ti{visibility:hidden}
+:host([read]) .col{max-width:960px} :host([read]) .hd{position:relative;min-height:72px}:host([read]) .hd .grab,:host([read]) .hd .ti{visibility:hidden}:host([read]) .hd .orb{position:absolute;left:50%;top:14px;width:48px;height:48px;transform:translateX(-50%) scale(var(--lv,1));z-index:1}:host([read]) .wrap,:host([read]) .cd{box-shadow:none;filter:none;outline:none}
 :host([read]) .log > :not(.cur),:host([read]) .jump{display:none !important}
 :host([read]) .bd{padding:14px 10px 26px}
 :host([read]) .m.a.cur{width:100%;max-width:none;animation:hvmi .32s ease both}
@@ -5678,7 +5678,7 @@ function hvAssist(hub, o) {
         // answer cards: weather / calendar, from this Home Assistant's own states (read only)
         const kind = hvAssistCardKind(text, r); if (kind === 'weather') hvAssistWeather(hub, m, keep); else if (kind === 'calendar') hvAssistCalendar(hub, m, text, keep);
         // 1.6.x: a long answer (list, card, article) opens the full-screen reading page by itself; a short one stays on the orb + caption
-        const card = !!m.querySelector('.card'); if (card) m.classList.add('lst'); if (compact && !bad && hvAssistLong(shown, card)) expand();
+        const card = !!m.querySelector('.card') || kind === 'weather' || kind === 'calendar'; if (card) m.classList.add('lst'); if (compact && !bad && hvAssistLong(shown, card)) expand();
         // the agent itself may have tried a timer (HassStartTimer needs a satellite): fall back to ours
         if (r.response_type === 'error' && /timer/i.test(text)) timerCmd(text);
         if (!speak) done(); }
