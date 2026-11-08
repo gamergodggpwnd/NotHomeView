@@ -55,36 +55,19 @@ asks for the screensaver but Wallpanel is missing.
 Tested with Home Assistant 2026.10, card-mod 4.2.1, layout-card 2.4.7, button-card 7.0.1, browser_mod 3.3.0, kiosk-mode 15.0.0
 and Wallpanel 4.67.2.
 
-## What's new in v1.6
+## What's new in v1.7
 
-**My Home page.** An Apple Home style page (`custom:homeview-myhome-card`) opened from the Home Screen's Home app: summary pills, cameras,
-scenes and every device grouped by room. Its ⋯ menu has *Issues*, *Home Settings*, *Edit Home View* (move, resize, hide / show tiles with Cancel / Done)
-and *Reorder Sections*. On the Home Screen, swipe right‑to‑left to reach a second page (`swipe_page`), with page dots underneath.
+New Home Screen apps and Assistant updates since v1.6.1.
 
-| My Home (tablet) | My Home (phone) |
-|---|---|
-| ![My Home page on a tablet (demo data)](docs/images/v1.6/my_home.png) | ![My Home page on a phone (demo data)](docs/images/v1.6/my_home_phone.png) |
+> **HACS users:** HACS compares version numbers, and v1.7 counts as *lower* than v1.31.x, so HACS may not show it as an update. To install it, open NotHomeView in HACS → ⋮ → **Redownload** → pick **v1.7**, then reload your browser.
 
-**Doorbell & motion pop‑up** (only on the *Home - Pixel* dashboard, `home-vertical-tablet`; see [docs/doorbell-popup.md](docs/doorbell-popup.md)).
-A ring shows the camera live full screen; during the screensaver a corner pop‑up appears instead (orange for motion). A still picture shows while the stream starts.
+### Added
+* **Calendar app** on the Home Screen: an iPad-style popup with Day, Week, Month and Year views. Day and Week show an event’s address in the description when there is one. Adding an event lets you choose which calendar to save it to; read-only calendars are marked so you can’t add to them.
+* **Add App** in Home Screen edit mode: put back any built-in app with its usual look and popup. For Home and Security you can start from scratch or add all accessories.
 
-| Doorbell ring, full screen | Motion during the screensaver |
-|---|---|
-| ![Doorbell full-screen pop-up (demo camera frame)](docs/images/v1.6/doorbell_full_screen.png) | ![Orange motion corner pop-up over the screensaver (demo)](docs/images/v1.6/motion_corner_popup_screensaver.png) |
-
-**Screensaver styles and colours.** Four new full‑screen clocks next to the Photo clock (still the default), picked in the screensaver settings,
-each with optional colours (picker, hex field, swatches, *Reset to default colors*).
-
-| Info dashboard | Abstract fluid | Modern typographic | Whimsical minimalist |
-|---|---|---|---|
-| ![Info dashboard screensaver](docs/images/v1.6/screensaver_1_info_dashboard.png) | ![Abstract fluid screensaver](docs/images/v1.6/screensaver_2_abstract_fluid.png) | ![Modern typographic screensaver](docs/images/v1.6/screensaver_3_modern_typographic.png) | ![Whimsical minimalist screensaver](docs/images/v1.6/screensaver_4_whimsical_minimalist.png) |
-
-| Style picker | Colour picker | Custom colours |
-|---|---|---|
-| ![Screensaver style picker](docs/images/v1.6/screensaver_style_picker.png) | ![Screensaver colour picker](docs/images/v1.6/screensaver_color_picker.png) | ![Modern typographic with custom colours](docs/images/v1.6/screensaver_custom_colors.png) |
-
-*All v1.6 pictures are demo / sample data: a throwaway test Home Assistant with made‑up entities, a generated camera frame and generated album art.*
-Full list of changes and fixes: [CHANGELOG.md](CHANGELOG.md).
+### Changed
+* **Assistant:** short answers stay a popup under the orb. Longer answers (a list, a calendar or weather card, or a longer article) open a full-screen HomePod-style reading page — white by day, dark at night — with the assistant orb at the top center and no glow around the screen edges.
+* Calendar answers on that page show the next 7 days of real events from Home Assistant, instead of a separate day-by-day text list.
 
 ## Device pages theme (Night / Day / Auto)
 
@@ -109,7 +92,7 @@ The dashboard needs a Home Screen card for the pencil menu to save the theme.
 
 * [Card gallery](#card-gallery)
 * [Requirements](#requirements)
-* [What's new in v1.6](#whats-new-in-v16)
+* [What's new in v1.7](#whats-new-in-v17)
 * [Device pages theme (Night / Day / Auto)](#device-pages-theme-night--day--auto)
 * [Install (step by step)](#install-step-by-step)
 * [Walkthrough: add and edit cards](#walkthrough-add-and-edit-cards)
