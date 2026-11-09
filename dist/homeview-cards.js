@@ -6297,7 +6297,7 @@ const HV_BG_LEVELS = [null,
   { name: 'Solid', blur: 32, tint: 1, dsc: 1, mix: 1, bgt: 0, sat: 1.35 }, // no photo: the plain wallpaper (the photo backdrop is turned off)
   { name: 'Heavy', blur: 48, tint: 0.45, dsc: 0.75, mix: 0.4, bgt: 0.35, sat: 1.35 },
   { name: 'Medium', blur: 32, tint: 0.24, dsc: 0.55, mix: 0, bgt: 0.6, sat: 1.35 },
-  { name: 'Light', blur: 12, tint: 0.1, dsc: 0.32, mix: 0, bgt: 0.8, sat: 1.2 },
+  { name: 'Light', blur: 4, tint: 0.04, dsc: 0.18, mix: 0, bgt: 0.92, sat: 1.1 },
   { name: 'Clear', blur: 0, tint: 0, dsc: 0.14, mix: 0, bgt: 1, sat: 1.05 }];
 // the level a config asks for: bg_blur_level 1-5; else an older bg_transparency (0-100) to the nearest look; else 3 Medium
 const hvBgLevel = c => { c = c || {}; const l = Number(c.bg_blur_level); if (c.bg_blur_level != null && c.bg_blur_level !== '' && l >= 1 && l <= 5) return Math.round(l);
