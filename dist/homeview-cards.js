@@ -3,7 +3,7 @@
  *         homeview-group-card, homeview-scene-card, homeview-music-card, homeview-nav-card, homeview-edit-button-card
  *  Every card has a visual editor (ha-form). Look = HomeView glass tiles; colours come from the
  *  HomeView CSS variables (--hv-*) set by the HomeView theme / style helper, with glass fall-backs. */
-const HV_VERSION = '1.6.0';
+const HV_VERSION = '1.7'; // the published release (tag v1.7); Settings › General › About shows it
 // Registered colour properties so a scene background written as linear-gradient(var(--hv-bg-top), var(--hv-bg-bottom))
 // can fade smoothly between scenes (plain gradients can't transition). Unused unless a dashboard style sets them.
 try { if (window.CSS && CSS.registerProperty) for (const n of ['--hv-bg-top', '--hv-bg-bottom'])
@@ -6025,7 +6025,7 @@ const HV_SET_PAGES = [
     sec: [{ f: ['person', 'fallback_person', 'name', 'ring_color'] }, { h: 'Times of day', f: ['morning_start', 'afternoon_start', 'evening_start', 'night_start'] },
       { h: 'Greetings', f: ['greeting_morning', 'greeting_afternoon', 'greeting_evening', 'greeting_night'] }] },
   { id: 'general', t: 'General', i: 'mdi:cog', c: '#8e8e93', g: 1, d: 'The look of the device pages, popups on this dashboard, and the way into edit mode.',
-    sec: [{ f: ['theme'] }, { h: 'Popups', f: ['full_height_popups', 'popup_edit'] }, { f: ['@edit'] }, { f: ['@setup'] }] },
+    sec: [{ f: ['@about', '@update'] }, { f: ['theme'] }, { h: 'Popups', f: ['full_height_popups', 'popup_edit'] }, { f: ['@edit'] }, { f: ['@setup'] }] },
   { id: 'photos', t: 'Photos & Background', i: 'mdi:image-multiple', c: '#32ade6', g: 1, d: 'The pictures on the Home Screen, the blurred background behind it and the Photos tile.',
     sec: [{ h: 'Photos', f: ['photo_source_mode', 'photo_source', 'photo_interval', 'photo_order'] }, { h: 'Background', f: ['photo_backdrop', 'bg_freeze', 'wallpaper'] },
       { h: 'Background blur', lvl: true, f: ['bg_blur_level'] }, { h: 'Advanced', f: ['dim'] },
@@ -6052,6 +6052,8 @@ const HV_SET_ACTS = {
   '@setup': { l: 'Create NotHomeView dashboard', h: 'Make a new NotHomeView dashboard from your own devices (adds a dashboard; this one is not changed).', i: 'mdi:view-dashboard-edit' },
   '@wallpanel': { l: 'Wallpaper & clock settings', h: 'This dashboard\'s Wallpanel screensaver: photos, timing, clock.', i: 'mdi:monitor-shimmer' },
   '@sidecards': { l: 'Extra tile cards', h: 'Pick the cards beside Photos (Add card) in the Home Screen card\'s editor.', i: 'mdi:card-plus-outline' },
+  '@about': { l: 'About', h: 'This device, Home Assistant and NotHomeView versions, Wi-Fi network, battery.', i: 'mdi:information-outline', nav: true },
+  '@update': { l: 'Software Update', h: 'Home Assistant updates: Core, OS, Supervisor, add-ons, HACS, NotHomeView release. Check now, install.', i: 'mdi:cellphone-arrow-down', nav: true },
   '@sspick': { l: 'Screensaver style', h: 'Photo clock, Info dashboard, Abstract fluid, Modern typographic or Whimsical minimalist: swipe or tap to choose. Screensaver colors for the chosen style (colour pickers, swatches, reset to default colors) are underneath.', pick: true },
   '@appsnote': { l: '', h: 'To add apps or move them around on the Home Screen, use General › Edit Home Screen (Add App, drag to reorder).', note: true } };
 const HV_SET_CSS = `
@@ -6139,6 +6141,76 @@ const hvSetFields = sch => { const m = {}; const w = l => l.forEach(x => { if (x
 async function hvFormReady() { if (customElements.get('ha-form')) return true;
   try { const h = await window.loadCardHelpers(); const c = await h.createCardElement({ type: 'entities', entities: [] }); if (c && c.constructor && c.constructor.getConfigElement) await c.constructor.getConfigElement(); } catch (e) {}
   await Promise.race([customElements.whenDefined('ha-form'), new Promise(r => setTimeout(r, 4000))]).catch(() => {}); return !!customElements.get('ha-form'); }
+// ---- Settings › General › About and Software Update
+// where this bundle was loaded from (jsDelivr: …/gh/gamergodggpwnd/NotHomeView@<sha or tag>/dist/homeview-cards.js); a module import has no currentScript, so
+// <script> tags and the browser's resource timing list are searched too
+const HV_SRC = (() => { try { return (document.currentScript && document.currentScript.src) || ''; } catch (e) { return ''; } })();
+const hvNhvBuild = () => { const urls = [HV_SRC]; try { for (const x of document.scripts) urls.push(x.src); } catch (e) {} try { for (const x of performance.getEntriesByType('resource')) urls.push(x.name); } catch (e) {}
+  for (const u of urls) { const m = /NotHomeView@([^/]+)\/dist\/homeview-cards(?:\.min)?\.js/i.exec(u || ''); if (m) { const r = decodeURIComponent(m[1]); return /^[0-9a-f]{12,40}$/i.test(r) ? r.slice(0, 7) : r; } } return ''; };
+const hvVerStr = () => { const b = hvNhvBuild(); return HV_VERSION + (b && b.replace(/^v/i, '') !== HV_VERSION ? ` (build ${b})` : ''); };
+const hvVerCmp = (a, b) => { const p = x => String(x || '').trim().replace(/^v/i, '').split(/[.+-]/).map(n => parseInt(n, 10) || 0), x = p(a), y = p(b);
+  for (let i = 0; i < Math.max(x.length, y.length); i++) { const d = (x[i] || 0) - (y[i] || 0); if (d) return d > 0 ? 1 : -1; } return 0; };
+// a friendly name for this device from the user agent: "iPad · iPadOS 26 · Safari"; the HA Companion app is named when it is the browser
+function hvDevice() { const n = navigator, ua = n.userAgent || '', plat = (n.userAgentData && n.userAgentData.platform) || n.platform || '', touch = (n.maxTouchPoints || 0) > 1;
+  const app = /Home ?Assistant\//i.test(ua) || /HomeAssistant/i.test(ua) || !!window.externalApp || !!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.getExternalAuth);
+  const ios = /\bOS (\d+)[_.](\d+)/.exec(ua), safariV = /Version\/(\d+)(?:\.(\d+))?/.exec(ua), v2 = (a, b) => a + (b && b !== '0' ? '.' + b : '');
+  let name, os = '';
+  if (/iPad/.test(ua) || (/Macintosh/.test(ua) && touch)) { name = 'iPad'; os = 'iPadOS' + (ios ? ' ' + v2(ios[1], ios[2]) : safariV ? ' ' + v2(safariV[1], safariV[2]) : ''); }
+  else if (/iPhone|iPod/.test(ua)) { name = 'iPhone'; os = 'iOS' + (ios ? ' ' + v2(ios[1], ios[2]) : ''); }
+  else if (/Android/i.test(ua)) { const v = /Android (\d+(?:\.\d+)?)/i.exec(ua); name = /Mobile/i.test(ua) ? 'Android phone' : 'Android tablet'; os = 'Android' + (v ? ' ' + v[1] : ''); }
+  else if (/CrOS/.test(ua)) { name = 'Chromebook'; os = 'ChromeOS'; }
+  else if (/Mac/i.test(plat) || /Macintosh/.test(ua)) { name = 'Mac'; os = 'macOS'; }
+  else if (/Win/i.test(plat) || /Windows/.test(ua)) { name = 'Windows PC'; os = 'Windows'; }
+  else if (/Linux/i.test(plat) || /Linux/.test(ua)) { name = 'Linux PC'; os = 'Linux'; }
+  else name = 'This device';
+  const br = app ? 'Home Assistant app' : /Edg(A|iOS)?\//.test(ua) ? 'Edge' : /OPR\//.test(ua) ? 'Opera' : /SamsungBrowser\//.test(ua) ? 'Samsung Internet' : /(Firefox|FxiOS)\//.test(ua) ? 'Firefox'
+    : /(Chrome|CriOS)\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : '';
+  return { name, os, browser: br, app, line: [name, os, br].filter(Boolean).join(' · ') }; }
+// this device's Companion app sensors: a choice saved in this browser for this dashboard, else the Home Screen card's about_*_entity, else the only one there is
+const hvAboutKey = kind => (kind === 'wifi' ? 'hvAboutWifi:' : 'hvAboutBatt:') + (ssDash() || 'lovelace');
+const hvAboutCands = (hass, kind) => { const re = kind === 'wifi' ? /^sensor\..+_(wifi_connection|ssid)$/ : /^sensor\..+_battery_level$/; return Object.keys((hass && hass.states) || {}).filter(k => re.test(k)).sort(); };
+const hvAboutPick = (hass, kind, cfg) => { const S = (hass && hass.states) || {}, c = hvAboutCands(hass, kind), saved = mhLs.get(hvAboutKey(kind));
+  if (saved && S[saved]) return { id: saved, how: 'chosen', cands: c };
+  const o = cfg && cfg[kind === 'wifi' ? 'about_wifi_entity' : 'about_battery_entity']; if (o && S[o]) return { id: o, how: 'card', cands: c };
+  return c.length === 1 ? { id: c[0], how: 'auto', cands: c } : { id: null, how: '', cands: c }; };
+// Home Assistant's update entities with an update available: NotHomeView, Core, OS, Supervisor, then add-ons / HACS (by name)
+const hvUpdName = s => (s && s.attributes && (s.attributes.title || s.attributes.friendly_name)) || (s && s.entity_id) || '';
+const hvUpdRank = s => { const id = s.entity_id, t = String(hvUpdName(s)).toLowerCase(); if (/nothomeview/.test(id) || /nothomeview/.test(t)) return 0;
+  if (id === 'update.home_assistant_core_update' || t === 'home assistant core') return 1; if (/operating_system|_os_update$/.test(id) || /operating system/.test(t)) return 2;
+  if (/supervisor/.test(id) || /supervisor/.test(t)) return 3; return 4; };
+const hvUpdList = hass => Object.values((hass && hass.states) || {}).filter(s => s.entity_id.startsWith('update.') && s.state === 'on').sort((a, b) => hvUpdRank(a) - hvUpdRank(b) || hvUpdName(a).localeCompare(hvUpdName(b)));
+const hvUpdHasNhv = hass => Object.values((hass && hass.states) || {}).some(s => s.entity_id.startsWith('update.') && hvUpdRank(s) === 0);
+// NotHomeView pinned through the CDN (no HACS update entity): the newest GitHub release, cached 6 h in this browser
+const hvGhRel = { key: 'hvGhRel', url: 'https://api.github.com/repos/gamergodggpwnd/NotHomeView/releases/latest', p: null,
+  get() { const c = mhLs.get(this.key); return c && c.tag ? c : null; },
+  newer() { const c = this.get(); return c && hvVerCmp(c.tag, HV_VERSION) > 0 ? c : null; },
+  load(force) { const c = mhLs.get(this.key); if (!force && c && Date.now() - (c.t || 0) < 6 * 36e5) return Promise.resolve(this.get()); if (this.p) return this.p;
+    this.p = fetch(this.url, { headers: { Accept: 'application/vnd.github+json' } }).then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
+      .then(j => { const v = { t: Date.now(), tag: String(j.tag_name || ''), name: String(j.name || j.tag_name || ''), url: String(j.html_url || '') }; mhLs.set(this.key, v); return v.tag ? v : null; })
+      .catch(() => { if (c) mhLs.set(this.key, Object.assign({}, c, { t: Date.now() })); return this.get(); }).finally(() => { this.p = null; }); return this.p; } };
+const hvUpdCount = hass => hvUpdList(hass).length + (!hvUpdHasNhv(hass) && hvGhRel.newer() ? 1 : 0);
+const hvUpdBusy = s => { const a = (s && s.attributes) || {}; return a.in_progress === true || typeof a.in_progress === 'number'; };
+const hvUpdPct = s => { const a = (s && s.attributes) || {}, p = a.update_percentage != null ? Number(a.update_percentage) : typeof a.in_progress === 'number' ? a.in_progress : NaN; return isNaN(p) ? null : Math.max(0, Math.min(100, p)); };
+const HV_ABOUT_CSS = `
+.sbt{margin:0 4px 14px;font-size:30px;font-weight:700;letter-spacing:-.02em;line-height:1.2}.se.wide .sbt{display:none}
+.r.act.nav .l{color:var(--fg)}.r.act.nav .tx{flex:1}
+.bdg{flex:none;min-width:22px;height:22px;padding:0 7px;box-sizing:border-box;border-radius:11px;background:#ff3b30;color:#fff;font-size:14px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;font-variant-numeric:tabular-nums}
+.r > .v{color:var(--fg2);text-align:right;overflow-wrap:anywhere;font-variant-numeric:tabular-nums;-webkit-user-select:text;user-select:text}
+.ur{all:unset;box-sizing:border-box;cursor:pointer;display:flex;align-items:center;gap:12px;width:100%;min-height:60px;padding:9px 16px;position:relative;color:var(--fg)}
+.ur + .ur::before{content:'';position:absolute;top:0;left:68px;right:0;border-top:.5px solid var(--sep)}.ur:active{background:var(--fld)}
+.ui{width:40px;height:40px;border-radius:10px;flex:none;background:#8e8e93 center/cover no-repeat;color:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.ui ha-icon{--mdc-icon-size:24px;display:flex}.ui.big{width:72px;height:72px;border-radius:17px}.ui.big ha-icon{--mdc-icon-size:42px}
+.ur .tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}.ur .l{font-size:17px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ur small{font-size:13px;color:var(--fg2)}
+.pbar{height:6px;border-radius:3px;background:var(--fld);overflow:hidden;margin-top:4px}.pbar i{display:block;height:100%;border-radius:3px;background:var(--blue);transition:width .4s}
+.pbar.ind i{width:35%;animation:hvpb 1.2s ease-in-out infinite}@keyframes hvpb{from{transform:translateX(-100%)}to{transform:translateX(300%)}}
+.utd{display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;padding:30px 20px 26px}
+.okc{width:64px;height:64px;border-radius:50%;background:#34c759;color:#fff;display:flex;align-items:center;justify-content:center;margin-bottom:6px}.okc svg{width:36px;height:36px}
+.utd b{font-size:20px}.utd small{font-size:14px;color:var(--fg2)}
+.spin{flex:none;width:18px;height:18px;border-radius:50%;border:2px solid var(--fld);border-top-color:var(--fg2);animation:hvsp .8s linear infinite}@keyframes hvsp{to{transform:rotate(360deg)}}
+.notes{padding:12px 16px;font-size:15px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere;-webkit-user-select:text;user-select:text}
+.ibtn{all:unset;box-sizing:border-box;cursor:pointer;display:flex;align-items:center;justify-content:center;width:100%;min-height:50px;border-radius:12px;background:var(--blue);color:#fff;font-size:17px;font-weight:600;margin:0 0 12px}
+.ibtn.sec{background:var(--card);color:var(--blue)}.ibtn:disabled{opacity:.5;cursor:default}
+.warn{margin:0 0 12px;padding:12px 16px;border-radius:12px;background:color-mix(in srgb,#ff9f0a 18%,var(--card));font-size:15px;line-height:1.38}`;
 function hvOpenSettings(hub, app, from) {
   const live = () => { for (const h of HV_HUBS) if (h.isConnected && h._w && !hvInDialog(h)) return h; return null; };
   if (!hub || !hub.isConnected) hub = live();
@@ -6147,7 +6219,7 @@ function hvOpenSettings(hub, app, from) {
   const H = () => (hub && hub._hass) || (from && from._hass) || (document.querySelector('home-assistant') || {}).hass; if (!H()) return null;
   const lvOf = () => { const r = hvFindRoot(hub && hub.isConnected ? hub : from) || hvFindRoot(live()); return (r && r.lovelace) || hvSsLv(); };
   const clone = o => JSON.parse(JSON.stringify(o)), dash = () => { const lv = lvOf(); return (lv && lv.urlPath) || ssDash(); };
-  const st = { page: null, q: '', cfg: null, views: [], nohub: false, ready: false, pipes: null, alb: null, albQ: null, wide: false, peek: false, why: '' };
+  const st = { sub: null, unotes: {}, page: null, q: '', cfg: null, views: [], nohub: false, ready: false, pipes: null, alb: null, albQ: null, wide: false, peek: false, why: '' };
   const useCfg = c => { const n = c && hvHubCfgOf(c); st.cfg = n ? clone(n) : null; st.nohub = !!c && !n; st.ready = !!c;
     st.views = ((c && c.views) || []).map((v, i) => ({ path: v.path != null && v.path !== '' ? String(v.path) : String(i), title: v.title || v.path || 'View ' + (i + 1) })); };
   const lv0 = lvOf(); useCfg(lv0 && lv0.config ? lv0.config : hub && hub._hvRaw ? { views: [{ cards: [hub._hvRaw] }] } : null); if (!(lv0 && lv0.config)) st.ready = false;
@@ -6173,6 +6245,7 @@ function hvOpenSettings(hub, app, from) {
   const rowHtml = (k, x, d, dis) => { const lb = label(k), hp = help(k), D = dis ? ' disabled' : '', tx = `<div class="tx"><span class="l">${esc(lb)}</span>${hp ? `<small>${esc(hp)}</small>` : ''}</div>`;
     const ln = `<span class="l">${esc(lb)}</span>`, sm = hp ? `<small>${esc(hp)}</small>` : ''; // one-line rows: label | control, the helper underneath
     const a = HV_SET_ACTS[k]; if (a) { if (a.note) return `<div class="r note"><small>${esc(a.h)}</small></div>`; if (a.pick) return `<div class="r stk" data-k="${k}" aria-label="${esc(a.l)}"><div data-sspick></div></div>`;
+      if (a.nav) { const n = k === '@update' ? hvUpdCount(H()) : 0; return `<button class="r act nav" data-act="${k.slice(1)}" aria-label="${esc(a.l)}${n ? ', ' + n + ' available' : ''}"><span class="sq" style="--c:#8e8e93"><ha-icon icon="${a.i}"></ha-icon></span><span class="tx"><span class="l">${esc(a.l)}</span></span>${n ? `<span class="bdg">${n}</span>` : ''}<ha-icon class="ch" icon="mdi:chevron-right"></ha-icon></button>`; }
       const off = k === '@wallpanel' && !customElements.get('wallpanel-view') ? ' disabled' : (k === '@sidecards' || k === '@setup') && (dis || st.nohub) ? ' disabled' : '';
       return `<button class="r act" data-act="${k.slice(1)}"${off}><span class="sq" style="--c:var(--blue)"><ha-icon icon="${a.i}"></ha-icon></span>${tx}<ha-icon class="ch" icon="mdi:chevron-right"></ha-icon></button>`; }
     if (!x) return ''; const sel = x.selector || {}, t = Object.keys(sel)[0], o = sel[t] || {}, v = d[k];
@@ -6224,11 +6297,11 @@ function hvOpenSettings(hub, app, from) {
   // --- painting
   const sideHtml = () => { const q = st.q.trim().toLowerCase(), sel = st.wide ? (st.page || 'general') : st.page, p0 = HV_SET_PAGES[0], P = personOf(), d = data();
     const nm = d.name || (P && P.attributes.friendly_name) || user.name || 'Home', pic = P && P.attributes.entity_picture, ini = String(nm).trim().split(/\s+/).map(w => w[0] || '').join('').slice(0, 2).toUpperCase();
-    const row = p => `<button class="sr${sel === p.id ? ' on' : ''}" data-go="${p.id}" aria-current="${sel === p.id}"><span class="sq" style="--c:${p.c}"><ha-icon icon="${p.i}"></ha-icon></span><span class="nm">${esc(p.t)}</span><ha-icon class="ch" icon="mdi:chevron-right"></ha-icon></button>`;
+    const un = hvUpdCount(H()), row = p => `<button class="sr${sel === p.id ? ' on' : ''}" data-go="${p.id}" aria-current="${sel === p.id}"><span class="sq" style="--c:${p.c}"><ha-icon icon="${p.i}"></ha-icon></span><span class="nm">${esc(p.t)}</span>${p.id === 'general' && un ? `<span class="bdg" aria-label="${un} updates">${un}</span>` : ''}<ha-icon class="ch" icon="mdi:chevron-right"></ha-icon></button>`;
     const grp = g => { const ps = HV_SET_PAGES.filter(p => p.g === g && pageHit(p, q)); return ps.length ? `<div class="grp">${ps.map(row).join('')}</div>` : ''; };
     const out = (pageHit(p0, q) ? `<div class="grp"><button class="sr pr${sel === 'person' ? ' on' : ''}" data-go="person" aria-current="${sel === 'person'}"><span class="av"${pic ? ` style="background-image:url('${esc(pic)}')"` : ''}>${pic ? '' : esc(ini)}</span><span class="tx"><span class="nm">${esc(nm)}</span><small>Person & greeting</small></span><ha-icon class="ch" icon="mdi:chevron-right"></ha-icon></button></div>` : '') + grp(1) + grp(2);
     return out || `<div class="grp"><div class="empty">No results for “${esc(st.q.trim())}”</div></div>`; };
-  const paneHtml = () => { const p = pageOf(st.wide ? (st.page || 'general') : st.page), q = st.q.trim().toLowerCase(), all = !q || p.t.toLowerCase().includes(q), d = data(), F = fields(), dis = ro(), w = why();
+  const paneHtml = () => { if (st.sub) return subHtml(); const p = pageOf(st.wide ? (st.page || 'general') : st.page), q = st.q.trim().toLowerCase(), all = !q || p.t.toLowerCase().includes(q), d = data(), F = fields(), dis = ro(), w = why();
     let h = `<div class="ph">${st.wide ? '' : '<button class="bk" data-act="back" aria-label="Back to Settings"><ha-icon icon="mdi:chevron-left"></ha-icon>Settings</button>'}<span class="nt">${esc(p.t)}</span></div>`;
     if (w) h += `<div class="ban" role="note">${esc(w)}</div>`;
     if (all) h += `<div class="intro"><span class="sq" style="--c:${p.c}"><ha-icon icon="${p.i}"></ha-icon></span><b>${esc(p.t)}</b><p>${esc(p.d)}</p></div>`;
@@ -6251,6 +6324,71 @@ function hvOpenSettings(hub, app, from) {
   const ssMount = () => { const box = pane && pane.querySelector('[data-sspick]'); if (!box) return; const inner = ssPick && ssPick.shadowRoot.firstElementChild;
     if (!ssPick || !inner || inner._dead) { ssPick = document.createElement('div'); ssPick.className = 'ssh'; ssPick.attachShadow({ mode: 'open' }).appendChild(hvSsPicker(ssShim, { mode: 'carousel', onPick: ssRefresh })); }
     box.appendChild(ssPick); const pk = ssPick.shadowRoot.firstElementChild; if (pk && pk._recenter) pk._recenter(); };
+  // --- General › About / Software Update: pushed pages inside Settings (read-only for everyone; installing needs an admin)
+  const phSub = (back, t) => `<div class="ph"><button class="bk" data-act="${back}" aria-label="Back to ${esc(back === 'subback' ? 'General' : 'Software Update')}"><ha-icon icon="mdi:chevron-left"></ha-icon>${back === 'subback' ? 'General' : 'Software Update'}</button><span class="nt">${esc(t)}</span></div><h1 class="sbt">${esc(t)}</h1>`; // phones: a large title (the centred one is hidden there)
+  const kv = (l, v, o) => { o = o || {}; return `<div class="r"${o.k ? ` data-ab="${o.k}"` : ''}><span class="l">${esc(l)}</span><span class="v"${o.copy ? ` data-copy="${esc(o.copy)}" title="Long press to copy"` : ''}>${esc(v)}</span>${o.note ? `<small>${esc(o.note)}</small>` : ''}</div>`; };
+  const sv = (S, id) => { const x = id && S[id]; return x && !['unknown', 'unavailable', ''].includes(x.state) ? x.state : null; };
+  const pickRow = (kind, P, S) => (P.cands.length > 1 || P.how === 'chosen') ? `<label class="r"><span class="l">${kind === 'wifi' ? 'Wi-Fi sensor' : 'Battery sensor'}</span><span class="sv"><select data-about="${kind}" aria-label="Choose sensor"><option value="">${P.how === 'chosen' ? 'Automatic' : 'Choose sensor'}</option>${P.cands.map(id => `<option value="${esc(id)}"${P.how === 'chosen' && P.id === id ? ' selected' : ''}>${esc((S[id].attributes && S[id].attributes.friendly_name) || id)}</option>`).join('')}</select><ha-icon icon="mdi:chevron-up-down"></ha-icon></span><small>Saved for this browser on this dashboard.</small></label>` : '';
+  const aboutHtml = () => { const h0 = H(), S = h0.states || {}, d = hvDevice(), c = st.cfg || {}, W = hvAboutPick(h0, 'wifi', c), B = hvAboutPick(h0, 'batt', c), ha = (h0.config && h0.config.version) || 'Unknown', nv = hvVerStr();
+    const ws = sv(S, W.id), wifi = !W.id ? 'Not available' : !ws ? 'Not available' : /^<?not connected>?$/i.test(ws) ? 'Not connected' : ws;
+    let bat = 'Not available', bnote = '';
+    if (st.bat) bat = Math.round(st.bat.level * 100) + '%' + (st.bat.charging ? ' · Charging' : '');
+    else if (B.id && sv(S, B.id) != null) { const lv = Number(sv(S, B.id)), bs = sv(S, B.id.replace(/_battery_level$/, '_battery_state')) || ''; bat = (isNaN(lv) ? sv(S, B.id) : Math.round(lv) + '%') + (/charging|full/i.test(bs) && !/not.?charging|discharging/i.test(bs) ? ' · ' + (/full/i.test(bs) ? 'Full' : 'Charging') : ''); }
+    else bnote = st.batNo ? 'This browser doesn\'t report the battery (Safari never does). The Home Assistant Companion app\'s Battery level sensor is needed.' : '';
+    return phSub('subback', 'About') + `<div class="grp">${kv('Device', d.line, { k: 'dev', note: d.app ? 'Home Assistant Companion app' : '' })}${kv('Home Assistant', ha, { copy: ha })}${kv('NotHomeView', nv, { copy: nv })}</div>`
+      + `<div class="grp">${kv('Wi-Fi network', wifi, { k: 'wifi', note: !W.id ? (W.cands.length ? 'Choose this device\'s Wi-Fi sensor below.' : 'Needs the Home Assistant Companion app\'s Wi-Fi connection sensor on this device.') : '' })}${pickRow('wifi', W, S)}`
+      + `${kv('Battery', bat, { k: 'bat', note: bnote || (!st.bat && !B.id && B.cands.length ? 'Choose this device\'s battery sensor below.' : '') })}${st.bat ? '' : pickRow('batt', B, S)}</div>`; };
+  const ago = t => { if (!t) return ''; const d = new Date(t), now = new Date(), same = d.toDateString() === now.toDateString(); return (same ? 'Today' : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })) + ' at ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }); };
+  const uIcon = (x, big) => { const a = x.attributes || {}, r = hvUpdRank(x), ic = r === 0 ? 'mdi:view-dashboard-variant' : r === 1 ? 'mdi:home-assistant' : r === 2 ? 'mdi:harddisk' : r === 3 ? 'mdi:lifebuoy' : 'mdi:package-up';
+    return a.entity_picture ? `<span class="ui${big ? ' big' : ''}" style="background-image:url('${esc(a.entity_picture)}')"></span>` : `<span class="ui${big ? ' big' : ''}" style="background:${r <= 1 ? '#18bcf2' : '#8e8e93'}"><ha-icon icon="${ic}"></ha-icon></span>`; };
+  const pbar = x => { if (!hvUpdBusy(x)) return ''; const p = hvUpdPct(x); return p == null ? '<div class="pbar ind"><i></i></div>' : `<div class="pbar" role="progressbar" aria-valuenow="${p}"><i style="width:${p}%"></i></div>`; };
+  const updHtml = () => { const h0 = H(), L = hvUpdList(h0), gh = !hvUpdHasNhv(h0) && hvGhRel.newer(), last = st.ulast || mhLs.get('hvUpdChecked'), ha = (h0.config && h0.config.version) || 'Unknown';
+    let h = phSub('subback', 'Software Update');
+    if (!admin) h += '<div class="ban" role="note">An admin has to check for and install updates. You can see what\'s available.</div>';
+    if (st.uchk) h += '<div class="grp"><div class="r"><span class="l">Checking for updates…</span><span class="spin" aria-hidden="true"></span></div></div>';
+    if (!L.length && !gh) h += `<div class="grp"><div class="utd"><span class="okc"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span><b>Everything is up to date</b>${last ? `<small>Last checked ${esc(ago(last))}</small>` : ''}</div></div>`;
+    else { h += `<div class="gh">${L.length + (gh ? 1 : 0)} update${L.length + (gh ? 1 : 0) === 1 ? '' : 's'} available</div><div class="grp">`;
+      if (gh) h += `<button class="ur" data-act="updgh"><span class="ui" style="background:#6e5ad2"><ha-icon icon="mdi:view-dashboard-variant"></ha-icon></span><span class="tx"><span class="l">NotHomeView ${esc(gh.tag)} available</span><small>${esc(HV_VERSION)} → ${esc(gh.tag.replace(/^v/i, ''))} · Release notes on GitHub</small></span><ha-icon class="ch" icon="mdi:open-in-new"></ha-icon></button>`;
+      for (const x of L) { const a = x.attributes || {}; h += `<button class="ur" data-act="updopen" data-id="${esc(x.entity_id)}"><span>${uIcon(x)}</span><span class="tx"><span class="l">${esc(hvUpdName(x))}</span><small>${esc(a.installed_version || '?')} → ${esc(a.latest_version || '?')}${hvUpdBusy(x) ? ' · Installing…' : ''}</small>${pbar(x)}</span><ha-icon class="ch" icon="mdi:chevron-right"></ha-icon></button>`; }
+      h += '</div>'; if (last) h += `<div class="gh" style="text-transform:none">Last checked ${esc(ago(last))}</div>`; }
+    if (admin) h += `<div class="grp"><button class="r act" data-act="updcheck"${st.uchk ? ' disabled' : ''}><span class="sq" style="--c:var(--blue)"><ha-icon icon="mdi:refresh"></ha-icon></span><span class="tx"><span class="l">Check Now</span></span></button></div>`;
+    h += `<div class="gh">Your versions</div><div class="grp">${kv('Home Assistant', ha, { copy: ha })}${kv('NotHomeView', hvVerStr(), { copy: hvVerStr() })}</div>`;
+    return h; };
+  const updDetail = id => { const h0 = H(), x = (h0.states || {})[id]; if (!x) { st.sub = 'update'; return updHtml(); } const a = x.attributes || {}, f = Number(a.supported_features) || 0, r = hvUpdRank(x), busy = hvUpdBusy(x) || st.uins === id;
+    let h = phSub('subupd', hvUpdName(x)) + `<div class="intro">${uIcon(x, true)}<b>${esc(hvUpdName(x))}</b><p>${esc(a.installed_version || '?')} → ${esc(a.latest_version || '?')}</p>${busy ? `<div style="width:min(320px,80%)">${pbar(x) || '<div class="pbar ind"><i></i></div>'}</div><p>Installing…${hvUpdPct(x) != null ? ' ' + Math.round(hvUpdPct(x)) + '%' : ''}</p>` : ''}</div>`;
+    if (x.state === 'on' && admin && (f & 1)) {
+      if (st.ucf === id) h += `<div class="warn" role="alert">Home Assistant will restart to install this, and the dashboard will reconnect by itself. Install now?</div><button class="ibtn" data-act="updgo">Install and restart</button><button class="ibtn sec" data-act="updcancel">Cancel</button>`;
+      else h += `<button class="ibtn" data-act="updinstall"${busy ? ' disabled' : ''}>${busy ? 'Installing…' : 'Install'}</button>`;
+      if (f & 8) h += `<div class="grp"><div class="r"><span class="l">Back up first</span><button class="sw" role="switch" data-act="updbackup" aria-checked="${!!st.ubk}" aria-label="Back up first"></button><small>Makes a backup in Home Assistant before installing.</small></div></div>`; }
+    else if (x.state === 'on' && !admin) h += '<div class="ban" role="note">An admin has to install this update.</div>';
+    else if (x.state !== 'on') h += '<div class="grp"><div class="empty">Up to date.</div></div>';
+    const notes = st.unotes[id], sum = a.release_summary;
+    if (sum) h += `<div class="gh">What's new</div><div class="grp"><div class="notes">${esc(sum)}</div></div>`;
+    if (notes) h += `<div class="gh">Release notes</div><div class="grp"><div class="notes">${esc(notes)}</div></div>`;
+    if (a.release_url) h += `<div class="grp"><button class="r act" data-act="updurl" data-url="${esc(a.release_url)}"><span class="sq" style="--c:var(--blue)"><ha-icon icon="mdi:text-box-outline"></ha-icon></span><span class="tx"><span class="l">Release notes</span></span><ha-icon class="ch" icon="mdi:open-in-new"></ha-icon></button></div>`;
+    if ((f & 16) && !(id in st.unotes)) { st.unotes[id] = ''; h0.callWS({ type: 'update/release_notes', entity_id: id }).then(t => { st.unotes[id] = typeof t === 'string' ? t : ''; if (st.sub === 'upd:' + id) paintPane(); }).catch(() => {}); }
+    return h; };
+  const subHtml = () => st.sub === 'about' ? aboutHtml() : st.sub === 'update' ? updHtml() : st.sub.startsWith('upd:') ? updDetail(st.sub.slice(4)) : '';
+  const subGo = v => { st.sub = v; st.ucf = null; paintPane(); st.usig = subSig(); if (pane) pane.scrollTop = 0; const bd = root && root.parentNode; if (bd && !st.wide) bd.scrollTop = 0; };
+  const uCheck = async () => { if (!admin || st.uchk) return; const ids = Object.keys(H().states || {}).filter(k => k.startsWith('update.')); st.uchk = true; if (st.sub === 'update') paintPane();
+    try { if (ids.length) await H().callService('homeassistant', 'update_entity', { entity_id: ids }); } catch (e) { flash('Couldn\'t check: ' + ((e && (e.message || e.code)) || e), true); }
+    await Promise.all([new Promise(r => setTimeout(r, 1200)), hvGhRel.load(true)]); st.uchk = false; st.ulast = Date.now(); mhLs.set('hvUpdChecked', st.ulast); if (root && root.isConnected) { paintSide(); if (st.sub === 'update') paintPane(); } };
+  const uInstall = async id => { const x = H().states[id]; if (!x) return; const f = Number((x.attributes || {}).supported_features) || 0, data = { entity_id: id }; if ((f & 8) && st.ubk) data.backup = true;
+    st.ucf = null; st.uins = id; paintPane(); flash('Installing ' + hvUpdName(x) + '…');
+    try { await H().callService('update', 'install', data); } catch (e) { flash('Not installed: ' + ((e && (e.message || e.code)) || e), true); } finally { st.uins = null; if (root && root.isConnected) paintPane(); } };
+  const subAct = (a, t) => { if (a === 'about') { subGo('about'); aboutLive(); return true; } if (a === 'update') { subGo('update'); hvGhRel.load(false).then(() => { if (st.sub === 'update') paintPane(); paintSide(); }); if (admin && !st.uchk0) { st.uchk0 = true; uCheck(); } return true; }
+    if (a === 'subback') { subGo(null); return true; } if (a === 'subupd') { subGo('update'); return true; }
+    if (a === 'updopen') { subGo('upd:' + t.dataset.id); return true; } if (a === 'updcheck') { uCheck(); return true; }
+    if (a === 'updbackup') { st.ubk = !st.ubk; t.setAttribute('aria-checked', String(st.ubk)); return true; }
+    if (a === 'updinstall') { const id = st.sub.slice(4), x = H().states[id]; if (x && hvUpdRank(x) >= 1 && hvUpdRank(x) <= 3) { st.ucf = id; paintPane(); } else uInstall(id); return true; } // Core / OS / Supervisor restart HA: ask first
+    if (a === 'updgo') { uInstall(st.sub.slice(4)); return true; } if (a === 'updcancel') { st.ucf = null; paintPane(); return true; }
+    if (a === 'updurl') { window.open(t.dataset.url, '_blank', 'noopener'); return true; } if (a === 'updgh') { const g = hvGhRel.newer(); if (g && g.url) window.open(g.url, '_blank', 'noopener'); return true; }
+    return false; };
+  // the browser's own battery (Chrome / Android; Safari has none), live while open
+  const aboutLive = () => { if (st.batP) return; st.batP = true; if (!navigator.getBattery) { st.batNo = true; if (st.sub === 'about') paintPane(); return; }
+    navigator.getBattery().then(b => { const upd = () => { st.bat = { level: b.level, charging: b.charging }; if (st.sub === 'about') paintPane(); }; upd(); b.addEventListener('levelchange', upd); b.addEventListener('chargingchange', upd); }).catch(() => { st.batNo = true; if (st.sub === 'about') paintPane(); }); };
+  const subSig = () => { const S = H().states || {}; let o = ''; for (const k in S) if (k.startsWith('update.')) { const x = S[k], a = x.attributes || {}; o += k + x.state + a.latest_version + a.in_progress + a.update_percentage + ';'; }
+    if (st.sub === 'about') { const c = st.cfg || {}, W = hvAboutPick(H(), 'wifi', c), B = hvAboutPick(H(), 'batt', c); o += '|' + sv(S, W.id) + sv(S, B.id) + (B.id ? sv(S, B.id.replace(/_battery_level$/, '_battery_state')) : '') + W.cands.length + B.cands.length + (H().config || {}).version; } return o; };
   const paintSide = () => { if (list) list.innerHTML = sideHtml(); };
   const paintPane = () => { if (!pane) return; const sy = pane.scrollTop; for (const f of forms.values()) f.remove(); if (ssPick) ssPick.remove(); pane.innerHTML = paneHtml(); ssMount(); pane.scrollTop = sy; formsMount(); pvPaint(hvBgLevel(st.cfg || {})); albCheck(); };
   const paint = () => { if (!root) return;
@@ -6258,13 +6396,14 @@ function hvOpenSettings(hub, app, from) {
     if (st.nohub) { root.classList.add('nohub', 'pg'); root.classList.remove('wide'); side.style.display = 'none';
       pane.innerHTML = `<div class="ph"><span class="nt">Settings</span></div><div class="intro"><span class="sq" style="--c:#8e8e93"><ha-icon icon="mdi:cog"></ha-icon></span><b>No Home Screen here</b><p>There is no NotHomeView Home Screen card on this dashboard, so there are no Home Screen settings to change. Add one in edit mode (Add card › NotHomeView Hub).</p></div><div class="grp">${rowHtml('@edit', null, {}, false)}</div>`; return; }
     root.classList.toggle('pg', !!st.page); paintSide(); paintPane(); };
-  const go = id => { st.page = id; root.classList.toggle('pg', !!id); paintSide(); paintPane(); if (pane && !st.wide) { pane.scrollTop = 0; const bd = root.parentNode; if (bd) bd.scrollTop = 0; } };
+  const go = id => { st.sub = null; st.page = id; root.classList.toggle('pg', !!id); paintSide(); paintPane(); if (pane && !st.wide) { pane.scrollTop = 0; const bd = root.parentNode; if (bd) bd.scrollTop = 0; } };
   const albCheck = () => { const d = data(), au = String(d.photo_album_url || '').trim(); if (d.photo_source_mode !== 'album' || !au || !hvAlbumProv(au) || (st.alb && st.alb.url === au) || st.albQ === au) return;
     st.albQ = au; hvAlbumLoad(H(), au).then(r => { if (st.albQ !== au) return; st.alb = Object.assign({ url: au }, r); delete st.alb.ids; st.albQ = null; const sm = root && root.querySelector('[data-k="photo_album_url"] small'); if (sm) sm.textContent = help('photo_album_url'); }).catch(() => { st.albQ = null; }); };
   const close = () => s && s.close();
   const after = fn => { close(); setTimeout(fn, 420); }; // runs once the sheet has slid away
-  const act = a => { const h = live();
+  const act = (a, t) => { const h = live();
     if (a === 'back') { go(null); return; }
+    if (subAct(a, t)) return;
     if (a === 'edit') { after(() => { const eb = (from instanceof HVEditButtonCard && from.isConnected) ? from : [...HVEditButtonCard.live].find(x => x.isConnected && x._config);
       if (eb) eb._go(); else hvGoEdit(location.pathname.replace(/\/$/, '') + '?disable_km&edit=1'); }); return; }
     if (a === 'setup') { after(() => hvSetupDialog(H(), { force: true })); return; }
@@ -6277,15 +6416,15 @@ function hvOpenSettings(hub, app, from) {
   s = hvSheet({ full: (st.cfg || {}).full_height_popups !== false, label: 'Settings', day, dayBg: '#f2f2f7', bg: '#000', parent: document.body, // over the page: a save that rebuilds the view keeps the sheet
     launch: () => { const h = live(); return h ? [h.shadowRoot.querySelector('.bg'), h._w] : []; },
     onClose: () => { hvOpenSettings.cur = null; clearInterval(ssKeep); ssBump(); clearTimeout(tstT); if (ro0) ro0.disconnect(); for (const h of HV_HUBS) if (h._sheetO === s) { h._sheetO = null; h._layout(); } },
-    build: bd => { const sty = document.createElement('style'); sty.textContent = HV_SET_CSS; bd.appendChild(sty); root = document.createElement('div'); root.className = 'se'; bd.appendChild(root);
+    build: bd => { const sty = document.createElement('style'); sty.textContent = HV_SET_CSS + HV_ABOUT_CSS; bd.appendChild(sty); root = document.createElement('div'); root.className = 'se'; bd.appendChild(root);
       root.innerHTML = '<div class="side"><h1 class="bt">Settings</h1><label class="srch"><ha-icon icon="mdi:magnify"></ha-icon><input type="search" placeholder="Search" aria-label="Search settings" enterkeyhint="search" autocomplete="off"></label><div class="sl"></div></div><div class="pane" role="region" aria-label="Settings page"></div><div class="tst" role="status" aria-live="polite"></div>';
       side = root.querySelector('.side'); pane = root.querySelector('.pane'); list = root.querySelector('.sl');
       const lay = () => { const w = (bd.clientWidth || innerWidth) >= 700; if (w === st.wide && root.dataset.l) return; st.wide = w; root.dataset.l = '1'; root.classList.toggle('wide', w && !st.nohub); paint(); };
       if (window.ResizeObserver) { ro0 = new ResizeObserver(lay); ro0.observe(bd); }
-      root.querySelector('.srch input').addEventListener('input', e => { st.q = e.target.value; const q = st.q.trim().toLowerCase();
+      root.querySelector('.srch input').addEventListener('input', e => { st.q = e.target.value; const q = st.q.trim().toLowerCase(); if (q) st.sub = null;
         if (st.wide && q && !pageHit(pageOf(st.page || 'general'), q)) { const m = HV_SET_PAGES.find(p => pageHit(p, q)); if (m) st.page = m.id; } paintSide(); if (st.wide || st.page) paintPane(); });
       root.addEventListener('click', e => { const t = e.target.closest && e.target.closest('[data-go],[data-act],.sw,.ci'); if (!t || t.disabled) return;
-        if (t.dataset.go) { go(t.dataset.go); return; } if (t.dataset.act) { act(t.dataset.act); return; }
+        if (t.dataset.go) { go(t.dataset.go); return; } if (t.dataset.act) { act(t.dataset.act, t); return; }
         if (t.classList.contains('sw')) { const v = t.getAttribute('aria-checked') !== 'true'; t.setAttribute('aria-checked', String(v)); save(t.dataset.k, v); return; }
         if (t.classList.contains('ci')) { const k = t.dataset.k, cur = (Array.isArray(data()[k]) ? data()[k] : []).map(x => typeof x === 'string' ? x : x && x.entity).filter(Boolean), on = t.getAttribute('aria-checked') !== 'true';
           t.setAttribute('aria-checked', String(on)); save(k, on ? cur.concat(t.dataset.e) : cur.filter(x => x !== t.dataset.e)); } });
@@ -6297,8 +6436,14 @@ function hvOpenSettings(hub, app, from) {
         const nd = hvSetApply(clone(st.cfg || {}), 'bg_blur_level', n); liveApply(nd); });
       for (const ty of ['pointerup', 'pointercancel', 'touchend', 'touchcancel']) root.addEventListener(ty, () => { if (st.peek) setTimeout(() => peek(false), 60); }, true);
       lay(); if (!root.dataset.l) { st.wide = innerWidth >= 700; root.dataset.l = '1'; root.classList.toggle('wide', st.wide); paint(); }
-      return { set hass(h) { const sig = (st.page === 'person' || !st.page || st.wide) ? JSON.stringify((personOf() || {}).attributes || {}) : ''; if (sig !== st.psig) { const first = st.psig === undefined; st.psig = sig; if (!first) paintSide(); } } }; } });
-  hvOpenSettings.cur = s; if (hub) { hub._sheetO = s; }
+      root.addEventListener('change', e => { const t = e.target; if (!t || !t.dataset || !t.dataset.about) return; mhLs.set(hvAboutKey(t.dataset.about), t.value || null); paintPane(); });
+      root.addEventListener('pointerdown', e => { const t = e.target.closest && e.target.closest('[data-copy]'); if (!t) return; clearTimeout(st.cpT); // long press copies a version
+        st.cpT = setTimeout(() => { const v = t.dataset.copy; try { navigator.clipboard.writeText(v).then(() => flash('Copied ' + v), () => flash('Couldn\'t copy', true)); } catch (z) { flash('Couldn\'t copy', true); } }, 600); });
+      for (const ty of ['pointerup', 'pointercancel', 'pointerleave']) root.addEventListener(ty, () => clearTimeout(st.cpT), true);
+      return { set hass(h) { const us = subSig(); if (us !== st.usig) { const first = st.usig === undefined; st.usig = us; if (!first && st.ready && !st.nohub) { paintSide(); if (st.sub || (st.wide ? (st.page || 'general') : st.page) === 'general') paintPane(); } }
+        const sig = (st.page === 'person' || !st.page || st.wide) ? JSON.stringify((personOf() || {}).attributes || {}) : ''; if (sig !== st.psig) { const first = st.psig === undefined; st.psig = sig; if (!first) paintSide(); } } }; } });
+  hvOpenSettings.cur = s; if (hub) { hub._sheetO = s; } st.usig = subSig(); // later hass changes repaint the badge / About / Software Update
+  hvGhRel.load(false).then(() => { if (!root || !root.isConnected || st.nohub || !st.ready) return; paintSide(); if (st.sub === 'update' || (!st.sub && (st.wide ? (st.page || 'general') : st.page) === 'general')) paintPane(); }); // the General badge (cached 6 h)
   ssBump(); ssKeep = setInterval(ssBump, 2000); // the screensaver stays paused while Settings is open (Wallpanel's idle clock kept fresh); it can start again once Settings closes
   // the saved dashboard (the open one may lag behind), and the Assist pipelines for the pipeline list
   (async () => { try { const q = { type: 'lovelace/config', force: true }; if (dash()) q.url_path = dash(); const c = await H().callWS(q); if (c && typeof c === 'object' && s.host.isConnected) { useCfg(c); st.ready = true; retheme(); root.classList.toggle('wide', st.wide && !st.nohub); paint(); } }
