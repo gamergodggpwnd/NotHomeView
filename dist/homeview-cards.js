@@ -3980,13 +3980,13 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
   async ctx() { const h = this.hub, cfg = await h._loadCfg(), views = new Map(((cfg && cfg.views) || []).map(v => [String(v.path || ''), v])), c = h._config;
     const S = (h._hass && h._hass.states) || {}, ids = d => Object.keys(S).filter(k => k.startsWith(d + '.') && S[k].state !== 'unavailable').sort();
     const apps = c.apps || [], dash = h._dash(), mh = v => !!v && JSON.stringify(v).includes('"custom:homeview-myhome-card"');
-    const players = ids('media_player'), cal = ids('calendar').length || (Array.isArray(c.calendar_entities) && c.calendar_entities.length) || c.calendar_entity;
-    return { views, dash, cal, players, music: players.filter(i => (S[i].attributes || {}).device_class !== 'tv'),
+    const players = ids('media_player'), cal = ids('calendar').length || (Array.isArray(c.calendar_entities) && c.calendar_entities.length) || c.calendar_entity, todo = Object.keys(S).some(k => k.startsWith('todo.'));
+    return { views, dash, cal, todo, players, music: players.filter(i => (S[i].attributes || {}).device_class !== 'tv'),
       have: new Set(apps.map(hvHubAppKey)), abs: apps.some(a => (a.kind || 'navigate') === 'navigate' && String(a.navigation_path || '').startsWith('/')), // write paths like this hub's other apps
       homePath: views.has('my-home') ? 'my-home' : mh(views.get('home')) ? 'home' : 'my-home',
       weather: (c.weather_entity && S[c.weather_entity] ? c.weather_entity : '') || (S['weather.forecast_home'] ? 'weather.forecast_home' : ids('weather')[0] || '') }; },
   // only apps that open something here: pages that exist (Home / Security make theirs), a media player for Music, a weather entity, a calendar
-  avail(x, k) { if (x.views) return x.views.some(p => k.views.has(p)); if (x.key === 'music') return !!k.players.length; if (x.key === 'weather') return !!k.weather; if (x.key === 'calendar') return !!k.cal; return true; },
+  avail(x, k) { if (x.views) return x.views.some(p => k.views.has(p)); if (x.key === 'music') return !!k.players.length; if (x.key === 'weather') return !!k.weather; if (x.key === 'calendar') return !!k.cal; if (x.key === 'reminders') return !!k.todo; return true; },
   entry(x, k) { const a = hubAppBase(x.key), fmt = p => (k.abs ? `/${k.dash}/${p}` : p);
     if (a.kind === 'navigate') a.navigation_path = fmt(x.key === 'home' ? k.homePath : (x.views || []).find(p => k.views.has(p)) || x.navigation_path);
     if (x.key === 'music') { const p = k.music[0] || k.players[0], o = k.players.filter(i => i !== p).slice(0, 5); a.entity = p; if (o.length) a.entities = o; } // same idea as first-run setup
@@ -4770,6 +4770,7 @@ const HUB_APP_CATALOG = [
   { key: 'music', name: 'Music', icon: 'mdi:music-note', color_from: '#ff6b81', color_to: '#f5163d', kind: 'now_playing' },
   { key: 'weather', name: 'Weather', icon: 'mdi:weather-partly-cloudy', color_from: '#5ec8ff', color_to: '#1a73e8', kind: 'weather' },
   { key: 'calendar', name: 'Calendar', icon: 'hv:calendar', color_from: '#ff453a', color_to: '#d70015', glyph_color: '#ffffff', kind: 'calendar' },
+  { key: 'reminders', name: 'Reminders', icon: 'hv:reminders', color_from: '#ffffff', color_to: '#e8e8ed', glyph_color: '#ff3b30', kind: 'reminders' },
   { key: 'assistant', name: 'Assistant', icon: 'mdi:microphone', color_from: '#b06cff', color_to: '#3d7bff', kind: 'assistant' },
   { key: 'lights', name: 'Lights', icon: 'mdi:lightbulb-group', color_from: '#ffd36b', color_to: '#ff9f0a', kind: 'navigate', navigation_path: 'lights', views: ['lights', 'lights-on'] },
   { key: 'climate', name: 'Climate', icon: 'mdi:thermostat', color_from: '#ffb37a', color_to: '#ff6a3d', kind: 'navigate', navigation_path: 'climate', views: ['climate'] },
@@ -5885,6 +5886,7 @@ function hvCalWriteTarget(ids, states, preferred) {
   return list.find(ok) || '';
 }
 function hvHubCalGlyph(a, hass) {
+  if (a && (a.icon === 'hv:reminders' || (a.kind === 'reminders' && !a.icon))) return HV_REM_SVG; // the Reminders app's checklist glyph
   if (!(a && (a.icon === 'hv:calendar' || (a.kind === 'calendar' && (!a.icon || a.icon === 'mdi:calendar'))))) return `<ha-icon icon="${esc(a && a.icon || 'mdi:apps')}"></ha-icon>`;
   const d = new Date();
   return `<span class="calico"><b>${esc(hvCalWd(hass, d))}</b><i>${d.getDate()}</i></span>`;
@@ -5909,6 +5911,137 @@ async function hvCalCreate(hass, entity, event) {
   else { data.start_date_time = event.start; data.end_date_time = event.end; }
   await hass.callService('calendar', 'create_event', data);
 }
+/* Reminders app (kind: 'reminders'): Home Assistant to-do lists (todo.*) in a full-screen HomePod-style sheet. Lists home: a 2-column grid of
+   tinted list cards (Scheduled first: every open item with a due date, across the lists) and the other lists as rows, with counts of open items;
+   + Add List. A list: tap the circle to complete (Completed is a disclosure), New Reminder at the bottom. Day = light page, night = near-black.
+   Lists: the app's / Home Screen card's todo_entities (or reminder_entities), else every todo.* entity. Only real lists; no Apple / iCloud calls. */
+const HV_REM_SVG = '<svg viewBox="0 0 60 60" aria-hidden="true"><circle cx="16" cy="17" r="5.4" fill="#007aff"/><circle cx="16" cy="30" r="5.4" fill="#ff3b30"/><circle cx="16" cy="43" r="5.4" fill="#ff9500"/>'
+  + '<rect x="26" y="15.4" width="22" height="3.2" rx="1.6" fill="#c7c7cc"/><rect x="26" y="28.4" width="22" height="3.2" rx="1.6" fill="#c7c7cc"/><rect x="26" y="41.4" width="22" height="3.2" rx="1.6" fill="#c7c7cc"/></svg>';
+const HV_REM_PAL = ['#007aff', '#34c759', '#af52de', '#ff9500', '#ff2d55', '#5ac8fa', '#5856d6', '#ffcc00', '#a2845e', '#30b0c7'];
+// a list's colour / icon: a few well-known names (as in Apple's Reminders), else stable from the entity id
+const hvRemLook = (id, name) => { const n = String(name || '').toLowerCase(), m = (rx, c, i) => rx.test(n) ? { c, i } : null;
+  const k = m(/grocer|food|market|supermarket/, '#34c759', 'mdi:cart') || m(/errand|car\b|garage|drive/, '#af52de', 'mdi:car') || m(/my tasks|^tasks?$|to-?do/, '#007aff', 'mdi:format-list-checks')
+    || m(/shop|buy|wish/, '#ff9500', 'mdi:shopping') || m(/well|health|fit|walk|exercise|run/, '#5ac8fa', 'mdi:walk') || m(/gift|birthday|christmas|present/, '#ff2d55', 'mdi:gift')
+    || m(/home|house|chore|clean/, '#ff9500', 'mdi:home') || m(/work|office|job|project/, '#5856d6', 'mdi:briefcase') || m(/travel|trip|holiday|vacation|pack/, '#30b0c7', 'mdi:airplane')
+    || m(/book|read/, '#a2845e', 'mdi:book-open-variant') || m(/school|study|homework/, '#ffcc00', 'mdi:school') || m(/pet|dog|cat/, '#a2845e', 'mdi:paw') || m(/movie|film|tv|watch/, '#ff2d55', 'mdi:movie-open');
+  let h = 0; for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return k || { c: HV_REM_PAL[h % HV_REM_PAL.length], i: 'mdi:format-list-bulleted' }; };
+const HV_REM_CSS = `
+.rm{--fg:#fff;--fg2:rgba(235,235,245,.6);--card:#1c1c1e;--sep:rgba(84,84,88,.6);--ring:rgba(235,235,245,.3);--blue:#0a84ff;--mix:#1c1c1e;--mixp:26%;color:var(--fg);max-width:1100px;margin:0 auto;padding:0 8px 28px;font-family:${FONT}}
+:host([hv-day]) .rm{--fg:#000;--fg2:rgba(60,60,67,.6);--card:#fff;--sep:rgba(60,60,67,.18);--ring:rgba(60,60,67,.3);--blue:#007aff;--mix:#fff;--mixp:16%}
+.hd{display:flex;align-items:center;gap:12px;margin:2px 52px 18px 4px;min-height:44px}
+.hd h1{margin:0;flex:1;min-width:0;font-size:clamp(30px,4.4vmin,40px);font-weight:700;letter-spacing:-.02em}
+.tm{font-size:clamp(20px,2.8vmin,26px);font-weight:500;font-variant-numeric:tabular-nums;color:var(--fg)}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.tile{all:unset;box-sizing:border-box;cursor:pointer;position:relative;display:flex;flex-direction:column;justify-content:space-between;gap:12px;min-height:clamp(104px,15vmin,132px);padding:14px 16px 14px;border-radius:18px;background:color-mix(in srgb,var(--c) var(--mixp),var(--mix))}
+.tile:active,.row:active{filter:brightness(.94)}
+.sq{width:36px;height:36px;border-radius:30%;background:var(--c);color:#fff;display:flex;align-items:center;justify-content:center;flex:none}
+.sq ha-icon{--mdc-icon-size:21px;display:flex}.sq.sm{width:30px;height:30px}.sq.sm ha-icon{--mdc-icon-size:18px}
+.tile .nm{font-size:clamp(16px,2.2vmin,19px);font-weight:600;color:var(--fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tile .ct{position:absolute;top:10px;right:16px;font-size:clamp(28px,4vmin,36px);font-weight:700;font-variant-numeric:tabular-nums;color:var(--fg)}
+.rows{margin-top:22px;border-radius:14px;background:var(--card);overflow:hidden}
+.row{all:unset;box-sizing:border-box;cursor:pointer;display:flex;align-items:center;gap:14px;width:100%;min-height:56px;padding:8px 14px}
+.row + .row .nm{box-shadow:none} .row + .row{border-top:.5px solid var(--sep)}
+.row .nm{flex:1;min-width:0;font-size:17px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .ct{font-size:17px;color:var(--fg2);font-variant-numeric:tabular-nums}.row .ch{--mdc-icon-size:20px;display:flex;color:var(--fg2)}
+.addl{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:6px;margin:22px 6px 0;min-height:44px;font-size:17px;font-weight:600;color:var(--blue)}.addl ha-icon{--mdc-icon-size:22px;display:flex}
+.note{margin:4px 6px 0;font-size:14px;line-height:1.4;color:var(--fg2)}
+.lh{display:flex;align-items:center;margin:0 52px 6px 0;min-height:44px}
+.bk{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:2px;min-height:44px;padding-right:10px;font-size:17px;color:var(--blue)}.bk ha-icon{--mdc-icon-size:30px;display:flex;margin-left:-6px}
+.lh .tm{margin-left:auto}
+.lt{margin:4px 4px 14px;font-size:clamp(30px,4.4vmin,40px);font-weight:700;letter-spacing:-.02em;color:var(--c)}
+.its{border-radius:14px;background:var(--card);overflow:hidden}
+.it{display:flex;align-items:flex-start;gap:12px;padding:12px 14px;transition:opacity .3s}.it + .it{border-top:.5px solid var(--sep)}
+.it.go{opacity:.35}
+.ck{all:unset;cursor:pointer;flex:none;width:24px;height:24px;margin-top:-1px;border-radius:50%;box-sizing:border-box;border:2px solid var(--ring);display:flex;align-items:center;justify-content:center}
+.ck[aria-checked="true"]{border-color:var(--c);background:var(--c)} .ck svg{display:none;width:14px;height:14px}.ck[aria-checked="true"] svg{display:block}
+.ck:disabled{cursor:default;opacity:.5}
+.it .tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}.it .s{font-size:17px;line-height:1.3;overflow-wrap:anywhere}
+.it small{font-size:14px;color:var(--fg2)}.it small.od{color:#ff453a}.it small b{font-weight:600;color:var(--lc,var(--fg2))}
+.done .s{color:var(--fg2)}
+.nw{display:flex;align-items:center;gap:12px;padding:10px 14px;border-top:.5px solid var(--sep)}.its:empty + .nw,.nw:first-child{border-top:0}
+.nw .pl{flex:none;width:24px;height:24px;border-radius:50%;background:var(--c);color:#fff;display:flex;align-items:center;justify-content:center}.nw .pl ha-icon{--mdc-icon-size:18px;display:flex}
+.nw input{flex:1;min-width:0;border:0;outline:0;background:none;color:var(--fg);font:17px ${FONT};padding:6px 0}.nw input::placeholder{color:var(--fg2)}
+.box{border-radius:14px;background:var(--card);overflow:hidden}
+.emp{padding:14px;font-size:15px;color:var(--fg2)}
+.dn{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:4px;margin:18px 6px 8px;min-height:40px;font-size:15px;font-weight:600;color:var(--blue)}.dn ha-icon{--mdc-icon-size:20px;display:flex}
+.dh{margin:20px 6px 8px;font-size:20px;font-weight:700}.dh.od{color:#ff453a}
+.err{margin:0 0 12px;padding:10px 14px;border-radius:12px;background:rgba(255,69,58,.14);color:#ff453a;font-size:14px}
+@media (max-width:560px){.grid{gap:10px}.tile{min-height:96px;padding:12px 14px}}`;
+function hvOpenReminders(hub, app) {
+  if (!hub || hub._sheetO || !hub._hass) return null;
+  const c0 = hub._config || {}, a0 = app || {}, H = () => hub._hass;
+  const idsOf = () => { const pick = x => Array.isArray(x) && x.length ? x : null, raw = pick(a0.todo_entities) || pick(a0.reminder_entities) || pick(c0.todo_entities) || pick(c0.reminder_entities)
+      || Object.keys(H().states || {}).filter(k => k.startsWith('todo.')).sort((x, y) => hvRemName(x).localeCompare(hvRemName(y)));
+    return raw.map(x => typeof x === 'string' ? x : x && x.entity).filter(x => x && x.startsWith('todo.') && H().states[x]); };
+  const hvRemName = id => { const s = H().states[id]; return (s && s.attributes.friendly_name) || id.split('.')[1].replace(/_/g, ' '); };
+  const lang = hvCalLang(H()), day = hvMode(c0.theme, H()) === 'day';
+  const st = { view: 'home', lists: new Map(), done: false, note: false, busy: 0, sig: '', seq: 0, flash: '' };
+  let root = null, tickIv = 0, rlT = 0;
+  const clock = () => { const d = new Date(); try { return d.toLocaleTimeString(lang, { hour: 'numeric', minute: '2-digit' }).replace(/\s?[AP]\.?M\.?$/i, ''); } catch (e) { return d.getHours() % 12 + ':' + String(d.getMinutes()).padStart(2, '0'); } };
+  const feat = id => Number(((H().states[id] || {}).attributes || {}).supported_features) || 0; // 1 create, 2 delete, 4 update
+  const open = L => (L.items || []).filter(x => x.status !== 'completed');
+  const count = id => { const L = st.lists.get(id); if (L && L.items) return open(L).length; const n = Number((H().states[id] || {}).state); return isNaN(n) ? 0 : n; };
+  // a due value: 'YYYY-MM-DD' (date) or an ISO date-time; day key + label
+  const dueAt = v => { if (!v) return null; const s = String(v); if (/^\d{4}-\d{2}-\d{2}$/.test(s)) { const [y, m, d] = s.split('-').map(Number); return { d: new Date(y, m - 1, d), t: false }; } const d = new Date(s); return isNaN(d) ? null : { d, t: true }; };
+  const sod = d => new Date(d.getFullYear(), d.getMonth(), d.getDate()), today = () => sod(new Date());
+  const dayLabel = d => { const n = Math.round((sod(d) - today()) / 864e5); if (n < 0) return 'Overdue'; if (n === 0) return 'Today'; if (n === 1) return 'Tomorrow'; return d.toLocaleDateString(lang, { weekday: 'long', month: 'long', day: 'numeric' }); };
+  const dueText = v => { const a = dueAt(v); if (!a) return ''; const n = Math.round((sod(a.d) - today()) / 864e5);
+    const ds = n === 0 ? 'Today' : n === 1 ? 'Tomorrow' : n === -1 ? 'Yesterday' : a.d.toLocaleDateString(lang, { month: 'short', day: 'numeric' }); return a.t ? ds + ', ' + a.d.toLocaleTimeString(lang, { hour: 'numeric', minute: '2-digit' }) : ds; };
+  const overdue = v => { const a = dueAt(v); return !!a && (a.t ? a.d < new Date() : sod(a.d) < today()); };
+  const sched = () => { const out = []; for (const id of idsOf()) { const L = st.lists.get(id); for (const it of (L && L.items) || []) if (it.status !== 'completed' && dueAt(it.due)) out.push({ it, id }); }
+    return out.sort((x, y) => dueAt(x.it.due).d - dueAt(y.it.due).d); };
+  const load = async ids => { const my = ++st.seq; await Promise.all((ids || idsOf()).map(async id => { let items = null, err = '';
+      try { const r = await H().callWS({ type: 'todo/item/list', entity_id: id }); items = (r && r.items) || []; } catch (e) { err = 'Couldn\'t read this list.'; }
+      if (my === st.seq || ids) st.lists.set(id, { items: items || (st.lists.get(id) || {}).items || null, err }); })); paint(); };
+  const reload = (ids, ms) => { clearTimeout(rlT); rlT = setTimeout(() => load(ids), ms == null ? 250 : ms); };
+  const chk = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+  const itemHtml = (it, id, showList) => { const L = st.lists.get(id), canU = !!(feat(id) & 4), lk = hvRemLook(id, hvRemName(id)), done = it.status === 'completed', dt = dueText(it.due);
+    const sub = [showList ? `<b style="--lc:${lk.c}">${esc(hvRemName(id))}</b>` : '', dt ? esc(dt) : ''].filter(Boolean).join(' · ');
+    return `<div class="it${done ? ' done' : ''}" data-id="${esc(id)}" data-uid="${esc(it.uid || it.summary)}" style="--c:${lk.c}"><button class="ck" role="checkbox" aria-checked="${done}" aria-label="${done ? 'Mark as not done' : 'Complete'}: ${esc(it.summary)}"${canU ? '' : ' disabled'}>${chk}</button>`
+      + `<div class="tx"><span class="s">${esc(it.summary)}</span>${sub ? `<small${!done && overdue(it.due) ? ' class="od"' : ''}>${sub}</small>` : ''}</div></div>`; };
+  const homeHtml = () => { const ids = idsOf(), sc = sched(), tiles = [{ id: '__sched', name: 'Scheduled', c: '#ff3b30', i: 'mdi:calendar', n: sc.length }].concat(ids.slice(0, 3).map(id => { const lk = hvRemLook(id, hvRemName(id)); return { id, name: hvRemName(id), c: lk.c, i: lk.i, n: count(id) }; }));
+    const rows = ids.slice(3).map(id => { const lk = hvRemLook(id, hvRemName(id)); return { id, name: hvRemName(id), c: lk.c, i: lk.i, n: count(id) }; });
+    return `<div class="hd"><h1>Reminders</h1><span class="tm">${clock()}</span></div>`
+      + `<div class="grid">${tiles.map(t => `<button class="tile" data-open="${esc(t.id)}" style="--c:${t.c}" aria-label="${esc(t.name)}, ${t.n} open"><span class="sq"><ha-icon icon="${t.i}"></ha-icon></span><span class="nm">${esc(t.name)}</span><span class="ct">${t.n}</span></button>`).join('')}</div>`
+      + (rows.length ? `<div class="rows">${rows.map(t => `<button class="row" data-open="${esc(t.id)}" style="--c:${t.c}" aria-label="${esc(t.name)}, ${t.n} open"><span class="sq sm"><ha-icon icon="${t.i}"></ha-icon></span><span class="nm">${esc(t.name)}</span><span class="ct">${t.n}</span><ha-icon class="ch" icon="mdi:chevron-right"></ha-icon></button>`).join('')}</div>` : '')
+      + (ids.length ? '' : '<p class="note">No to-do lists in Home Assistant yet.</p>')
+      + `<button class="addl" data-act="addlist"><ha-icon icon="mdi:plus-circle"></ha-icon>Add List</button>`
+      + (st.note ? '<p class="note" role="status">New lists are added in Home Assistant: open To-do lists in the sidebar and choose Create list (Local To-do). They show up here by themselves.</p>' : ''); };
+  const listHtml = () => { const id = st.view, sch = id === '__sched', lk = sch ? { c: '#ff3b30' } : hvRemLook(id, hvRemName(id)), L = sch ? null : st.lists.get(id);
+    let body = '';
+    if (sch) { const sc = sched(); if (!sc.length) body = '<div class="box"><div class="emp">Nothing scheduled. Reminders with a due date show here.</div></div>';
+      let last = ''; for (const x of sc) { const g = dayLabel(dueAt(x.it.due).d); if (g !== last) { if (last) body += '</div>'; body += `<h2 class="dh${g === 'Overdue' ? ' od' : ''}">${esc(g)}</h2><div class="its">`; last = g; } body += itemHtml(x.it, x.id, true); } if (last) body += '</div>'; }
+    else { const op = L && L.items ? open(L) : [], dn = L && L.items ? L.items.filter(x => x.status === 'completed') : [], canA = !!(feat(id) & 1);
+      body = (L && L.err ? `<div class="err" role="alert">${esc(L.err)}</div>` : '') + `<div class="box"><div class="its">${op.map(it => itemHtml(it, id)).join('')}</div>`
+        + (canA ? `<form class="nw"><span class="pl" aria-hidden="true"><ha-icon icon="mdi:plus"></ha-icon></span><input type="text" enterkeyhint="done" placeholder="New Reminder" aria-label="New reminder"></form>` : '')
+        + (!op.length && !canA ? `<div class="emp">${L && !L.items ? 'Loading…' : 'No reminders'}</div>` : '') + '</div>'
+        + (dn.length ? `<button class="dn" data-act="done" aria-expanded="${st.done}">${st.done ? 'Hide' : 'Show'} Completed (${dn.length})<ha-icon icon="mdi:chevron-${st.done ? 'up' : 'down'}"></ha-icon></button>` + (st.done ? `<div class="its done">${dn.map(it => itemHtml(it, id)).join('')}</div>` : '') : ''); }
+    return `<div class="lh"><button class="bk" data-act="back" aria-label="Back to lists"><ha-icon icon="mdi:chevron-left"></ha-icon>Lists</button><span class="tm">${clock()}</span></div>`
+      + `<h1 class="lt">${esc(sch ? 'Scheduled' : hvRemName(id))}</h1>` + body; };
+  const paint = () => { if (!root || !root.isConnected) return; const inp = root.querySelector('.nw input'), keep = inp && inp === root.getRootNode().activeElement ? inp.value : null;
+    const lk = st.view === 'home' ? null : st.view === '__sched' ? { c: '#ff3b30' } : hvRemLook(st.view, hvRemName(st.view)); if (lk) root.style.setProperty('--c', lk.c); else root.style.removeProperty('--c');
+    root.innerHTML = st.view === 'home' ? homeHtml() : listHtml();
+    if (keep != null) { const n = root.querySelector('.nw input'); if (n) { n.value = keep; n.focus({ preventScroll: true }); } } };
+  const go = v => { st.view = v; st.done = false; paint(); const bd = root && root.parentNode; if (bd) bd.scrollTop = 0; if (v !== 'home' && v !== '__sched') reload([v], 0); };
+  const toggle = async (id, uid) => { const L = st.lists.get(id), it = L && L.items && L.items.find(x => (x.uid || x.summary) === uid); if (!it) return; const was = it.status, to = was === 'completed' ? 'needs_action' : 'completed';
+    const row = root.querySelector(`.it[data-uid="${CSS.escape(uid)}"] .ck`); if (row) { row.setAttribute('aria-checked', String(to === 'completed')); row.closest('.it').classList.toggle('go', to === 'completed'); }
+    st.busy++; try { await H().callService('todo', 'update_item', { item: uid, status: to }, { entity_id: id }); it.status = to; } catch (e) { hvToast('Couldn\'t update the reminder: ' + (e && e.message || e)); }
+    finally { st.busy--; } setTimeout(() => { paint(); reload([id], 600); }, to === 'completed' ? 450 : 0); };
+  const addItem = async (id, text) => { const s = String(text || '').trim(); if (!s) return; st.busy++;
+    try { await H().callService('todo', 'add_item', { item: s }, { entity_id: id }); const L = st.lists.get(id); if (L && L.items) L.items.push({ summary: s, status: 'needs_action', uid: '' }); paint(); reload([id], 300); }
+    catch (e) { hvToast('Couldn\'t add the reminder: ' + (e && e.message || e)); } finally { st.busy--; } };
+  const s = hub._openSheet({ label: 'Reminders', day, dayBg: '#f2f2f7', bg: '#000', onClose: () => { clearInterval(tickIv); clearTimeout(rlT); },
+    build: bd => { const sty = document.createElement('style'); sty.textContent = HV_REM_CSS; bd.appendChild(sty); root = document.createElement('div'); root.className = 'rm'; bd.appendChild(root);
+      root.addEventListener('click', e => { const t = e.target.closest && e.target.closest('[data-open],[data-act],.ck'); if (!t) return;
+        if (t.classList.contains('ck')) { const r = t.closest('.it'); if (r && !t.disabled) toggle(r.dataset.id, r.dataset.uid); return; }
+        if (t.dataset.open) { go(t.dataset.open); return; } const a = t.dataset.act;
+        if (a === 'back') go('home'); else if (a === 'done') { st.done = !st.done; paint(); } else if (a === 'addlist') { st.note = !st.note; paint(); } });
+      root.addEventListener('submit', e => { e.preventDefault(); const i = e.target.querySelector('input'); const v = i && i.value; if (i) i.value = ''; if (st.view !== 'home' && st.view !== '__sched') addItem(st.view, v); });
+      root.addEventListener('focusout', e => { const i = e.target; if (i && i.matches && i.matches('.nw input') && i.value.trim() && st.view !== 'home' && st.view !== '__sched') { const v = i.value; i.value = ''; addItem(st.view, v); } });
+      paint(); load(); tickIv = setInterval(() => { root && root.querySelectorAll('.tm').forEach(x => { x.textContent = clock(); }); }, 15000);
+      return { set hass(h) { const sig = idsOf().map(id => id + '=' + ((h.states[id] || {}).state)).join(';'); if (sig !== st.sig) { const first = !st.sig; st.sig = sig; if (!first && !st.busy) reload(null, 400); } } }; } });
+  return s; }
 function hvOpenCalApp(hub, app) {
   if (!hub || hub._sheetO || !hub._hass) return null;
   const host = document.createElement('homeview-calendar-app'); host.attachShadow({ mode: 'open' });
@@ -6308,7 +6441,7 @@ class HVHubCard extends HTMLElement {
   constructor() { super(); this.attachShadow({ mode: 'open' }); this._layer = 0; }
   static get defaults() { return { theme: 'night', person: '', morning_start: 5, afternoon_start: 12, evening_start: 17, greeting_morning: 'Good morning', greeting_afternoon: 'Good afternoon',
     greeting_evening: 'Good evening', photo_source_mode: 'media', photo_album_url: '', photo_source: '', photo_interval: 25, photo_order: 'random', blur: 32, dim: 0.32, bg_blur_level: 3, photo_backdrop: true, bg_freeze: true, photo_tap: 'viewer', photo_viewer_nav: true, photo_viewer_swipe: true, photo_viewer_add: true, photo_gallery_upload: true, photo_viewer_pause: true, photo_label: 'Photos', photo_max_aspect: 2.6,
-    show_calendar: true, calendar_size: 'full', calendar_layout: 'wide', calendar_columns: 3, calendar_days: 7, calendar_title: 'Calendar', calendar_min_height: 240, max_icon: 140, edge_sidebar: true, ss_hold: true, weather_entity: '', photo_size: 'wide', side_portrait: 'below', side_sizes: '', row_units: 3, block_pull_refresh: true, calendar_rows: 'auto', swipe_screensaver: 'auto', full_height_popups: true, popup_edit: true, assistant_enabled: false, assistant_pipeline: 'preferred', assistant_theme: 'same', assistant_button: true, assistant_speak: true, assistant_auto_listen: true, assistant_orb: true, assistant_continue: true, assistant_silence_timeout: 5, assistant_end_of_speech_pause: 2, assistant_history_retention: 'forever', assistant_dismiss_phrases: "thank you, thanks, thanks jarvis, thank you jarvis, goodbye, bye, good bye, that's all, that's it, never mind, nevermind, stop, cancel, no thanks, I'm done", assistant_quiet_volume_below: 5, assistant_quiet_start: '23:30', assistant_quiet_end: '10:00', timer_sound: true }; }
+    show_calendar: true, calendar_size: 'full', calendar_layout: 'wide', calendar_columns: 3, calendar_days: 7, calendar_title: 'Calendar', calendar_min_height: 240, max_icon: 140, edge_sidebar: true, ss_hold: true, weather_entity: '', photo_size: 'wide', side_portrait: 'below', side_sizes: '', row_units: 3, block_pull_refresh: true, calendar_rows: 'auto', swipe_screensaver: 'auto', swipe_open_home: false, full_height_popups: true, popup_edit: true, assistant_enabled: false, assistant_pipeline: 'preferred', assistant_theme: 'same', assistant_button: true, assistant_speak: true, assistant_auto_listen: true, assistant_orb: true, assistant_continue: true, assistant_silence_timeout: 5, assistant_end_of_speech_pause: 2, assistant_history_retention: 'forever', assistant_dismiss_phrases: "thank you, thanks, thanks jarvis, thank you jarvis, goodbye, bye, good bye, that's all, that's it, never mind, nevermind, stop, cancel, no thanks, I'm done", assistant_quiet_volume_below: 5, assistant_quiet_start: '23:30', assistant_quiet_end: '10:00', timer_sound: true }; }
   static getStubConfig(hass) { return { apps: HUB_APPS.map(a => Object.assign({}, a)), calendar_entities: Object.keys((hass && hass.states) || {}).filter(k => k.startsWith('calendar.')).slice(0, 3) }; }
   static getConfigElement() { return document.createElement('homeview-hub-card-editor'); }
   setConfig(c) { if (!c) throw new Error('Invalid configuration'); this._hvRaw = c; const old = this._config, nc = Object.assign({}, HVHubCard.defaults, c);
@@ -6330,7 +6463,7 @@ class HVHubCard extends HTMLElement {
     if (!!v !== was) this._gBind(); }
   // 1.32.0: the page-wide touch listeners (edge sidebar swipe, pull-to-refresh block, pull-down screensaver) only while this is the real Home
   // Screen: connected, not in HA's edit mode and not the card editor's preview. Released on edit mode, disconnect and in the preview.
-  _gBind() { const on = !!this.isConnected && !this._edit && !hvInDialog(this); this._edgeBind(on);
+  _gBind() { const on = !!this.isConnected && !this._edit && !hvInDialog(this); this._edgeBind(on); this._homeSwBind(on && (this._config || {}).swipe_open_home === true);
     hvPTR.set(this, on && (this._config || {}).block_pull_refresh !== false); this._ssBind(on); }
   getCardSize() { return 12; }
   getGridOptions() { return { columns: 'full', rows: 'auto', min_columns: 12 }; }
@@ -6350,7 +6483,7 @@ class HVHubCard extends HTMLElement {
     if (on) { const t = s.done ? 'Done' : hvFmtLeft(HVTM.left()) + (s.paused != null ? ' ❚❚' : ''); const sp = p.querySelector('span'); if (sp.textContent !== t) sp.textContent = t; } }
   _openAssist() { if (this._assistO || !this._hass) return; hvSpkUnlock(); HVTM.opts.sound = this._config.timer_sound !== false; const al = this._config.assistant_auto_listen !== false;
     this._assistO = hvAssist(this, { orb: al && this._config.assistant_orb !== false }); hvWwSync(); if (al) this._assistO.listen(true); }
-  disconnectedCallback() { HV_HUBS.delete(this); setTimeout(hvWwSync, 0); hvTimerPills.delete(this._tpf); if (this._assistO) this._assistO.close(); clearInterval(this._ssHoldIv); this._ssHoldIv = null; this._edgeBind(false); hvPTR.set(this, false); this._ssBind(false); if (this._galO) this._galO.close(); if (this._sheetO) this._sheetO.close(); this._ssPause(false); clearInterval(this._tick); clearTimeout(this._timer); this._timer = null;
+  disconnectedCallback() { HV_HUBS.delete(this); setTimeout(hvWwSync, 0); hvTimerPills.delete(this._tpf); if (this._assistO) this._assistO.close(); clearInterval(this._ssHoldIv); this._ssHoldIv = null; this._edgeBind(false); hvPTR.set(this, false); this._ssBind(false); this._homeSwBind(false); if (this._galO) this._galO.close(); if (this._sheetO) this._sheetO.close(); this._ssPause(false); clearInterval(this._tick); clearTimeout(this._timer); this._timer = null;
     removeEventListener('resize', this._bound); removeEventListener('orientationchange', this._bound); removeEventListener('hv-layout', this._bound); if (window.visualViewport) visualViewport.removeEventListener('resize', this._bound);
     document.removeEventListener('visibilitychange', this._vis); }
   // --- dashboard config (Wallpanel settings, views for the sheets), cached
@@ -6385,6 +6518,23 @@ class HVHubCard extends HTMLElement {
   // blurred -> sharp, with the clock); past the threshold (or a fast flick) the page carries on off the bottom while Wallpanel
   // starts right away; the preview holds until Wallpanel's own layer is up, then the page is put back underneath. Below the
   // threshold it springs back. Transforms / opacity only.
+  // swipe_open_home: open the Home app exactly as tapping its icon does (its sheet, else its page); without a Home app on this Home Screen, the My Home (or home) view
+  async _openHome() { if (this._sheetO || this._edit || hvHubArr.hub === this || !this._config) return false; const apps = this._config.apps || [], i = apps.findIndex(a => hvHubAppKey(a) === 'home');
+    if (i >= 0) { this._runApp(null, i); return true; }
+    const cfg = await this._loadCfg(), vs = (cfg && cfg.views) || [], v = vs.find(x => x.path === 'my-home') || vs.find(x => x.path === 'home'); if (!v || this._sheetO) return false;
+    const a = { kind: 'navigate', navigation_path: v.path }; if (!(await this._openViewSheet(a)) && !this._sheetO) hvNavigate(this._path(v.path)); return true; }
+  // a left-to-right swipe on the Home Screen (screensaver not showing) opens the Home app. It starts away from the left edge (the sidebar swipe) and
+  // never inside a popup, sheet, Calendar / Reminders, the Assistant or arrange mode; right-to-left (swipe page) and pull-down (screensaver) are untouched.
+  _homeSwBind(on) {
+    if (!this._hsH) { let g = null;
+      const ok = () => { const w = ssWallpanel(); return this.isConnected && !!this._config && !this._edit && !this._sheetO && !this._galO && !this._assistO && !this._fs && hvHubArr.hub !== this && !window.__hvCalOpen
+        && !hvFhBusy() && !hvDialogOpen() && !hvEdOpen() && !hvSsHome.g && !this.hasAttribute('contained') && this.getClientRects().length > 0 && !(w && hvSsOv.showing(w)); };
+      const ts = e => { g = null; if (e.touches.length !== 1 || hvInUi(e) || !ok()) return; const t = e.touches[0], p = e.composedPath ? e.composedPath() : []; if (t.clientX <= 36 || !p.includes(this)) return;
+        g = { x: t.clientX, y: t.clientY, t: Date.now(), block: p.some(n => n instanceof Element && n !== this && n.scrollWidth > n.clientWidth + 2 && n.scrollLeft > 2 && /(auto|scroll)/.test(getComputedStyle(n).overflowX)) }; };
+      const te = e => { if (!g) return; const s = g; g = null; const t = e.changedTouches[0], dx = t.clientX - s.x, dy = t.clientY - s.y;
+        if (s.block || dx < 80 || Math.abs(dy) > dx * 0.6 || Date.now() - s.t > 900 || !ok()) return; this._openHome(); };
+      this._hsH = [['touchstart', ts, { capture: true, passive: true }], ['touchend', te, { capture: true, passive: true }], ['touchcancel', () => { g = null; }, true]]; }
+    if (!!on !== !!this._hsOnB) for (const [t, f, o] of this._hsH) on ? addEventListener(t, f, o) : removeEventListener(t, f, o); this._hsOnB = !!on; }
   _ssBind(on) {
     if (!this._ssH) { let g = null;
       const ok = t => this._ssOn && !this._edit && !this._sheetO && !this._ssBusy && this.isConnected && !hvFhBusy() && !this.hasAttribute('contained') && scrollY <= 2 && t.clientX > 28
@@ -6708,6 +6858,7 @@ class HVHubCard extends HTMLElement {
       fire(this, 'll-custom', { action: 'fire-dom-event', browser_mod: { service: 'browser_mod.popup', data } }); return; }
     if (kind === 'weather') { this._openWeather(a.weather_entity); return; }
     if (kind === 'calendar') { hvOpenCalApp(this, a); return; }
+    if (kind === 'reminders') { hvOpenReminders(this, a); return; }
     if (kind === 'assistant') { this._openAssist(); return; }
     if (kind === 'photos') { this._openPhoto(); return; }
     const cfg = a.tap_action; if (cfg && cfg.action !== 'none') fire(this, 'hass-action', { config: { entity: a.entity, tap_action: cfg }, action: 'tap' }); }
@@ -7105,7 +7256,7 @@ const HUB_SCHEMA = [
     { name: 'popup_edit', selector: { boolean: {} } },
     { name: 'screensaver_style', selector: { select: { mode: 'dropdown', options: [{ value: 'photo', label: 'Photo clock (default)' }, { value: 'info', label: 'Info dashboard' }, { value: 'fluid', label: 'Abstract fluid' }, { value: 'typo', label: 'Modern typographic' }, { value: 'whimsy', label: 'Whimsical minimalist' }] } } },
     { name: 'screensaver_colors', selector: { object: {} } },
-    { name: 'swipe_screensaver', selector: { select: { mode: 'dropdown', options: [{ value: 'auto', label: 'Auto (when the screensaver is on here)' }, { value: 'on', label: 'On' }, { value: 'off', label: 'Off' }] } } }, { name: 'ss_hold', selector: { boolean: {} } }, { name: 'swipe_page', selector: { navigation: {} } }] }];
+    { name: 'swipe_screensaver', selector: { select: { mode: 'dropdown', options: [{ value: 'auto', label: 'Auto (when the screensaver is on here)' }, { value: 'on', label: 'On' }, { value: 'off', label: 'Off' }] } } }, { name: 'ss_hold', selector: { boolean: {} } }, { name: 'swipe_open_home', selector: { boolean: {} } }, { name: 'swipe_page', selector: { navigation: {} } }] }];
 Object.assign(LABELS, { photo_source_mode: 'Photo source', photo_album_url: 'Album link', apps: 'Apps (drag to reorder, pencil to edit)', person: 'Person (empty = the logged-in user)', fallback_person: 'Fallback person (no match)', ring_color: 'Avatar ring colour / gradient',
   morning_start: 'Morning from (hour)', afternoon_start: 'Afternoon from', evening_start: 'Evening from', night_start: 'Night from (empty = evening until morning)', greeting_night: 'Night greeting', greeting_morning: 'Morning greeting', greeting_afternoon: 'Afternoon greeting', greeting_evening: 'Evening greeting',
   wallpaper: 'Wallpaper when there are no photos (any CSS background, e.g. a colour or gradient)', photo_source: 'Media folder (empty = the Wallpanel screensaver\'s, e.g. media-source://media_source/local/)', photo_interval: 'Next photo every', photo_order: 'Order', blur: 'Background blur (px)', dim: 'Edge darkening for text readability (0-0.9)', photo_backdrop: 'Show the current photo, blurred, behind the page', bg_freeze: 'Freeze the blurred background while the Home Screen is showing', bg_blur_level: 'Background blur',
@@ -7117,7 +7268,7 @@ Object.assign(LABELS, { photo_source_mode: 'Photo source', photo_album_url: 'Alb
   assistant_auto_listen: 'Start listening when it opens', assistant_speak: 'Speak the replies', timer_sound: 'Timer alert sound',
   assistant_orb: 'Mic opens a floating orb (tap it for the chat)', assistant_continue: 'Keep listening until dismissed', assistant_dismiss_phrases: 'Phrases that end the conversation', assistant_silence_timeout: 'Close after silence', assistant_end_of_speech_pause: 'Pause before sending', assistant_history_retention: 'Chat history', assistant_quiet_volume_entity: 'Volume sensor of the device (optional)', assistant_quiet_volume_below: 'Quiet when the volume is under',
   assistant_quiet_focus_entity: 'Focus / Do Not Disturb sensor (optional)', assistant_quiet_start: 'Quiet hours from', assistant_quiet_end: 'Quiet hours until',
-  location_name: 'Weather location name (empty = Home Assistant\'s)', weather_sky_header: 'Weather popup: animated sky header (sunny, partly cloudy, cloudy, rain, snow; night sky after sunset)', swipe_screensaver: 'Swipe down for screensaver (grab bar at the top)', swipe_page: 'Swipe left for this page (button page; it slides in from the right, swipe right to come back, page dots)', ss_hold: 'Keep the screensaver paused while the Home Screen is showing',
+  location_name: 'Weather location name (empty = Home Assistant\'s)', weather_sky_header: 'Weather popup: animated sky header (sunny, partly cloudy, cloudy, rain, snow; night sky after sunset)', swipe_screensaver: 'Swipe down for screensaver (grab bar at the top)', swipe_page: 'Swipe left for this page (button page; it slides in from the right, swipe right to come back, page dots)', ss_hold: 'Keep the screensaver paused while the Home Screen is showing', swipe_open_home: 'Swipe to open the Home app',
   side_tiles: 'Extra tile options, in order (1st = first extra tile): size, fit, tap opens enlarged view' });
 // the Assist pipeline dropdown lists this Home Assistant's pipelines (assist_pipeline/pipeline/list); a removed one stays selectable so nothing is lost
 const hvHubSchemaPipes = r => { if (!r || !Array.isArray(r.pipelines)) return HUB_SCHEMA;
@@ -7134,7 +7285,7 @@ class HVHubEditor extends HTMLElement {
     const data = Object.assign({}, HVHubCard.defaults, { calendar_show_weather: true, apps: HUB_APPS }, this._config); data.bg_blur_level = hvBgLevel(this._config); // an older bg_transparency shows as its level
     if (!this._form) { const f = this._form = document.createElement('ha-form');
       f.computeLabel = s => LABELS[s.name] || s.name;
-      f.computeHelper = s => s.name === 'bg_blur_level' ? `1 Solid · 2 Heavy · 3 Medium · 4 Light · 5 Clear (now: ${HV_BG_LEVELS[hvBgLevel(this._config)].name}). The preview updates while you drag.` : s.name === 'bg_freeze' ? 'On: the background keeps the photo it had when the Home Screen opened (the Photos card still changes); it moves to the current photo only while the page is out of sight (screensaver up, another view, app in the background). Off: it follows the Photos card.' : s.name === 'ss_hold' ? 'On: the screensaver does not start by itself behind the Home Screen (and uses nothing there); swipe the page away to start it, on the photo the Photos card shows. Off: Wallpanel\'s idle timer runs as before.' : s.name === 'dim' ? 'Darkens the top and bottom of the page so the text stays readable. Each Background blur level scales it (lighter for Light and Clear).' : s.name === 'photo_viewer_add' ? 'The viewer button that opens the gallery (the gallery keeps its own “Add photos” upload button).' : s.name === 'side_sizes' ? hubUnitsNote(this._config) : s.name === 'photo_source' ? 'The photo viewer, the gallery and uploads all use this folder. Empty = the screensaver\'s folder (Media → My media). Uploading needs a media-source:// folder and an administrator.' : s.name === 'apps' ? 'Each app: label, icon, gradient colours and what it does (open a view, Now Playing, Weather, Calendar, photos, or any tap action). Calendar opens an iPad-style popup. hv:calendar draws today’s date. Empty Calendars uses this card’s calendar_entities; Save new events to picks the calendar that stores them.' : undefined;
+      f.computeHelper = s => s.name === 'bg_blur_level' ? `1 Solid · 2 Heavy · 3 Medium · 4 Light · 5 Clear (now: ${HV_BG_LEVELS[hvBgLevel(this._config)].name}). The preview updates while you drag.` : s.name === 'bg_freeze' ? 'On: the background keeps the photo it had when the Home Screen opened (the Photos card still changes); it moves to the current photo only while the page is out of sight (screensaver up, another view, app in the background). Off: it follows the Photos card.' : s.name === 'swipe_open_home' ? 'On: swipe right on the screensaver, or on the Home Screen when the screensaver is not showing, to open the Home app. The screensaver also shows a lock-screen-style Home button in the bottom corner.' : s.name === 'ss_hold' ? 'On: the screensaver does not start by itself behind the Home Screen (and uses nothing there); swipe the page away to start it, on the photo the Photos card shows. Off: Wallpanel\'s idle timer runs as before.' : s.name === 'dim' ? 'Darkens the top and bottom of the page so the text stays readable. Each Background blur level scales it (lighter for Light and Clear).' : s.name === 'photo_viewer_add' ? 'The viewer button that opens the gallery (the gallery keeps its own “Add photos” upload button).' : s.name === 'side_sizes' ? hubUnitsNote(this._config) : s.name === 'photo_source' ? 'The photo viewer, the gallery and uploads all use this folder. Empty = the screensaver\'s folder (Media → My media). Uploading needs a media-source:// folder and an administrator.' : s.name === 'apps' ? 'Each app: label, icon, gradient colours and what it does (open a view, Now Playing, Weather, Calendar, photos, or any tap action). Calendar opens an iPad-style popup. hv:calendar draws today’s date. Empty Calendars uses this card’s calendar_entities; Save new events to picks the calendar that stores them.' : undefined;
       { const h1 = f.computeHelper; f.computeHelper = s => s.name === 'assistant_enabled' ? 'Talk to an Assist pipeline with this device\'s microphone (or type). Timers ("set a timer for 15 minutes", "pause / cancel the timer") run right here, full screen.' : s.name === 'assistant_pipeline' ? 'Which assistant answers (Settings → Voice assistants).' : h1(s); }
       { const h3 = f.computeHelper; f.computeHelper = s => s.name === 'assistant_orb' ? 'On: the mic shows only an animated orb near the top (the dashboard stays clear); tap the orb for the chat. Off: the full chat opens.'
         : s.name === 'assistant_continue' ? 'After every reply the mic opens again in the same conversation, until you tap outside the orb, say one of the phrases below, or say nothing for a few seconds (Close after silence).'
@@ -8508,7 +8659,37 @@ const hvSsOv = {
     let z = parseInt(getComputedStyle(w).zIndex, 10); if (!(z > 0)) z = 1000; const op = Number(getComputedStyle(w).opacity);
     this.host.style.cssText = `position:fixed;inset:0;z-index:${z + 1};pointer-events:none;opacity:${isFinite(op) ? op : 1};transition:opacity .4s linear`;
     this.face.update(this.hass(), new Date()); },
-  start() { if (this.iv) return; this.iv = setInterval(() => { try { this.tick(); } catch (e) { /* next tick */ } }, 250); } };
+  start() { if (this.iv) return; this.iv = setInterval(() => { try { this.tick(); } catch (e) { /* next tick */ } try { hvSsHome.tick(); } catch (e) {} }, 250); } };
+/* swipe_open_home on the screensaver: a lock-screen-style Home button (bottom right) and a left-to-right swipe each stop the screensaver and open
+   the Home app (as tapping its icon does). Its own layer just above Wallpanel's and the style faces, only while the setting is on and a screensaver
+   is showing (every style); only the button takes touches, so a tap anywhere else still reaches Wallpanel and dismisses it as before. */
+const HV_SS_HOME_CSS = `.hb{all:unset;pointer-events:auto;cursor:pointer;position:absolute;right:calc(28px + env(safe-area-inset-right, 0px));bottom:calc(28px + env(safe-area-inset-bottom, 0px));
+width:60px;height:60px;border-radius:50%;box-sizing:border-box;display:flex;align-items:center;justify-content:center;color:#fff;background:rgba(28,28,32,.34);border:1px solid rgba(255,255,255,.34);
+backdrop-filter:blur(18px) saturate(1.4);-webkit-backdrop-filter:blur(18px) saturate(1.4);transition:transform .15s ease,background .15s;-webkit-tap-highlight-color:transparent}
+.hb:active{transform:scale(.92);background:rgba(28,28,32,.5)} .hb:focus-visible{outline:2px solid #fff;outline-offset:3px} .hb ha-icon{--mdc-icon-size:28px;display:flex}`;
+const hvSsHome = {
+  host: null, g: null, press: 0, at: 0,
+  on() { try { const lv = hvSsLv(), hub = lv && lv.config && hvHubCfgOf(lv.config); return !!(hub && hub.swipe_open_home === true); } catch (e) { return false; } },
+  hide() { const h = this.host; this.host = null; if (h) { try { h.remove(); } catch (e) {} } },
+  tick() { const w = ssWallpanel(), show = !!w && hvSsOv.showing(w) && this.on(); if (!show) { if (Date.now() - this.press > 1500) this.hide(); return; } // a press on the button keeps it for its pointerup
+    if (!this.host || !this.host.isConnected || this.host.parentNode !== w.parentNode) { this.hide(); const h = document.createElement('div'); h.id = 'hv-ss-home'; const sr = h.attachShadow({ mode: 'open' });
+      sr.innerHTML = `<style>${HV_SS_HOME_CSS}</style><button class="hb" type="button" aria-label="Open Home"><ha-icon icon="mdi:home"></ha-icon></button>`; const b = sr.querySelector('.hb');
+      b.addEventListener('pointerdown', ev => { ev.stopPropagation(); this.press = Date.now(); }); for (const t of ['touchstart', 'mousedown']) b.addEventListener(t, ev => ev.stopPropagation(), { passive: true });
+      b.addEventListener('pointerup', ev => { ev.stopPropagation(); if (this.press) this.go(); }); b.addEventListener('click', ev => { ev.preventDefault(); ev.stopPropagation(); this.go(); });
+      w.parentNode.appendChild(h); this.host = h; }
+    let z = parseInt(getComputedStyle(w).zIndex, 10); if (!(z > 0)) z = 1000; const op = Number(getComputedStyle(w).opacity);
+    this.host.style.cssText = `position:fixed;inset:0;z-index:${z + 2};pointer-events:none;opacity:${isFinite(op) ? op : 1}`; },
+  // stop the screensaver first (as a tap does), then open the Home app on the Home Screen card of this dashboard
+  go() { if (Date.now() - this.at < 900) return; this.at = Date.now(); this.press = 0; const w = ssWallpanel();
+    try { if (w && w.screensaverRunning && w.screensaverRunning() && typeof w.stopScreensaver === 'function') w.stopScreensaver(); } catch (e) {} this.hide(); try { hvSsOv.hide(); } catch (e) {}
+    setTimeout(() => { const hs = [...HV_HUBS].filter(h => h.isConnected && h._config && h._config.swipe_open_home === true), hub = hs.find(h => h.getClientRects().length) || hs[0];
+      if (hub) { hub._openHome(); return; } const lv = hvSsLv(), vs = (lv && lv.config && lv.config.views) || [], v = vs.find(x => x.path === 'my-home') || vs.find(x => x.path === 'home');
+      if (v) hvNavigate(`/${(lv && lv.urlPath) || ssDash() || 'lovelace'}/${v.path}`); }, 80); } };
+// the screensaver swipe: a clear left-to-right swipe (not a tap, not a nudge) while the Home layer is up
+addEventListener('touchstart', e => { hvSsHome.g = null; if (!hvSsHome.host || e.touches.length !== 1) return; const t = e.touches[0]; hvSsHome.g = { x: t.clientX, y: t.clientY, t: Date.now() }; }, { capture: true, passive: true });
+addEventListener('touchend', e => { const s = hvSsHome.g; if (!s) return; setTimeout(() => { hvSsHome.g = null; }, 0); const t = e.changedTouches[0], dx = t.clientX - s.x, dy = t.clientY - s.y;
+  if (dx >= 80 && Math.abs(dy) <= dx * 0.6 && Date.now() - s.t <= 900) hvSsHome.go(); }, { capture: true, passive: true });
+addEventListener('touchcancel', () => { hvSsHome.g = null; }, true);
 if (!window.__hvSsStyles) { window.__hvSsStyles = true; hvSsOv.start(); }
 // ---- picker + colour controls in the screensaver settings popup
 const HV_SS_PICK_CSS = `
