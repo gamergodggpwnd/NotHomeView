@@ -4590,15 +4590,17 @@ function hvSheet(o) { // o: { parent, launch() -> [els], label, bg, build(bd, fr
   sr.querySelector('.x').addEventListener('click', close); addEventListener('keydown', key);
   if (o.edit) hvPen(sr.querySelector('.x'), o.edit); // 1.32.0: edit pencil (admins)
   // drag to dismiss: from the pill / top strip, or anywhere while the content under the finger is scrolled to the top
-  // left-entering sheets (swipe-open Home): device paging stays with mid-screen swipes; close by swiping down on the grab/top
-  // or swiping left from the right edge (back toward the previous page). A right-edge start is allowed even when the grid
-  // is already on a later device page.
+  // left-entering sheets (swipe-open Home): mid-screen swipes are never tracked (device paging). Close by swiping down
+  // on the grab/top, or swiping left from a thin right-edge strip (like going back a page). The strip stays narrow so a
+  // page-next swipe that starts further in is not stolen; once the edge gesture is clearly leftward, claim it immediately
+  // so Safari does not hand it to the page scroller.
   let g = null;
   const scroller = path => { for (const n of path) { if (n === sh) break; if (!(n instanceof Element)) continue;
     if (n.scrollHeight > n.clientHeight + 1) { const oy = getComputedStyle(n).overflowY; if (oy === 'auto' || oy === 'scroll') return n; }
     if (sideL && n.scrollWidth > n.clientWidth + 1) { const ox = getComputedStyle(n).overflowX; if (ox === 'auto' || ox === 'scroll') return n; } } return null; };
   sh.addEventListener('touchstart', e => { g = null; if (closed || e.touches.length !== 1) return; const t = e.touches[0], path = e.composedPath(), box = sh.getBoundingClientRect();
-    const onGrab = path.includes(grab) || t.clientY - box.top < 34, fromRight = sideL && box.right - t.clientX < 80, sc = scroller(path);
+    const onGrab = path.includes(grab) || t.clientY - box.top < 34, fromRight = sideL && box.right - t.clientX < 36, sc = scroller(path);
+    if (sideL && !onGrab && !fromRight) return;
     if (!onGrab && !fromRight && sc && (sc.scrollTop > 1 || (sideL && sc.scrollLeft > 1))) return;
     // never steal a drag that starts on a slider / seek bar / text field; a sheet can narrow it further (o.dragOk)
     if (!onGrab && path.some(n => n instanceof Element && (/^(INPUT|TEXTAREA|SELECT|HA-SLIDER|HA-CONTROL-SLIDER|MD-SLIDER|HA-TEXTFIELD)$/.test(n.tagName) || n.getAttribute('role') === 'slider' || n.hasAttribute('data-no-sheet-drag')))) return;
@@ -4607,12 +4609,12 @@ function hvSheet(o) { // o: { parent, launch() -> [els], label, bg, build(bd, fr
   sh.addEventListener('touchmove', e => { if (!g) return; const t = e.touches[0], dx = t.clientX - g.x, dy = t.clientY - g.y;
     if (!g.on) { if (Math.abs(dx) < 3 && Math.abs(dy) < 3) return;
       if (sideL) { if (dy > 0 && g.grab && dy >= Math.abs(dx) * 1.1) { g.on = true; g.axis = 'y'; g.y0 = t.clientY; g.t = Date.now(); }
-        else if (dx < 0 && (g.grab || g.edge) && -dx >= 16 && -dx >= Math.abs(dy) * 1.25) { g.on = true; g.axis = 'x'; g.x0 = t.clientX; g.t = Date.now(); }
+        else if (dx < 0 && (g.grab || g.edge) && -dx >= Math.abs(dy)) { g.on = true; g.axis = 'x'; g.x0 = t.clientX; g.t = Date.now(); }
         else if (Math.abs(dx) > 10 || Math.abs(dy) > 10) { g = null; return; } else return; }
       else if (dy > 0 && (g.grab || dy >= Math.abs(dx) * 1.1)) { g.on = true; g.axis = 'y'; g.y0 = t.clientY; g.t = Date.now(); } else { g = null; return; } }
     if (e.cancelable) e.preventDefault(); g.dy = g.axis === 'x' ? Math.max(0, g.x0 - t.clientX) : Math.max(0, t.clientY - g.y0); apply(g.dy, false); }, { passive: false });
   const end = () => { if (!g) return; const s0 = g; g = null; if (!s0.on) return; const v = s0.dy / Math.max(1, Date.now() - s0.t);
-    const need = s0.axis === 'x' ? MAX() * 0.28 : MAX() * 0.22, flick = s0.axis === 'x' ? (v > 0.7 && s0.dy > 70) : (v > 0.5 && s0.dy > 40);
+    const need = s0.axis === 'x' ? MAX() * 0.2 : MAX() * 0.22, flick = s0.axis === 'x' ? (v > 0.45 && s0.dy > 36) : (v > 0.5 && s0.dy > 40);
     if (s0.dy > need || flick) close(); else apply(0, true, 0.38); };
   sh.addEventListener('touchend', end); sh.addEventListener('touchcancel', end);
   return { close, host, set hass(h) { if (api) api.hass = h; }, get dy() { return dyNow; } };
