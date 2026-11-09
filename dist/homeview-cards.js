@@ -4761,6 +4761,8 @@ const HUB_CSS = `:host{display:block;position:relative;font-family:${FONT};color
 :host(:not([bgphoto])) .bgi{display:none}
 .tint{position:absolute;inset:0;background:radial-gradient(120% 90% at 20% 10%,#4b3a66 0%,#1c1a33 55%,#0d0f1a 100%);opacity:var(--tint,.24);transition:opacity .2s ease}
 :host(:not([bgphoto])) .tint{display:none}
+.ssface{position:absolute;inset:0;pointer-events:none;z-index:0}
+:host([sswall]) .bgi,:host([sswall]) .tint,:host([sswall]) .dim{display:none}
 .dim{position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,calc(var(--dim,.35) + .08)) 0%,rgba(0,0,0,var(--dim,.35)) 40%,rgba(0,0,0,calc(var(--dim,.35) + .12)) 100%)}
 :host([bgphoto]) .dim{--dk:calc(var(--dim,.32) * var(--dsc,.55));--m:var(--dmix,0);background:linear-gradient(180deg,rgba(0,0,0,calc(var(--m) * (var(--dim,.32) + .08) + (1 - var(--m)) * var(--dk) * .95)) 0%,rgba(0,0,0,calc(var(--m) * (var(--dim,.32) + .01) + (1 - var(--m)) * var(--dk) * .38)) 35%,rgba(0,0,0,calc(var(--m) * (var(--dim,.32) + .04) + (1 - var(--m)) * var(--dk) * .32)) 60%,rgba(0,0,0,calc(var(--m) * (var(--dim,.32) + .12) + (1 - var(--m)) * var(--dk) * .88)) 100%),rgba(255,255,255,calc(var(--bgt,.6) * .09))}
 .w{position:relative;z-index:1;box-sizing:border-box;display:flex;flex-direction:column;padding:var(--pt,24px) var(--px,32px) var(--pb,20px);gap:var(--gap,24px);min-height:var(--h,auto)}
@@ -6885,7 +6887,7 @@ class HVHubCard extends HTMLElement {
     if (!this._vis) { this._vis = () => { if (!document.hidden) this._restartTimer(); else this._paintBg(true, true); }; } document.addEventListener('visibilitychange', this._vis);
     requestAnimationFrame(() => this._layout()); setTimeout(() => this._layout(), 700); setTimeout(() => this._layout(), 1800);
     for (const t of [2500, 6000]) setTimeout(() => { this._vk = null; this._layout(); }, t); // re-measure the space below once the page has settled
-    if (this._hass) this._loadPhotos(); this._restartTimer(); this._paintBg(true, true); // back on the Home Screen (from another view): one instant catch-up before it shows
+    if (this._hass) this._loadPhotos(); this._restartTimer(); this._paintBg(true, true); try { this._ssWallPaint(); } catch (e) {} // back on the Home Screen: catch up wallpaper / parked style
   }
   _tpillPaint() { const p = this._tpill; if (!p) return; const s = HVTM.st, on = !!s && this._config.assistant_enabled === true && !(HVTM.scr && HVTM.scr.isConnected); p.hidden = !on;
     if (on) { const t = s.done ? 'Done' : hvFmtLeft(HVTM.left()) + (s.paused != null ? ' ❚❚' : ''); const sp = p.querySelector('span'); if (sp.textContent !== t) sp.textContent = t; } }
@@ -6909,7 +6911,7 @@ class HVHubCard extends HTMLElement {
     let n = this.shadowRoot && this.shadowRoot.querySelector('.wpn'); const show = want && !this._edit && hvWpMissing();
     if (!show) { if (n) n.remove(); if (want && !hvHasWallpanel() && !this._wpT) this._wpT = setTimeout(() => { this._wpT = null; this._wpNote(); }, 13000); return; }
     if (!n) { n = document.createElement('div'); n.className = 'wpn'; n.setAttribute('role', 'note'); n.textContent = HV_WP_HINT; this.shadowRoot.appendChild(n); hvWhenWallpanel(() => this._wpNote()); } }
-  _ssPaint() { this._wpNote(); this._wpOn = this._wpOnHere(); this._ssOn = !!(this._hass && this._lcfg && this._ssEnabled()); if (this._ssp) this._ssp.hidden = !this._ssOn || !!this._edit; this._ssHoldSet(); }
+  _ssPaint() { this._wpNote(); this._wpOn = this._wpOnHere(); this._ssOn = !!(this._hass && this._lcfg && this._ssEnabled()); if (this._ssp) this._ssp.hidden = !this._ssOn || !!this._edit; this._ssHoldSet(); try { this._ssWallPaint(); } catch (e) {} }
   // 1.30.2: while the Home Screen is showing and the screensaver is on here, the screensaver stays paused in the background: Wallpanel's idle clock is kept fresh (so it
   // never starts by itself behind the page and costs nothing), and only the Photos card changes its picture, on its own interval. Swiping the page away starts it again.
   _ssHoldSet() { const on = !!this._wpOn && this._config && this._config.ss_hold !== false && this.isConnected && !this._edit;
@@ -7356,13 +7358,32 @@ class HVHubCard extends HTMLElement {
     this._restartTimer(true); }
   _restartTimer(force) { if (!this.isConnected || !this._ids || !this._ids.length || this._pv) return; if (this._timer && !force) return; clearTimeout(this._timer);
     this._timer = setTimeout(() => { this._timer = null; if (document.hidden) return; if (this._ssHeld()) { this._bgAway(); this._restartTimer(true); return; } this._next(); }, Math.max(5, Number(this._config.photo_interval) || 25) * 1000); }
+  // Park the chosen screensaver style as the Home Screen wallpaper (paused) when style !== photo.
+  // Lives inside .bg so swipe-down (_ssPose) slides it with the page; Photos tile cycling is untouched.
+  _ssWallPaint() { const bg = this.shadowRoot && this.shadowRoot.querySelector('.bg'); if (!bg) return;
+    const st = (typeof hvSs !== 'undefined' && hvSs.get) ? hvSs.get() : 'photo'; let host = bg.querySelector(':scope > .ssface');
+    if (st === 'photo') { if (host) { try { host.remove(); } catch (e) {} } this._ssWall = null; this.removeAttribute('sswall'); return; }
+    this.setAttribute('sswall', '');
+    if (!host) { host = document.createElement('div'); host.className = 'ssface'; host.setAttribute('aria-hidden', 'true');
+      const sr = host.attachShadow({ mode: 'open' });
+      sr.innerHTML = `<style>${HV_SS_FACE_CSS}\n.f,.f *,.f *::before,.f *::after{animation-play-state:paused !important}</style>`;
+      const dim = bg.querySelector('.dim'); if (dim) bg.insertBefore(host, dim); else bg.appendChild(host); }
+    const cols = (typeof hvSsColors !== 'undefined' && hvSsColors.get) ? hvSsColors.get(st) : {}, sr = host.shadowRoot;
+    if (!this._ssWall || this._ssWall.s !== st || !this._ssWall.el.isConnected) {
+      [...sr.childNodes].forEach(n => { if (n.tagName !== 'STYLE') n.remove(); });
+      this._ssWall = new HVSsFace(st); this._ssWall.applyColors(cols); sr.appendChild(this._ssWall.el); }
+    else this._ssWall.applyColors(cols);
+    try { this._ssWall.update(this._hass, new Date()); } catch (e) {} }
   // Background transparency (0-100) -> --bgt 0..1; the photo backdrop shows once a photo is loaded (else the gradient)
   // the Background blur level's look (HV_BG_LEVELS): blur, gradient tint, darkening scale / mix and the white wash. 3 Medium = the approved
   // default look; 1 Solid = the plain wallpaper even when a photo is loaded. dim (Edge darkening) is scaled the same way when set by hand.
   _bgMode() { const c = this._config || {}, L = HV_BG_LEVELS[this._lvl || 3] || HV_BG_LEVELS[3], st = this.style.setProperty.bind(this.style);
     const bl = this._blurX ? Math.max(0, Number(c.blur) || 0) : L.blur; st('--blur', (Math.round(bl * 2) / 2) + 'px');
     st('--bgt', String(L.bgt)); st('--tint', L.tint.toFixed(4)); st('--dsc', L.dsc.toFixed(4)); st('--dmix', L.mix.toFixed(4)); st('--sat', String(L.sat));
-    this.toggleAttribute('bgphoto', c.photo_backdrop !== false && !!this._cur && L !== HV_BG_LEVELS[1]); }
+    // Styled screensaver: never use the Photos-tile photo as the page wallpaper (Photos tile still cycles).
+    const ss = (typeof hvSs !== 'undefined' && hvSs.get) ? hvSs.get() : 'photo', photoBg = ss === 'photo';
+    this.toggleAttribute('bgphoto', photoBg && c.photo_backdrop !== false && !!this._cur && L !== HV_BG_LEVELS[1]);
+    this.toggleAttribute('sswall', !photoBg); try { this._ssWallPaint(); } catch (e) {} }
   _paintPhoto(instant, dir) { if (!this._cur) return; this._bgMode(); const L = this._layer, bg = `url("${this._cur.replace(/"/g, '%22')}")`;
     const set = this._pis || []; if (set.length > 1) { const on = set[L], off = set[1 - L];
       if (instant) { on.style.transition = 'none'; off.style.transition = 'none'; }
@@ -7375,7 +7396,8 @@ class HVHubCard extends HTMLElement {
   // 1.30.4: the blurred backdrop. Frozen (bg_freeze, default on): once it shows a photo it is left completely alone while the Home Screen is showing (no swap, no fade,
   // no style writes), whatever the Photos card does. force = the page is out of sight (screensaver fully up, another view, app hidden) or freeze was turned off:
   // catch up with the current photo once, instantly. Off: follows the Photos card (cross-fade). A re-render never repaints layers already showing this photo.
-  _paintBg(instant, force) { const B = this._bgs; if (!B || B.length < 2 || !this._cur) return;
+  _paintBg(instant, force) { const ss = (typeof hvSs !== 'undefined' && hvSs.get) ? hvSs.get() : 'photo'; if (ss !== 'photo') return;
+    const B = this._bgs; if (!B || B.length < 2 || !this._cur) return;
     const live = this._bgEl === B[0] && !!this._bgUrl; if (live && this._bgUrl === this._cur) return;
     if (live && !force && (this._config || {}).bg_freeze !== false) return;
     const n = live ? 1 - this._bgL : 0, on = B[n], off = B[1 - n], im = !!(instant || force);
@@ -8869,7 +8891,7 @@ const hvSs = {
   async set(v, hass) { if (!HV_SSS_V.includes(v)) v = 'photo';
     this._latest = v;
     mhLs.set(this.key(), { v, cfg: this.cfgVal() });
-    hvSsOv.tick(true);
+    hvSsOv.tick(true); try { for (const h of HV_HUBS) if (h.isConnected && h._bgMode) h._bgMode(); } catch (e) {}
     if (this._busy) return this._wait;
     this._busy = true;
     this._wait = (async () => {
@@ -8918,7 +8940,7 @@ const hvSsColors = {
       if (JSON.stringify(cur) === JSON.stringify(want)) return false; hub.screensaver_colors = want; cfg = want; return true; });
       if (saved) mhLs.set(this.key(), { colors: next, cfg: this.cfgSig(cfg) });
     } catch (e) { saved = false; }
-    hvSsOv.tick(true); return saved; } };
+    hvSsOv.tick(true); try { for (const h of HV_HUBS) if (h.isConnected && h._bgMode) h._bgMode(); } catch (e) {} return saved; } };
 // ---- faces (sized with container units, so one renderer draws the full screen and the picker thumbnails)
 const HV_SS_FACE_CSS = `
 .f,.f *{pointer-events:none !important}
@@ -9101,8 +9123,12 @@ const hvSsOv = {
     // (pointer-events:none while still opaque). Drop it only when the screensaver is gone, or is a
     // transparent ghost that would cover the Settings dialog.
     if (!w || ghost || !(run || faded)) {
-      if (this.host || this._up) this.hide();
-      hvSsPhotoTint.clear(); return; }
+      const was = !!(this.host || this._up);
+      if (was) this.hide();
+      hvSsPhotoTint.clear();
+      // After a styled overlay drops: park that style in the Home Screen .bg (not the Photos wallpaper).
+      if (was) { try { for (const h of HV_HUBS) if (h.isConnected && h._bgMode) h._bgMode(); } catch (e) {} }
+      return; }
     const st = hvSs.get(), cols = hvSsColors.get(st), colKey = st + ':' + JSON.stringify(hvSsStrip(st, cols) || {});
     if (st === 'photo') { this.hide(); hvSsPhotoTint.apply(cols.text); return; }
     hvSsPhotoTint.clear();
@@ -9113,10 +9139,10 @@ const hvSsOv = {
     else if (this.face) this.face.applyColors(cols);
     // Just above Wallpanel (page hints sit under it). A 2147482000 z-index painted over the settings dialog, so the button looked dead.
     let z = parseInt(cs && cs.zIndex, 10); if (!(z > 0)) z = 1000;
-    // Starting (not yet faded in): cover immediately so photos never flash through. Fading out: match
-    // Wallpanel's opacity. Skip the opacity transition on first paint — that fade-from-zero was another flash.
-    const starting = run && !faded, overlayOp = starting ? 1 : (isFinite(op) ? op : 1);
-    this.host.style.cssText = `position:fixed;inset:0;z-index:${z + 1};pointer-events:none;opacity:${overlayOp};transition:${born || starting ? 'none' : 'opacity .4s linear'}`;
+    // While Wallpanel is running/starting: stay fully opaque so its photo-clock never shows through a
+    // translucent overlay during fade-in. Only match Wallpanel opacity while it is fading OUT after dismiss.
+    const overlayOp = run ? 1 : (isFinite(op) ? op : 1);
+    this.host.style.cssText = `position:fixed;inset:0;z-index:${z + 1};pointer-events:none;opacity:${overlayOp};transition:${born || run ? 'none' : 'opacity .4s linear'}`;
     this.face.update(this.hass(), new Date()); },
   start() { if (this.iv) return; this._hookStart(); this.iv = setInterval(() => { try { this._hookStart(); this.tick(); } catch (e) { /* next tick */ } try { hvSsHome.tick(); } catch (e) {} }, 250); } };
 /* swipe_open_home on the screensaver: a lock-screen-style Home button (bottom left) and a left-to-right swipe each open the
