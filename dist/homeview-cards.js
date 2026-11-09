@@ -8960,90 +8960,119 @@ const hvSsColors = {
     } catch (e) { saved = false; }
     hvSsOv.tick(true); try { for (const h of HV_HUBS) if (h.isConnected && h._bgMode) h._bgMode(); } catch (e) {} return saved; } };
 // ---- faces (sized with container units, so one renderer draws the full screen and the picker thumbnails)
-// ---- Homie: NotHomeView's own house mascot (an original character: a rounded cream house with a sky-blue cap roof and chimney, a face on the front wall,
-// charcoal arms and legs, sky-blue shoes). One renderer (HVHomie) draws him for the Homie screensaver style (HVSsFace 'homie': full screen, the Settings
+// ---- Homie: NotHomeView's own house mascot (an original character drawn after the 2D action board: a cream house slightly taller than wide, a sky-blue
+// peaked gable roof with a blue chimney right of the ridge, a face on the front wall, short charcoal sausage arms and legs, chunky sky-blue shoes).
+// Two drawings: a front view (.vf: wave, rain, shade, ...) and a three-quarter view facing right (.vq: walk, dance, sit against the date, lights,
+// bugs; mirrored for facing left). One renderer (HVHomie) draws him for the Homie screensaver style (HVSsFace 'homie': full screen, the Settings
 // picker thumbnail and the parked wallpaper), the Home Screen card (homeview-homie-card) and its popup. Cartoon only: nothing here calls a service.
 const HV_HOMIE_T = 'custom:homeview-homie-card';
-const HV_HOMIE_ICO = '<svg viewBox="0 0 100 100" width="74%" height="74%" aria-hidden="true" stroke="#1b1b1b" stroke-width="3.4" stroke-linejoin="round"><rect x="65" y="13" width="10" height="20" rx="2" fill="#41bdf5"/><path d="M24 46L50 25L76 46V80Q76 88 68 88H32Q24 88 24 80Z" fill="#fff6ea"/><path d="M45 13Q50 9 55 13L92 44Q95 48 90 49H85L50 22L15 49H10Q5 48 8 44Z" fill="#41bdf5"/><circle cx="40" cy="59" r="5" fill="#141414" stroke="none"/><circle cx="60" cy="59" r="5" fill="#141414" stroke="none"/><circle cx="41.8" cy="57.2" r="1.7" fill="#fff" stroke="none"/><circle cx="61.8" cy="57.2" r="1.7" fill="#fff" stroke="none"/><ellipse cx="31.5" cy="68" rx="4" ry="2.6" fill="#ffb6a3" stroke="none"/><ellipse cx="68.5" cy="68" rx="4" ry="2.6" fill="#ffb6a3" stroke="none"/><path d="M43 67Q50 68 57 67Q56 76 50 76Q44 76 43 67Z" fill="#3a2222" stroke-width="2.4"/></svg>';
+const HV_HOMIE_ICO = '<svg viewBox="1 0 98 98" width="74%" height="74%" aria-hidden="true" stroke="#1f2328" stroke-width="2.6" stroke-linejoin="round"><rect x="63" y="8" width="8" height="21" rx="1.5" fill="#41bdf5"/><rect x="61.5" y="4.5" width="11" height="5.5" rx="2" fill="#41bdf5"/><path d="M22 42L50 15.5L78 42V85Q78 95 68 95H32Q22 95 22 85Z" fill="#fff6ea"/><path d="M45.5 9.5Q50 5.5 54.5 9.5L94 45Q97.5 49.5 92.5 51H86L50 19L14 51H7.5Q2.5 49.5 6 45Z" fill="#41bdf5"/><g stroke="none"><ellipse cx="40" cy="63" rx="4.8" ry="5.8" fill="#17191c"/><ellipse cx="60" cy="63" rx="4.8" ry="5.8" fill="#17191c"/><circle cx="41.7" cy="60.6" r="1.9" fill="#fff"/><circle cx="61.7" cy="60.6" r="1.9" fill="#fff"/><ellipse cx="30" cy="72.5" rx="4.4" ry="2.7" fill="#f8a39b" opacity=".8"/><ellipse cx="70" cy="72.5" rx="4.4" ry="2.7" fill="#f8a39b" opacity=".8"/></g><path d="M42.5 71Q50 72.8 57.5 71Q56.6 81 50 81Q43.4 81 42.5 71Z" fill="#3a2222" stroke-width="1.8"/></svg>';
+const HV_HOMIE_FACE = (x, s) => { const e = (dx, dy) => `${(x + dx * s).toFixed(1)} ${dy}`, X = dx => (x + dx * s).toFixed(1);
+  return `<g class="fc"><g class="ey"><ellipse cx="${X(-10)}" cy="63" rx="${(4.8 * s).toFixed(2)}" ry="5.8"/><ellipse cx="${X(10)}" cy="63" rx="${(4.8 * s).toFixed(2)}" ry="5.8"/>`
+  + `<circle class="hl" cx="${X(-8.3)}" cy="60.6" r="1.9"/><circle class="hl" cx="${X(11.7)}" cy="60.6" r="1.9"/><circle class="hl" cx="${X(-11.6)}" cy="65.6" r=".8"/><circle class="hl" cx="${X(8.4)}" cy="65.6" r=".8"/></g>`
+  + `<ellipse class="bl" cx="${X(-20)}" cy="72.5" rx="${(4.4 * s * s).toFixed(2)}" ry="2.7"/><ellipse class="bl" cx="${X(20)}" cy="72.5" rx="4.4" ry="2.7"/>`
+  + `<path class="mo sm" d="M${e(-6, 72)}Q${e(0, 78.5)} ${e(6, 72)}"/><path class="mo so" d="M${e(-4.5, 73)}Q${e(0, 77)} ${e(4.5, 73)}"/>`
+  + `<g class="mo wd"><path d="M${e(-7.5, 71)}Q${e(0, 72.8)} ${e(7.5, 71)}Q${e(6.6, 81)} ${e(0, 81)}Q${e(-6.6, 81)} ${e(-7.5, 71)}Z"/><path class="tg" d="M${e(-4, 78.8)}Q${e(0, 75.4)} ${e(4, 78.8)}Q${e(2.4, 80.8)} ${e(0, 80.8)}Q${e(-2.4, 80.8)} ${e(-4, 78.8)}Z"/></g><ellipse class="mo oh" cx="${x}" cy="75" rx="3.2" ry="4"/></g>`; };
+const HV_HOMIE_LIMB = (c, d, hx, hy) => `<g class="${c}"><path class="lmo" d="${d}"/><path class="lmb" d="${d}"/><circle class="hd" cx="${hx}" cy="${hy}" r="4.2"/></g>`;
+const HV_HOMIE_LEG = (c, d, shoe) => `<g class="${c}"><path class="lmo" d="${d}"/><path class="lmb" d="${d}"/><path class="sho" d="${shoe}"/></g>`;
 const HV_HOMIE_SVG = `<svg class="hmv" viewBox="0 0 100 124" aria-hidden="true" focusable="false">
-<g class="lg l"><path class="lmo" d="M40 93v13"/><path class="lmb" d="M40 93v13"/><path class="sho" d="M29 113Q29 105 37 105Q46 105 46 111Q46 116 40 116H32Q29 116 29 113Z"/></g>
-<g class="lg r"><path class="lmo" d="M60 93v13"/><path class="lmb" d="M60 93v13"/><path class="sho" d="M71 113Q71 105 63 105Q54 105 54 111Q54 116 60 116H68Q71 116 71 113Z"/></g>
-<g class="tor">
-<rect class="rf" x="65" y="15" width="10" height="24" rx="2"/><rect class="rf" x="63" y="11.5" width="14" height="6" rx="2"/>
-<path class="wal" d="M23 47L50 24L77 47V87Q77 97 67 97H33Q23 97 23 87Z"/>
-<path class="rf" d="M45 12Q50 7.5 55 12L94 45Q97.5 49.5 92 51H86.5L50 21.5L13.5 51H8Q2.5 49.5 6 45Z"/>
-<g class="fc"><path class="ebw" d="M34.5 54.5Q39 51.5 43.5 54M56.5 54Q61 51.5 65.5 54.5"/>
-<g class="ey"><ellipse cx="39.5" cy="63" rx="5.2" ry="5.9"/><ellipse cx="60.5" cy="63" rx="5.2" ry="5.9"/><circle class="hl" cx="41.4" cy="60.8" r="1.9"/><circle class="hl" cx="62.4" cy="60.8" r="1.9"/><circle class="hl" cx="38" cy="65.4" r=".8"/><circle class="hl" cx="59" cy="65.4" r=".8"/></g>
-<ellipse class="bl" cx="30.5" cy="72.5" rx="4.6" ry="3"/><ellipse class="bl" cx="69.5" cy="72.5" rx="4.6" ry="3"/>
-<path class="mo sm" d="M43.5 72Q50 78.5 56.5 72"/><path class="mo so" d="M45 73Q50 77 55 73"/>
-<g class="mo wd"><path d="M41.5 71Q50 72.6 58.5 71Q57.6 81.5 50 81.5Q42.4 81.5 41.5 71Z"/><path class="tg" d="M45.4 79.3Q50 75.6 54.6 79.3Q52.6 81.4 50 81.4Q47.4 81.4 45.4 79.3Z"/></g><ellipse class="mo oh" cx="50" cy="76" rx="3.4" ry="4.2"/></g>
-<g class="ar l"><path class="lmo" d="M24 70Q18 75 14.5 81"/><path class="lmb" d="M24 70Q18 75 14.5 81"/><circle class="hd" cx="13" cy="83.5" r="5.4"/></g>
-<g class="ar r"><path class="lmo" d="M76 70Q82 75 85.5 81"/><path class="lmb" d="M76 70Q82 75 85.5 81"/><circle class="hd" cx="87" cy="83.5" r="5.4"/></g></g>
-<g class="umb"><path class="uh" d="M82 56V-4"/><path class="uh" d="M82 56Q82 61 78 61"/><path class="uc" d="M34 -2Q35 -28 82 -29Q129 -28 130 -2Q122 -7 114 -2Q106 -7 98 -2Q90 -7 82 -2Q74 -7 66 -2Q58 -7 50 -2Q42 -7 34 -2Z"/><path class="ut" d="M82 -29V-34"/></g>
+<g class="vf"><ellipse class="gs" cx="50" cy="118" rx="27" ry="2.6"/>
+${HV_HOMIE_LEG('lg l', 'M39 92V108', 'M29 115Q28 106.5 37.5 106.5Q46.5 106.5 46.5 112.5Q46.5 117.5 41 117.5H32Q29 117.5 29 115Z')}
+${HV_HOMIE_LEG('lg r', 'M61 92V108', 'M71 115Q72 106.5 62.5 106.5Q53.5 106.5 53.5 112.5Q53.5 117.5 59 117.5H68Q71 117.5 71 115Z')}
+<g class="tor"><rect class="rf" x="63" y="8" width="8" height="21" rx="1.5"/><rect class="rf" x="61.5" y="4.5" width="11" height="5.5" rx="2"/>
+<path class="wal" d="M22 42L50 15.5L78 42V85Q78 95 68 95H32Q22 95 22 85Z"/>
+<path class="rf" d="M45.5 9.5Q50 5.5 54.5 9.5L94 45Q97.5 49.5 92.5 51H86L50 19L14 51H7.5Q2.5 49.5 6 45Z"/>
+${HV_HOMIE_FACE(50, 1)}
+${HV_HOMIE_LIMB('ar l', 'M25 73Q17.5 78 14 88', 13.5, 91)}${HV_HOMIE_LIMB('ar r', 'M75 73Q82.5 78 86 88', 86.5, 91)}</g></g>
+<g class="vq"><ellipse class="gs" cx="54" cy="118" rx="29" ry="2.6"/>
+${HV_HOMIE_LEG('lg r', 'M66 91V106', 'M58 112.5Q58 104.5 65.5 104.5Q73 104.5 75.5 109.5Q77 115.5 71 115.5H61Q58 115.5 58 112.5Z')}
+${HV_HOMIE_LEG('lg l', 'M46 92V108', 'M39 114.5Q39 106.5 46.5 106.5Q54 106.5 56.5 111.5Q58 117.5 52 117.5H42Q39 117.5 39 114.5Z')}
+<g class="tor">${HV_HOMIE_LIMB('ar r', 'M77 73Q84 78 87 87', 87.5, 89.8)}
+<rect class="rf" x="68" y="6" width="7.5" height="23" rx="1.5"/><rect class="rf" x="66.5" y="2.5" width="10.5" height="5.5" rx="2"/>
+<path class="sw" d="M17 43L34 48V95L24 92.5Q17 91 17 85Z"/>
+<path class="wal" d="M34 45L57 18L80 45V85Q80 95 70 95H34Z"/>
+<path class="rs" d="M22 48L55.5 7.5L40.5 1.5L7 42Q5 45.5 8.5 46Z"/>
+<path class="rf" d="M53.5 9Q57 5 60.5 9L91.5 45Q94 49.5 89.5 50.5H82.5L57 19.5L31.5 50.5H24.5Q20 49.5 22.5 45Z"/>
+${HV_HOMIE_FACE(57, 0.88)}
+${HV_HOMIE_LIMB('ar l', 'M25 72Q18 77.5 15.5 87', 15.3, 89.8)}</g>
+<g class="sl">${HV_HOMIE_LEG('', 'M62 102L86 104', 'M86 96.5Q92 96 92.5 103Q93 110.5 87 111Q83 111.5 82.5 104Q82.3 97 86 96.5Z')}${HV_HOMIE_LEG('', 'M48 105L78 109', 'M78 101Q84.5 100.5 85 108Q85.5 115.5 79 116Q74.5 116.5 74 109Q73.8 101.5 78 101Z')}</g></g>
+<g class="umb"><path class="uh" d="M88 62L74 -6"/><path class="uh" d="M88 62Q89 67 85 67.6"/><g transform="translate(8 -2) rotate(-12 66 -4)"><path class="uc" d="M26 -2Q27 -30 66 -31Q105 -30 106 -2Q98 -7 90 -2Q82 -7 74 -2Q66 -7 58 -2Q50 -7 42 -2Q34 -7 26 -2Z"/><path class="ut" d="M66 -31V-36"/></g></g>
 </svg>`;
+const HV_HOMIE_Q = new Set(['walk', 'dance', 'sit', 'reach', 'pull', 'stomp', 'notice', 'lean', 'peek']); // poses drawn in the three-quarter view
 const HV_HOMIE_LAMP = `<svg viewBox="0 0 40 240" aria-hidden="true"><path d="M20 0V150" stroke="currentColor" stroke-width="1.6" opacity=".55"/>
 <g class="ry"><path d="M2 182l-6 4M38 182l6 4M6 192l-5 8M34 192l5 8M20 196v10"/></g>
 <path class="sh" d="M5 172Q5 151 20 151Q35 151 35 172Z"/><rect class="sh" x="16" y="146" width="8" height="6" rx="1.5"/><path class="bu" d="M12 172Q12 182 20 182Q28 182 28 172Z"/><g class="pc"><path d="M30 172V232" stroke="currentColor" stroke-width="1.3" opacity=".7"/><circle cx="30" cy="234" r="2.6" fill="currentColor"/></g></svg>`;
 const HV_HOMIE_BUG = '<svg viewBox="0 0 40 26" aria-hidden="true"><g class="lgs"><path d="M13 19l-4 6M20 20v5M27 19l4 6"/></g><g class="lgs"><path d="M31 7l3-5M35 8l5-3"/></g><ellipse cx="18" cy="15" rx="12" ry="8.4"/><path class="sp" d="M18 7v16"/><circle cx="31" cy="12" r="5.4"/><circle class="e" cx="30.4" cy="10.6" r="1.5"/><circle class="e" cx="33.8" cy="10.8" r="1.5"/></svg>';
 const HV_HOMIE_CSS = `
-.hms{--hs:30cqh;--gy:9cqh;--lmb:var(--hv-ss-limb,#2b2f33)}
-.hm-card{--hs:58cqh;--gy:9cqh}
+.hms{--hs:42cqh;--gy:7cqh;--lmb:var(--hv-ss-limb,#2b2f33);--hmo:#1f2328;--hmr:color-mix(in srgb,var(--hv-ss-text,#e6e6e6) 30%,#15171a)}
+.hm-card{--hs:60cqh;--gy:7cqh}
 .hz .hm *,.hz .hwx i,.hz .hbg *,.hz .hflash{animation-play-state:paused !important} /* not .hm itself: its state tells a paused host (the parked wallpaper) apart */
-.hm{position:absolute;bottom:var(--gy);left:50%;height:var(--hs);aspect-ratio:100/124;transform:translateX(-50%);z-index:3}
-.hm.bh{z-index:1}
-.hmf{width:100%;height:100%;transition:transform .2s}.hm.fl .hmf{transform:scaleX(-1)}
+.hm{position:absolute;bottom:var(--gy);left:50%;height:var(--hs);aspect-ratio:100/124;transform:translateX(-50%);transform-origin:50% 100%;z-index:3;transition:transform .7s ease,bottom .7s ease,filter .7s}
+.hm.bh{z-index:1;bottom:calc(var(--gy) + 7cqh);transform:translateX(-50%) scale(.8);filter:brightness(.84)} /* round the back of the date: smaller, higher, under the number */
+.hmf{width:100%;height:100%}.hm.fl[data-v="q"] .hmf{transform:scaleX(-1)} /* the three-quarter drawing faces right; mirrored to face left */
 .hmv{width:100%;height:100%;display:block;overflow:visible;transform-origin:50% 100%;transition:transform .35s ease}
-.hmv .lmb{fill:none;stroke:var(--lmb);stroke-width:8;stroke-linecap:round}.hmv .lmo{fill:none;stroke:#161616;stroke-width:12;stroke-linecap:round}
-.hmv .wal,.hmv .rf,.hmv .sho,.hmv .uc,.hmv .hd{stroke:#161616;stroke-width:3;stroke-linejoin:round}.hmv .hd{fill:var(--lmb);stroke-width:2.2}
-.hmv .wal{fill:var(--hv-ss-body,#fff6ea)}.hmv .rf,.hmv .sho,.hmv .uc{fill:var(--hv-ss-roof,#41bdf5)}
-.hmv .ey ellipse{fill:#141414}.hmv .hl{fill:#fff}.hmv .bl{fill:#ffb6a3;opacity:.9}.hmv .ebw{fill:none;stroke:#2b2b2b;stroke-width:2.2;stroke-linecap:round;transition:transform .3s}
-.hmv .mo{display:none;fill:none;stroke:#2a1c1c;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}.hmv .mo.wd{fill:#3a2222;stroke-width:2}.hmv .mo.wd .tg{fill:#ff8a80;stroke:none}.hmv .mo.oh{fill:#3a2222;stroke:none}
+.hmv .vq,.hm[data-v="q"] .hmv .vf{display:none}.hm[data-v="q"] .hmv .vq{display:inline}
+.hmv .lmb{fill:none;stroke:var(--lmb);stroke-width:6;stroke-linecap:round}.hmv .lmo{fill:none;stroke:var(--hmr);stroke-width:8.6;stroke-linecap:round}
+.hmv .wal,.hmv .sw,.hmv .rf,.hmv .rs,.hmv .sho,.hmv .uc{stroke:var(--hmo);stroke-width:2.3;stroke-linejoin:round}.hmv .hd{fill:var(--lmb);stroke:var(--hmr);stroke-width:1.3}
+.hmv .wal{fill:var(--hv-ss-body,#fff6ea)}.hmv .sw{fill:color-mix(in srgb,var(--hv-ss-body,#fff6ea) 80%,#b39270)}
+.hmv .rf,.hmv .sho,.hmv .uc{fill:var(--hv-ss-roof,#41bdf5)}.hmv .rs{fill:color-mix(in srgb,var(--hv-ss-roof,#41bdf5) 76%,#0d3a57)}.hmv .gs{fill:rgba(0,0,0,.16)}
+.hmv .ey ellipse{fill:#17191c}.hmv .hl{fill:#fff}.hmv .bl{fill:#f8a39b;opacity:.72}
+.hmv .mo{display:none;fill:none;stroke:#2a1c1c;stroke-width:2.3;stroke-linecap:round;stroke-linejoin:round}.hmv .mo.wd{fill:#3a2222;stroke-width:1.8}.hmv .mo.wd .tg{fill:#ff8a80;stroke:none}.hmv .mo.oh{fill:#3a2222;stroke:none}
 .hm[data-m="sm"] .mo.sm,.hm[data-m="wd"] .mo.wd,.hm[data-m="so"] .mo.so,.hm[data-m="oh"] .mo.oh{display:inline}
-.hmv .uh,.hmv .ut{fill:none;stroke:#161616;stroke-width:2.8;stroke-linecap:round}.hmv .umb{display:none}.hm.umb .umb{display:inline}
-.hmv .ar,.hmv .lg,.hmv .tor,.hmv .ey,.hmv .ebw{transform-box:view-box;transition:transform .3s ease}
-.hmv .ar.l{transform-origin:24px 70px}.hmv .ar.r{transform-origin:76px 70px}.hmv .lg.l{transform-origin:40px 93px}.hmv .lg.r{transform-origin:60px 93px}
-.hmv .tor{transform-origin:50px 97px}.hmv .ey{transform-origin:50px 63px;animation:hmblink 5.2s infinite}
+.hmv .uh,.hmv .ut{fill:none;stroke:var(--hmo);stroke-width:2.6;stroke-linecap:round}.hmv .umb{display:none}.hm.umb .umb{display:inline}.hm.umb[data-v="q"] .umb{transform:translate(3px,1px)}
+.hmv .sl{display:none}.hm[data-p="sit"] .sl{display:inline}.hm[data-p="sit"] .vq .lg,.hm[data-p="sit"] .vq .gs{display:none}
+.hmv .ar,.hmv .lg,.hmv .tor,.hmv .ey{transform-box:view-box;transition:transform .3s ease}
+.vf .ar.l{transform-origin:25px 73px}.vf .ar.r{transform-origin:75px 73px}.vf .lg.l{transform-origin:39px 92px}.vf .lg.r{transform-origin:61px 92px}.vf .tor{transform-origin:50px 95px}.vf .ey{transform-origin:50px 63px}
+.vq .ar.l{transform-origin:25px 72px}.vq .ar.r{transform-origin:77px 73px}.vq .lg.l{transform-origin:46px 92px}.vq .lg.r{transform-origin:66px 91px}.vq .tor{transform-origin:57px 95px}.vq .ey{transform-origin:57px 63px}
+.hmv .ey{animation:hmblink 5.2s infinite}
 @keyframes hmblink{0%,93%,100%{transform:scaleY(1)}95.5%{transform:scaleY(.12)}}
 @keyframes hmbob{0%,100%{transform:translateY(0)}50%{transform:translateY(-1.6px)}}
-@keyframes hmstep{from{transform:translateY(0)}to{transform:translateY(-2.6px)}}
-@keyframes hmleg{from{transform:rotate(20deg)}to{transform:rotate(-20deg)}}
-@keyframes hmarm{from{transform:rotate(-16deg)}to{transform:rotate(16deg)}}
-@keyframes hmwave{from{transform:rotate(-138deg)}to{transform:rotate(-100deg)}}
-@keyframes hmwavel{from{transform:rotate(138deg)}to{transform:rotate(100deg)}}
-@keyframes hmdr{from{transform:rotate(-146deg)}to{transform:rotate(-108deg)}}
-@keyframes hmdl{from{transform:rotate(108deg)}to{transform:rotate(146deg)}}
-@keyframes hmdance{0%,100%{transform:translateY(0) rotate(-7deg) scaleY(.97)}25%{transform:translateY(-10%) rotate(0) scaleY(1.03)}50%{transform:translateY(0) rotate(7deg) scaleY(.97)}75%{transform:translateY(-10%) rotate(0) scaleY(1.03)}}
-@keyframes hmkick{0%,100%{transform:rotate(0)}50%{transform:rotate(-34deg)}}
-@keyframes hmstomp{0%{transform:translateY(0)}35%{transform:translateY(-16%) scaleY(1.04)}62%{transform:translateY(0) scaleY(.88)}80%,100%{transform:translateY(0) scaleY(1)}}
+@keyframes hmstep{from{transform:translateY(0) rotate(1deg)}to{transform:translateY(-3px) rotate(3.5deg)}}
+@keyframes hmleg{from{transform:rotate(24deg)}to{transform:rotate(-24deg)}}
+@keyframes hmarm{from{transform:rotate(-22deg)}to{transform:rotate(22deg)}}
+@keyframes hmwave{from{transform:rotate(-150deg)}to{transform:rotate(-112deg)}}
+@keyframes hmwavel{from{transform:rotate(150deg)}to{transform:rotate(112deg)}}
+@keyframes hmdr{from{transform:rotate(-150deg)}to{transform:rotate(-112deg)}}
+@keyframes hmdl{from{transform:rotate(112deg)}to{transform:rotate(150deg)}}
+@keyframes hmdqr{from{transform:rotate(-112deg)}to{transform:rotate(-82deg)}}
+@keyframes hmdql{from{transform:rotate(92deg)}to{transform:rotate(128deg)}}
+@keyframes hmdance{0%,100%{transform:translate(0,0) scale(1.05,.93)}12%{transform:translate(1.5%,-9%) scale(.96,1.05) rotate(3deg)}25%{transform:translate(3%,-12%) scale(.97,1.04) rotate(4deg)}
+ 50%{transform:translate(0,0) scale(1.05,.93)}62%{transform:translate(-1.5%,-9%) scale(.96,1.05) rotate(-3deg)}75%{transform:translate(-3%,-12%) scale(.97,1.04) rotate(-4deg)}}
+@keyframes hmkick{0%,45%,100%{transform:rotate(8deg)}20%{transform:rotate(-46deg)}}
+@keyframes hmkick2{0%,50%,95%,100%{transform:rotate(-6deg)}70%{transform:rotate(40deg)}}
+@keyframes hmstomp{0%{transform:translateY(0)}35%{transform:translateY(-12%) scale(.97,1.04)}62%{transform:translateY(0) scale(1.06,.9)}80%,100%{transform:translateY(0) scale(1)}}
+@keyframes hmstompl{0%{transform:rotate(0)}35%{transform:rotate(-44deg)}62%,100%{transform:rotate(-6deg)}}
 @keyframes hmjump{0%,100%{transform:translateY(0)}30%{transform:translateY(-12%)}}
 @keyframes hmshiver{from{transform:translateX(-1.4px)}to{transform:translateX(1.4px)}}
 .hm[data-p="idle"] .tor,.hm[data-p="peek"] .tor{animation:hmbob 2.4s ease-in-out infinite}
 .hm[data-p="walk"] .lg.l{animation:hmleg .46s ease-in-out infinite alternate}.hm[data-p="walk"] .lg.r{animation:hmleg .46s ease-in-out infinite alternate-reverse}
-.hm[data-p="walk"] .ar.l{animation:hmarm .46s ease-in-out infinite alternate}.hm[data-p="walk"] .ar.r{animation:hmarm .46s ease-in-out infinite alternate}
+.hm[data-p="walk"] .ar.l{animation:hmarm .46s ease-in-out infinite alternate-reverse}.hm[data-p="walk"] .ar.r{animation:hmarm .46s ease-in-out infinite alternate}
 .hm[data-p="walk"] .tor{animation:hmstep .23s ease-in-out infinite alternate}
 .hm[data-p="wave"] .ar.r{animation:hmwave .42s ease-in-out infinite alternate}.hm[data-p="wave"] .tor{animation:hmbob 1.2s ease-in-out infinite}
-.hm.umb .ar.r{animation:none !important;transform:rotate(-118deg) !important}.hm.umb[data-p="wave"] .ar.l{animation:hmwavel .42s ease-in-out infinite alternate}
+.hm.umb .vf .ar.r{animation:none !important;transform:rotate(-112deg) !important}.hm.umb .vq .ar.r{animation:none !important;transform:rotate(-104deg) !important}.hm.umb[data-p="wave"] .ar.l{animation:hmwavel .42s ease-in-out infinite alternate}
 .hm[data-p="dance"] .ar.r{animation:hmdr .45s ease-in-out infinite alternate}.hm[data-p="dance"] .ar.l{animation:hmdl .45s ease-in-out infinite alternate}
-.hm[data-p="dance"] .hmv{animation:hmdance .9s ease-in-out infinite}.hm[data-p="dance"] .lg.l{animation:hmleg .45s ease-in-out infinite alternate}.hm[data-p="dance"] .lg.r{animation:hmkick .9s ease-in-out infinite}
-.hm[data-p="sit"] .hmv{transform:translateY(12%)}.hm[data-p="sit"] .lg.l{transform:rotate(48deg)}.hm[data-p="sit"] .lg.r{transform:rotate(-48deg)}
-.hm[data-p="sit"] .ar.l{transform:rotate(-12deg)}.hm[data-p="sit"] .ar.r{transform:rotate(12deg)}.hm[data-p="sit"] .tor{animation:hmbob 3.4s ease-in-out infinite}
-.hm[data-p="reach"] .ar.r{transform:rotate(-138deg)}.hm[data-p="reach"] .tor{transform:translateY(-1.5px)}.hm[data-p="pull"] .ar.r{transform:rotate(-126deg)}.hm[data-p="pull"] .tor{transform:translateY(2px)}
-.hm[data-p="notice"] .tor{transform:rotate(-7deg)}.hm[data-p="notice"] .ey{animation:none;transform:translate(-2px,2.5px)}
-.hm[data-p="stomp"] .hmv{animation:hmstomp .65s ease-in-out}.hm[data-p="stomp"] .lg.r{transform:rotate(-30deg)}.hm[data-p="stomp"] .ar.l{transform:rotate(40deg)}.hm[data-p="stomp"] .ar.r{transform:rotate(-40deg)}
-.hm[data-p="startle"] .hmv{animation:hmjump .5s ease-out}.hm[data-p="startle"] .ar.l{transform:rotate(-131deg)}.hm[data-p="startle"] .ar.r{transform:rotate(131deg)}
-.hm[data-p="peek"] .ey{animation:none;transform:translateX(3px)}.hm[data-p="peek"] .tor{transform:rotate(5deg)}
-.hm[data-p="shade"] .ar.r{transform:rotate(156deg)}.hm[data-p="shade"] .ey{animation:none;transform:scaleY(.55)}.hm[data-p="shade"] .tor{animation:hmbob 1.6s ease-in-out infinite}
-.hm[data-p="shiver"] .hmv{animation:hmshiver .11s linear infinite alternate}.hm[data-p="shiver"] .ar.l{transform:rotate(-58deg)}.hm[data-p="shiver"] .ar.r{transform:rotate(58deg)}
-.hm[data-p="catch"] .ar.l{transform:rotate(148deg)}.hm[data-p="catch"] .ar.r{transform:rotate(-148deg)}.hm[data-p="catch"] .ey{animation:none;transform:translateY(-2.5px)}.hm[data-p="catch"] .tor{animation:hmbob 1s ease-in-out infinite}
-.hm[data-p="lean"] .hmv{transform:rotate(9deg)}.hm[data-p="lean"] .ar.r{transform:rotate(-74deg)}.hm[data-p="lean"] .ar.l{transform:rotate(30deg)}
-.hm[data-p="peer"] .hmv{transform:translateY(-2%) scale(1.05)}.hm[data-p="peer"] .ey{animation:none;transform:scaleY(.42)}.hm[data-p="peer"] .ebw{transform:translateY(2.2px)}
-.hlamp{position:absolute;top:0;height:74cqh;aspect-ratio:40/240;transform:translateX(-50%);opacity:0;transition:opacity .6s;z-index:2;color:var(--hv-ss-text,#e6e6e6);pointer-events:none}
-.hlamp svg{width:100%;height:100%;display:block;overflow:visible}.hlamp .sh{fill:#ffc83d;stroke:#161616;stroke-width:1.8;stroke-linejoin:round}.hlamp .ry{opacity:0;transition:opacity .4s}.hlamp .ry path{stroke:#ffd45e;stroke-width:2;stroke-linecap:round}.hms.lit .hlamp .ry{opacity:1}
-.hlamp .bu{fill:#fff4d0;stroke:#161616;stroke-width:1.4;transition:fill .5s,filter .5s}.hlamp .pc{transition:transform .25s ease}.hlamp.pl .pc{transform:translateY(7px)}
+.hm[data-p="dance"] .vq .ar.r{animation:hmdqr .45s ease-in-out infinite alternate}.hm[data-p="dance"] .vq .ar.l{animation:hmdql .45s ease-in-out infinite alternate}
+.hm[data-p="dance"] .hmv{animation:hmdance .9s ease-in-out infinite}.hm[data-p="dance"] .lg.l{animation:hmkick .9s ease-in-out infinite}.hm[data-p="dance"] .lg.r{animation:hmkick2 .9s ease-in-out infinite}
+.hm[data-p="sit"] .vq .tor{transform-origin:20px 95px;transform:translate(0,13px) rotate(-8deg);animation:none}
+.hm[data-p="sit"] .vq .ar.l{transform:rotate(22deg)}.hm[data-p="sit"] .vq .ar.r{transform:rotate(-24deg)}.hm[data-p="sit"] .vq .ey{animation:hmblink 6.4s infinite}
+.hm[data-p="reach"] .ar.r{transform:rotate(-122deg)}.hm[data-p="reach"] .tor{transform:translateY(-1.5px) rotate(4deg)}.hm[data-p="pull"] .ar.r{transform:rotate(-110deg)}.hm[data-p="pull"] .tor{transform:translateY(2px) rotate(2deg)}
+.hm[data-p="reach"] .ey,.hm[data-p="pull"] .ey{animation:none;transform:translate(1.5px,-2px)}
+.hm[data-p="notice"] .tor{transform:rotate(6deg)}.hm[data-p="notice"] .ey{animation:none;transform:translate(2px,2.5px)}.hm[data-p="notice"] .ar.l{transform:rotate(16deg)}
+.hm[data-p="stomp"] .hmv{animation:hmstomp .7s ease-in-out}.hm[data-p="stomp"] .lg.l{animation:hmstompl .7s ease-in-out forwards}.hm[data-p="stomp"] .ar.l{transform:rotate(60deg)}.hm[data-p="stomp"] .ar.r{transform:rotate(-70deg)}
+.hm[data-p="startle"] .hmv{animation:hmjump .5s ease-out}.hm[data-p="startle"] .ar.l{transform:rotate(140deg)}.hm[data-p="startle"] .ar.r{transform:rotate(-140deg)}
+.hm[data-p="peek"] .ey{animation:none;transform:translateX(2.5px)}.hm[data-p="peek"] .tor{transform:rotate(5deg)}.hm[data-p="peek"] .ar.r{transform:rotate(-60deg)}
+.hm[data-p="shade"] .ar.r{transform:rotate(-176deg)}.hm[data-p="shade"] .ey{animation:none;transform:scaleY(.55)}.hm[data-p="shade"] .tor{animation:hmbob 1.6s ease-in-out infinite}
+.hm[data-p="shiver"] .hmv{animation:hmshiver .11s linear infinite alternate}.hm[data-p="shiver"] .ar.l{transform:rotate(-52deg)}.hm[data-p="shiver"] .ar.r{transform:rotate(52deg)}
+.hm[data-p="catch"] .ar.l{transform:rotate(150deg)}.hm[data-p="catch"] .ar.r{transform:rotate(-150deg)}.hm[data-p="catch"] .ey{animation:none;transform:translateY(-2.5px)}.hm[data-p="catch"] .tor{animation:hmbob 1s ease-in-out infinite}
+.hm[data-p="lean"] .hmv{transform:rotate(7deg)}.hm[data-p="lean"] .ar.r{transform:rotate(-82deg)}.hm[data-p="lean"] .ar.l{transform:rotate(-30deg)}.hm[data-p="lean"] .ey{animation:none;transform:scaleY(.6)}
+.hm[data-p="peer"] .hmv{transform:translateY(-2%) scale(1.05)}.hm[data-p="peer"] .ey{animation:none;transform:scaleY(.42)}
+.hlamp{position:absolute;top:0;height:74cqh;aspect-ratio:40/240;transform:translateX(-50%);opacity:0;transition:opacity .6s;z-index:4;color:var(--hv-ss-text,#e6e6e6);pointer-events:none} /* over Homie, so the cord reaches his hand */
+.hlamp svg{width:100%;height:100%;display:block;overflow:visible}.hlamp .sh{fill:#ffc83d;stroke:#1f2328;stroke-width:1.8;stroke-linejoin:round}.hlamp .ry{opacity:0;transition:opacity .4s}.hlamp .ry path{stroke:#ffd45e;stroke-width:2;stroke-linecap:round}.hms.lit .hlamp .ry{opacity:1}
+.hlamp .bu{fill:#fff4d0;stroke:#1f2328;stroke-width:1.4;transition:fill .5s,filter .5s}.hlamp .pc{transition:transform .25s ease}.hlamp.pl .pc{transform:translateY(7px)}
 .hlamp.vis{opacity:1}.hms.lit .hlamp .bu{fill:#ffd45e;filter:drop-shadow(0 0 6px #ffd45e) drop-shadow(0 0 16px rgba(255,212,94,.8))}
-.hglow{position:absolute;inset:0 -30%;pointer-events:none;z-index:4;opacity:0;transition:opacity 1.4s ease;mix-blend-mode:screen;
- background:radial-gradient(circle at var(--lx,20%) 62%,rgba(255,214,110,.46),rgba(255,214,110,.14) 42%,rgba(255,214,110,0) 72%)}.hms.lit .hglow{opacity:1}
-.hbg{position:absolute;bottom:calc(var(--gy) - .6cqh);height:4.6cqh;aspect-ratio:40/26;transform:translateX(-50%);z-index:3;transition:left 1.1s ease-in,opacity .45s}
+.hglow{position:absolute;inset:0 -30%;pointer-events:none;z-index:1;opacity:0;transition:opacity 1.4s ease; /* under Homie and the date, so the light never washes him out */
+ background:radial-gradient(circle at var(--lx,20%) 40%,rgba(255,214,110,.3),rgba(255,214,110,.1) 40%,rgba(255,214,110,0) 70%)}.hms.lit .hglow{opacity:1}
+.hbg{position:absolute;bottom:calc(var(--gy) - .4cqh);height:5cqh;aspect-ratio:40/26;transform:translateX(-50%);z-index:3;transition:left 1.1s ease-in,opacity .45s}
 .hbg svg{width:100%;height:100%;display:block;overflow:visible;animation:hmcrawl 1.4s ease-in-out infinite alternate}.hbg ellipse,.hbg circle{fill:#151515;stroke:color-mix(in srgb,var(--hv-ss-text,#e6e6e6) 55%,transparent);stroke-width:1.2}.hbg .sp{stroke:#444;stroke-width:1.2;fill:none}
 .hbg .e{fill:#fff;stroke:none}.hbg .lgs path{stroke:#151515;stroke-width:2;stroke-linecap:round;animation:hmlegs .18s linear infinite alternate}
 .hbg.fl svg{transform:scaleX(-1)}.hbg.pf svg{animation:hmpoof .45s ease-in forwards}
@@ -9071,13 +9100,17 @@ function hvHomieWx(hass, we) { const S = (hass && hass.states) || {};
 const HV_HOMIE_WX = { sunny: 'sun', 'clear-night': '', partlycloudy: '', cloudy: '', rainy: 'rain', pouring: 'rain', 'lightning-rainy': 'storm', lightning: 'storm0', snowy: 'snow', 'snowy-rainy': 'snow', hail: 'hail', windy: 'wind', 'windy-variant': 'wind', fog: 'fog', exceptional: '' };
 class HVHomie {
   // mode: 'ss' (full screensaver, also the popup), 'thumb' (picker preview: idle + wave), 'card' (Home Screen tile: calmer)
+  // 2D drawings, 3D staging: he walks round the big date (in front of it, then smaller and under it behind), turns through a front-view beat,
+  // sits leaning on its foot and dances beside it. Depth is z-index + scale + a higher ground line (.bh); never a card-flip of a flat drawing.
   constructor(stage, mode, opt) { this.st = stage; this.mode = mode; this.big = mode === 'ss'; this.opt = opt || {};
     stage.classList.add('hms', 'hm-' + mode);
     stage.insertAdjacentHTML('beforeend', `<div class="hwx"></div><div class="hglow"></div>${this.big ? `<div class="hlamp">${HV_HOMIE_LAMP}</div>` : ''}<div class="hbugs"></div>`
-      + `<div class="hm" data-p="idle" data-m="sm"><div class="hmf">${HV_HOMIE_SVG}</div></div><div class="hflash"></div>`);
+      + `<div class="hm" data-p="idle" data-m="sm" data-v="f"><div class="hmf">${HV_HOMIE_SVG}</div></div><div class="hflash"></div>`);
     this.hm = stage.querySelector('.hm'); this.wx = stage.querySelector('.hwx'); this.lamp = stage.querySelector('.hlamp'); this.bugs = stage.querySelector('.hbugs');
-    this.x = 50; this.q = []; this.bag = []; this.first = true; this.wand = false; this.cond = undefined; this.wxDue = false; this.lit = false; this.on = false; this.t = 0; this.gone = 0; this.nb = { l: 38, r: 62 }; }
-  pose(p, m) { this.hm.dataset.p = p || 'idle'; this.hm.dataset.m = m || 'sm'; }
+    this.x = mode === 'card' ? 50 : 76; this.hm.style.left = this.x + '%'; this.dir = 1; this.placed = mode === 'card';
+    this.q = []; this.bag = []; this.first = true; this.wand = false; this.cond = undefined; this.wxDue = false; this.lit = false; this.on = false; this.t = 0; this.gone = 0; this.nb = { l: 38, r: 62 }; }
+  pose(p, m) { p = p || 'idle'; const d = this.hm.dataset; d.p = p; d.m = m || 'sm'; d.v = HV_HOMIE_Q.has(p) ? 'q' : 'f'; }
+  face(d) { this.dir = d < 0 ? -1 : 1; this.hm.classList.toggle('fl', this.dir < 0); }
   // frozen: detached, the page hidden, the parked wallpaper (its CSS pauses every animation) or the host says so (the card under a sheet / the screensaver)
   frozen() { if (!this.st.isConnected || document.hidden) return true;
     try { if (String(getComputedStyle(this.hm).animationPlayState).includes('paused')) return true; } catch (e) {}
@@ -9087,60 +9120,78 @@ class HVHomie {
     this.gone = 0; this.st.classList.remove('hz'); fn(); }
   start() { if (this.on) return; this.on = true; this.gone = 0; this.wait(this.first ? 500 : 300, () => this.next()); }
   stop() { this.on = false; clearTimeout(this.t); }
+  // walk in the three-quarter view; turning round passes through a short front-view beat
   walk(x, fn) { x = Math.max(8, Math.min(92, x)); const dx = x - this.x; if (Math.abs(dx) < 1) { fn(); return; }
-    this.hm.classList.toggle('fl', dx < 0); this.pose('walk'); const ms = Math.round(Math.abs(dx) * (this.mode === 'card' ? 70 : 62));
-    this.hm.style.transition = `left ${ms}ms linear`; this.hm.style.left = x + '%'; this.x = x; this.wait(ms, () => { this.hm.classList.remove('fl'); fn(); }); }
+    const d = dx < 0 ? -1 : 1, go = () => { this.face(d); this.pose('walk'); const ms = Math.round(Math.abs(dx) * (this.mode === 'card' ? 70 : 62) * (this.hm.classList.contains('bh') ? 1.2 : 1));
+      this.hm.style.transition = `left ${ms}ms linear,transform .7s ease,bottom .7s ease,filter .7s`; this.hm.style.left = x + '%'; this.x = x; this.wait(ms, fn); };
+    if (d !== this.dir && this.hm.dataset.v === 'q') { this.pose('idle', this.hm.dataset.m); this.wait(260, go); } else go(); }
   next() { if (!this.on) return; const s = this.q.shift(); if (!s) { this.plan(); return; }
     if (s.cb) try { s.cb(); } catch (e) {}
-    if (s.behind != null) this.hm.classList.toggle('bh', !!s.behind);
+    if (s.dir) this.face(s.dir);
+    if (s.depth != null) { const b = !!s.depth; if (b !== this.hm.classList.contains('bh')) { this.pose('walk'); this.hm.classList.toggle('bh', b); this.wait(720, () => this.next()); return; } }
     if (s.walk != null) { this.walk(s.walk, () => this.next()); return; }
+    if (s.p === undefined && s.depth != null) { this.next(); return; }
     this.pose(s.p, s.m); this.wait(s.d || 1000, () => this.next()); }
   // wander between behaviours; the first is a greeting, a new weather condition gets its reaction next
-  plan() { let b; const pool = this.mode === 'thumb' ? ['wave'] : this.mode === 'card' ? ['wave', 'sit', 'wave', 'hop'] : ['wave', 'sit', 'dance', 'lights', 'bugs', 'peek', 'wave'];
+  plan() { let b; const pool = this.mode === 'thumb' ? ['wave'] : this.mode === 'card' ? ['wave', 'sit', 'wave', 'hop'] : ['wave', 'loop', 'sit', 'dance', 'lights', 'bugs', 'loop', 'peek', 'wave'];
     if (this.first) { b = 'greet'; this.first = false; } else if (this.wxDue && this.mode !== 'thumb') { b = 'weather'; this.wxDue = false; }
     else if (!this.wand) { b = 'wander'; } else { if (!this.bag.length) { this.bag = this.seq ? pool.slice().sort(() => Math.random() - 0.5) : pool.slice(); this.seq = true; if (this.cond && this.mode !== 'thumb') this.bag.splice(1 + Math.floor(Math.random() * 3), 0, 'weather'); } b = this.bag.shift(); }
     this.wand = b === 'wander';
     this.q = this.beh(b); this.next(); }
   rnd(a, b) { return a + Math.random() * (b - a); }
-  beh(b) { const nb = this.nb, card = this.mode === 'card', thumb = this.mode === 'thumb', idle = (d, m) => ({ p: 'idle', m, d });
+  // where he stands clear of the number on either side (his half-width is about 12% of the stage)
+  side(r) { const nb = this.nb; return r ? Math.min(90, nb.r + 12) : Math.max(10, nb.l - 12); }
+  beh(b) { const nb = this.nb, card = this.mode === 'card', thumb = this.mode === 'thumb', idle = (d, m) => ({ p: 'idle', m, d }), right = this.x >= 50;
     if (thumb) return b === 'wander' ? [idle(2600)] : [{ p: 'wave', m: 'wd', d: 2400 }, idle(600)];
-    if (b === 'greet') return [{ behind: false }, { p: 'wave', m: 'wd', d: 2800 }, idle(700)];
+    if (b === 'greet') return [{ depth: false }, { p: 'wave', m: 'wd', d: 2800 }, idle(700)];
     if (b === 'wave') return [{ p: 'wave', m: 'wd', d: 2400 }, idle(500)];
-    if (b === 'wander') { let x; if (card) x = this.rnd(26, 74); else { const r = Math.random(); x = r < 0.4 ? this.rnd(12, nb.l - 6) : r < 0.75 ? this.rnd(nb.l + 4, nb.r - 4) : this.rnd(nb.r + 6, 88); }
-      return [{ behind: false, walk: x }, idle(Math.round(this.rnd(card ? 2400 : 1400, card ? 4200 : 2800)))]; }
-    if (b === 'hop') return [{ p: 'stomp', d: 650 }, idle(1600)];
-    if (b === 'sit') return [{ walk: card ? this.x : (this.x < 50 ? nb.l + 3 : nb.r - 3) }, { p: 'sit', m: 'so', d: card ? 6000 : 5200 }, idle(700)];
-    if (b === 'dance') return [{ walk: this.x < 50 ? Math.max(14, nb.l - 12) : Math.min(86, nb.r + 12) }, { p: 'dance', m: 'wd', d: 3800 }, idle(600)];
-    if (b === 'lights') { const lx = this.x < 50 ? 18 : 82; return [{ walk: lx }, { cb: () => this.lampAt(lx, true) }, idle(900), { p: 'reach', d: 800 },
-      { cb: () => { this.lamp.classList.add('pl'); this.lit = !this.lit; this.st.classList.toggle('lit', this.lit); setTimeout(() => this.lamp && this.lamp.classList.remove('pl'), 420); }, p: 'pull', d: 700 },
+    if (b === 'wander') { let x; if (card) x = this.rnd(28, 72); else { const r = Math.random(); x = r < 0.45 ? this.rnd(10, this.side(false)) : r < 0.9 ? this.rnd(this.side(true), 90) : this.rnd(nb.l + 4, nb.r - 4); }
+      return [{ depth: false, walk: x }, idle(Math.round(this.rnd(card ? 2400 : 1400, card ? 4200 : 2800)))]; }
+    if (b === 'hop') return [{ p: 'stomp', d: 700 }, idle(1600)];
+    // round the date: across the front, a step back, behind it (smaller, under the number), a step forward, a wave
+    if (b === 'loop') { const a = this.side(right), z = this.side(!right);
+      return [{ depth: false, walk: a }, { walk: z }, { depth: true }, { walk: a }, { depth: false }, { p: 'wave', m: 'wd', d: 1600 }, idle(500)]; }
+    // sit on the ground, back against the foot of the number, legs stretched out away from it
+    if (b === 'sit') { if (card) return [{ dir: this.x > 50 ? -1 : 1, p: 'sit', m: 'so', d: 6000 }, idle(700)];
+      const r = nb.r < 74 && (right || nb.l < 26), sx = r ? nb.r + 4.5 : nb.l - 4.5;
+      return [{ depth: false, walk: sx }, { dir: r ? 1 : -1, p: 'sit', m: 'so', d: 5600 }, idle(700)]; }
+    if (b === 'dance') return [{ depth: false, walk: card ? this.x : this.side(right) }, { p: 'dance', m: 'wd', d: 3800 }, idle(600)];
+    if (b === 'lights') { const r = !right, lx = right ? Math.min(78, this.side(true)) : Math.max(22, this.side(false)); // he faces the room, the lamp hangs in front of him
+      return [{ depth: false, walk: lx }, { dir: r ? -1 : 1, cb: () => this.lampAt(lx, this.dir, true), p: 'notice', m: 'oh', d: 900 }, { p: 'reach', m: 'wd', d: 800 },
+      { cb: () => { this.lamp.classList.add('pl'); this.lit = !this.lit; this.st.classList.toggle('lit', this.lit); setTimeout(() => this.lamp && this.lamp.classList.remove('pl'), 420); }, p: 'pull', m: 'wd', d: 700 },
       { p: 'idle', m: 'wd', d: 1700 }, { cb: () => { if (!this.lit) this.lamp.classList.remove('vis'); }, p: 'idle', d: 500 }]; }
-    if (b === 'bugs') { const n = 1 + Math.floor(Math.random() * 3), side = this.x < 50 ? 1 : -1, bx = Math.max(12, Math.min(88, this.x + side * this.rnd(16, 24))), list = [];
-      return [{ cb: () => { this.bugs.innerHTML = ''; for (let i = 0; i < n; i++) { const g = document.createElement('div'); g.className = 'hbg' + (side < 0 ? '' : ' fl'); g.innerHTML = HV_HOMIE_BUG;
-          const x0 = bx + (i ? side * (4 + i * 4) : 0); g.style.left = x0 + '%'; this.bugs.appendChild(g); list.push(g); } } }, { p: 'notice', m: 'oh', d: 1000 }, { walk: bx - side * 5 },
-        { cb: () => setTimeout(() => { if (list[0]) list[0].classList.add('pf'); list.slice(1).forEach((g, i) => { g.style.left = (side > 0 ? 112 + i * 6 : -12 - i * 6) + '%'; g.classList.add('sc'); }); }, 330), p: 'stomp', d: 700 },
+    if (b === 'bugs') { const n = 1 + Math.floor(Math.random() * 3), side = right ? -1 : 1, bx = Math.max(12, Math.min(88, this.x + side * this.rnd(16, 22))), list = [];
+      return [{ depth: false }, { dir: side, cb: () => { this.bugs.innerHTML = ''; for (let i = 0; i < n; i++) { const g = document.createElement('div'); g.className = 'hbg' + (side < 0 ? '' : ' fl'); g.innerHTML = HV_HOMIE_BUG;
+          const x0 = bx + (i ? side * (4 + i * 4) : 0); g.style.left = x0 + '%'; this.bugs.appendChild(g); list.push(g); } }, p: 'notice', m: 'oh', d: 1000 }, { walk: bx - side * 3 },
+        { cb: () => setTimeout(() => { if (list[0]) list[0].classList.add('pf'); list.slice(1).forEach((g, i) => { g.style.left = (side > 0 ? 112 + i * 6 : -12 - i * 6) + '%'; g.classList.add('sc'); }); }, 380), p: 'stomp', m: 'wd', d: 760 },
         { p: 'idle', m: 'wd', d: 1500 }, { cb: () => { this.bugs.innerHTML = ''; }, p: 'idle', d: 300 }]; }
-    if (b === 'peek') { const x0 = Math.max(10, nb.l - 12); return [{ walk: x0 }, { behind: true }, { walk: nb.l + 4 }, { p: 'peek', d: 1900 }, { walk: x0 }, { behind: false }, { p: 'wave', m: 'wd', d: 1400 }, idle(400)]; }
+    // hide round the back of the number and peek out past its edge
+    if (b === 'peek') { const x0 = this.side(false); return [{ depth: false, walk: x0 }, { depth: true }, { walk: nb.l + 6 }, { dir: -1, p: 'peek', d: 1900 }, { walk: x0 }, { depth: false }, { p: 'wave', m: 'wd', d: 1400 }, idle(400)]; }
     if (b === 'weather') { const c = this.cond || '', k = HV_HOMIE_WX[c] || '';
       if (k === 'sun') return [{ p: 'shade', m: 'wd', d: 2800 }, idle(600)];
       if (k === 'snow') return [{ p: 'shiver', d: 2000 }, { p: 'catch', m: 'wd', d: 2400 }, idle(500)];
-      if (k === 'storm' || k === 'storm0') return card ? [{ p: 'idle', m: 'so', d: 2200 }] : [{ cb: () => this.flash(), p: 'startle', m: 'oh', d: 1100 }, { walk: Math.max(10, nb.l - 12) }, { behind: true },
-        { walk: nb.l + 4 }, { p: 'peek', m: 'so', d: 2000 }, { walk: Math.max(10, nb.l - 12) }, { behind: false }, idle(600)];
-      if (k === 'wind') return [{ walk: card ? 40 : Math.max(10, nb.l - 6) }, { p: 'lean', d: 3800 }, idle(500)];
+      if (k === 'storm' || k === 'storm0') return card ? [{ p: 'idle', m: 'so', d: 2200 }] : [{ cb: () => this.flash(), p: 'startle', m: 'oh', d: 1100 }, { depth: false, walk: this.side(false) }, { depth: true },
+        { walk: nb.l + 6 }, { dir: -1, p: 'peek', m: 'so', d: 2000 }, { walk: this.side(false) }, { depth: false }, idle(600)];
+      if (k === 'wind') return card ? [{ dir: 1, p: 'lean', d: 3600 }, idle(500)] : [{ depth: false, walk: Math.max(10, nb.l - 10) }, { dir: 1, p: 'lean', d: 3800 }, idle(500)]; // holds on to the number
       if (k === 'fog') return [{ p: 'peer', d: 3200 }, idle(500)];
       if (k === 'rain' || k === 'hail') return [{ p: 'idle', m: 'wd', d: 2600 }, { p: 'wave', m: 'wd', d: 1800 }, idle(800)];
       return [{ p: 'wave', m: 'wd', d: 2000 }, idle(500)]; }
     return [idle(1500)]; }
-  lampAt(x, vis) { if (!this.lamp) return; this.lamp.style.left = `calc(${x}% + 3.3cqh)`; /* the pull cord under his raised right hand */ this.st.style.setProperty('--lx', ((x + 30) / 1.6).toFixed(1) + '%'); /* .hglow is 160% wide */ this.lamp.classList.toggle('vis', !!vis); }
+  // the lamp's pull cord ends at his raised front hand (three-quarter view: ~0.31 x his height ahead of his centre, 55% of his height above his feet)
+  lampAt(x, dir, vis) { if (!this.lamp) return; const H = '(100cqh - var(--gy) - var(--hs) * .55) / .975';
+    this.lamp.style.height = `calc(${H})`; this.lamp.style.left = `calc(${x}% + ${(dir < 0 ? -0.31 : 0.31)} * var(--hs) - ${H} / 24)`;
+    this.st.style.setProperty('--lx', ((x + 30) / 1.6).toFixed(1) + '%'); /* .hglow is 160% wide */ this.lamp.classList.toggle('vis', !!vis); }
   flash() { const f = this.st.querySelector('.hflash'); if (!f || !this.big) return; f.classList.remove('go'); void f.offsetWidth; f.classList.add('go'); }
   setWx(cond) { const k = HV_HOMIE_WX[cond] || '', kind = k === 'storm0' ? '' : k; this.hm.classList.toggle('umb', ['rain', 'storm', 'hail'].includes(k));
     if (this.wx.dataset.w === kind) return; this.wx.dataset.w = kind; let h = ''; const n = { rain: 38, storm: 46, hail: 30, snow: 28, wind: 7, fog: 3, sun: 1 }[kind] || 0, few = this.mode === 'card' ? 0.55 : this.mode === 'thumb' ? 0.4 : 1;
     for (let i = 0, m = Math.max(kind ? 1 : 0, Math.round(n * few)); i < m; i++) { const l = (i * 61.8 % 100).toFixed(1), dl = -((i * 0.37) % (kind === 'snow' ? 7 : kind === 'wind' ? 2.4 : kind === 'fog' ? 12 : 1)).toFixed(2);
       h += kind === 'wind' ? `<i style="top:${(12 + i * 11) % 90}%;animation-delay:${(-i * 0.7).toFixed(2)}s"></i>` : kind === 'fog' ? `<i style="top:${20 + i * 24}%;animation-delay:${-i * 4}s"></i>` : kind === 'sun' ? '<i></i>' : `<i style="left:${l}%;animation-delay:${dl}s"></i>`; }
     this.wx.innerHTML = h; }
-  // refresh from the face / card tick: weather (a new condition plays its reaction next) and the big number's edges (where he sits, peeks, leans)
+  // refresh from the face / card tick: weather (a new condition plays its reaction next) and the big number's edges (where he walks round, sits, peeks, leans)
   update(hass, we) { if (this.opt.pause) { const z = !!this.opt.pause() || document.hidden; if (z) this.st.classList.add('hz'); } // the card: pause at once (the runner resumes it)
     const c = hvHomieWx(hass, we); if (c !== this.cond) { if (this.cond !== undefined || c) this.wxDue = !!c; this.cond = c; this.setWx(c); }
-    if (this.big) { const n = this.st.querySelector('.hdn'); if (n) { const a = this.st.getBoundingClientRect(), b = n.getBoundingClientRect(); if (a.width && b.width) this.nb = { l: (b.left - a.left) / a.width * 100, r: (b.right - a.left) / a.width * 100 }; } }
+    if (this.mode !== 'card') { const n = this.st.querySelector('.hdn'); if (n) { const a = this.st.getBoundingClientRect(), b = n.getBoundingClientRect(); if (a.width && b.width) { this.nb = { l: (b.left - a.left) / a.width * 100, r: (b.right - a.left) / a.width * 100 };
+      if (!this.placed) { this.placed = true; this.x = this.nb.r < 76 ? this.side(true) : this.side(false); this.hm.style.left = this.x + '%'; } } } } // first frame: beside the number, not over it
     this.start(); } }
 // the Home Screen card: <homeview-homie-card> (Add App › Homie or show_homie on the Home Screen card puts it in the tile row). Tap = the larger Homie popup.
 class HVHomieCard extends HTMLElement {
@@ -9227,9 +9278,9 @@ const HV_SS_FACE_CSS = `
 .whimsy svg.h{position:absolute;inset:0;width:100%;height:100%}
 /* homie */
 .f.homie{background:var(--hv-ss-bg,#1a1a1a)}
-.homie .hwd{position:absolute;left:0;right:0;top:6cqh;text-align:center;color:var(--hv-ss-text,#e6e6e6);font:700 7.6cqh/1 ui-rounded,"SF Pro Rounded","Nunito","Varela Round",${FONT};letter-spacing:.05em}
+.homie .hwd{position:absolute;left:0;right:0;top:5.5cqh;text-align:center;color:var(--hv-ss-text,#e6e6e6);font:700 7.6cqh/1 "Comic Neue","Chalkboard SE",ui-rounded,"SF Pro Rounded","Nunito","Varela Round",${FONT};letter-spacing:.06em;text-transform:uppercase}
 .homie .htm{position:absolute;left:0;right:0;top:15.5cqh;text-align:center;color:color-mix(in srgb,var(--hv-ss-text,#e6e6e6) 55%,transparent);font:600 3.6cqh/1 ui-rounded,"SF Pro Rounded",${FONT};letter-spacing:.08em;font-variant-numeric:tabular-nums}
-.homie .hdn{position:absolute;left:50%;top:59%;transform:translate(-50%,-50%);z-index:2;white-space:nowrap;color:color-mix(in srgb,var(--hv-ss-text,#e6e6e6) 34%,var(--hv-ss-bg,#1a1a1a));font:700 62cqh/.8 ui-rounded,"SF Pro Rounded",${FONT};letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.homie .hdn{position:absolute;left:50%;top:59%;transform:translate(-50%,-50%);z-index:2;white-space:nowrap;color:color-mix(in srgb,var(--hv-ss-text,#e6e6e6) 80%,var(--hv-ss-bg,#1a1a1a));font:700 64cqh/.8 ui-rounded,"SF Pro Rounded",${FONT};letter-spacing:-.03em;font-variant-numeric:tabular-nums}
 ` + HV_HOMIE_CSS;
 const hvSsSvgNS = 'http://www.w3.org/2000/svg';
 // glassy digit shapes (box 100 x 140): [x, y, w, h, radius, rotate]
