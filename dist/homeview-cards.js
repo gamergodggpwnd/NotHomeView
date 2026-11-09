@@ -6244,6 +6244,7 @@ function hvOpenSettings(hub, app, from) {
         f.addEventListener('value-changed', ev => { ev.stopPropagation(); const v = ev.detail.value && ev.detail.value[k]; f.data = { [k]: v }; save(k, v); }); forms.set(k, f); }
       f.hass = H(); f.schema = [fields()[k]].filter(Boolean); f.data = { [k]: data()[k] }; f.disabled = ro(); box.appendChild(f); } }); };
   // Screensaver: the shared style picker as a carousel, in its own shadow root (the faces' CSS and Settings' CSS stay apart)
+  const ssBump = () => { const w = ssWallpanel(); if (w && !(w.screensaverRunning && w.screensaverRunning())) w.idleSince = Date.now(); }; let ssKeep = 0;
   let ssPick = null; const ssShim = { get _hass() { return H(); }, _status: (m, k) => { if (k === 'err') flash(m, true); else if (k === 'ok') flash('Saved'); } };
   const ssRefresh = async () => { try { const q = { type: 'lovelace/config', force: true }; if (dash()) q.url_path = dash(); const c = await H().callWS(q); if (c && typeof c === 'object') useCfg(c); } catch (e) {}
     const h = live(); if (h && !h._sheetO && s && s.host.isConnected) h._sheetO = s; };
@@ -6275,7 +6276,7 @@ function hvOpenSettings(hub, app, from) {
   const day = hvMode((st.cfg || {}).theme, H()) === 'day';
   s = hvSheet({ full: (st.cfg || {}).full_height_popups !== false, label: 'Settings', day, dayBg: '#f2f2f7', bg: '#000', parent: document.body, // over the page: a save that rebuilds the view keeps the sheet
     launch: () => { const h = live(); return h ? [h.shadowRoot.querySelector('.bg'), h._w] : []; },
-    onClose: () => { hvOpenSettings.cur = null; clearTimeout(tstT); if (ro0) ro0.disconnect(); for (const h of HV_HUBS) if (h._sheetO === s) { h._sheetO = null; h._layout(); } },
+    onClose: () => { hvOpenSettings.cur = null; clearInterval(ssKeep); ssBump(); clearTimeout(tstT); if (ro0) ro0.disconnect(); for (const h of HV_HUBS) if (h._sheetO === s) { h._sheetO = null; h._layout(); } },
     build: bd => { const sty = document.createElement('style'); sty.textContent = HV_SET_CSS; bd.appendChild(sty); root = document.createElement('div'); root.className = 'se'; bd.appendChild(root);
       root.innerHTML = '<div class="side"><h1 class="bt">Settings</h1><label class="srch"><ha-icon icon="mdi:magnify"></ha-icon><input type="search" placeholder="Search" aria-label="Search settings" enterkeyhint="search" autocomplete="off"></label><div class="sl"></div></div><div class="pane" role="region" aria-label="Settings page"></div><div class="tst" role="status" aria-live="polite"></div>';
       side = root.querySelector('.side'); pane = root.querySelector('.pane'); list = root.querySelector('.sl');
@@ -6298,6 +6299,7 @@ function hvOpenSettings(hub, app, from) {
       lay(); if (!root.dataset.l) { st.wide = innerWidth >= 700; root.dataset.l = '1'; root.classList.toggle('wide', st.wide); paint(); }
       return { set hass(h) { const sig = (st.page === 'person' || !st.page || st.wide) ? JSON.stringify((personOf() || {}).attributes || {}) : ''; if (sig !== st.psig) { const first = st.psig === undefined; st.psig = sig; if (!first) paintSide(); } } }; } });
   hvOpenSettings.cur = s; if (hub) { hub._sheetO = s; }
+  ssBump(); ssKeep = setInterval(ssBump, 2000); // the screensaver stays paused while Settings is open (Wallpanel's idle clock kept fresh); it can start again once Settings closes
   // the saved dashboard (the open one may lag behind), and the Assist pipelines for the pipeline list
   (async () => { try { const q = { type: 'lovelace/config', force: true }; if (dash()) q.url_path = dash(); const c = await H().callWS(q); if (c && typeof c === 'object' && s.host.isConnected) { useCfg(c); st.ready = true; retheme(); root.classList.toggle('wide', st.wide && !st.nohub); paint(); } }
     catch (e) { if (!st.ready && s.host.isConnected) { st.ready = true; st.nohub = !st.cfg; paint(); } } })();
@@ -6744,7 +6746,8 @@ class HVHubCard extends HTMLElement {
     if (on) { const t = s.done ? 'Done' : hvFmtLeft(HVTM.left()) + (s.paused != null ? ' ❚❚' : ''); const sp = p.querySelector('span'); if (sp.textContent !== t) sp.textContent = t; } }
   _openAssist() { if (this._assistO || !this._hass) return; hvSpkUnlock(); HVTM.opts.sound = this._config.timer_sound !== false; const al = this._config.assistant_auto_listen !== false;
     this._assistO = hvAssist(this, { orb: al && this._config.assistant_orb !== false }); hvWwSync(); if (al) this._assistO.listen(true); }
-  disconnectedCallback() { HV_HUBS.delete(this); setTimeout(hvWwSync, 0); hvTimerPills.delete(this._tpf); if (this._assistO) this._assistO.close(); clearInterval(this._ssHoldIv); this._ssHoldIv = null; this._edgeBind(false); hvPTR.set(this, false); this._ssBind(false); this._homeSwBind(false); if (this._galO) this._galO.close(); if (this._sheetO) this._sheetO.close(); this._ssPause(false); clearInterval(this._tick); clearTimeout(this._timer); this._timer = null;
+  disconnectedCallback() { HV_HUBS.delete(this); setTimeout(hvWwSync, 0); hvTimerPills.delete(this._tpf); if (this._assistO) this._assistO.close(); clearInterval(this._ssHoldIv); this._ssHoldIv = null; this._edgeBind(false); hvPTR.set(this, false); this._ssBind(false); this._homeSwBind(false); if (this._galO) this._galO.close(); if (this._sheetO) { const so = this._sheetO, d0 = ssDash(); this._sheetO = null; if (so !== hvOpenSettings.cur) so.close(); // Settings (on document.body) survives a view rebuild: hand it to the new card, close it only if the card is really gone
+    else setTimeout(() => { if (hvOpenSettings.cur !== so) return; const n = ssDash() === d0 && [...HV_HUBS].find(x => x.isConnected && !hvInDialog(x)); if (n) { if (!n._sheetO) n._sheetO = so; } else so.close(); }, 1200); } this._ssPause(false); clearInterval(this._tick); clearTimeout(this._timer); this._timer = null;
     removeEventListener('resize', this._bound); removeEventListener('orientationchange', this._bound); removeEventListener('hv-layout', this._bound); if (window.visualViewport) visualViewport.removeEventListener('resize', this._bound);
     document.removeEventListener('visibilitychange', this._vis); }
   // --- dashboard config (Wallpanel settings, views for the sheets), cached
@@ -8682,8 +8685,11 @@ const hvSsSaveHub = async (hass, mut) => { // mut(hub) → true if changed; retu
   const admin = !!(hass && hass.user && hass.user.is_admin); if (!admin) return false;
   const dash = ssDash(), q = { type: 'lovelace/config', force: true }; if (dash) q.url_path = dash;
   const fresh = JSON.parse(JSON.stringify(await hass.callWS(q))), hub = hvHubCfgOf(fresh);
+  const lv = hvSsLv(), same = !!lv && JSON.stringify(fresh) === JSON.stringify(lv.rawConfig || lv.config);
   if (!hub || !mut(hub)) return false;
-  const lv = hvSsLv(); if (lv && typeof lv.saveConfig === 'function' && (lv.urlPath || null) === (dash || null)) await lv.saveConfig(fresh);
+  // Settings open: save quietly like Settings' own options (no view rebuild, so the Home Screen card and the Settings sheet stay)
+  const qh = hvOpenSettings.cur && same ? [...HV_HUBS].find(x => x.isConnected && x._w && !hvInDialog(x)) : null;
+  if (lv && typeof lv.saveConfig === 'function' && (lv.urlPath || null) === (dash || null)) { if (qh) { try { qh.setConfig(JSON.parse(JSON.stringify(hub))); } catch (e) {} await hvQuietSave(qh, lv, fresh); } else await lv.saveConfig(fresh); }
   else { const sv = { type: 'lovelace/config/save', config: fresh }; if (dash) sv.url_path = dash; await hass.callWS(sv); }
   return true; };
 const hvSs = {
