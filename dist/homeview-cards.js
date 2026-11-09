@@ -6968,11 +6968,30 @@ class HVHubCard extends HTMLElement {
   _ssPrev(show) { let v = this._ssv;
     if (!v) { v = this._ssv = document.createElement('div'); v.className = 'ssv';
       v.innerHTML = '<div class="ssin"><div class="ssb"></div><div class="sss"></div><div class="ssg"></div><div class="ssc"><div class="sst"></div><div class="ssd"></div></div></div>'; this.shadowRoot.appendChild(v); }
-    if (!show) { v.style.display = 'none'; return v; }
-    const bg = this._cur ? `url("${this._cur.replace(/"/g, '%22')}")` : ''; v.querySelector('.ssb').style.backgroundImage = bg; v.querySelector('.sss').style.backgroundImage = bg;
-    const n = new Date(), lang = (this._hass && this._hass.locale && this._hass.locale.language) || navigator.language;
-    v.querySelector('.sst').textContent = n.toLocaleTimeString(lang, { hour: 'numeric', minute: '2-digit' }).replace(/\s?[AP]M$/i, '');
-    v.querySelector('.ssd').textContent = n.toLocaleDateString(lang, { weekday: 'long', month: 'long', day: 'numeric' });
+    if (!show) { v.style.display = 'none'; const fh = v.querySelector('.ssface'); if (fh) { try { fh.remove(); } catch (e) {} } this._ssFace = null; return v; }
+    const st = (typeof hvSs !== 'undefined' && hvSs.get) ? hvSs.get() : 'photo', photo = st === 'photo';
+    const ssb = v.querySelector('.ssb'), sss = v.querySelector('.sss'), ssg = v.querySelector('.ssg'), ssc = v.querySelector('.ssc');
+    let faceHost = v.querySelector('.ssface');
+    if (photo) {
+      if (faceHost) { try { faceHost.remove(); } catch (e) {} } this._ssFace = null;
+      const bg = this._cur ? `url("${this._cur.replace(/"/g, '%22')}")` : ''; ssb.style.backgroundImage = bg; sss.style.backgroundImage = bg;
+      for (const el of [ssb, sss, ssg, ssc]) el.style.display = '';
+      const n = new Date(), lang = (this._hass && this._hass.locale && this._hass.locale.language) || navigator.language;
+      v.querySelector('.sst').textContent = n.toLocaleTimeString(lang, { hour: 'numeric', minute: '2-digit' }).replace(/\s?[AP]M$/i, '');
+      v.querySelector('.ssd').textContent = n.toLocaleDateString(lang, { weekday: 'long', month: 'long', day: 'numeric' });
+    } else {
+      // Styled overlay selected: never flash Wallpanel's photo+clock in the swipe-down preview.
+      ssb.style.backgroundImage = ''; sss.style.backgroundImage = '';
+      for (const el of [ssb, sss, ssg, ssc]) el.style.display = 'none';
+      if (!faceHost) { faceHost = document.createElement('div'); faceHost.className = 'ssface'; faceHost.style.cssText = 'position:absolute;inset:0;';
+        const sr = faceHost.attachShadow({ mode: 'open' }); sr.innerHTML = `<style>${HV_SS_FACE_CSS}</style>`; v.querySelector('.ssin').appendChild(faceHost); }
+      const cols = hvSsColors.get(st), sr = faceHost.shadowRoot;
+      if (!this._ssFace || this._ssFace.s !== st || !this._ssFace.el.isConnected) {
+        [...sr.childNodes].forEach(n => { if (n.tagName !== 'STYLE') n.remove(); });
+        this._ssFace = new HVSsFace(st); this._ssFace.applyColors(cols); sr.appendChild(this._ssFace.el); }
+      else this._ssFace.applyColors(cols);
+      this._ssFace.update(this._hass, new Date());
+    }
     v.style.display = 'block'; this._ssPose(0, false); return v; }
   // dy = how far the page is pulled down; the preview hangs above the page (its picture held still), sharpening as it opens
   _ssPose(dy, anim, dur, ease) { const H = innerHeight || 800, p = Math.max(0, Math.min(1, dy / H)), v = this._ssv; if (!v) return;
@@ -6997,7 +7016,9 @@ class HVHubCard extends HTMLElement {
   _startSS(quick) { const w = ssWallpanel(); if (!this._wpOnHere()) return false; if (w && typeof w.startScreensaver === 'function') { try { this._ssSync(w); w.startScreensaver();
       // the pull preview already covers the screen: let Wallpanel's own layer come up quickly instead of its slow first fade-in
       // (Wallpanel sets its fade-in transition synchronously at start; the next start / stop sets its own again)
-      if (quick) w.style.transition = 'opacity 320ms ease-out'; return true; } catch (e) {} } return false; }
+      if (quick) w.style.transition = 'opacity 320ms ease-out';
+      try { hvSsOv.tick(true); } catch (e) {}
+      return true; } catch (e) {} } return false; }
   // --- slide-up sheets on the launch page
   // 1.32.0: the popups' edit pencil: closes whatever is open, then the Home Screen card's editor (or a device page in edit mode)
   _penFn(target) { return hvPenOK(this, this._hass) ? () => this._penGo(target) : null; }
@@ -9062,30 +9083,42 @@ const hvSsOv = {
     let cs; try { cs = getComputedStyle(w); } catch (e) { return false; }
     if (cs.visibility === 'hidden' || cs.display === 'none' || cs.pointerEvents === 'none') return false;
     const op = Number(cs.opacity); return isFinite(op) && op >= 0.05; },
-  tick(force) { const w = ssWallpanel();
-    if (!this.showing(w)) {
-      let run = false; try { run = !!(w && w.screensaverRunning && w.screensaverRunning()); } catch (e) { run = false; }
-      // Only a layer that is marked visible and hit-testable but fully transparent. A start that is still
-      // loading stays visibility:hidden / pointer-events:none and must not be stopped.
-      let ghost = false;
-      if (run && w) { try { const cs = getComputedStyle(w); ghost = cs.visibility !== 'hidden' && cs.display !== 'none' && cs.pointerEvents !== 'none' && !(Number(cs.opacity) >= 0.05); } catch (e) { ghost = false; } }
-      if (ghost) { this._ghost = this._ghost || Date.now(); if (Date.now() - this._ghost > 1200 && typeof w.stopScreensaver === 'function') { try { w.stopScreensaver(); } catch (e) {} } }
-      else this._ghost = 0;
+  _running(w) { try { return !!(w && w.screensaverRunning && w.screensaverRunning()); } catch (e) { return false; } },
+  _hookStart() { const w = ssWallpanel(); if (!w || w.__hvSsHooked || typeof w.startScreensaver !== 'function') return;
+    w.__hvSsHooked = true; const orig = w.startScreensaver;
+    // Show the chosen style in the same turn Wallpanel starts, so its photo clock never paints first.
+    w.startScreensaver = function () { const r = orig.apply(this, arguments); try { hvSsOv.tick(true); } catch (e) {} return r; }; },
+  tick(force) { const w = ssWallpanel(); this._hookStart();
+    let run = this._running(w), cs = null; try { cs = w && getComputedStyle(w); } catch (e) { cs = null; }
+    const vis = !!(cs && cs.visibility !== 'hidden' && cs.display !== 'none');
+    const op = cs ? Number(cs.opacity) : 0, faded = vis && isFinite(op) && op >= 0.05;
+    // Only a layer that is marked visible and hit-testable but fully transparent. A start that is still
+    // loading stays visibility:hidden / pointer-events:none and must not be stopped.
+    const ghost = !!(run && cs && vis && cs.pointerEvents !== 'none' && !faded);
+    if (ghost) { this._ghost = this._ghost || Date.now(); if (Date.now() - this._ghost > 1200 && typeof w.stopScreensaver === 'function') { try { w.stopScreensaver(); } catch (e) {} } }
+    else this._ghost = 0;
+    // Keep the style up while Wallpanel is starting (often hidden / pointer-events:none) or fading out
+    // (pointer-events:none while still opaque). Drop it only when the screensaver is gone, or is a
+    // transparent ghost that would cover the Settings dialog.
+    if (!w || ghost || !(run || faded)) {
       if (this.host || this._up) this.hide();
       hvSsPhotoTint.clear(); return; }
-    this._ghost = 0;
     const st = hvSs.get(), cols = hvSsColors.get(st), colKey = st + ':' + JSON.stringify(hvSsStrip(st, cols) || {});
     if (st === 'photo') { this.hide(); hvSsPhotoTint.apply(cols.text); return; }
     hvSsPhotoTint.clear();
-    if (!this.host || this.style !== st || this.colKey !== colKey || !this.host.isConnected || this.host.parentNode !== w.parentNode) { this.hide();
+    const born = !this.host || this.style !== st || this.colKey !== colKey || !this.host.isConnected || this.host.parentNode !== w.parentNode;
+    if (born) { this.hide();
       const h = document.createElement('div'); h.id = 'hv-ss-style'; h.setAttribute('aria-hidden', 'true'); h.inert = true; const sr = h.attachShadow({ mode: 'open' }); sr.innerHTML = `<style>${HV_SS_FACE_CSS}</style>`;
       this.face = new HVSsFace(st); this.face.applyColors(cols); sr.appendChild(this.face.el); this.style = st; this.colKey = colKey; this.host = h; this._up = true; w.parentNode.appendChild(h); }
     else if (this.face) this.face.applyColors(cols);
     // Just above Wallpanel (page hints sit under it). A 2147482000 z-index painted over the settings dialog, so the button looked dead.
-    let z = parseInt(getComputedStyle(w).zIndex, 10); if (!(z > 0)) z = 1000; const op = Number(getComputedStyle(w).opacity);
-    this.host.style.cssText = `position:fixed;inset:0;z-index:${z + 1};pointer-events:none;opacity:${isFinite(op) ? op : 1};transition:opacity .4s linear`;
+    let z = parseInt(cs && cs.zIndex, 10); if (!(z > 0)) z = 1000;
+    // Starting (not yet faded in): cover immediately so photos never flash through. Fading out: match
+    // Wallpanel's opacity. Skip the opacity transition on first paint — that fade-from-zero was another flash.
+    const starting = run && !faded, overlayOp = starting ? 1 : (isFinite(op) ? op : 1);
+    this.host.style.cssText = `position:fixed;inset:0;z-index:${z + 1};pointer-events:none;opacity:${overlayOp};transition:${born || starting ? 'none' : 'opacity .4s linear'}`;
     this.face.update(this.hass(), new Date()); },
-  start() { if (this.iv) return; this.iv = setInterval(() => { try { this.tick(); } catch (e) { /* next tick */ } try { hvSsHome.tick(); } catch (e) {} }, 250); } };
+  start() { if (this.iv) return; this._hookStart(); this.iv = setInterval(() => { try { this._hookStart(); this.tick(); } catch (e) { /* next tick */ } try { hvSsHome.tick(); } catch (e) {} }, 250); } };
 /* swipe_open_home on the screensaver: a lock-screen-style Home button (bottom left) and a left-to-right swipe each open the
    Home app as a sheet over the running screensaver (it stays up until you close Home). Its own layer just above Wallpanel's and the style faces, only while the setting is on and a screensaver
    is showing (every style); only the button takes touches, so a tap anywhere else still reaches Wallpanel and dismisses it as before. */
