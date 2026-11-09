@@ -8961,42 +8961,45 @@ const hvSsColors = {
     hvSsOv.tick(true); try { for (const h of HV_HUBS) if (h.isConnected && h._bgMode) h._bgMode(); } catch (e) {} return saved; } };
 // ---- faces (sized with container units, so one renderer draws the full screen and the picker thumbnails)
 // ---- Homie: NotHomeView's own house mascot (an original character drawn after the 2D action board: a cream house slightly taller than wide, a sky-blue
-// peaked gable roof with a blue chimney right of the ridge, a face on the front wall, short charcoal sausage arms and legs, chunky sky-blue shoes).
+// peaked gable roof with a blue chimney right of the ridge, a face on the front wall, long charcoal sausage arms and legs with four-fingered cartoon hands, chunky sky-blue shoes).
 // Two drawings: a front view (.vf: wave, rain, shade, ...) and a three-quarter view facing right (.vq: walk, dance, sit against the date, lights,
 // bugs; mirrored for facing left). One renderer (HVHomie) draws him for the Homie screensaver style (HVSsFace 'homie': full screen, the Settings
 // picker thumbnail and the parked wallpaper), the Home Screen card (homeview-homie-card) and its popup. Cartoon only: nothing here calls a service.
 const HV_HOMIE_T = 'custom:homeview-homie-card';
-const HV_HOMIE_ICO = '<svg viewBox="1 0 98 98" width="74%" height="74%" aria-hidden="true" stroke="#1f2328" stroke-width="2.6" stroke-linejoin="round"><rect x="63" y="8" width="8" height="21" rx="1.5" fill="#41bdf5"/><rect x="61.5" y="4.5" width="11" height="5.5" rx="2" fill="#41bdf5"/><path d="M22 42L50 15.5L78 42V85Q78 95 68 95H32Q22 95 22 85Z" fill="#fff6ea"/><path d="M45.5 9.5Q50 5.5 54.5 9.5L94 45Q97.5 49.5 92.5 51H86L50 19L14 51H7.5Q2.5 49.5 6 45Z" fill="#41bdf5"/><g stroke="none"><ellipse cx="40" cy="63" rx="4.8" ry="5.8" fill="#17191c"/><ellipse cx="60" cy="63" rx="4.8" ry="5.8" fill="#17191c"/><circle cx="41.7" cy="60.6" r="1.9" fill="#fff"/><circle cx="61.7" cy="60.6" r="1.9" fill="#fff"/><ellipse cx="30" cy="72.5" rx="4.4" ry="2.7" fill="#f8a39b" opacity=".8"/><ellipse cx="70" cy="72.5" rx="4.4" ry="2.7" fill="#f8a39b" opacity=".8"/></g><path d="M42.5 71Q50 72.8 57.5 71Q56.6 81 50 81Q43.4 81 42.5 71Z" fill="#3a2222" stroke-width="1.8"/></svg>';
+const HV_HOMIE_ICO = '<svg viewBox="0 -1 100 94" width="76%" height="76%" aria-hidden="true" stroke="#1f2328" stroke-width="2.6" stroke-linejoin="round"><rect x="64" y="6" width="8" height="22" rx="1.5" fill="#41bdf5"/><rect x="62.5" y="2.5" width="11" height="5.5" rx="2" fill="#41bdf5"/><path d="M20 42L50 14L80 42V79Q80 89 70 89H30Q20 89 20 79Z" fill="#fff6ea"/><path d="M45.5 8.5Q50 4.5 54.5 8.5L96 45.5Q99.5 50 94.5 51.5H88L50 18L12 51.5H5.5Q0.5 50 4 45.5Z" fill="#41bdf5"/><g stroke="none"><ellipse cx="39" cy="60" rx="4.8" ry="5.8" fill="#17191c"/><ellipse cx="61" cy="60" rx="4.8" ry="5.8" fill="#17191c"/><circle cx="40.7" cy="57.6" r="1.9" fill="#fff"/><circle cx="62.7" cy="57.6" r="1.9" fill="#fff"/></g><path d="M42.5 68Q50 69.8 57.5 68Q56.6 78 50 78Q43.4 78 42.5 68Z" fill="#3a2222" stroke-width="1.8"/></svg>';
 const HV_HOMIE_FACE = (x, s) => { const e = (dx, dy) => `${(x + dx * s).toFixed(1)} ${dy}`, X = dx => (x + dx * s).toFixed(1);
-  return `<g class="fc"><g class="ey"><ellipse cx="${X(-10)}" cy="63" rx="${(4.8 * s).toFixed(2)}" ry="5.8"/><ellipse cx="${X(10)}" cy="63" rx="${(4.8 * s).toFixed(2)}" ry="5.8"/>`
-  + `<circle class="hl" cx="${X(-8.3)}" cy="60.6" r="1.9"/><circle class="hl" cx="${X(11.7)}" cy="60.6" r="1.9"/><circle class="hl" cx="${X(-11.6)}" cy="65.6" r=".8"/><circle class="hl" cx="${X(8.4)}" cy="65.6" r=".8"/></g>`
-  + `<ellipse class="bl" cx="${X(-20)}" cy="72.5" rx="${(4.4 * s * s).toFixed(2)}" ry="2.7"/><ellipse class="bl" cx="${X(20)}" cy="72.5" rx="4.4" ry="2.7"/>`
-  + `<path class="mo sm" d="M${e(-6, 72)}Q${e(0, 78.5)} ${e(6, 72)}"/><path class="mo so" d="M${e(-4.5, 73)}Q${e(0, 77)} ${e(4.5, 73)}"/>`
-  + `<g class="mo wd"><path d="M${e(-7.5, 71)}Q${e(0, 72.8)} ${e(7.5, 71)}Q${e(6.6, 81)} ${e(0, 81)}Q${e(-6.6, 81)} ${e(-7.5, 71)}Z"/><path class="tg" d="M${e(-4, 78.8)}Q${e(0, 75.4)} ${e(4, 78.8)}Q${e(2.4, 80.8)} ${e(0, 80.8)}Q${e(-2.4, 80.8)} ${e(-4, 78.8)}Z"/></g><ellipse class="mo oh" cx="${x}" cy="75" rx="3.2" ry="4"/></g>`; };
-const HV_HOMIE_LIMB = (c, d, hx, hy) => `<g class="${c}"><path class="lmo" d="${d}"/><path class="lmb" d="${d}"/><circle class="hd" cx="${hx}" cy="${hy}" r="4.2"/></g>`;
+  return `<g class="fc"><g class="ey"><ellipse cx="${X(-11)}" cy="60" rx="${(4.8 * s).toFixed(2)}" ry="5.8"/><ellipse cx="${X(11)}" cy="60" rx="${(4.8 * s).toFixed(2)}" ry="5.8"/>`
+  + `<circle class="hl" cx="${X(-9.3)}" cy="57.6" r="1.9"/><circle class="hl" cx="${X(12.7)}" cy="57.6" r="1.9"/><circle class="hl" cx="${X(-12.6)}" cy="62.6" r=".8"/><circle class="hl" cx="${X(9.4)}" cy="62.6" r=".8"/></g>`
+  + `<path class="mo sm" d="M${e(-6, 69)}Q${e(0, 75.5)} ${e(6, 69)}"/><path class="mo so" d="M${e(-4.5, 70)}Q${e(0, 74)} ${e(4.5, 70)}"/>`
+  + `<g class="mo wd"><path d="M${e(-7.5, 68)}Q${e(0, 69.8)} ${e(7.5, 68)}Q${e(6.6, 78)} ${e(0, 78)}Q${e(-6.6, 78)} ${e(-7.5, 68)}Z"/><path class="tg" d="M${e(-4, 75.8)}Q${e(0, 72.4)} ${e(4, 75.8)}Q${e(2.4, 77.8)} ${e(0, 77.8)}Q${e(-2.4, 77.8)} ${e(-4, 75.8)}Z"/></g><ellipse class="mo oh" cx="${x}" cy="72" rx="3.2" ry="4"/></g>`; };
+// a cartoon hand: a small palm and four spread sausage fingers pointing along the arm (angle in degrees)
+const HV_HOMIE_HAND = (hx, hy, ang) => { let d = ''; for (const o of [-52, -18, 18, 52]) { const r = (ang + o) * Math.PI / 180, L = Math.abs(o) > 30 ? 5.6 : 6.8;
+    d += `M${(hx + Math.cos(r) * 1.5).toFixed(1)} ${(hy + Math.sin(r) * 1.5).toFixed(1)}L${(hx + Math.cos(r) * (1.5 + L)).toFixed(1)} ${(hy + Math.sin(r) * (1.5 + L)).toFixed(1)}`; }
+  return `<path class="fgo" d="${d}"/><circle class="hd" cx="${hx}" cy="${hy}" r="3.6"/><path class="fgb" d="${d}"/>`; };
+const HV_HOMIE_LIMB = (c, d, hx, hy, ang) => `<g class="${c}"><path class="lmo" d="${d}"/><path class="lmb" d="${d}"/>${HV_HOMIE_HAND(hx, hy, ang)}</g>`;
 const HV_HOMIE_LEG = (c, d, shoe) => `<g class="${c}"><path class="lmo" d="${d}"/><path class="lmb" d="${d}"/><path class="sho" d="${shoe}"/></g>`;
 const HV_HOMIE_SVG = `<svg class="hmv" viewBox="0 0 100 124" aria-hidden="true" focusable="false">
-<g class="vf"><ellipse class="gs" cx="50" cy="118" rx="27" ry="2.6"/>
-${HV_HOMIE_LEG('lg l', 'M39 92V108', 'M29 115Q28 106.5 37.5 106.5Q46.5 106.5 46.5 112.5Q46.5 117.5 41 117.5H32Q29 117.5 29 115Z')}
-${HV_HOMIE_LEG('lg r', 'M61 92V108', 'M71 115Q72 106.5 62.5 106.5Q53.5 106.5 53.5 112.5Q53.5 117.5 59 117.5H68Q71 117.5 71 115Z')}
-<g class="tor"><rect class="rf" x="63" y="8" width="8" height="21" rx="1.5"/><rect class="rf" x="61.5" y="4.5" width="11" height="5.5" rx="2"/>
-<path class="wal" d="M22 42L50 15.5L78 42V85Q78 95 68 95H32Q22 95 22 85Z"/>
-<path class="rf" d="M45.5 9.5Q50 5.5 54.5 9.5L94 45Q97.5 49.5 92.5 51H86L50 19L14 51H7.5Q2.5 49.5 6 45Z"/>
+<g class="vf"><ellipse class="gs" cx="50" cy="118" rx="30" ry="2.6"/>
+${HV_HOMIE_LEG('lg l', 'M38 85Q37 97 38 108', 'M27 115Q26 106.5 35.5 106.5Q44.5 106.5 44.5 112.5Q44.5 117.5 39 117.5H30Q27 117.5 27 115Z')}
+${HV_HOMIE_LEG('lg r', 'M62 85Q63 97 62 108', 'M73 115Q74 106.5 64.5 106.5Q55.5 106.5 55.5 112.5Q55.5 117.5 61 117.5H70Q73 117.5 73 115Z')}
+<g class="tor"><rect class="rf" x="64" y="6" width="8" height="22" rx="1.5"/><rect class="rf" x="62.5" y="2.5" width="11" height="5.5" rx="2"/>
+<path class="wal" d="M20 42L50 14L80 42V79Q80 89 70 89H30Q20 89 20 79Z"/>
+<path class="rf" d="M45.5 8.5Q50 4.5 54.5 8.5L96 45.5Q99.5 50 94.5 51.5H88L50 18L12 51.5H5.5Q0.5 50 4 45.5Z"/>
 ${HV_HOMIE_FACE(50, 1)}
-${HV_HOMIE_LIMB('ar l', 'M25 73Q17.5 78 14 88', 13.5, 91)}${HV_HOMIE_LIMB('ar r', 'M75 73Q82.5 78 86 88', 86.5, 91)}</g></g>
-<g class="vq"><ellipse class="gs" cx="54" cy="118" rx="29" ry="2.6"/>
-${HV_HOMIE_LEG('lg r', 'M66 91V106', 'M58 112.5Q58 104.5 65.5 104.5Q73 104.5 75.5 109.5Q77 115.5 71 115.5H61Q58 115.5 58 112.5Z')}
-${HV_HOMIE_LEG('lg l', 'M46 92V108', 'M39 114.5Q39 106.5 46.5 106.5Q54 106.5 56.5 111.5Q58 117.5 52 117.5H42Q39 117.5 39 114.5Z')}
-<g class="tor">${HV_HOMIE_LIMB('ar r', 'M77 73Q84 78 87 87', 87.5, 89.8)}
-<rect class="rf" x="68" y="6" width="7.5" height="23" rx="1.5"/><rect class="rf" x="66.5" y="2.5" width="10.5" height="5.5" rx="2"/>
-<path class="sw" d="M17 43L34 48V95L24 92.5Q17 91 17 85Z"/>
-<path class="wal" d="M34 45L57 18L80 45V85Q80 95 70 95H34Z"/>
-<path class="rs" d="M22 48L55.5 7.5L40.5 1.5L7 42Q5 45.5 8.5 46Z"/>
-<path class="rf" d="M53.5 9Q57 5 60.5 9L91.5 45Q94 49.5 89.5 50.5H82.5L57 19.5L31.5 50.5H24.5Q20 49.5 22.5 45Z"/>
-${HV_HOMIE_FACE(57, 0.88)}
-${HV_HOMIE_LIMB('ar l', 'M25 72Q18 77.5 15.5 87', 15.3, 89.8)}</g>
-<g class="sl">${HV_HOMIE_LEG('', 'M62 102L86 104', 'M86 96.5Q92 96 92.5 103Q93 110.5 87 111Q83 111.5 82.5 104Q82.3 97 86 96.5Z')}${HV_HOMIE_LEG('', 'M48 105L78 109', 'M78 101Q84.5 100.5 85 108Q85.5 115.5 79 116Q74.5 116.5 74 109Q73.8 101.5 78 101Z')}</g></g>
-<g class="umb"><path class="uh" d="M88 62L74 -6"/><path class="uh" d="M88 62Q89 67 85 67.6"/><g transform="translate(8 -2) rotate(-12 66 -4)"><path class="uc" d="M26 -2Q27 -30 66 -31Q105 -30 106 -2Q98 -7 90 -2Q82 -7 74 -2Q66 -7 58 -2Q50 -7 42 -2Q34 -7 26 -2Z"/><path class="ut" d="M66 -31V-36"/></g></g>
+${HV_HOMIE_LIMB('ar l', 'M22 70Q12 76 8.5 88', 8, 91, 103)}${HV_HOMIE_LIMB('ar r', 'M78 70Q88 76 91.5 88', 92, 91, 77)}</g></g>
+<g class="vq"><ellipse class="gs" cx="54" cy="118" rx="32" ry="2.6"/>
+${HV_HOMIE_LEG('lg r', 'M67 84Q68 95 66 106', 'M58 112.5Q58 104.5 65.5 104.5Q73 104.5 75.5 109.5Q77 115.5 71 115.5H61Q58 115.5 58 112.5Z')}
+${HV_HOMIE_LEG('lg l', 'M45 85Q44 97 46 108', 'M39 114.5Q39 106.5 46.5 106.5Q54 106.5 56.5 111.5Q58 117.5 52 117.5H42Q39 117.5 39 114.5Z')}
+<g class="tor">${HV_HOMIE_LIMB('ar r', 'M79 70Q88 76 91 87', 91.5, 90, 72)}
+<rect class="rf" x="70" y="4" width="7.5" height="23" rx="1.5"/><rect class="rf" x="68.5" y="0.5" width="10.5" height="5.5" rx="2"/>
+<path class="sw" d="M14 41L32 46V89L22 86.5Q14 85 14 79Z"/>
+<path class="wal" d="M32 42L57 15L82 42V79Q82 89 72 89H32Z"/>
+<path class="rs" d="M20 47.5L54.5 6.5L38.5 0.5L4 41.5Q2 45 5.5 45.5Z"/>
+<path class="rf" d="M53.5 8Q57 4 60.5 8L94 45Q96.5 49.5 92 50.5H85L57 17.5L29 50.5H22Q17.5 49.5 20 45Z"/>
+${HV_HOMIE_FACE(57, 0.9)}
+${HV_HOMIE_LIMB('ar l', 'M22 69Q13 75 10 87', 9.5, 90, 106)}</g>
+<g class="sl">${HV_HOMIE_LEG('', 'M60 100L87 103', 'M89 92Q95 91.5 95.5 99Q96 106.5 90 107Q86 107.5 85.5 100Q85.3 92.5 89 92Z')}${HV_HOMIE_LEG('', 'M46 103L79 108', 'M82 96Q88.5 95.5 89 103.5Q89.5 111.5 83 112Q78.5 112.5 78 104.5Q77.8 96.5 82 96Z')}</g></g>
+<g class="umb"><path class="uh" d="M90 58L76 -10"/><path class="uh" d="M90 58Q91 63 87 63.6"/><g transform="translate(10 -6) rotate(-12 66 -4)"><path class="uc" d="M26 -2Q27 -30 66 -31Q105 -30 106 -2Q98 -7 90 -2Q82 -7 74 -2Q66 -7 58 -2Q50 -7 42 -2Q34 -7 26 -2Z"/><path class="ut" d="M66 -31V-36"/></g></g>
 </svg>`;
 const HV_HOMIE_Q = new Set(['walk', 'dance', 'sit', 'reach', 'pull', 'stomp', 'notice', 'lean', 'peek']); // poses drawn in the three-quarter view
 const HV_HOMIE_LAMP = `<svg viewBox="0 0 40 240" aria-hidden="true"><path d="M20 0V150" stroke="currentColor" stroke-width="1.6" opacity=".55"/>
@@ -9013,25 +9016,26 @@ const HV_HOMIE_CSS = `
 .hmv{width:100%;height:100%;display:block;overflow:visible;transform-origin:50% 100%;transition:transform .35s ease}
 .hmv .vq,.hm[data-v="q"] .hmv .vf{display:none}.hm[data-v="q"] .hmv .vq{display:inline}
 .hmv .lmb{fill:none;stroke:var(--lmb);stroke-width:6;stroke-linecap:round}.hmv .lmo{fill:none;stroke:var(--hmr);stroke-width:8.6;stroke-linecap:round}
-.hmv .wal,.hmv .sw,.hmv .rf,.hmv .rs,.hmv .sho,.hmv .uc{stroke:var(--hmo);stroke-width:2.3;stroke-linejoin:round}.hmv .hd{fill:var(--lmb);stroke:var(--hmr);stroke-width:1.3}
+.hmv .wal,.hmv .sw,.hmv .rf,.hmv .rs,.hmv .sho,.hmv .uc{stroke:var(--hmo);stroke-width:2.3;stroke-linejoin:round}.hmv .hd{fill:var(--lmb);stroke:var(--hmr);stroke-width:1.2}
 .hmv .wal{fill:var(--hv-ss-body,#fff6ea)}.hmv .sw{fill:color-mix(in srgb,var(--hv-ss-body,#fff6ea) 80%,#b39270)}
 .hmv .rf,.hmv .sho,.hmv .uc{fill:var(--hv-ss-roof,#41bdf5)}.hmv .rs{fill:color-mix(in srgb,var(--hv-ss-roof,#41bdf5) 76%,#0d3a57)}.hmv .gs{fill:rgba(0,0,0,.16)}
-.hmv .ey ellipse{fill:#17191c}.hmv .hl{fill:#fff}.hmv .bl{fill:#f8a39b;opacity:.72}
+.hmv .ey ellipse{fill:#17191c}.hmv .hl{fill:#fff}
+.hmv .fgo{fill:none;stroke:var(--hmr);stroke-width:5;stroke-linecap:round}.hmv .fgb{fill:none;stroke:var(--lmb);stroke-width:2.9;stroke-linecap:round}
 .hmv .mo{display:none;fill:none;stroke:#2a1c1c;stroke-width:2.3;stroke-linecap:round;stroke-linejoin:round}.hmv .mo.wd{fill:#3a2222;stroke-width:1.8}.hmv .mo.wd .tg{fill:#ff8a80;stroke:none}.hmv .mo.oh{fill:#3a2222;stroke:none}
 .hm[data-m="sm"] .mo.sm,.hm[data-m="wd"] .mo.wd,.hm[data-m="so"] .mo.so,.hm[data-m="oh"] .mo.oh{display:inline}
 .hmv .uh,.hmv .ut{fill:none;stroke:var(--hmo);stroke-width:2.6;stroke-linecap:round}.hmv .umb{display:none}.hm.umb .umb{display:inline}.hm.umb[data-v="q"] .umb{transform:translate(3px,1px)}
 .hmv .sl{display:none}.hm[data-p="sit"] .sl{display:inline}.hm[data-p="sit"] .vq .lg,.hm[data-p="sit"] .vq .gs{display:none}
 .hmv .ar,.hmv .lg,.hmv .tor,.hmv .ey{transform-box:view-box;transition:transform .3s ease}
-.vf .ar.l{transform-origin:25px 73px}.vf .ar.r{transform-origin:75px 73px}.vf .lg.l{transform-origin:39px 92px}.vf .lg.r{transform-origin:61px 92px}.vf .tor{transform-origin:50px 95px}.vf .ey{transform-origin:50px 63px}
-.vq .ar.l{transform-origin:25px 72px}.vq .ar.r{transform-origin:77px 73px}.vq .lg.l{transform-origin:46px 92px}.vq .lg.r{transform-origin:66px 91px}.vq .tor{transform-origin:57px 95px}.vq .ey{transform-origin:57px 63px}
+.vf .ar.l{transform-origin:22px 70px}.vf .ar.r{transform-origin:78px 70px}.vf .lg.l{transform-origin:38px 85px}.vf .lg.r{transform-origin:62px 85px}.vf .tor{transform-origin:50px 89px}.vf .ey{transform-origin:50px 60px}
+.vq .ar.l{transform-origin:22px 69px}.vq .ar.r{transform-origin:79px 70px}.vq .lg.l{transform-origin:45px 85px}.vq .lg.r{transform-origin:67px 84px}.vq .tor{transform-origin:57px 89px}.vq .ey{transform-origin:57px 60px}
 .hmv .ey{animation:hmblink 5.2s infinite}
 @keyframes hmblink{0%,93%,100%{transform:scaleY(1)}95.5%{transform:scaleY(.12)}}
 @keyframes hmbob{0%,100%{transform:translateY(0)}50%{transform:translateY(-1.6px)}}
 @keyframes hmstep{from{transform:translateY(0) rotate(1deg)}to{transform:translateY(-3px) rotate(3.5deg)}}
 @keyframes hmleg{from{transform:rotate(24deg)}to{transform:rotate(-24deg)}}
 @keyframes hmarm{from{transform:rotate(-22deg)}to{transform:rotate(22deg)}}
-@keyframes hmwave{from{transform:rotate(-150deg)}to{transform:rotate(-112deg)}}
-@keyframes hmwavel{from{transform:rotate(150deg)}to{transform:rotate(112deg)}}
+@keyframes hmwave{from{transform:rotate(-128deg)}to{transform:rotate(-92deg)}}
+@keyframes hmwavel{from{transform:rotate(128deg)}to{transform:rotate(92deg)}}
 @keyframes hmdr{from{transform:rotate(-150deg)}to{transform:rotate(-112deg)}}
 @keyframes hmdl{from{transform:rotate(112deg)}to{transform:rotate(150deg)}}
 @keyframes hmdqr{from{transform:rotate(-112deg)}to{transform:rotate(-82deg)}}
@@ -9053,7 +9057,7 @@ const HV_HOMIE_CSS = `
 .hm[data-p="dance"] .ar.r{animation:hmdr .45s ease-in-out infinite alternate}.hm[data-p="dance"] .ar.l{animation:hmdl .45s ease-in-out infinite alternate}
 .hm[data-p="dance"] .vq .ar.r{animation:hmdqr .45s ease-in-out infinite alternate}.hm[data-p="dance"] .vq .ar.l{animation:hmdql .45s ease-in-out infinite alternate}
 .hm[data-p="dance"] .hmv{animation:hmdance .9s ease-in-out infinite}.hm[data-p="dance"] .lg.l{animation:hmkick .9s ease-in-out infinite}.hm[data-p="dance"] .lg.r{animation:hmkick2 .9s ease-in-out infinite}
-.hm[data-p="sit"] .vq .tor{transform-origin:20px 95px;transform:translate(0,13px) rotate(-8deg);animation:none}
+.hm[data-p="sit"] .vq .tor{transform-origin:16px 89px;transform:translate(0,17px) rotate(-8deg);animation:none}
 .hm[data-p="sit"] .vq .ar.l{transform:rotate(22deg)}.hm[data-p="sit"] .vq .ar.r{transform:rotate(-24deg)}.hm[data-p="sit"] .vq .ey{animation:hmblink 6.4s infinite}
 .hm[data-p="reach"] .ar.r{transform:rotate(-122deg)}.hm[data-p="reach"] .tor{transform:translateY(-1.5px) rotate(4deg)}.hm[data-p="pull"] .ar.r{transform:rotate(-110deg)}.hm[data-p="pull"] .tor{transform:translateY(2px) rotate(2deg)}
 .hm[data-p="reach"] .ey,.hm[data-p="pull"] .ey{animation:none;transform:translate(1.5px,-2px)}
@@ -9177,9 +9181,9 @@ class HVHomie {
       if (k === 'rain' || k === 'hail') return [{ p: 'idle', m: 'wd', d: 2600 }, { p: 'wave', m: 'wd', d: 1800 }, idle(800)];
       return [{ p: 'wave', m: 'wd', d: 2000 }, idle(500)]; }
     return [idle(1500)]; }
-  // the lamp's pull cord ends at his raised front hand (three-quarter view: ~0.31 x his height ahead of his centre, 55% of his height above his feet)
-  lampAt(x, dir, vis) { if (!this.lamp) return; const H = '(100cqh - var(--gy) - var(--hs) * .55) / .975';
-    this.lamp.style.height = `calc(${H})`; this.lamp.style.left = `calc(${x}% + ${(dir < 0 ? -0.31 : 0.31)} * var(--hs) - ${H} / 24)`;
+  // the lamp's pull cord ends at his raised front hand (three-quarter view: ~0.32 x his height ahead of his centre, 58% of his height above his feet)
+  lampAt(x, dir, vis) { if (!this.lamp) return; const H = '(100cqh - var(--gy) - var(--hs) * .585) / .975';
+    this.lamp.style.height = `calc(${H})`; this.lamp.style.left = `calc(${x}% + ${(dir < 0 ? -0.32 : 0.32)} * var(--hs) - ${H} / 24)`;
     this.st.style.setProperty('--lx', ((x + 30) / 1.6).toFixed(1) + '%'); /* .hglow is 160% wide */ this.lamp.classList.toggle('vis', !!vis); }
   flash() { const f = this.st.querySelector('.hflash'); if (!f || !this.big) return; f.classList.remove('go'); void f.offsetWidth; f.classList.add('go'); }
   setWx(cond) { const k = HV_HOMIE_WX[cond] || '', kind = k === 'storm0' ? '' : k; this.hm.classList.toggle('umb', ['rain', 'storm', 'hail'].includes(k));
