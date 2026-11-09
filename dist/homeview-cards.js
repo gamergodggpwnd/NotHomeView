@@ -4784,7 +4784,7 @@ const HUB_APPS = ['home', 'security', 'music', 'weather'].map(hubAppBase);
 const HUB_CSS = `:host{display:block;position:relative;font-family:${FONT};color:#fff;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none}
 .bg{position:fixed;inset:0;z-index:-1;pointer-events:none;overflow:hidden;background:var(--hv-wall,radial-gradient(120% 90% at 20% 10%,#4b3a66 0%,#1c1a33 55%,#0d0f1a 100%))}
 :host([contained]) .bg{position:absolute;border-radius:24px;z-index:0}
-.bgi{position:absolute;inset:calc(-2 * var(--blur,32px));background-size:cover;background-position:center;filter:blur(var(--blur,32px)) saturate(1.35);transform:scale(1.08);opacity:0;transition:opacity 2.2s ease}
+.bgi{position:absolute;inset:calc(-2 * var(--blur,32px));background-size:cover;background-position:center;filter:blur(var(--blur,32px)) saturate(var(--sat,1.35));transform:scale(1.08);opacity:0;transition:opacity 2.2s ease}
 .bgi.on{opacity:1}
 :host(:not([bgphoto])) .bgi{display:none}
 .tint{position:absolute;inset:0;background:radial-gradient(120% 90% at 20% 10%,#4b3a66 0%,#1c1a33 55%,#0d0f1a 100%);opacity:var(--tint,.24);transition:opacity .2s ease}
@@ -6290,18 +6290,33 @@ ${reminder ? '<p class="warn">Reminders aren’t stored on a Home Assistant cale
 }
 try { window.HVCal = { blockDesc: hvCalBlockDesc, eventPayload: hvCalEventPayload, columns: hvCalColumns, ymd: hvCalYmd, addDays: hvCalAddDays, addMonths: hvCalAddMonths, startOfWeek: hvCalStartOfWeek, iso: hvCalIso, create: hvCalCreate, canCreate: hvCalCanCreate, writeTarget: hvCalWriteTarget, name: hvCalName }; } catch (e) {}
 
+/* Home Screen Background blur: five looks for the photo behind the page (bg_blur_level, default 3). blur px, tint = the gradient over the
+   photo, dsc / mix = how the edge darkening (dim) is scaled / mixed with the classic page darkening, bgt = the faint white wash, sat = colour boost.
+   3 Medium is the approved default (the old transparency 60, blur 32); 5 Clear shows the photo sharp, with only a light scrim for the text. */
+const HV_BG_LEVELS = [null,
+  { name: 'Solid', blur: 32, tint: 1, dsc: 1, mix: 1, bgt: 0, sat: 1.35 }, // no photo: the plain wallpaper (the photo backdrop is turned off)
+  { name: 'Heavy', blur: 48, tint: 0.45, dsc: 0.75, mix: 0.4, bgt: 0.35, sat: 1.35 },
+  { name: 'Medium', blur: 32, tint: 0.24, dsc: 0.55, mix: 0, bgt: 0.6, sat: 1.35 },
+  { name: 'Light', blur: 4, tint: 0.04, dsc: 0.18, mix: 0, bgt: 0.92, sat: 1.1 },
+  { name: 'Clear', blur: 0, tint: 0, dsc: 0.14, mix: 0, bgt: 1, sat: 1.05 }];
+// the level a config asks for: bg_blur_level 1-5; else an older bg_transparency (0-100) to the nearest look; else 3 Medium
+const hvBgLevel = c => { c = c || {}; const l = Number(c.bg_blur_level); if (c.bg_blur_level != null && c.bg_blur_level !== '' && l >= 1 && l <= 5) return Math.round(l);
+  const t = Number(c.bg_transparency); if (c.bg_transparency == null || c.bg_transparency === '' || isNaN(t)) return 3;
+  return t <= 20 ? 1 : t <= 45 ? 2 : t <= 70 ? 3 : t <= 90 ? 4 : 5; };
+
 class HVHubCard extends HTMLElement {
   constructor() { super(); this.attachShadow({ mode: 'open' }); this._layer = 0; }
   static get defaults() { return { theme: 'night', person: '', morning_start: 5, afternoon_start: 12, evening_start: 17, greeting_morning: 'Good morning', greeting_afternoon: 'Good afternoon',
-    greeting_evening: 'Good evening', photo_source_mode: 'media', photo_album_url: '', photo_source: '', photo_interval: 25, photo_order: 'random', blur: 32, dim: 0.32, bg_transparency: 60, photo_backdrop: true, bg_freeze: true, photo_tap: 'viewer', photo_viewer_nav: true, photo_viewer_swipe: true, photo_viewer_add: true, photo_gallery_upload: true, photo_viewer_pause: true, photo_label: 'Photos', photo_max_aspect: 2.6,
+    greeting_evening: 'Good evening', photo_source_mode: 'media', photo_album_url: '', photo_source: '', photo_interval: 25, photo_order: 'random', blur: 32, dim: 0.32, bg_blur_level: 3, photo_backdrop: true, bg_freeze: true, photo_tap: 'viewer', photo_viewer_nav: true, photo_viewer_swipe: true, photo_viewer_add: true, photo_gallery_upload: true, photo_viewer_pause: true, photo_label: 'Photos', photo_max_aspect: 2.6,
     show_calendar: true, calendar_size: 'full', calendar_layout: 'wide', calendar_columns: 3, calendar_days: 7, calendar_title: 'Calendar', calendar_min_height: 240, max_icon: 140, edge_sidebar: true, ss_hold: true, weather_entity: '', photo_size: 'wide', side_portrait: 'below', side_sizes: '', row_units: 3, block_pull_refresh: true, calendar_rows: 'auto', swipe_screensaver: 'auto', full_height_popups: true, popup_edit: true, assistant_enabled: false, assistant_pipeline: 'preferred', assistant_theme: 'same', assistant_button: true, assistant_speak: true, assistant_auto_listen: true, assistant_orb: true, assistant_continue: true, assistant_silence_timeout: 5, assistant_end_of_speech_pause: 2, assistant_history_retention: 'forever', assistant_dismiss_phrases: "thank you, thanks, thanks jarvis, thank you jarvis, goodbye, bye, good bye, that's all, that's it, never mind, nevermind, stop, cancel, no thanks, I'm done", assistant_quiet_volume_below: 5, assistant_quiet_start: '23:30', assistant_quiet_end: '10:00', timer_sound: true }; }
   static getStubConfig(hass) { return { apps: HUB_APPS.map(a => Object.assign({}, a)), calendar_entities: Object.keys((hass && hass.states) || {}).filter(k => k.startsWith('calendar.')).slice(0, 3) }; }
   static getConfigElement() { return document.createElement('homeview-hub-card-editor'); }
   setConfig(c) { if (!c) throw new Error('Invalid configuration'); this._hvRaw = c; const old = this._config, nc = Object.assign({}, HVHubCard.defaults, c);
     if (nc.wallpaper && typeof nc.wallpaper === 'string') this.style.setProperty('--hv-wall', nc.wallpaper); else this.style.removeProperty('--hv-wall'); // 1.31.0
-    this._blurX = c.blur !== undefined && c.blur !== null && c.blur !== '' && Number(c.blur) !== HVHubCard.defaults.blur; // an explicit Advanced blur (not the default value) stays exactly as set; the default one follows the transparency slider
+    this._blurX = c.blur !== undefined && c.blur !== null && c.blur !== '' && Number(c.blur) !== HVHubCard.defaults.blur; // an older explicit blur (px, set in YAML before the levels) stays as set; otherwise the level's
+    this._lvl = hvBgLevel(c); // Background blur level 1-5 (an older bg_transparency maps to the nearest)
     if (!Array.isArray(nc.apps) || !nc.apps.length) nc.apps = HUB_APPS;
-    const BG = ['bg_transparency', 'blur', 'dim', 'photo_backdrop', 'bg_freeze'], rest = o => JSON.stringify(Object.keys(o).filter(k => !BG.includes(k)).sort().map(k => [k, o[k]]));
+    const BG = ['bg_blur_level', 'bg_transparency', 'blur', 'dim', 'photo_backdrop', 'bg_freeze'], rest = o => JSON.stringify(Object.keys(o).filter(k => !BG.includes(k)).sort().map(k => [k, o[k]]));
     if (old && this._w && rest(old) === rest(nc)) { // only the background options changed (slider drag): update in place, no rebuild
       this._config = nc; this.style.setProperty('--blur', (Number(nc.blur) || 0) + 'px'); this.style.setProperty('--dim', String(Math.max(0, Math.min(0.9, Number(nc.dim) || 0)))); this._bgMode(); if (nc.bg_freeze === false) this._paintBg(true, true); return; }
     this._config = nc;
@@ -6752,12 +6767,12 @@ class HVHubCard extends HTMLElement {
   _restartTimer(force) { if (!this.isConnected || !this._ids || !this._ids.length || this._pv) return; if (this._timer && !force) return; clearTimeout(this._timer);
     this._timer = setTimeout(() => { this._timer = null; if (document.hidden) return; if (this._ssHeld()) { this._bgAway(); this._restartTimer(true); return; } this._next(); }, Math.max(5, Number(this._config.photo_interval) || 25) * 1000); }
   // Background transparency (0-100) -> --bgt 0..1; the photo backdrop shows once a photo is loaded (else the gradient)
-  // 60 = the approved look (tint .24, darkening x.55). Below 60 the gradient tint grows to fully opaque at 0 (solid gradient, darkening eases to the classic page
-  // look); above 60 the tint fades to 0 and the darkening to x.1 at 100 (nearly clear blurred photo).
-  _bgMode() { const c = this._config || {}, t = Number(c.bg_transparency), T = Math.max(0, Math.min(100, isNaN(t) || c.bg_transparency === '' || c.bg_transparency == null ? 60 : t)) / 100, st = this.style.setProperty.bind(this.style);
-    const tint = T >= 0.6 ? 0.24 * (1 - T) / 0.4 : 0.24 + (0.6 - T) / 0.6 * 0.76, dsc = T <= 0.6 ? 1 - 0.75 * T : 0.55 - (T - 0.6) / 0.4 * 0.45, mix = T >= 0.6 ? 0 : 1 - T / 0.6;
-    const bl = Math.max(0, Number(c.blur) || 0), eff = this._blurX ? bl : bl * (T <= 0.6 ? 1 : 1 - (T - 0.6) / 0.4); st('--blur', (Math.round(eff * 2) / 2) + 'px'); // default blur: full to 60, eased to 0 (sharp photo) at 100
-    st('--bgt', String(T)); st('--tint', tint.toFixed(4)); st('--dsc', dsc.toFixed(4)); st('--dmix', mix.toFixed(4)); this.toggleAttribute('bgphoto', c.photo_backdrop !== false && !!this._cur); }
+  // the Background blur level's look (HV_BG_LEVELS): blur, gradient tint, darkening scale / mix and the white wash. 3 Medium = the approved
+  // default look; 1 Solid = the plain wallpaper even when a photo is loaded. dim (Edge darkening) is scaled the same way when set by hand.
+  _bgMode() { const c = this._config || {}, L = HV_BG_LEVELS[this._lvl || 3] || HV_BG_LEVELS[3], st = this.style.setProperty.bind(this.style);
+    const bl = this._blurX ? Math.max(0, Number(c.blur) || 0) : L.blur; st('--blur', (Math.round(bl * 2) / 2) + 'px');
+    st('--bgt', String(L.bgt)); st('--tint', L.tint.toFixed(4)); st('--dsc', L.dsc.toFixed(4)); st('--dmix', L.mix.toFixed(4)); st('--sat', String(L.sat));
+    this.toggleAttribute('bgphoto', c.photo_backdrop !== false && !!this._cur && L !== HV_BG_LEVELS[1]); }
   _paintPhoto(instant, dir) { if (!this._cur) return; this._bgMode(); const L = this._layer, bg = `url("${this._cur.replace(/"/g, '%22')}")`;
     const set = this._pis || []; if (set.length > 1) { const on = set[L], off = set[1 - L];
       if (instant) { on.style.transition = 'none'; off.style.transition = 'none'; }
@@ -7042,10 +7057,9 @@ const HUB_SCHEMA = [
     { name: 'photo_source', selector: { text: {} } },
     { type: 'grid', name: '', schema: [n_('photo_interval', 5, 600, 1, 's'), { name: 'photo_order', selector: { select: { mode: 'dropdown', options: [{ value: 'random', label: 'Random' }, { value: 'sorted', label: 'In order' }] } } }] },
     { type: 'grid', name: '', schema: [{ name: 'photo_backdrop', selector: { boolean: {} } }, { name: 'bg_freeze', selector: { boolean: {} } }] },
-    { name: 'bg_transparency', selector: { number: { min: 0, max: 100, step: 1, mode: 'slider', unit_of_measurement: '%' } } },
+    { name: 'bg_blur_level', selector: { number: { min: 1, max: 5, step: 1, mode: 'slider' } } },
     { name: 'wallpaper', selector: { text: {} } },
-    { type: 'expandable', name: '', flatten: true, title: 'Advanced background', icon: 'mdi:tune-variant', schema: [
-      { type: 'grid', name: '', schema: [n_('blur', 0, 120, 1, 'px'), n_('dim', 0, 0.9, 0.02)] }] },
+    { type: 'expandable', name: '', flatten: true, title: 'Advanced background', icon: 'mdi:tune-variant', schema: [n_('dim', 0, 0.9, 0.02)] },
     { type: 'grid', name: '', schema: [{ name: 'photo_tap', selector: { select: { mode: 'dropdown', options: [{ value: 'viewer', label: 'Photo viewer (previous / next, add pictures)' }, { value: 'screensaver', label: 'Start the screensaver' }, { value: 'fullscreen', label: 'Full-screen photo (just the picture)' }, { value: 'none', label: 'Nothing' }] } } },
       { name: 'photo_label', selector: { text: {} } }] },
     { type: 'grid', name: '', schema: [{ name: 'photo_viewer_nav', selector: { boolean: {} } }, { name: 'photo_viewer_swipe', selector: { boolean: {} } }, { name: 'photo_viewer_add', selector: { boolean: {} } },
@@ -7094,7 +7108,7 @@ const HUB_SCHEMA = [
     { name: 'swipe_screensaver', selector: { select: { mode: 'dropdown', options: [{ value: 'auto', label: 'Auto (when the screensaver is on here)' }, { value: 'on', label: 'On' }, { value: 'off', label: 'Off' }] } } }, { name: 'ss_hold', selector: { boolean: {} } }, { name: 'swipe_page', selector: { navigation: {} } }] }];
 Object.assign(LABELS, { photo_source_mode: 'Photo source', photo_album_url: 'Album link', apps: 'Apps (drag to reorder, pencil to edit)', person: 'Person (empty = the logged-in user)', fallback_person: 'Fallback person (no match)', ring_color: 'Avatar ring colour / gradient',
   morning_start: 'Morning from (hour)', afternoon_start: 'Afternoon from', evening_start: 'Evening from', night_start: 'Night from (empty = evening until morning)', greeting_night: 'Night greeting', greeting_morning: 'Morning greeting', greeting_afternoon: 'Afternoon greeting', greeting_evening: 'Evening greeting',
-  wallpaper: 'Wallpaper when there are no photos (any CSS background, e.g. a colour or gradient)', photo_source: 'Media folder (empty = the Wallpanel screensaver\'s, e.g. media-source://media_source/local/)', photo_interval: 'Next photo every', photo_order: 'Order', blur: 'Background blur (px)', dim: 'Edge darkening for text readability (0-0.9)', photo_backdrop: 'Show the current photo, blurred, behind the page', bg_freeze: 'Freeze the blurred background while the Home Screen is showing', bg_transparency: 'Background transparency',
+  wallpaper: 'Wallpaper when there are no photos (any CSS background, e.g. a colour or gradient)', photo_source: 'Media folder (empty = the Wallpanel screensaver\'s, e.g. media-source://media_source/local/)', photo_interval: 'Next photo every', photo_order: 'Order', blur: 'Background blur (px)', dim: 'Edge darkening for text readability (0-0.9)', photo_backdrop: 'Show the current photo, blurred, behind the page', bg_freeze: 'Freeze the blurred background while the Home Screen is showing', bg_blur_level: 'Background blur',
   photo_tap: 'Tapping Photos', photo_label: 'Photos label', photo_viewer_nav: 'Viewer: Previous / Next buttons', photo_viewer_swipe: 'Viewer: swipe left / right to change picture', photo_viewer_add: 'Viewer: View Gallery button', photo_gallery_upload: 'Gallery: let people upload new pictures', photo_viewer_pause: 'Pause the screensaver while the viewer is open', show_calendar: 'Show the calendar', calendar_show_weather: 'Forecast per day', calendar_entities: 'Calendars (empty = all)', calendar_layout: 'Calendar layout',
   calendar_size: 'Calendar size', calendar_columns: 'Days side by side', calendar_rows: 'Rows of days (phones always stack)', calendar_days: 'Days to load', calendar_title: 'Calendar title', calendar_min_height: 'Calendar min height', max_icon: 'Largest app icon', photo_max_aspect: 'Photos widget: widest aspect (w/h)', photo_size: 'Photos tile size', side_sizes: 'Extra tiles\' sizes, in order: S = square, W = wide (e.g. S, S)', side_portrait: 'Tiles that don\'t fit beside the apps', row_units: 'Landscape: units beside the apps (icons shrink to fit)',
   full_height_popups: 'Full-height popups: every popup on this dashboard reaches the top of the screen; swipe down to close',
@@ -7117,10 +7131,10 @@ class HVHubEditor extends HTMLElement {
   set hass(h) { this._hass = h; this._render(); }
   _render() {
     if (!this._hass || !this._config) return;
-    const data = Object.assign({}, HVHubCard.defaults, { calendar_show_weather: true, apps: HUB_APPS }, this._config);
+    const data = Object.assign({}, HVHubCard.defaults, { calendar_show_weather: true, apps: HUB_APPS }, this._config); data.bg_blur_level = hvBgLevel(this._config); // an older bg_transparency shows as its level
     if (!this._form) { const f = this._form = document.createElement('ha-form');
       f.computeLabel = s => LABELS[s.name] || s.name;
-      f.computeHelper = s => s.name === 'bg_transparency' ? '0 = solid gradient, 60 = default look, 100 = clear photo. The preview updates while you drag.' : s.name === 'bg_freeze' ? 'On: the background keeps the photo it had when the Home Screen opened (the Photos card still changes); it moves to the current photo only while the page is out of sight (screensaver up, another view, app in the background). Off: it follows the Photos card.' : s.name === 'ss_hold' ? 'On: the screensaver does not start by itself behind the Home Screen (and uses nothing there); swipe the page away to start it, on the photo the Photos card shows. Off: Wallpanel\'s idle timer runs as before.' : s.name === 'blur' ? 'How soft the photo behind the page is. Left at the default it eases to 0 as Background transparency goes from 60 to 100 (a clear, sharp photo); set a value to keep it fixed.' : s.name === 'dim' ? 'Darkens the top and bottom of the page so the text stays readable; also fades out as transparency goes up.' : s.name === 'photo_viewer_add' ? 'The viewer button that opens the gallery (the gallery keeps its own “Add photos” upload button).' : s.name === 'side_sizes' ? hubUnitsNote(this._config) : s.name === 'photo_source' ? 'The photo viewer, the gallery and uploads all use this folder. Empty = the screensaver\'s folder (Media → My media). Uploading needs a media-source:// folder and an administrator.' : s.name === 'apps' ? 'Each app: label, icon, gradient colours and what it does (open a view, Now Playing, Weather, Calendar, photos, or any tap action). Calendar opens an iPad-style popup. hv:calendar draws today’s date. Empty Calendars uses this card’s calendar_entities; Save new events to picks the calendar that stores them.' : undefined;
+      f.computeHelper = s => s.name === 'bg_blur_level' ? `1 Solid · 2 Heavy · 3 Medium · 4 Light · 5 Clear (now: ${HV_BG_LEVELS[hvBgLevel(this._config)].name}). The preview updates while you drag.` : s.name === 'bg_freeze' ? 'On: the background keeps the photo it had when the Home Screen opened (the Photos card still changes); it moves to the current photo only while the page is out of sight (screensaver up, another view, app in the background). Off: it follows the Photos card.' : s.name === 'ss_hold' ? 'On: the screensaver does not start by itself behind the Home Screen (and uses nothing there); swipe the page away to start it, on the photo the Photos card shows. Off: Wallpanel\'s idle timer runs as before.' : s.name === 'dim' ? 'Darkens the top and bottom of the page so the text stays readable. Each Background blur level scales it (lighter for Light and Clear).' : s.name === 'photo_viewer_add' ? 'The viewer button that opens the gallery (the gallery keeps its own “Add photos” upload button).' : s.name === 'side_sizes' ? hubUnitsNote(this._config) : s.name === 'photo_source' ? 'The photo viewer, the gallery and uploads all use this folder. Empty = the screensaver\'s folder (Media → My media). Uploading needs a media-source:// folder and an administrator.' : s.name === 'apps' ? 'Each app: label, icon, gradient colours and what it does (open a view, Now Playing, Weather, Calendar, photos, or any tap action). Calendar opens an iPad-style popup. hv:calendar draws today’s date. Empty Calendars uses this card’s calendar_entities; Save new events to picks the calendar that stores them.' : undefined;
       { const h1 = f.computeHelper; f.computeHelper = s => s.name === 'assistant_enabled' ? 'Talk to an Assist pipeline with this device\'s microphone (or type). Timers ("set a timer for 15 minutes", "pause / cancel the timer") run right here, full screen.' : s.name === 'assistant_pipeline' ? 'Which assistant answers (Settings → Voice assistants).' : h1(s); }
       { const h3 = f.computeHelper; f.computeHelper = s => s.name === 'assistant_orb' ? 'On: the mic shows only an animated orb near the top (the dashboard stays clear); tap the orb for the chat. Off: the full chat opens.'
         : s.name === 'assistant_continue' ? 'After every reply the mic opens again in the same conversation, until you tap outside the orb, say one of the phrases below, or say nothing for a few seconds (Close after silence).'
@@ -7134,13 +7148,15 @@ class HVHubEditor extends HTMLElement {
       { const h0 = f.computeHelper; f.computeHelper = s => s.name === 'theme' ? 'The look of the device pages (the pages with the button tiles) on this dashboard: their tiles, popups and page background. The Home Screen itself always keeps its own look. Night = dark glass (default); Day = white tiles on a light grey page. A Page Grid card can choose its own.' : h0(s); }
       { const l0 = f.computeLabel; f.computeLabel = s => s.name === 'theme' ? 'Device pages theme' : l0(s); }
       f.addEventListener('input', ev => { const p = ev.composedPath(), sl = p.find(n => n.tagName === 'HA-SLIDER'), sel = p.find(n => n.tagName === 'HA-SELECTOR-NUMBER'); // live preview while dragging
-        if (!sl || !sel || sel.label !== LABELS.bg_transparency) return; const v = Number(sl.value); if (isNaN(v)) return; this._live = v;
-        if (!this._liveRaf) this._liveRaf = requestAnimationFrame(() => { this._liveRaf = 0; const cfg = Object.assign({}, this._config); if (this._live === HVHubCard.defaults.bg_transparency) delete cfg.bg_transparency; else cfg.bg_transparency = this._live; this._config = cfg; fire(this, 'config-changed', { config: cfg }); }); });
+        if (!sl || !sel || sel.label !== LABELS.bg_blur_level) return; const v = Math.round(Number(sl.value)); if (isNaN(v) || v < 1 || v > 5) return; this._live = v;
+        if (!this._liveRaf) this._liveRaf = requestAnimationFrame(() => { this._liveRaf = 0; const cfg = Object.assign({}, this._config); if (this._live === HVHubCard.defaults.bg_blur_level) delete cfg.bg_blur_level; else cfg.bg_blur_level = this._live;
+          if (this._live !== hvBgLevel(this._config)) { delete cfg.bg_transparency; delete cfg.blur; } this._config = cfg; fire(this, 'config-changed', { config: cfg }); }); }); // a level chosen here replaces the older transparency / px blur
       f.addEventListener('value-changed', ev => { ev.stopPropagation(); const v = ev.detail.value, cfg = { type: this._config.type };
         for (const [k, val] of Object.entries(v)) { if (val === undefined || val === '' || (Array.isArray(val) && !val.length && k !== 'apps')) continue;
           if (k !== 'apps' && HVHubCard.defaults[k] === val) continue; if (k === 'calendar_show_weather' && val === true) continue; cfg[k] = val; }
         if (cfg.apps) cfg.apps = cfg.apps.map(x => { const o = {}; for (const [k, val] of Object.entries(x || {})) if (val !== undefined && val !== '' && !(Array.isArray(val) && !val.length)) o[k] = val; return o; });
         for (const k of Object.keys(this._config)) if (!(k in v) && !(k in cfg)) cfg[k] = this._config[k]; // keep keys the form doesn't show (grid_options, ...)
+        if (v.bg_blur_level != null) { const was = hvBgLevel(this._config); delete cfg.bg_transparency; if (Number(v.bg_blur_level) !== was) delete cfg.blur; } // the level replaces the older transparency (same look); a new level also drops an older px blur
         this._config = cfg; fire(this, 'config-changed', { config: cfg }); });
       this.appendChild(f); this._stackEd(); }
     if (!this._pipesP) this._pipesP = this._hass.callWS({ type: 'assist_pipeline/pipeline/list' }).then(r => { this._pipes = r; this._render(); }).catch(() => { this._pipes = null; });
@@ -7843,7 +7859,7 @@ function hvSetupBuild(data, url) {
   for (const k of ['security', 'media', 'weather', 'lights', 'climate', 'garage', 'rooms']) { if (apps.length >= 4) break; const a = app(k); if (a) apps.push(a); }
   if (cals.length) apps.push(hubAppBase('calendar'));
   // Home Screen, laid out like the NotHomeView home screen: wallpaper, greeting, apps, photos, now playing, house tile, calendar
-  const hub = { type: 'custom:homeview-hub-card', full_width: true, theme: 'auto', apps, wallpaper: HV_SETUP_WALL, bg_transparency: 80, photo_size: 'square', calendar_rows: '2', grid_options: { columns: 'full', rows: 'auto' } };
+  const hub = { type: 'custom:homeview-hub-card', full_width: true, theme: 'auto', apps, wallpaper: HV_SETUP_WALL, bg_blur_level: 4, photo_size: 'square', calendar_rows: '2', grid_options: { columns: 'full', rows: 'auto' } };
   if (weather) hub.weather_entity = weather; if (people.length) hub.fallback_person = people[0];
   if (cals.length) hub.calendar_entities = cals.slice(0, 4); else hub.show_calendar = false;
   const house = { type: 'custom:homeview-house-card' }; if (weather) house.weather = weather; if (garage[0]) house.garage = garage[0]; if (heroC[0]) house.climate = heroC[0];
