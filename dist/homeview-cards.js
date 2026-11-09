@@ -1142,8 +1142,8 @@ class HVEditButtonCard extends HTMLElement {
   get hass() { return this._hass; }
   getCardSize() { return 1; }
   getGridOptions() { return { columns: 'full', rows: 'auto' }; }
-  connectedCallback() { if (!this._t) this._t = setInterval(() => this._tick(), 800); setTimeout(() => this._tick(), 30); }
-  disconnectedCallback() { clearInterval(this._t); this._t = null; this._unportal(); }
+  connectedCallback() { HVEditButtonCard.live.add(this); if (!this._t) this._t = setInterval(() => this._tick(), 800); setTimeout(() => this._tick(), 30); }
+  disconnectedCallback() { HVEditButtonCard.live.delete(this); clearInterval(this._t); this._t = null; this._unportal(); }
   url() { // the exact page the button opens
     const c = this._config || {};
     if (c.url) return c.url;
@@ -1170,7 +1170,7 @@ class HVEditButtonCard extends HTMLElement {
   _btnHTML(theme) {
     const c = this._config, icon = c.icon ? `<ha-icon icon="${esc(c.icon)}"></ha-icon>` : `<svg viewBox="0 0 24 24"><path d="${PENCIL}"/></svg>`;
     const st = `--s:${+c.size || 30}px;--o:${c.opacity}`, ss = this._ssWanted();
-    const pen = c.show_edit_button !== false ? `<button class="${theme} pen" style="${st}" aria-label="Edit dashboard" title="Edit dashboard">${icon}</button>` : '';
+    const pen = c.show_edit_button !== false ? `<button class="${theme} pen" style="${st}" aria-label="Settings" title="Settings">${icon}</button>` : '';
     const scr = ss ? `<button class="${theme} scr" style="${st}" aria-label="Screensaver settings" title="Screensaver settings"><ha-icon icon="${esc(c.screensaver_icon || 'mdi:monitor-shimmer')}"></ha-icon></button>` : '';
     const v = String(c.position || 'top-right').startsWith('bottom');
     return `<style>${EDIT_CSS}.stack{display:flex;flex-direction:${v ? 'column-reverse' : 'column'};gap:${Math.max(5, Math.round((+c.size || 30) * .3))}px}</style><div class="stack">${pen}${scr}</div>`;
@@ -1178,7 +1178,7 @@ class HVEditButtonCard extends HTMLElement {
   // the Wallpanel button: only when Wallpanel is installed (it defines <wallpanel-view>) and the option is on
   _ssWanted() { const c = this._config || {}; return c.show_screensaver_button !== false && !!customElements.get('wallpanel-view'); }
   _openScreensaver(e) { if (e) { if (e.type !== 'pointerdown') e.preventDefault(); e.stopPropagation(); } if (this._config.preview_only) return; hvOpenScreensaverSettings(this); }
-  _go(e) { e.preventDefault(); e.stopPropagation(); if (this._config.preview_only) return; const u = this.url(); if (this._config.url) location.assign(u); else hvGoEdit(u); }
+  _go(e) { if (e) { e.preventDefault(); e.stopPropagation(); } if (this._config.preview_only) return; const u = this.url(); if (this._config.url) location.assign(u); else hvGoEdit(u); }
   _paint() { // in-grid placeholder: visible only in edit mode and in the card editor preview
     if (!this._config) return;
     this.shadowRoot.innerHTML = `<style>:host{display:block}.ph{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;font:500 13px ${FONT};
@@ -1196,7 +1196,6 @@ class HVEditButtonCard extends HTMLElement {
   }
   _portal() {
     const theme = this._theme(), c = this._config, key = theme + JSON.stringify(c) + this._ssWanted();
-    if (this._menuEl && this._fab && this._fab.isConnected) return; // menu open: keep it (re-styled after it closes)
     if (this._fab && this._fab.isConnected && this._fabKey === key) return;
     this._unportal();
     const host = document.createElement('homeview-edit-fab'), r = host.attachShadow({ mode: 'open' });
@@ -1206,58 +1205,17 @@ class HVEditButtonCard extends HTMLElement {
       + `${h === 'left' ? 'left' : 'right'}:calc(env(safe-area-inset-${h === 'left' ? 'left' : 'right'},0px) + ${off});display:block;width:auto;height:auto;margin:0;padding:0`;
     r.innerHTML = this._btnHTML(theme);
     const pen = r.querySelector('.pen'), scr = r.querySelector('.scr');
-    if (pen) pen.addEventListener('click', e => this._config.edit_menu === false ? this._go(e) : this._menu(e, r, pen));
+    if (pen) pen.addEventListener('click', e => this._settings(e)); // the pencil opens the Settings app (edit mode is inside it: General › Edit Home Screen)
     if (scr) { scr.addEventListener('pointerdown', e => this._openScreensaver(e)); scr.addEventListener('click', e => this._openScreensaver(e)); }
     // keep the tap from reaching anything underneath (Wallpanel idle timer still sees the activity on window)
     for (const b of r.querySelectorAll('button')) for (const t of ['pointerdown', 'pointerup', 'touchstart', 'touchend']) b.addEventListener(t, e => e.stopPropagation(), { passive: true });
     document.body.appendChild(host); this._fab = host; this._fabKey = key;
   }
-  _unportal() { this._menuClose(); if (this._fab) { this._fab.remove(); this._fab = null; } }
-  // 1.30.6: the pencil opens a small menu: "Edit page" + the Device pages theme (Night / Day / Auto). The choice is saved as the
-  // `theme` option of the dashboard's NotHomeView Home Screen card (same place as its visual editor), so it persists for everyone.
-  _menuClose() { if (this._menuEl) { this._menuEl.remove(); this._menuEl = null; } if (this._menuOff) { this._menuOff(); this._menuOff = null; } }
-  _menu(e, r, pen) {
-    e.preventDefault(); e.stopPropagation(); if (this._config.preview_only) return;
-    if (this._menuEl) { this._menuClose(); return; }
-    const root = hvFindRoot(this), lv = root && root.lovelace, cfg = lv && lv.config, hub = cfg ? hvHubCfgOf(cfg) : null;
-    const cur = hub && HV_THEMES.includes(hub.theme) ? hub.theme : 'night', admin = !this._hass || !this._hass.user || this._hass.user.is_admin;
-    const yaml = lv && lv.mode === 'yaml', can = admin && !!hub && !yaml;
-    const m = document.createElement('div'); m.className = 'menu' + (hvThemeOf(this) === 'day' ? ' lt' : ''); m.setAttribute('role', 'menu');
-    const [v, h] = String(this._config.position || 'top-right').split('-'), gap = (+this._config.size || 30) + 8 + 'px';
-    m.style.cssText = `${v === 'bottom' ? 'bottom' : 'top'}:${gap};${h === 'left' ? 'left' : 'right'}:0;transform-origin:${v === 'bottom' ? 'bottom' : 'top'} ${h === 'left' ? 'left' : 'right'}`;
-    const opt = (val, label, sw) => `<button class="mi th" role="menuitemradio" data-v="${val}" aria-checked="${val === cur}"${can ? '' : ' disabled'}><span class="sw" style="background:${sw}"></span><span>${label}</span><svg class="ck" viewBox="0 0 24 24"><path d="M9,20.42L2.79,14.21L5.62,11.38L9,14.77L18.88,4.88L21.71,7.71L9,20.42Z"/></svg></button>`;
-    const why = !admin ? 'Only an admin can change the theme.' : yaml ? 'This dashboard is in YAML mode: set theme: on the Home Screen card in its YAML.' : !hub ? 'Add a NotHomeView Home Screen card to this dashboard to choose a theme.' : '';
-    m.innerHTML = `<button class="mi ed" role="menuitem"><svg viewBox="0 0 24 24"><path d="${PENCIL}"/></svg><span>Edit page</span></button><div class="sep"></div>
-      <div class="hd">Device pages theme</div>
-      ${opt('night', 'Night (dark glass)', 'linear-gradient(150deg,#3b3f8f,#1b1d3a)')}${opt('day', 'Day (white)', 'linear-gradient(150deg,#ffffff,#e6e6eb)')}${opt('auto', 'Auto (follow sun)', 'linear-gradient(90deg,#1b1d3a 50%,#ffffff 50%)')}
-      <div class="st${why ? '' : ''}">${esc(why || 'The Home Screen keeps its own look.')}</div>`;
-    m.querySelector('.ed').addEventListener('click', ev => this._go(ev));
-    m.querySelectorAll('.th').forEach(b => b.addEventListener('click', ev => { ev.preventDefault(); ev.stopPropagation(); this._setTheme(b.dataset.v, m); }));
-    for (const t of ['pointerdown', 'pointerup', 'touchstart', 'touchend', 'click']) m.addEventListener(t, ev => ev.stopPropagation(), { passive: t !== 'click' });
-    pen.parentNode.style.position = 'relative'; pen.parentNode.appendChild(m); this._menuEl = m;
-    const out = ev => { if (!ev.composedPath().includes(this._fab)) this._menuClose(); }, key = ev => { if (ev.key === 'Escape') this._menuClose(); };
-    setTimeout(() => { if (this._menuEl !== m) return; window.addEventListener('pointerdown', out, true); window.addEventListener('keydown', key, true); }, 0);
-    this._menuOff = () => { window.removeEventListener('pointerdown', out, true); window.removeEventListener('keydown', key, true); };
-    const first = m.querySelector('.ed'); if (first) first.focus({ preventScroll: true });
-  }
-  async _setTheme(val, m) {
-    const st = m.querySelector('.st'), btns = [...m.querySelectorAll('.th')]; st.className = 'st'; st.textContent = 'Saving…'; btns.forEach(b => { b.disabled = true; });
-    try {
-      const root = hvFindRoot(this), lv = root && root.lovelace, dash = (lv && lv.urlPath) || ssDash();
-      const q = { type: 'lovelace/config', force: true }; if (dash) q.url_path = dash;
-      const fresh = JSON.parse(JSON.stringify(await this._hass.callWS(q))); // re-read: only this one key changes, everything else stays as saved
-      const hub = hvHubCfgOf(fresh); if (!hub) throw new Error('no NotHomeView Home Screen card on this dashboard');
-      if (val === 'night') delete hub.theme; else hub.theme = val; // Night = default: the key is removed
-      if (lv && typeof lv.saveConfig === 'function' && (lv.urlPath || null) === (dash || null)) await lv.saveConfig(fresh); // updates the open dashboard at once
-      else { const sv = { type: 'lovelace/config/save', config: fresh }; if (dash) sv.url_path = dash; await this._hass.callWS(sv); }
-      btns.forEach(b => b.setAttribute('aria-checked', String(b.dataset.v === val)));
-      st.textContent = 'Saved ✓ Device pages use ' + ({ night: 'Night', day: 'Day', auto: 'Auto' })[val] + '.';
-      setTimeout(() => { HVT.key = ''; hvThemeTick(this, this._hass); }, 50);
-      hvToast('Device pages theme: ' + ({ night: 'Night (dark glass)', day: 'Day (white)', auto: 'Auto (follow sun)' })[val] + ' ✓'); // the page re-renders (menu closes)
-    } catch (e) { st.className = 'st err'; st.textContent = 'Not saved: ' + (e && (e.message || e.code) || e); hvToast('Theme not saved: ' + (e && (e.message || e.code) || e)); }
-    btns.forEach(b => { b.disabled = false; });
-  }
+  _unportal() { if (this._fab) { this._fab.remove(); this._fab = null; } }
+  // the same Settings sheet as the Home Screen's Settings app (the Home Screen card on this page, else a sheet over this page)
+  _settings(e) { if (e) { e.preventDefault(); e.stopPropagation(); } if (this._config.preview_only) return; hvOpenSettings(null, null, this); }
 }
+HVEditButtonCard.live = new Set(); // the edit buttons on screen (Settings › Edit Home Screen uses their Open URL)
 HVEditButtonCard.layoutSection = false; // it takes no grid space
 HVEditButtonCard.sizePresets = false;
 HVEditButtonCard.schema = [
@@ -1273,12 +1231,12 @@ HVEditButtonCard.schema = [
   { name: 'edit_menu', selector: { boolean: {} } },
   { name: 'screensaver_icon', selector: { icon: {} } }];
 HVEditButtonCard.editorDefaults = true;
-Object.assign(LABELS, { edit_menu: 'Pencil opens a menu (Edit page + Device pages theme)' });
-Object.assign(HELPERS, { edit_menu: 'On: a tap shows "Edit page" and the Night / Day / Auto choice for the device pages (saved on the Home Screen card, admins only). Off: a tap goes straight to the editor.' });
+Object.assign(LABELS, { edit_menu: 'Old pencil menu option (no longer used)' });
+Object.assign(HELPERS, { edit_menu: 'Kept for older dashboards; it changes nothing. The pencil always opens Settings: the Device pages theme is in General, and General › Edit Home Screen turns on edit mode.' });
 Object.assign(LABELS, { show_edit_button: 'Show the edit pencil', show_screensaver_button: 'Show the screensaver button (below the pencil)', screensaver_icon: 'Screensaver button icon (empty = mdi:monitor-shimmer)' });
 Object.assign(HELPERS, { show_screensaver_button: 'Opens the Wallpanel screensaver settings for this dashboard. Only shown when Wallpanel is installed.' });
-Object.assign(LABELS, { position: 'Corner', style: 'Look', admin_only: 'Admins only', size: 'Size', offset: 'Distance from the edge', opacity: 'Opacity when idle', url: 'Open URL (empty = this view with ?disable_km&edit=1)' });
-Object.assign(HELPERS, { url: 'Default reloads the current view without kiosk-mode and in edit mode.' });
+Object.assign(LABELS, { position: 'Corner', style: 'Look', admin_only: 'Admins only', size: 'Size', offset: 'Distance from the edge', opacity: 'Opacity when idle', url: 'Edit Home Screen URL (empty = this view with ?disable_km&edit=1)' });
+Object.assign(HELPERS, { url: 'Used by Settings › General › Edit Home Screen. Default reloads the current view without kiosk-mode and in edit mode.' });
 
 /* ---------------- now playing (Apple HomePad style) ---------------- */
 // Full "Now Playing" panel: blurred-artwork background, big artwork, title/artist, live progress, transport controls,
@@ -4781,6 +4739,7 @@ const HUB_APP_CATALOG = [
   { key: 'weather', name: 'Weather', icon: 'mdi:weather-partly-cloudy', color_from: '#5ec8ff', color_to: '#1a73e8', kind: 'weather' },
   { key: 'calendar', name: 'Calendar', icon: 'hv:calendar', color_from: '#ff453a', color_to: '#d70015', glyph_color: '#ffffff', kind: 'calendar' },
   { key: 'reminders', name: 'Reminders', icon: 'hv:reminders', color_from: '#ffffff', color_to: '#e8e8ed', glyph_color: '#ff3b30', kind: 'reminders' },
+  { key: 'settings', name: 'Settings', icon: 'mdi:cog', color_from: '#8e8e93', color_to: '#636366', glyph_color: '#ffffff', kind: 'settings' },
   { key: 'assistant', name: 'Assistant', icon: 'mdi:microphone', color_from: '#b06cff', color_to: '#3d7bff', kind: 'assistant' },
   { key: 'lights', name: 'Lights', icon: 'mdi:lightbulb-group', color_from: '#ffd36b', color_to: '#ff9f0a', kind: 'navigate', navigation_path: 'lights', views: ['lights', 'lights-on'] },
   { key: 'climate', name: 'Climate', icon: 'mdi:thermostat', color_from: '#ffb37a', color_to: '#ff6a3d', kind: 'navigate', navigation_path: 'climate', views: ['climate'] },
@@ -6052,6 +6011,288 @@ function hvOpenReminders(hub, app) {
       paint(); load(); tickIv = setInterval(() => { root && root.querySelectorAll('.tm').forEach(x => { x.textContent = clock(); }); }, 15000);
       return { set hass(h) { const sig = idsOf().map(id => id + '=' + ((h.states[id] || {}).state)).join(';'); if (sig !== st.sig) { const first = !st.sig; st.sig = sig; if (!first && !st.busy) reload(null, 400); } } }; } });
   return s; }
+/* ---------------- Settings app (iPad / iPhone Settings) ----------------
+   The Home Screen's options as a Settings app: a full-screen sheet (grab bar, swipe down to close). Wide screens (700px and up): a sidebar
+   (Settings, Search, grouped rows with coloured squircles) and the selected page on the right; phones: the list, and a tap pushes the page
+   with a "Settings" back chevron. The floating pencil (homeview-edit-button-card) and a Settings icon on the Home Screen open the same sheet.
+   Every change is saved right away like the pencil's old theme menu: re-read the dashboard, change only that key on the Home Screen card
+   (a value equal to the default is removed, as in the card editor), save. The Home Screen on screen updates in place. Admins on storage
+   dashboards only; YAML dashboards and other users see the pages read-only with a short note. */
+const HV_SET_PAGES = [
+  { id: 'person', t: 'Person & greeting', i: 'mdi:account-circle', c: '#8e8e93', d: 'Who the Home Screen greets, the avatar ring and the greeting for each time of day.',
+    sec: [{ f: ['person', 'fallback_person', 'name', 'ring_color'] }, { h: 'Times of day', f: ['morning_start', 'afternoon_start', 'evening_start', 'night_start'] },
+      { h: 'Greetings', f: ['greeting_morning', 'greeting_afternoon', 'greeting_evening', 'greeting_night'] }] },
+  { id: 'general', t: 'General', i: 'mdi:cog', c: '#8e8e93', g: 1, d: 'The look of the device pages, popups on this dashboard, and the way into edit mode.',
+    sec: [{ f: ['theme'] }, { h: 'Popups', f: ['full_height_popups', 'popup_edit'] }, { f: ['@edit'] }, { f: ['@setup'] }] },
+  { id: 'photos', t: 'Photos & Background', i: 'mdi:image-multiple', c: '#32ade6', g: 1, d: 'The pictures on the Home Screen, the blurred background behind it and the Photos tile.',
+    sec: [{ h: 'Photos', f: ['photo_source_mode', 'photo_source', 'photo_interval', 'photo_order'] }, { h: 'Background', f: ['photo_backdrop', 'bg_freeze', 'wallpaper'] },
+      { h: 'Background blur', lvl: true, f: ['bg_blur_level'] }, { h: 'Advanced', f: ['dim'] },
+      { h: 'Photos tile', f: ['photo_tap', 'photo_label', 'photo_viewer_nav', 'photo_viewer_swipe', 'photo_viewer_add', 'photo_gallery_upload', 'photo_viewer_pause'] }] },
+  { id: 'screensaver', t: 'Screensaver', i: 'mdi:monitor-shimmer', c: '#5856d6', g: 1, d: 'The screensaver face and how it starts from the Home Screen.',
+    sec: [{ f: ['screensaver_style'] }, { f: ['swipe_screensaver', 'ss_hold'] }, { f: ['@wallpanel'] }, { h: 'Advanced', f: ['screensaver_colors'] }] },
+  { id: 'gestures', t: 'Gestures', i: 'mdi:gesture-swipe', c: '#34c759', g: 1, d: 'Swipes on the Home Screen.',
+    sec: [{ f: ['swipe_open_home', 'swipe_page'] }, { f: ['edge_sidebar', 'block_pull_refresh'] }] },
+  { id: 'apps', t: 'Apps', i: 'mdi:apps', c: '#007aff', g: 2, d: 'The app icons on the Home Screen and what each one opens.',
+    sec: [{ f: ['apps'] }, { f: ['@appsnote'] }] },
+  { id: 'calendar', t: 'Calendar', i: 'mdi:calendar', c: '#ff3b30', g: 2, d: 'The calendar on the Home Screen.',
+    sec: [{ f: ['show_calendar', 'calendar_show_weather'] }, { f: ['calendar_entities'] },
+      { h: 'Layout', f: ['calendar_layout', 'calendar_columns', 'calendar_days', 'calendar_size', 'calendar_rows', 'calendar_title', 'calendar_min_height'] }] },
+  { id: 'assistant', t: 'Assistant & timer', i: 'mdi:microphone', c: 'linear-gradient(135deg,#ff5f9e,#a646f0 52%,#3d7bff)', g: 2, d: 'Talk or type to Home Assistant\'s Assist, timers and quiet mode.',
+    sec: [{ f: ['assistant_enabled', 'assistant_button'] }, { f: ['assistant_pipeline', 'assistant_theme'] }, { f: ['assistant_auto_listen', 'assistant_speak', 'timer_sound'] },
+      { h: 'Conversation', f: ['assistant_orb', 'assistant_continue', 'assistant_dismiss_phrases', 'assistant_silence_timeout', 'assistant_end_of_speech_pause', 'assistant_history_retention'] },
+      { h: 'Quiet mode: Auto', f: ['assistant_quiet_volume_entity', 'assistant_quiet_volume_below', 'assistant_quiet_focus_entity', 'assistant_quiet_start', 'assistant_quiet_end'] }] },
+  { id: 'layout', t: 'Layout & weather', i: 'mdi:view-dashboard', c: '#ff9500', g: 2, d: 'The Photos and extra tiles\' sizes, the app icons\' size, and the weather.',
+    sec: [{ h: 'Photos tile', f: ['photo_size', 'photo_max_aspect'] }, { h: 'Extra tiles', f: ['side_sizes', 'row_units', 'side_tiles', 'side_portrait', 'max_icon', '@sidecards'] },
+      { h: 'Weather', f: ['weather_entity', 'location_name', 'weather_sky_header'] }] }];
+// rows that do something instead of changing an option
+const HV_SET_ACTS = {
+  '@edit': { l: 'Edit Home Screen', h: 'Closes Settings and turns on Home Assistant\'s edit mode for this page (kiosk-mode off): rearrange tiles, Add App, and open a card\'s own editor.', i: 'mdi:pencil' },
+  '@setup': { l: 'Create NotHomeView dashboard', h: 'Make a new NotHomeView dashboard from your own devices (adds a dashboard; this one is not changed).', i: 'mdi:view-dashboard-edit' },
+  '@wallpanel': { l: 'Wallpaper & clock settings', h: 'This dashboard\'s Wallpanel screensaver: photos, timing, clock.', i: 'mdi:monitor-shimmer' },
+  '@sidecards': { l: 'Extra tile cards', h: 'Pick the cards beside Photos (Add card) in the Home Screen card\'s editor.', i: 'mdi:card-plus-outline' },
+  '@appsnote': { l: '', h: 'To add apps or move them around on the Home Screen, use General › Edit Home Screen (Add App, drag to reorder).', note: true } };
+const HV_SET_CSS = `
+.se{--fg:#fff;--fg2:rgba(235,235,245,.6);--fg3:rgba(235,235,245,.3);--card:#1c1c1e;--sep:rgba(84,84,88,.65);--blue:#0a84ff;--on:#30d158;--off:rgba(120,120,128,.32);--fld:rgba(118,118,128,.24);--sel:#0a84ff;
+ color:var(--fg);font-family:${FONT};font-size:17px;max-width:1240px;margin:0 auto;-webkit-user-select:none;user-select:none;box-sizing:border-box}
+:host([hv-day]) .se{--fg:#000;--fg2:rgba(60,60,67,.6);--fg3:rgba(60,60,67,.3);--card:#fff;--sep:rgba(60,60,67,.2);--blue:#007aff;--on:#34c759;--off:rgba(120,120,128,.16);--fld:rgba(118,118,128,.12);--sel:#007aff}
+.se.wide{display:grid;grid-template-columns:minmax(280px,330px) minmax(0,1fr);column-gap:30px;height:100%}
+.side,.pane{min-width:0;box-sizing:border-box}.se.wide .side,.se.wide .pane{overflow-y:auto;overscroll-behavior:contain;padding:0 2px 30px;scrollbar-width:none}
+.se.wide .side::-webkit-scrollbar,.se.wide .pane::-webkit-scrollbar{display:none}
+.se:not(.wide).pg .side,.se:not(.wide):not(.pg) .pane{display:none}
+.bt{margin:2px 52px 12px 6px;font-size:34px;font-weight:700;letter-spacing:-.02em;line-height:1.2}.se.wide .bt{margin-right:0}
+.srch{display:flex;align-items:center;gap:6px;height:36px;padding:0 8px;border-radius:10px;background:var(--fld);color:var(--fg2);margin:0 0 20px}
+.srch ha-icon{--mdc-icon-size:20px;display:flex}.srch input{flex:1;min-width:0;border:0;outline:0;background:none;color:var(--fg);font:17px ${FONT};-webkit-appearance:none;appearance:none;padding:0}
+.srch input::placeholder{color:var(--fg2)}.srch input::-webkit-search-cancel-button{-webkit-appearance:none}
+.grp{border-radius:12px;background:var(--card);overflow:hidden;margin:0 0 24px}
+.sr{all:unset;box-sizing:border-box;cursor:pointer;display:flex;align-items:center;gap:12px;width:100%;min-height:46px;padding:7px 12px;position:relative}
+.sr + .sr::before{content:'';position:absolute;top:0;left:54px;right:0;border-top:.5px solid var(--sep)}
+.sr.on{background:var(--sel);color:#fff}.sr.on::before,.sr.on + .sr::before{border-color:transparent}
+.sr .nm{flex:1;min-width:0;font-size:17px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sr:not(.on):active,.r.act:active{background:var(--fld)}
+.sq{width:30px;height:30px;border-radius:7px;background:var(--c);color:#fff;display:flex;align-items:center;justify-content:center;flex:none}
+.sq ha-icon{--mdc-icon-size:20px;display:flex}
+.ch{--mdc-icon-size:22px;display:flex;color:var(--fg3);flex:none}.se.wide .sr .ch{display:none}
+.pr{min-height:76px;gap:14px}.av{width:58px;height:58px;border-radius:50%;background:linear-gradient(180deg,#a5a5aa,#7c7c82) center/cover;display:flex;align-items:center;justify-content:center;font-size:23px;font-weight:600;color:#fff;flex:none;overflow:hidden}
+.pr .tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}.pr .nm{font-size:21px;font-weight:600;flex:none}.pr small{font-size:14px;color:var(--fg2)}.pr.on small{color:rgba(255,255,255,.82)}
+.ph{position:relative;display:flex;align-items:center;min-height:44px;margin:0 52px 10px 0}
+.nt{position:absolute;left:50%;transform:translateX(-50%);font-size:17px;font-weight:600;white-space:nowrap;max-width:60%;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
+.se.wide .ph{margin-left:52px}.se:not(.wide) .nt{display:none}.se:not(.wide) .sv{max-width:46vw}
+.bk{all:unset;cursor:pointer;display:inline-flex;align-items:center;min-height:44px;padding-right:10px;font-size:17px;color:var(--blue);position:relative;z-index:1}.bk ha-icon{--mdc-icon-size:32px;display:flex;margin-left:-8px}
+.intro{display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px;padding:22px 20px 20px;border-radius:12px;background:var(--card);margin:0 0 24px}
+.intro .sq{width:64px;height:64px;border-radius:15px}.intro .sq ha-icon{--mdc-icon-size:40px}.intro b{font-size:22px;font-weight:700}.intro p{margin:0;font-size:15px;color:var(--fg2);line-height:1.35;max-width:520px}
+.gh{margin:0 16px 7px;font-size:13px;text-transform:uppercase;letter-spacing:.02em;color:var(--fg2)}
+.r{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:14px;row-gap:3px;min-height:46px;padding:9px 16px;position:relative;box-sizing:border-box}
+.r > .l{font-size:17px;line-height:1.28;min-width:0}.r > small{grid-column:1 / -1}
+.r + .r::before{content:'';position:absolute;top:0;left:16px;right:0;border-top:.5px solid var(--sep)}
+.r .tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}.r .l{font-size:17px;line-height:1.28}.r small{font-size:13px;line-height:1.38;color:var(--fg2);overflow-wrap:anywhere}
+.r.stk{display:flex;flex-direction:column;align-items:stretch;gap:9px}
+button.r{all:unset;box-sizing:border-box;cursor:pointer;display:flex;align-items:center;gap:14px;width:100%;min-height:46px;padding:9px 16px;position:relative}
+.r.act .l{color:var(--blue)}.r.act .sq{width:28px;height:28px}.r.act .sq ha-icon{--mdc-icon-size:18px}.r:disabled{cursor:default;opacity:.5}
+.r.note{min-height:0}.r.note small{font-size:14px}
+.sw{all:unset;cursor:pointer;flex:none;width:51px;height:31px;border-radius:16px;background:var(--off);position:relative;transition:background .2s}
+.sw::after{content:'';position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:0 3px 8px rgba(0,0,0,.15),0 1px 1px rgba(0,0,0,.16);transition:transform .2s}
+.sw[aria-checked="true"]{background:var(--on)}.sw[aria-checked="true"]::after{transform:translateX(20px)}
+.sw:disabled,.r select:disabled,.r input:disabled,.r textarea:disabled,.ci:disabled{opacity:.5;cursor:default}
+.sv{position:relative;display:flex;align-items:center;justify-content:flex-end;max-width:min(340px,58vw)}
+.sv select{-webkit-appearance:none;appearance:none;border:0;outline:0;background:none;color:var(--fg2);font:17px ${FONT};text-align:right;text-align-last:right;padding:4px 24px 4px 0;max-width:100%;min-width:60px;cursor:pointer;text-overflow:ellipsis;white-space:nowrap;overflow:hidden}
+.sv ha-icon{position:absolute;right:0;--mdc-icon-size:18px;display:flex;color:var(--fg3);pointer-events:none}
+.sv option{color:#000;background:#fff}
+.nb{flex:none;display:flex;align-items:center;gap:6px;color:var(--fg2);font-size:15px}
+.nb input,.fi{box-sizing:border-box;border:0;outline:0;border-radius:9px;background:var(--fld);color:var(--fg);font:17px ${FONT};padding:7px 10px;-webkit-user-select:text;user-select:text}
+.nb input{width:92px;text-align:right}.nb input[type=time]{width:auto;text-align:left;color-scheme:dark}:host([hv-day]) .nb input[type=time]{color-scheme:light}
+.fi{width:100%}textarea.fi{min-height:84px;resize:vertical;line-height:1.35}.fi::placeholder,.nb input::placeholder{color:var(--fg3)}
+.ckl{border-radius:10px;background:var(--fld);overflow:hidden}
+.ci{all:unset;box-sizing:border-box;cursor:pointer;display:flex;align-items:center;gap:10px;width:100%;min-height:42px;padding:6px 12px;font-size:16px}
+.ci + .ci{border-top:.5px solid var(--sep)}.ci span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ci ha-icon{--mdc-icon-size:20px;display:flex;color:var(--blue);visibility:hidden}.ci[aria-checked="true"] ha-icon{visibility:visible}
+.pv{position:relative;height:118px;border-radius:12px;overflow:hidden;background:var(--hv-wall,radial-gradient(120% 90% at 20% 10%,#4b3a66 0%,#1c1a33 55%,#0d0f1a 100%))}
+.pv i{position:absolute;inset:-30px;background-size:cover;background-position:center;transition:filter .2s,opacity .2s}
+.pv b{position:absolute;inset:0;transition:background .2s}.pv span{position:absolute;left:14px;bottom:12px;font-size:20px;font-weight:600;color:#fff;text-shadow:0 1px 8px rgba(0,0,0,.35)}
+.lv{display:flex;flex-direction:column;gap:2px}
+.lv input{-webkit-appearance:none;appearance:none;width:100%;height:28px;margin:0;background:none;cursor:pointer}
+.lv input::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:linear-gradient(90deg,var(--blue) var(--p,50%),var(--off) var(--p,50%))}
+.lv input::-webkit-slider-thumb{-webkit-appearance:none;width:28px;height:28px;margin-top:-12px;border-radius:50%;background:#fff;box-shadow:0 3px 8px rgba(0,0,0,.18),0 0 0 .5px rgba(0,0,0,.06)}
+.lv input::-moz-range-track{height:4px;border-radius:2px;background:var(--off)}.lv input::-moz-range-progress{height:4px;border-radius:2px;background:var(--blue)}
+.lv input::-moz-range-thumb{width:28px;height:28px;border:0;border-radius:50%;background:#fff;box-shadow:0 3px 8px rgba(0,0,0,.18)}
+.tk{display:flex;justify-content:space-between;font-size:12px;color:var(--fg2);padding:0 2px}.tk span.on{color:var(--fg);font-weight:600}
+.se.peek .side,.se.peek .pane > :not(.lvg){opacity:0;transition:opacity .18s}.se.peek .lvg{box-shadow:0 10px 40px rgba(0,0,0,.35)}.se.peek .lvg .pv{visibility:hidden}
+.ban{margin:0 0 20px;padding:12px 16px;border-radius:12px;background:color-mix(in srgb,#ff9f0a 18%,var(--card));font-size:15px;line-height:1.38}
+.empty{padding:14px 16px;font-size:15px;color:var(--fg2)}
+.fm{padding:10px 12px 12px;--mdc-theme-primary:var(--blue);--primary-color:var(--blue)}
+:host([hv-day]) .fm{--primary-text-color:#000;--secondary-text-color:rgba(60,60,67,.6);--card-background-color:#fff;--ha-card-background:#fff;--input-fill-color:rgba(118,118,128,.08);--mdc-text-field-fill-color:rgba(118,118,128,.08);--divider-color:rgba(60,60,67,.2)}
+.tst{position:fixed;left:50%;bottom:calc(22px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);max-width:min(520px,90%);padding:11px 18px;border-radius:22px;background:rgba(44,44,46,.96);color:#fff;font-size:15px;line-height:1.3;box-shadow:0 10px 30px rgba(0,0,0,.35);opacity:0;pointer-events:none;transition:opacity .2s;z-index:3}
+.tst.on{opacity:1}.tst.err{background:#ff453a}`;
+const hvSetNorm = (k, v) => { // the value written for an option: undefined = remove the key (empty, or the default), as in the card editor
+  if (v === undefined || v === null || v === '' || (typeof v === 'number' && isNaN(v)) || (Array.isArray(v) && !v.length && k !== 'apps')) return undefined;
+  if (k !== 'apps' && HVHubCard.defaults[k] === v) return undefined; if (k === 'calendar_show_weather' && v === true) return undefined;
+  if (k === 'apps' && Array.isArray(v)) return v.map(x => { const o = {}; for (const [a, b] of Object.entries(x || {})) if (b !== undefined && b !== '' && !(Array.isArray(b) && !b.length)) o[a] = b; return o; });
+  return v; };
+const hvSetApply = (node, k, v) => { const was = hvBgLevel(node), n = hvSetNorm(k, v); if (n === undefined) delete node[k]; else node[k] = n; // Night theme = the default: the key goes
+  if (k === 'bg_blur_level') { delete node.bg_transparency; if (Number(v) !== was) delete node.blur; } // a level replaces the older transparency (same look); a new level drops an older px blur
+  return node; };
+// the home-screen editor's fields by name (selectors from HUB_SCHEMA: the pipelines and the album link field as the card editor shows them)
+const hvSetFields = sch => { const m = {}; const w = l => l.forEach(x => { if (x.schema) w(x.schema); else if (x.name) m[x.name] = x; }); w(sch); return m; };
+// ha-form is loaded by Home Assistant only once some card editor is opened: load it through a built-in card's editor
+async function hvFormReady() { if (customElements.get('ha-form')) return true;
+  try { const h = await window.loadCardHelpers(); const c = await h.createCardElement({ type: 'entities', entities: [] }); if (c && c.constructor && c.constructor.getConfigElement) await c.constructor.getConfigElement(); } catch (e) {}
+  await Promise.race([customElements.whenDefined('ha-form'), new Promise(r => setTimeout(r, 4000))]).catch(() => {}); return !!customElements.get('ha-form'); }
+function hvOpenSettings(hub, app, from) {
+  const live = () => { for (const h of HV_HUBS) if (h.isConnected && h._w && !hvInDialog(h)) return h; return null; };
+  if (!hub || !hub.isConnected) hub = live();
+  if (hvOpenSettings.cur && hvOpenSettings.cur.host.isConnected) return null; // one Settings at a time
+  if (hub && (hub._sheetO || hvHubArr.hub === hub)) return null;
+  const H = () => (hub && hub._hass) || (from && from._hass) || (document.querySelector('home-assistant') || {}).hass; if (!H()) return null;
+  const lvOf = () => { const r = hvFindRoot(hub && hub.isConnected ? hub : from) || hvFindRoot(live()); return (r && r.lovelace) || hvSsLv(); };
+  const clone = o => JSON.parse(JSON.stringify(o)), dash = () => { const lv = lvOf(); return (lv && lv.urlPath) || ssDash(); };
+  const st = { page: null, q: '', cfg: null, views: [], nohub: false, ready: false, pipes: null, alb: null, albQ: null, wide: false, peek: false, why: '' };
+  const useCfg = c => { const n = c && hvHubCfgOf(c); st.cfg = n ? clone(n) : null; st.nohub = !!c && !n; st.ready = !!c;
+    st.views = ((c && c.views) || []).map((v, i) => ({ path: v.path != null && v.path !== '' ? String(v.path) : String(i), title: v.title || v.path || 'View ' + (i + 1) })); };
+  const lv0 = lvOf(); useCfg(lv0 && lv0.config ? lv0.config : hub && hub._hvRaw ? { views: [{ cards: [hub._hvRaw] }] } : null); if (!(lv0 && lv0.config)) st.ready = false;
+  const user = H().user || {}, admin = user.is_admin !== false;
+  const why = () => { const lv = lvOf(); return !st.ready ? '' : st.nohub ? '' : lv && lv.mode === 'yaml' ? 'This dashboard is in YAML mode, so Settings can\'t be saved here. Change the Home Screen card in the dashboard\'s YAML.' : !admin ? 'Only an admin can change settings.' : ''; };
+  const ro = () => !st.ready || st.nohub || !!why();
+  const data = () => { const c = st.cfg || {}, d = Object.assign({}, HVHubCard.defaults, { calendar_show_weather: true, apps: HUB_APPS }, c); d.bg_blur_level = hvBgLevel(c); return d; };
+  const fields = () => hvSetFields(hvHubSchemaAlbum(hvHubSchemaPipes(st.pipes), data().photo_source_mode === 'album'));
+  const fname = k => k === 'photo_source' && data().photo_source_mode === 'album' ? 'photo_album_url' : k;
+  const label = k => HV_SET_ACTS[k] ? (k === '@edit' && st.nohub ? 'Edit Dashboard' : HV_SET_ACTS[k].l) : k === 'bg_blur_level' ? 'Background blur' : hvHubLabel({ name: k });
+  const help = k => { if (HV_SET_ACTS[k]) return HV_SET_ACTS[k].h; let t; try { t = hvHubHelp({ name: k }, st.cfg || {}, st.alb); } catch (e) {} return t || HELPERS[k] || ''; };
+  const hit = (k, q) => (label(k) + ' ' + help(k)).toLowerCase().includes(q);
+  const pageHit = (p, q) => !q || p.t.toLowerCase().includes(q) || p.sec.some(s => s.f.some(k => hit(fname(k), q)));
+  const pageOf = id => HV_SET_PAGES.find(p => p.id === id) || HV_SET_PAGES[1];
+  const personOf = () => { const c = data(), S = H().states || {}; if (hub && hub._config && hub._hass) { try { const p = hub._person(); if (p) return p; } catch (e) {} }
+    if (c.person && S[c.person]) return S[c.person]; const p = user.id && Object.values(S).find(s => s.entity_id.startsWith('person.') && s.attributes.user_id === user.id); return p || (c.fallback_person && S[c.fallback_person]) || null; };
+  let root = null, side = null, pane = null, list = null, s = null, ro0 = null, tstT = 0; const forms = new Map();
+  const flash = (msg, err) => { const t = root && root.querySelector('.tst'); if (!t) return; t.textContent = msg; t.classList.toggle('err', !!err); t.classList.add('on'); clearTimeout(tstT); tstT = setTimeout(() => t.classList.remove('on'), err ? 4200 : 1800); };
+  // --- rows
+  const opt = (v, l, cur) => `<option value="${esc(v)}"${String(cur) === String(v) ? ' selected' : ''}>${esc(l)}</option>`;
+  const ents = dom => { const S = H().states || {}, ds = dom == null ? null : [].concat(dom); return Object.keys(S).filter(k => !ds || ds.includes(k.split('.')[0]))
+    .map(k => [k, (S[k].attributes && S[k].attributes.friendly_name) || k]).sort((a, b) => a[1].localeCompare(b[1])); };
+  const rowHtml = (k, x, d, dis) => { const lb = label(k), hp = help(k), D = dis ? ' disabled' : '', tx = `<div class="tx"><span class="l">${esc(lb)}</span>${hp ? `<small>${esc(hp)}</small>` : ''}</div>`;
+    const ln = `<span class="l">${esc(lb)}</span>`, sm = hp ? `<small>${esc(hp)}</small>` : ''; // one-line rows: label | control, the helper underneath
+    const a = HV_SET_ACTS[k]; if (a) { if (a.note) return `<div class="r note"><small>${esc(a.h)}</small></div>`;
+      const off = k === '@wallpanel' && !customElements.get('wallpanel-view') ? ' disabled' : (k === '@sidecards' || k === '@setup') && (dis || st.nohub) ? ' disabled' : '';
+      return `<button class="r act" data-act="${k.slice(1)}"${off}><span class="sq" style="--c:var(--blue)"><ha-icon icon="${a.i}"></ha-icon></span>${tx}<ha-icon class="ch" icon="mdi:chevron-right"></ha-icon></button>`; }
+    if (!x) return ''; const sel = x.selector || {}, t = Object.keys(sel)[0], o = sel[t] || {}, v = d[k];
+    if (t === 'boolean') return `<div class="r" data-k="${k}">${ln}<button class="sw" role="switch" data-k="${k}" aria-checked="${v === true}" aria-label="${esc(lb)}"${D}></button>${sm}</div>`;
+    if (t === 'select') { const ops = (o.options || []).map(p => typeof p === 'object' ? p : { value: p, label: p }); const has = ops.some(p => String(p.value) === String(v));
+      return `<label class="r" data-k="${k}">${ln}<span class="sv"><select data-k="${k}" data-t="select" aria-label="${esc(lb)}"${D}>${has ? '' : opt(v == null ? '' : v, v == null || v === '' ? '—' : v, v == null ? '' : v)}${ops.map(p => opt(p.value, p.label, v)).join('')}</select><ha-icon icon="mdi:chevron-up-down"></ha-icon></span>${sm}</label>`; }
+    if (t === 'number') { if (k === 'bg_blur_level') return lvlHtml(v, dis);
+      return `<label class="r" data-k="${k}">${ln}<span class="nb"><input type="number" inputmode="decimal" data-k="${k}" data-t="num" min="${o.min ?? ''}" max="${o.max ?? ''}" step="${o.step || 1}" value="${v == null || v === '' ? '' : esc(v)}" placeholder="${esc(HVHubCard.defaults[k] ?? '')}" aria-label="${esc(lb)}"${D}>${o.unit_of_measurement ? esc(o.unit_of_measurement) : ''}</span>${sm}</label>`; }
+    if (t === 'time') return `<label class="r" data-k="${k}">${ln}<span class="nb"><input type="time" data-k="${k}" data-t="time" value="${esc(String(v || '').slice(0, 5))}" aria-label="${esc(lb)}"${D}></span>${sm}</label>`;
+    if (t === 'entity' && o.multiple) { const cur = (Array.isArray(v) ? v : []).map(e => typeof e === 'string' ? e : e && e.entity), all = ents(o.domain); for (const e of cur) if (e && !all.some(z => z[0] === e)) all.push([e, e]);
+      return `<div class="r stk" data-k="${k}">${tx}<div class="ckl">${all.length ? all.map(([e, n]) => `<button class="ci" role="checkbox" data-k="${k}" data-e="${esc(e)}" aria-checked="${cur.includes(e)}"${D}><span>${esc(n)}</span><ha-icon icon="mdi:check"></ha-icon></button>`).join('') : '<div class="empty">None in Home Assistant.</div>'}</div></div>`; }
+    if (t === 'entity') { const all = ents(o.domain); if (v && !all.some(z => z[0] === v)) all.unshift([v, v]);
+      return `<label class="r" data-k="${k}">${ln}<span class="sv"><select data-k="${k}" data-t="select" aria-label="${esc(lb)}"${D}>${opt('', 'None', v || '')}${all.map(([e, n]) => opt(e, n, v || '')).join('')}</select><ha-icon icon="mdi:chevron-up-down"></ha-icon></span>${sm}</label>`; }
+    if (t === 'navigation') { const vs = st.views.slice(); if (v && !vs.some(z => z.path === String(v).replace(/^.*\//, ''))) vs.unshift({ path: String(v), title: String(v) });
+      return `<label class="r" data-k="${k}">${ln}<span class="sv"><select data-k="${k}" data-t="select" aria-label="${esc(lb)}"${D}>${opt('', 'None', v || '')}${vs.map(z => opt(z.path, z.title, String(v || '').replace(/^.*\//, '') || '')).join('')}</select><ha-icon icon="mdi:chevron-up-down"></ha-icon></span>${sm}</label>`; }
+    if (t === 'object') return `<div class="r stk" data-k="${k}">${tx}<div class="fm" data-form="${k}"></div></div>`;
+    const ml = o.multiline, ph = esc(HVHubCard.defaults[k] ?? '');
+    return `<label class="r stk" data-k="${k}">${tx}${ml ? `<textarea class="fi" data-k="${k}" data-t="text" placeholder="${ph}" aria-label="${esc(lb)}"${D}>${esc(v == null ? '' : v)}</textarea>`
+      : `<input class="fi" type="${o.type === 'url' ? 'url' : 'text'}" data-k="${k}" data-t="text" value="${esc(v == null ? '' : v)}" placeholder="${ph}" aria-label="${esc(lb)}" autocomplete="off"${D}>`}</label>`; };
+  // Background blur: a 5-step slider with a small preview; while dragging, the sheet fades away to show the real Home Screen behind it
+  const lvlHtml = (v, dis) => { const n = Math.min(5, Math.max(1, Math.round(Number(v) || 3)));
+    return `<div class="r stk" data-k="bg_blur_level"><div class="pv"><i></i><b></b><span>${esc(greet())}</span></div><div class="lv"><input type="range" min="1" max="5" step="1" value="${n}" data-k="bg_blur_level" data-t="level" aria-label="Background blur" aria-valuetext="${HV_BG_LEVELS[n].name}"${dis ? ' disabled' : ''}>`
+      + `<div class="tk">${[1, 2, 3, 4, 5].map(i => `<span${i === n ? ' class="on"' : ''}>${HV_BG_LEVELS[i].name}</span>`).join('')}</div></div><div class="tx"><small>${esc(help('bg_blur_level'))}</small></div></div>`; };
+  const greet = () => { try { if (hub && hub._config) return hub._greeting(); } catch (e) {} return 'Good evening'; };
+  const pvPaint = n => { const r = root && root.querySelector('[data-k="bg_blur_level"]'); if (!r) return; const L = HV_BG_LEVELS[n] || HV_BG_LEVELS[3], i = r.querySelector('.pv i'), b = r.querySelector('.pv b'), d = data();
+    const url = hub && hub._cur, on = n !== 1 && d.photo_backdrop !== false && !!url; if (i) { i.style.backgroundImage = on ? `url("${String(url).replace(/"/g, '%22')}")` : 'none'; i.style.filter = `blur(${(L.blur * 0.35).toFixed(1)}px) saturate(${L.sat})`; i.style.opacity = on ? String(L.bgt) : '0'; }
+    if (b) b.style.background = on ? `linear-gradient(180deg,rgba(0,0,0,${(L.tint * 0.8).toFixed(3)}),rgba(0,0,0,${(L.tint + L.dsc * 0.35).toFixed(3)}))` : 'none';
+    const inp = r.querySelector('input'); if (inp) { inp.style.setProperty('--p', ((n - 1) * 25) + '%'); inp.setAttribute('aria-valuetext', L.name); }
+    r.querySelectorAll('.tk span').forEach((x, j) => x.classList.toggle('on', j + 1 === n)); };
+  // --- the Home Screen on screen follows at once (a background-only change updates in place, no rebuild)
+  const liveApply = node => { const h = live(); if (!h || !node) return; try { h.setConfig(clone(node)); } catch (e) {} };
+  const peek = on => { if (st.peek === on || !s) return; st.peek = on; root.classList.toggle('peek', on); const sr = s.host.shadowRoot, sh = sr.querySelector('.sh'), sc = sr.querySelector('.scrim');
+    sh.style.transition = 'background-color .18s'; sh.style.backgroundColor = on ? 'transparent' : ''; sh.style.background = on ? 'transparent' : ''; sh.style.boxShadow = on ? 'none' : ''; if (sc) sc.style.visibility = on ? 'hidden' : ''; };
+  // --- saving: re-read, change one key on the Home Screen card, save (quietly when nothing else changed: the sheet and the Home Screen stay)
+  let chain = Promise.resolve();
+  const persist = async (k, v) => { const lv = lvOf(), d0 = dash(); if (lv && lv.mode === 'yaml') throw new Error('this dashboard is in YAML mode');
+    const q = { type: 'lovelace/config', force: true }; if (d0) q.url_path = d0; const fresh = clone(await H().callWS(q)), node = hvHubCfgOf(fresh);
+    if (!node) throw new Error('no NotHomeView Home Screen card on this dashboard'); const same = !!lv && JSON.stringify(fresh) === JSON.stringify(lv.rawConfig || lv.config);
+    hvSetApply(node, k, v); const h = live();
+    if (lv && typeof lv.saveConfig === 'function' && (lv.urlPath || null) === (d0 || null)) { if (same && h) { h.setConfig(clone(node)); await hvQuietSave(h, lv, fresh); } else await lv.saveConfig(fresh); }
+    else { const sv = { type: 'lovelace/config/save', config: fresh }; if (d0) sv.url_path = d0; await H().callWS(sv); }
+    useCfg(fresh); // the saved Home Screen card (and the views for the page lists)
+    if (k === 'theme') { setTimeout(() => { HVT.key = ''; const el = (from && from.isConnected && from) || live(); if (el) hvThemeTick(el, H()); }, 50); retheme(); } };
+  const save = (k, v, repaint) => { if (ro()) return chain; const before = clone(st.cfg || {}); hvSetApply(st.cfg, k, v); liveApply(st.cfg); if (repaint) paintPane();
+    chain = chain.then(() => persist(k, v)).then(() => flash('Saved')).catch(async e => { const m = (e && (e.message || e.code)) || String(e); flash('Not saved: ' + m, true); hvToast('Settings not saved: ' + m);
+      try { const lv = lvOf(), q = { type: 'lovelace/config', force: true }; if (dash()) q.url_path = dash(); useCfg(await H().callWS(q)); if (!st.cfg) st.cfg = before; } catch (z) { st.cfg = before; }
+      liveApply(st.cfg); paintPane(); }); return chain; };
+  const retheme = () => { if (!s) return; const day = hvMode((st.cfg || {}).theme, H()) === 'day', sh = s.host.shadowRoot.querySelector('.sh'); s.host.toggleAttribute('hv-day', day); sh.style.setProperty('--sbg', day ? '#f2f2f7' : '#000'); };
+  // --- painting
+  const sideHtml = () => { const q = st.q.trim().toLowerCase(), sel = st.wide ? (st.page || 'general') : st.page, p0 = HV_SET_PAGES[0], P = personOf(), d = data();
+    const nm = d.name || (P && P.attributes.friendly_name) || user.name || 'Home', pic = P && P.attributes.entity_picture, ini = String(nm).trim().split(/\s+/).map(w => w[0] || '').join('').slice(0, 2).toUpperCase();
+    const row = p => `<button class="sr${sel === p.id ? ' on' : ''}" data-go="${p.id}" aria-current="${sel === p.id}"><span class="sq" style="--c:${p.c}"><ha-icon icon="${p.i}"></ha-icon></span><span class="nm">${esc(p.t)}</span><ha-icon class="ch" icon="mdi:chevron-right"></ha-icon></button>`;
+    const grp = g => { const ps = HV_SET_PAGES.filter(p => p.g === g && pageHit(p, q)); return ps.length ? `<div class="grp">${ps.map(row).join('')}</div>` : ''; };
+    const out = (pageHit(p0, q) ? `<div class="grp"><button class="sr pr${sel === 'person' ? ' on' : ''}" data-go="person" aria-current="${sel === 'person'}"><span class="av"${pic ? ` style="background-image:url('${esc(pic)}')"` : ''}>${pic ? '' : esc(ini)}</span><span class="tx"><span class="nm">${esc(nm)}</span><small>Person & greeting</small></span><ha-icon class="ch" icon="mdi:chevron-right"></ha-icon></button></div>` : '') + grp(1) + grp(2);
+    return out || `<div class="grp"><div class="empty">No results for “${esc(st.q.trim())}”</div></div>`; };
+  const paneHtml = () => { const p = pageOf(st.wide ? (st.page || 'general') : st.page), q = st.q.trim().toLowerCase(), all = !q || p.t.toLowerCase().includes(q), d = data(), F = fields(), dis = ro(), w = why();
+    let h = `<div class="ph">${st.wide ? '' : '<button class="bk" data-act="back" aria-label="Back to Settings"><ha-icon icon="mdi:chevron-left"></ha-icon>Settings</button>'}<span class="nt">${esc(p.t)}</span></div>`;
+    if (w) h += `<div class="ban" role="note">${esc(w)}</div>`;
+    if (all) h += `<div class="intro"><span class="sq" style="--c:${p.c}"><ha-icon icon="${p.i}"></ha-icon></span><b>${esc(p.t)}</b><p>${esc(p.d)}</p></div>`;
+    let any = false;
+    for (const sc of p.sec) { const ks = sc.f.map(fname).filter(k => all || hit(k, q)); if (!ks.length) continue; any = true;
+      h += (sc.h ? `<div class="gh">${esc(sc.h)}</div>` : '') + `<div class="grp${sc.lvl ? ' lvg' : ''}">${ks.map(k => rowHtml(k, F[k], d, dis)).join('')}</div>`; }
+    if (!any) h += `<div class="grp"><div class="empty">No results for “${esc(st.q.trim())}” on this page.</div></div>`;
+    return h; };
+  const formsMount = () => { if (!pane) return; const els = [...pane.querySelectorAll('[data-form]')]; if (!els.length) return;
+    hvFormReady().then(ok => { for (const box of els) { if (!box.isConnected) continue; const k = box.dataset.form;
+      if (!ok) { box.innerHTML = '<div class="empty">This list is edited in the Home Screen card\'s editor (General › Edit Home Screen).</div>'; continue; }
+      let f = forms.get(k); if (!f) { f = document.createElement('ha-form'); f.computeLabel = s0 => s0.name === k ? '' : hvHubLabel(s0); f.computeHelper = () => undefined;
+        f.addEventListener('value-changed', ev => { ev.stopPropagation(); const v = ev.detail.value && ev.detail.value[k]; f.data = { [k]: v }; save(k, v); }); forms.set(k, f); }
+      f.hass = H(); f.schema = [fields()[k]].filter(Boolean); f.data = { [k]: data()[k] }; f.disabled = ro(); box.appendChild(f); } }); };
+  const paintSide = () => { if (list) list.innerHTML = sideHtml(); };
+  const paintPane = () => { if (!pane) return; const sy = pane.scrollTop; for (const f of forms.values()) f.remove(); pane.innerHTML = paneHtml(); pane.scrollTop = sy; formsMount(); pvPaint(hvBgLevel(st.cfg || {})); albCheck(); };
+  const paint = () => { if (!root) return;
+    if (!st.ready) { root.classList.remove('pg'); list.innerHTML = '<div class="grp"><div class="empty">Loading…</div></div>'; pane.innerHTML = ''; return; }
+    if (st.nohub) { root.classList.add('nohub', 'pg'); root.classList.remove('wide'); side.style.display = 'none';
+      pane.innerHTML = `<div class="ph"><span class="nt">Settings</span></div><div class="intro"><span class="sq" style="--c:#8e8e93"><ha-icon icon="mdi:cog"></ha-icon></span><b>No Home Screen here</b><p>There is no NotHomeView Home Screen card on this dashboard, so there are no Home Screen settings to change. Add one in edit mode (Add card › NotHomeView Hub).</p></div><div class="grp">${rowHtml('@edit', null, {}, false)}</div>`; return; }
+    root.classList.toggle('pg', !!st.page); paintSide(); paintPane(); };
+  const go = id => { st.page = id; root.classList.toggle('pg', !!id); paintSide(); paintPane(); if (pane && !st.wide) { pane.scrollTop = 0; const bd = root.parentNode; if (bd) bd.scrollTop = 0; } };
+  const albCheck = () => { const d = data(), au = String(d.photo_album_url || '').trim(); if (d.photo_source_mode !== 'album' || !au || !hvAlbumProv(au) || (st.alb && st.alb.url === au) || st.albQ === au) return;
+    st.albQ = au; hvAlbumLoad(H(), au).then(r => { if (st.albQ !== au) return; st.alb = Object.assign({ url: au }, r); delete st.alb.ids; st.albQ = null; const sm = root && root.querySelector('[data-k="photo_album_url"] small'); if (sm) sm.textContent = help('photo_album_url'); }).catch(() => { st.albQ = null; }); };
+  const close = () => s && s.close();
+  const after = fn => { close(); setTimeout(fn, 420); }; // runs once the sheet has slid away
+  const act = a => { const h = live();
+    if (a === 'back') { go(null); return; }
+    if (a === 'edit') { after(() => { const eb = (from instanceof HVEditButtonCard && from.isConnected) ? from : [...HVEditButtonCard.live].find(x => x.isConnected && x._config);
+      if (eb) eb._go(); else hvGoEdit(location.pathname.replace(/\/$/, '') + '?disable_km&edit=1'); }); return; }
+    if (a === 'setup') { after(() => hvSetupDialog(H(), { force: true })); return; }
+    if (a === 'wallpanel') { after(() => hvOpenScreensaverSettings((from && from.isConnected && from) || h || document.body)); return; }
+    if (a === 'sidecards') { after(() => { const r = hvFindRoot(h || from), lv = r && r.lovelace; if (!lv || !lv.config) return; const raw = JSON.stringify((h && h._hvRaw) || st.cfg || {});
+      const path = hvCardPath(lv.config, o => o && o.type === 'custom:homeview-hub-card' && (JSON.stringify(o) === raw || (h && hvCfgMatch(h)(o))), r._curView) || hvCardPath(lv.config, o => o && o.type === 'custom:homeview-hub-card', r._curView);
+      if (path && hvOpenCardEditor(r, path)) return; if (path) { const vw = lv.config.views[path[0]] || {}; hvPenPage(lv.urlPath || ssDash(), vw.path != null && vw.path !== '' ? vw.path : path[0]); return; }
+      const eb = [...HVEditButtonCard.live].find(x => x.isConnected && x._config); if (eb) eb._go(); else hvGoEdit(location.pathname.replace(/\/$/, '') + '?disable_km&edit=1'); }); } };
+  const day = hvMode((st.cfg || {}).theme, H()) === 'day';
+  s = hvSheet({ full: (st.cfg || {}).full_height_popups !== false, label: 'Settings', day, dayBg: '#f2f2f7', bg: '#000', parent: document.body, // over the page: a save that rebuilds the view keeps the sheet
+    launch: () => { const h = live(); return h ? [h.shadowRoot.querySelector('.bg'), h._w] : []; },
+    onClose: () => { hvOpenSettings.cur = null; clearTimeout(tstT); if (ro0) ro0.disconnect(); for (const h of HV_HUBS) if (h._sheetO === s) { h._sheetO = null; h._layout(); } },
+    build: bd => { const sty = document.createElement('style'); sty.textContent = HV_SET_CSS; bd.appendChild(sty); root = document.createElement('div'); root.className = 'se'; bd.appendChild(root);
+      root.innerHTML = '<div class="side"><h1 class="bt">Settings</h1><label class="srch"><ha-icon icon="mdi:magnify"></ha-icon><input type="search" placeholder="Search" aria-label="Search settings" enterkeyhint="search" autocomplete="off"></label><div class="sl"></div></div><div class="pane" role="region" aria-label="Settings page"></div><div class="tst" role="status" aria-live="polite"></div>';
+      side = root.querySelector('.side'); pane = root.querySelector('.pane'); list = root.querySelector('.sl');
+      const lay = () => { const w = (bd.clientWidth || innerWidth) >= 700; if (w === st.wide && root.dataset.l) return; st.wide = w; root.dataset.l = '1'; root.classList.toggle('wide', w && !st.nohub); paint(); };
+      if (window.ResizeObserver) { ro0 = new ResizeObserver(lay); ro0.observe(bd); }
+      root.querySelector('.srch input').addEventListener('input', e => { st.q = e.target.value; const q = st.q.trim().toLowerCase();
+        if (st.wide && q && !pageHit(pageOf(st.page || 'general'), q)) { const m = HV_SET_PAGES.find(p => pageHit(p, q)); if (m) st.page = m.id; } paintSide(); if (st.wide || st.page) paintPane(); });
+      root.addEventListener('click', e => { const t = e.target.closest && e.target.closest('[data-go],[data-act],.sw,.ci'); if (!t || t.disabled) return;
+        if (t.dataset.go) { go(t.dataset.go); return; } if (t.dataset.act) { act(t.dataset.act); return; }
+        if (t.classList.contains('sw')) { const v = t.getAttribute('aria-checked') !== 'true'; t.setAttribute('aria-checked', String(v)); save(t.dataset.k, v); return; }
+        if (t.classList.contains('ci')) { const k = t.dataset.k, cur = (Array.isArray(data()[k]) ? data()[k] : []).map(x => typeof x === 'string' ? x : x && x.entity).filter(Boolean), on = t.getAttribute('aria-checked') !== 'true';
+          t.setAttribute('aria-checked', String(on)); save(k, on ? cur.concat(t.dataset.e) : cur.filter(x => x !== t.dataset.e)); } });
+      root.addEventListener('change', e => { const t = e.target, k = t && t.dataset && t.dataset.k; if (!k) return; const ty = t.dataset.t;
+        if (ty === 'level') { peek(false); save(k, Math.round(Number(t.value))); return; }
+        if (ty === 'num') { const v = t.value === '' ? undefined : Number(t.value); save(k, v); return; }
+        save(k, t.value, k === 'photo_source_mode'); });
+      root.addEventListener('input', e => { const t = e.target; if (!t || t.dataset.t !== 'level') return; const n = Math.round(Number(t.value)); pvPaint(n); peek(true); // live preview while dragging
+        const nd = hvSetApply(clone(st.cfg || {}), 'bg_blur_level', n); liveApply(nd); });
+      for (const ty of ['pointerup', 'pointercancel', 'touchend', 'touchcancel']) root.addEventListener(ty, () => { if (st.peek) setTimeout(() => peek(false), 60); }, true);
+      lay(); if (!root.dataset.l) { st.wide = innerWidth >= 700; root.dataset.l = '1'; root.classList.toggle('wide', st.wide); paint(); }
+      return { set hass(h) { const sig = (st.page === 'person' || !st.page || st.wide) ? JSON.stringify((personOf() || {}).attributes || {}) : ''; if (sig !== st.psig) { const first = st.psig === undefined; st.psig = sig; if (!first) paintSide(); } } }; } });
+  hvOpenSettings.cur = s; if (hub) { hub._sheetO = s; }
+  // the saved dashboard (the open one may lag behind), and the Assist pipelines for the pipeline list
+  (async () => { try { const q = { type: 'lovelace/config', force: true }; if (dash()) q.url_path = dash(); const c = await H().callWS(q); if (c && typeof c === 'object' && s.host.isConnected) { useCfg(c); st.ready = true; retheme(); root.classList.toggle('wide', st.wide && !st.nohub); paint(); } }
+    catch (e) { if (!st.ready && s.host.isConnected) { st.ready = true; st.nohub = !st.cfg; paint(); } } })();
+  H().callWS({ type: 'assist_pipeline/pipeline/list' }).then(r => { st.pipes = r; if (s.host.isConnected && (st.page === 'assistant')) paintPane(); }).catch(() => {});
+  return s; }
 function hvOpenCalApp(hub, app) {
   if (!hub || hub._sheetO || !hub._hass) return null;
   const host = document.createElement('homeview-calendar-app'); host.attachShadow({ mode: 'open' });
@@ -6877,6 +7118,7 @@ class HVHubCard extends HTMLElement {
     if (kind === 'weather') { this._openWeather(a.weather_entity); return; }
     if (kind === 'calendar') { hvOpenCalApp(this, a); return; }
     if (kind === 'reminders') { hvOpenReminders(this, a); return; }
+    if (kind === 'settings') { hvOpenSettings(this, a); return; }
     if (kind === 'assistant') { this._openAssist(); return; }
     if (kind === 'photos') { this._openPhoto(); return; }
     const cfg = a.tap_action; if (cfg && cfg.action !== 'none') fire(this, 'hass-action', { config: { entity: a.entity, tap_action: cfg }, action: 'tap' }); }
@@ -7198,7 +7440,7 @@ const HUB_APP_FIELDS = {
   color_to: { label: 'Gradient bottom colour', selector: { text: {} } },
   glyph_color: { label: 'Glyph colour (empty = white)', selector: { text: {} } },
   kind: { label: 'What it does', selector: { select: { mode: 'dropdown', options: [{ value: 'navigate', label: 'Open a view' }, { value: 'now_playing', label: 'Now Playing popup' },
-    { value: 'weather', label: 'Weather popup' }, { value: 'calendar', label: 'Calendar popup' }, { value: 'assistant', label: 'Assistant (voice / typed)' }, { value: 'photos', label: 'Full-screen photos' }, { value: 'action', label: 'Custom tap action' }] } } },
+    { value: 'weather', label: 'Weather popup' }, { value: 'calendar', label: 'Calendar popup' }, { value: 'reminders', label: 'Reminders (to-do lists)' }, { value: 'settings', label: 'Settings' }, { value: 'assistant', label: 'Assistant (voice / typed)' }, { value: 'photos', label: 'Full-screen photos' }, { value: 'action', label: 'Custom tap action' }] } } },
   calendar_entities: { label: 'Calendars (Calendar popup; empty = the Home Screen’s calendars)', selector: { entity: { domain: 'calendar', multiple: true } } },
   calendar_entity: { label: 'Save new events to (Calendar popup; empty = the first calendar)', selector: { entity: { domain: 'calendar' } } },
   navigation_path: { label: 'View (Open a view)', selector: { navigation: {} } },
@@ -7295,17 +7537,12 @@ const hvHubSchemaPipes = r => { if (!r || !Array.isArray(r.pipelines)) return HU
   return fix(HUB_SCHEMA); };
 // the Photos section shows the media folder field or the album link field, after the Photo source choice
 const hvHubSchemaAlbum = (sch, album) => { const fix = l => l.map(x => x.name === 'photo_source' && album ? { name: 'photo_album_url', selector: { text: { type: 'url' } } } : x.schema ? Object.assign({}, x, { schema: fix(x.schema) }) : x); return fix(sch); };
-class HVHubEditor extends HTMLElement {
-  setConfig(c) { this._config = c; this._render(); }
-  set hass(h) { this._hass = h; this._render(); }
-  _render() {
-    if (!this._hass || !this._config) return;
-    const data = Object.assign({}, HVHubCard.defaults, { calendar_show_weather: true, apps: HUB_APPS }, this._config); data.bg_blur_level = hvBgLevel(this._config); // an older bg_transparency shows as its level
-    if (!this._form) { const f = this._form = document.createElement('ha-form');
-      f.computeLabel = s => LABELS[s.name] || s.name;
-      f.computeHelper = s => s.name === 'bg_blur_level' ? `1 Solid · 2 Heavy · 3 Medium · 4 Light · 5 Clear (now: ${HV_BG_LEVELS[hvBgLevel(this._config)].name}). The preview updates while you drag.` : s.name === 'bg_freeze' ? 'On: the background keeps the photo it had when the Home Screen opened (the Photos card still changes); it moves to the current photo only while the page is out of sight (screensaver up, another view, app in the background). Off: it follows the Photos card.' : s.name === 'swipe_open_home' ? 'On: swipe right on the screensaver, or on the Home Screen when the screensaver is not showing, to open the Home app. The screensaver also shows a lock-screen-style Home button in the bottom-left corner. Opening Home from the screensaver slides the app over it, without turning the screensaver off.' : s.name === 'ss_hold' ? 'On: the screensaver does not start by itself behind the Home Screen (and uses nothing there); swipe the page away to start it, on the photo the Photos card shows. Off: Wallpanel\'s idle timer runs as before.' : s.name === 'dim' ? 'Darkens the top and bottom of the page so the text stays readable. Each Background blur level scales it (lighter for Light and Clear).' : s.name === 'photo_viewer_add' ? 'The viewer button that opens the gallery (the gallery keeps its own “Add photos” upload button).' : s.name === 'side_sizes' ? hubUnitsNote(this._config) : s.name === 'photo_source' ? 'The photo viewer, the gallery and uploads all use this folder. Empty = the screensaver\'s folder (Media → My media). Uploading needs a media-source:// folder and an administrator.' : s.name === 'apps' ? 'Each app: label, icon, gradient colours and what it does (open a view, Now Playing, Weather, Calendar, photos, or any tap action). Calendar opens an iPad-style popup. hv:calendar draws today’s date. Empty Calendars uses this card’s calendar_entities; Save new events to picks the calendar that stores them.' : undefined;
-      { const h1 = f.computeHelper; f.computeHelper = s => s.name === 'assistant_enabled' ? 'Talk to an Assist pipeline with this device\'s microphone (or type). Timers ("set a timer for 15 minutes", "pause / cancel the timer") run right here, full screen.' : s.name === 'assistant_pipeline' ? 'Which assistant answers (Settings → Voice assistants).' : h1(s); }
-      { const h3 = f.computeHelper; f.computeHelper = s => s.name === 'assistant_orb' ? 'On: the mic shows only an animated orb near the top (the dashboard stays clear); tap the orb for the chat. Off: the full chat opens.'
+// the Home Screen options' helper texts (the card editor and the Settings app)
+function hvHubHelp(s, cfg, albSt) { cfg = cfg || {};
+  let f = s => s.name === 'bg_blur_level' ? `1 Solid · 2 Heavy · 3 Medium · 4 Light · 5 Clear (now: ${HV_BG_LEVELS[hvBgLevel(cfg)].name}). The preview updates while you drag.` : s.name === 'bg_freeze' ? 'On: the background keeps the photo it had when the Home Screen opened (the Photos card still changes); it moves to the current photo only while the page is out of sight (screensaver up, another view, app in the background). Off: it follows the Photos card.' : s.name === 'swipe_open_home' ? 'On: swipe right on the screensaver, or on the Home Screen when the screensaver is not showing, to open the Home app. The screensaver also shows a lock-screen-style Home button in the bottom-left corner. Opening Home from the screensaver slides the app over it, without turning the screensaver off.' : s.name === 'ss_hold' ? 'On: the screensaver does not start by itself behind the Home Screen (and uses nothing there); swipe the page away to start it, on the photo the Photos card shows. Off: Wallpanel\'s idle timer runs as before.' : s.name === 'dim' ? 'Darkens the top and bottom of the page so the text stays readable. Each Background blur level scales it (lighter for Light and Clear).' : s.name === 'photo_viewer_add' ? 'The viewer button that opens the gallery (the gallery keeps its own “Add photos” upload button).' : s.name === 'side_sizes' ? hubUnitsNote(cfg) : s.name === 'photo_source' ? 'The photo viewer, the gallery and uploads all use this folder. Empty = the screensaver\'s folder (Media → My media). Uploading needs a media-source:// folder and an administrator.' : s.name === 'apps' ? 'Each app: label, icon, gradient colours and what it does (open a view, Now Playing, Weather, Calendar, photos, or any tap action). Calendar opens an iPad-style popup. hv:calendar draws today’s date. Empty Calendars uses this card’s calendar_entities; Save new events to picks the calendar that stores them.' : undefined;
+  { const h1 = f; f = s => s.name === 'assistant_enabled' ? 'Talk to an Assist pipeline with this device\'s microphone (or type). Timers ("set a timer for 15 minutes", "pause / cancel the timer") run right here, full screen.' : s.name === 'assistant_pipeline' ? 'Which assistant answers (Settings → Voice assistants).' : h1(s); }
+  { const h3 = f; f = s => s.name === 'assistant_orb' ? 'On: the mic shows only an animated orb near the top (the dashboard stays clear); tap the orb for the chat. Off: the full chat opens.'
+
         : s.name === 'assistant_continue' ? 'After every reply the mic opens again in the same conversation, until you tap outside the orb, say one of the phrases below, or say nothing for a few seconds (Close after silence).'
         : s.name === 'assistant_dismiss_phrases' ? 'Comma-separated. Saying one of them (alone, or with words like "ok", "very much", "for now") closes the assistant without sending it; "thanks, also turn off the lights" is still a request.'
         : s.name === 'assistant_silence_timeout' ? 'Seconds the mic waits for you to start speaking after a reply; nothing said at all = the assistant closes and the mic stops.'
@@ -7313,9 +7550,19 @@ class HVHubEditor extends HTMLElement {
         : s.name === 'assistant_history_retention' ? 'How long this browser keeps the chat (shown when the chat opens). The default for devices; each device can choose its own (and clear it) in the assistant\'s settings button.'
         : s.name === 'assistant_quiet_volume_entity' ? 'Quiet mode is chosen on each device (Off / On / Auto) with the Quiet button in the assistant\'s chat. Quiet: the reply is not spoken, it shows as text under the orb. Auto uses this sensor when it reports a number (percent or 0-1), otherwise the quiet hours. A sensor belongs to one phone or tablet: set it on the dashboard that device uses.'
         : s.name === 'assistant_quiet_focus_entity' ? 'Auto is also quiet while this is on (e.g. a phone\'s Focus or Do Not Disturb sensor).' : s.name === 'assistant_quiet_start' ? 'Used by Auto when no volume sensor is set or it isn\'t reporting.' : h3(s); }
-      { const h2 = f.computeHelper; f.computeHelper = s => s.name === 'photo_album_url' ? hvAlbumStatus(this._albSt, (this._config || {}).photo_album_url) : s.name === 'photo_source_mode' ? 'Media folder: pictures in Home Assistant\'s media (Media → My media). Album link: a shared Google Photos, iCloud or OneDrive album, used for the Photos tile and its viewer (and the screensaver, if its source is set the same way).' : h2(s); }
-      { const h0 = f.computeHelper; f.computeHelper = s => s.name === 'theme' ? 'The look of the device pages (the pages with the button tiles) on this dashboard: their tiles, popups and page background. The Home Screen itself always keeps its own look. Night = dark glass (default); Day = white tiles on a light grey page. A Page Grid card can choose its own.' : h0(s); }
-      { const l0 = f.computeLabel; f.computeLabel = s => s.name === 'theme' ? 'Device pages theme' : l0(s); }
+  { const h2 = f; f = s => s.name === 'photo_album_url' ? hvAlbumStatus(albSt, (cfg || {}).photo_album_url) : s.name === 'photo_source_mode' ? 'Media folder: pictures in Home Assistant\'s media (Media → My media). Album link: a shared Google Photos, iCloud or OneDrive album, used for the Photos tile and its viewer (and the screensaver, if its source is set the same way).' : h2(s); }
+  { const h0 = f; f = s => s.name === 'theme' ? 'The look of the device pages (the pages with the button tiles) on this dashboard: their tiles, popups and page background. The Home Screen itself always keeps its own look. Night = dark glass (default); Day = white tiles on a light grey page. A Page Grid card can choose its own.' : h0(s); }
+  return f(s); }
+const hvHubLabel = s => s.name === 'theme' ? 'Device pages theme' : LABELS[s.name] || s.name;
+class HVHubEditor extends HTMLElement {
+  setConfig(c) { this._config = c; this._render(); }
+  set hass(h) { this._hass = h; this._render(); }
+  _render() {
+    if (!this._hass || !this._config) return;
+    const data = Object.assign({}, HVHubCard.defaults, { calendar_show_weather: true, apps: HUB_APPS }, this._config); data.bg_blur_level = hvBgLevel(this._config); // an older bg_transparency shows as its level
+    if (!this._form) { const f = this._form = document.createElement('ha-form');
+      f.computeHelper = s => hvHubHelp(s, this._config, this._albSt);
+      f.computeLabel = hvHubLabel;
       f.addEventListener('input', ev => { const p = ev.composedPath(), sl = p.find(n => n.tagName === 'HA-SLIDER'), sel = p.find(n => n.tagName === 'HA-SELECTOR-NUMBER'); // live preview while dragging
         if (!sl || !sel || sel.label !== LABELS.bg_blur_level) return; const v = Math.round(Number(sl.value)); if (isNaN(v) || v < 1 || v > 5) return; this._live = v;
         if (!this._liveRaf) this._liveRaf = requestAnimationFrame(() => { this._liveRaf = 0; const cfg = Object.assign({}, this._config); if (this._live === HVHubCard.defaults.bg_blur_level) delete cfg.bg_blur_level; else cfg.bg_blur_level = this._live;
@@ -7376,7 +7623,7 @@ const CARDS = [
   ['homeview-battery-card', HVBatteryCard, 'NotHomeView Battery', 'Battery level as a rounded glass bar with a big % (green / yellow / red) and a bolt while charging.'],
   ['homeview-person-card', HVPersonCard, 'NotHomeView People', 'Find My style person tile: round avatar, status badge, name and location (zone or street); tap for a map.'],
   ['homeview-screensaver-card', HVScreensaverCard, 'NotHomeView Screensaver Settings', 'Friendly settings form for this dashboard\'s Wallpanel screensaver (photos, timing, clock); Save writes the wallpanel config.'],
-  ['homeview-edit-button-card', HVEditButtonCard, 'NotHomeView Edit Button', 'Small glass pencil button fixed in a corner; opens this dashboard in edit mode with kiosk-mode off.'],
+  ['homeview-edit-button-card', HVEditButtonCard, 'NotHomeView Edit Button', 'Small glass pencil button fixed in a corner; opens the Settings app (Home Screen options, Device pages theme, and Edit Home Screen for edit mode with kiosk-mode off).'],
 ];
 if (!customElements.get('homeview-card-editor')) customElements.define('homeview-card-editor', HVEditor);
 for (const [, cls] of CARDS) hvThemeWrap(cls); // Night / Day theme (1.30.5)
