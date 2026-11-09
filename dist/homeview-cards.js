@@ -8925,11 +8925,11 @@ const HV_SS_FACE_CSS = `
 .info .ci{width:6cqh;height:5cqh;margin-top:1cqh}
 .info .cn,.info .hl{color:var(--hv-ss-clock,#1f2326);font-weight:500;font-size:3.8cqh;line-height:1.3}
 /* fluid */
-.f.fluid{background:radial-gradient(ellipse 70% 75% at 50% 50%,var(--hv-ss-bg,#f06aa8) 0%,color-mix(in srgb,var(--hv-ss-bg,#f06aa8) 55%,#fff) 40%,color-mix(in srgb,var(--hv-ss-accent,#5b78f0) 35%,#fff) 75%,color-mix(in srgb,var(--hv-ss-accent,#5b78f0) 55%,#e8e4ff) 100%)}
-.fluid .bl{position:absolute;left:18cqw;top:14cqh;width:64cqw;height:72cqh;background:radial-gradient(circle at 40% 45%,var(--hv-ss-accent,#5b78f0) 0%,color-mix(in srgb,var(--hv-ss-accent,#5b78f0) 80%,#4f8bf0) 35%,color-mix(in srgb,var(--hv-ss-accent,#5b78f0) 55%,transparent) 60%,rgba(240,110,180,0) 75%);
+.f.fluid{isolation:isolate;background:radial-gradient(ellipse 70% 75% at 50% 50%,var(--hv-ss-bg,#f06aa8) 0%,color-mix(in srgb,var(--hv-ss-bg,#f06aa8) 55%,#fff) 40%,color-mix(in srgb,var(--hv-ss-accent,#5b78f0) 35%,#fff) 75%,color-mix(in srgb,var(--hv-ss-accent,#5b78f0) 55%,#e8e4ff) 100%)}
+.fluid .bl{position:absolute;left:18cqw;top:14cqh;width:64cqw;height:72cqh;z-index:0;background:radial-gradient(circle at 40% 45%,var(--hv-ss-accent,#5b78f0) 0%,color-mix(in srgb,var(--hv-ss-accent,#5b78f0) 80%,#4f8bf0) 35%,color-mix(in srgb,var(--hv-ss-accent,#5b78f0) 55%,transparent) 60%,rgba(240,110,180,0) 75%);
  filter:blur(2.5cqh);border-radius:46% 54% 41% 59%/52% 38% 62% 48%;animation:hvssm 26s ease-in-out infinite alternate}
 @keyframes hvssm{0%{border-radius:46% 54% 41% 59%/52% 38% 62% 48%;transform:rotate(0deg) scale(1)}50%{border-radius:60% 40% 55% 45%/40% 60% 40% 60%;transform:rotate(14deg) scale(1.06)}100%{border-radius:40% 60% 48% 52%/58% 46% 54% 42%;transform:rotate(-10deg) scale(.97)}}
-.fluid .dg{position:absolute;width:24cqw;height:39cqh}
+.fluid .dg{position:absolute;z-index:1;width:24cqw;height:39cqh}
 .fluid .sh{position:absolute;box-sizing:border-box;overflow:hidden;border:.25cqh solid rgba(255,255,255,.55);
  background:linear-gradient(200deg,rgba(255,255,255,.55) 0%,color-mix(in srgb,var(--hv-ss-glass,#6c7cf2) 55%,#fff) 18%,var(--hv-ss-glass,#6c7cf2) 45%,color-mix(in srgb,var(--hv-ss-glass,#6c7cf2) 70%,#7d86f4) 62%,color-mix(in srgb,var(--hv-ss-bg,#f06aa8) 70%,#fff) 86%,#ffc4e2 100%);
  box-shadow:inset 0 1.2cqh 2cqh rgba(255,255,255,.45),inset 0 -1.5cqh 2.5cqh rgba(255,170,215,.65),0 1.5cqh 4cqh rgba(80,60,170,.25)}
@@ -9001,7 +9001,7 @@ class HVSsFace {
   _hands(d, cx, cy) { const h = d.getHours() % 12, m = d.getMinutes(), s = d.getSeconds(), rot = (el, deg) => el && el.setAttribute('transform', `rotate(${deg} ${cx} ${cy})`);
     rot(this._hh, (h + m / 60) * 30); rot(this._mh, (m + s / 60) * 6); rot(this._hh2, (h + m / 60) * 30); rot(this._mh2, (m + s / 60) * 6); rot(this._sh, s * 6); return (h + m / 60) * 30; }
   // ---- abstract fluid
-  _b_fluid() { const f = this.el; f.innerHTML = '<div class="bl"></div><div class="stg"></div>'; this._dg = [];
+  _b_fluid() { const f = this.el; f.innerHTML = '<div class="stg"><div class="bl"></div></div>'; this._dg = [];
     const pos = [[23, 9], [52, 9], [23, 53], [52, 53]], st = f.querySelector('.stg');
     for (const [x, y] of pos) { const g = document.createElement('div'); g.className = 'dg'; g.style.left = x + 'cqw'; g.style.top = y + 'cqh'; st.appendChild(g); this._dg.push(g); } }
   _u_fluid(d, hass) { const h = d.getHours(), h12 = (hass && hass.locale && hass.locale.time_format === '24') ? h : (h % 12 || 12), t = String(h12).padStart(2, '0') + String(d.getMinutes()).padStart(2, '0');
