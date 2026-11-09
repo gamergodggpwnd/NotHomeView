@@ -4613,21 +4613,22 @@ function hvSheet(o) { // o: { parent, launch() -> [els], label, bg, build(bd, fr
   host.style.setProperty('--st', (o.full ? 0 : st) + 'px'); host.style.setProperty('--sr', (o.full ? 0 : vw > 700 ? 22 : 16) + 'px');
   if (o.full) { hvFhOpen.add(host); host.setAttribute('full', ''); host.style.setProperty('--sft', safeT + 'px'); } // 1.31.1: full height, content below the safe area host.style.setProperty('--spx', Math.round(Math.max(12, Math.min(40, vw * 0.03))) + 'px');
   const fabs = [...document.querySelectorAll('homeview-edit-fab')]; fabs.forEach(f => { f.style.visibility = 'hidden'; });
-  const L = () => (o.launch ? o.launch() : []).filter(Boolean), H = () => sh.offsetHeight || vh;
+  const sideL = o.side === 'left'; // swipe-open Home: the sheet comes from the left (moving right), instead of up from the bottom
+  const L = () => (o.launch ? o.launch() : []).filter(Boolean), H = () => sh.offsetHeight || vh, W = () => sh.offsetWidth || vw, MAX = () => sideL ? W() : H();
   let dyNow = 0, closed = false;
-  const apply = (dy, anim, dur) => { dyNow = dy; const h = H(), p = Math.max(0, Math.min(1, 1 - dy / h)), d = (dur || 0.45) + 's ' + SHEET_EASE;
-    sh.style.transition = anim ? 'transform ' + d : 'none'; sh.style.transform = `translate3d(0,${dy.toFixed(1)}px,0)`;
+  const apply = (dy, anim, dur) => { dyNow = dy; const m = MAX(), p = Math.max(0, Math.min(1, 1 - dy / m)), d = (dur || 0.45) + 's ' + SHEET_EASE;
+    sh.style.transition = anim ? 'transform ' + d : 'none'; sh.style.transform = sideL ? `translate3d(${(-dy).toFixed(1)}px,0,0)` : `translate3d(0,${dy.toFixed(1)}px,0)`;
     scrim.style.transition = anim ? 'opacity ' + d : 'none'; scrim.style.opacity = p.toFixed(3);
-    for (const el of L()) { el.style.transition = anim ? `transform ${d}, border-radius ${d}` : 'none'; el.style.transformOrigin = '50% 0';
-      el.style.transform = p > 0.002 ? `translate3d(0,${(safeT * 0.6 * p + 8 * p).toFixed(1)}px,0) scale(${(1 - 0.075 * p).toFixed(4)})` : ''; el.style.borderRadius = p > 0.002 ? Math.round(18 * p) + 'px' : ''; } };
+    for (const el of L()) { el.style.transition = anim ? `transform ${d}, border-radius ${d}` : 'none'; el.style.transformOrigin = sideL ? '100% 50%' : '50% 0';
+      el.style.transform = p > 0.002 ? (sideL ? `translate3d(${(28 * p).toFixed(1)}px,0,0)` : `translate3d(0,${(safeT * 0.6 * p + 8 * p).toFixed(1)}px,0) scale(${(1 - 0.075 * p).toFixed(4)})`) : ''; el.style.borderRadius = p > 0.002 ? Math.round(18 * p) + 'px' : ''; } };
   const frame = () => { const r = sh.getBoundingClientRect(); return { x: r.left, y: r.top, w: sh.offsetWidth, h: sh.offsetHeight }; };
-  apply(H(), false); const api = o.build ? o.build(bd, frame) || {} : {};
+  apply(MAX(), false); const api = o.build ? o.build(bd, frame) || {} : {};
   sh.getBoundingClientRect(); requestAnimationFrame(() => requestAnimationFrame(() => apply(0, true, 0.5)));
   setTimeout(() => dispatchEvent(new Event('hv-layout')), 60); setTimeout(() => dispatchEvent(new Event('hv-layout')), 560);
   const key = k => { if (k.key === 'Escape' && !sr.querySelector('homeview-room-picker') && !hvDialogOpen()) close(); };
-  const close = () => { if (closed) return; closed = true; removeEventListener('keydown', key); const left = Math.max(0.2, 0.36 * (1 - dyNow / H()));
-    apply(H(), true, left); setTimeout(() => { for (const el of L()) { el.style.transition = ''; el.style.transform = ''; el.style.borderRadius = ''; el.style.transformOrigin = ''; }
-      host.remove(); fabs.forEach(f => { f.style.visibility = ''; }); if (o.onClose) o.onClose(); }, left * 1000 + 30); };
+  const close = () => { if (closed) return; closed = true; removeEventListener('keydown', key); const dur = Math.max(0.2, 0.36 * (1 - dyNow / MAX()));
+    apply(MAX(), true, dur); setTimeout(() => { for (const el of L()) { el.style.transition = ''; el.style.transform = ''; el.style.borderRadius = ''; el.style.transformOrigin = ''; }
+      host.remove(); fabs.forEach(f => { f.style.visibility = ''; }); if (o.onClose) o.onClose(); }, dur * 1000 + 30); };
   sr.querySelector('.x').addEventListener('click', close); addEventListener('keydown', key);
   if (o.edit) hvPen(sr.querySelector('.x'), o.edit); // 1.32.0: edit pencil (admins)
   // drag to dismiss: from the pill / top strip, or anywhere while the content under the finger is scrolled to the top
@@ -4642,10 +4643,11 @@ function hvSheet(o) { // o: { parent, launch() -> [els], label, bg, build(bd, fr
     g = { x: t.clientX, y: t.clientY, t: Date.now(), on: false, dy: 0, grab: onGrab }; }, { passive: true });
   sh.addEventListener('touchmove', e => { if (!g) return; const t = e.touches[0], dx = t.clientX - g.x, dy = t.clientY - g.y;
     if (!g.on) { if (Math.abs(dx) < 3 && Math.abs(dy) < 3) return;
-      if (dy > 0 && (g.grab || dy >= Math.abs(dx) * 1.1)) { g.on = true; g.y0 = t.clientY; g.t = Date.now(); } else { g = null; return; } }
-    if (e.cancelable) e.preventDefault(); g.dy = Math.max(0, t.clientY - g.y0); apply(g.dy, false); }, { passive: false });
+      if (sideL) { if (dx < 0 && (g.grab || -dx >= Math.abs(dy) * 1.1)) { g.on = true; g.x0 = t.clientX; g.t = Date.now(); } else { g = null; return; } }
+      else if (dy > 0 && (g.grab || dy >= Math.abs(dx) * 1.1)) { g.on = true; g.y0 = t.clientY; g.t = Date.now(); } else { g = null; return; } }
+    if (e.cancelable) e.preventDefault(); g.dy = sideL ? Math.max(0, g.x0 - t.clientX) : Math.max(0, t.clientY - g.y0); apply(g.dy, false); }, { passive: false });
   const end = () => { if (!g) return; const s0 = g; g = null; if (!s0.on) return; const v = s0.dy / Math.max(1, Date.now() - s0.t);
-    if (s0.dy > H() * 0.22 || (v > 0.5 && s0.dy > 40)) close(); else apply(0, true, 0.38); };
+    if (s0.dy > MAX() * 0.22 || (v > 0.5 && s0.dy > 40)) close(); else apply(0, true, 0.38); };
   sh.addEventListener('touchend', end); sh.addEventListener('touchcancel', end);
   return { close, host, set hass(h) { if (api) api.hass = h; }, get dy() { return dyNow; } };
 }
@@ -6520,9 +6522,11 @@ class HVHubCard extends HTMLElement {
   // threshold it springs back. Transforms / opacity only.
   // swipe_open_home: open the Home app exactly as tapping its icon does (its sheet, else its page); without a Home app on this Home Screen, the My Home (or home) view
   async _openHome() { if (this._sheetO || this._edit || hvHubArr.hub === this || !this._config) return false; const apps = this._config.apps || [], i = apps.findIndex(a => hvHubAppKey(a) === 'home');
-    if (i >= 0) { this._runApp(null, i); return true; }
+    if (i >= 0) { const a0 = apps[i]; if ((a0.kind || 'navigate') === 'navigate' && a0.open_as !== 'page') {
+      if (!(await this._openViewSheet(a0, { side: 'left' })) && !this._sheetO) this._runApp(null, i, true); return true; }
+      this._runApp(null, i); return true; }
     const cfg = await this._loadCfg(), vs = (cfg && cfg.views) || [], v = vs.find(x => x.path === 'my-home') || vs.find(x => x.path === 'home'); if (!v || this._sheetO) return false;
-    const a = { kind: 'navigate', navigation_path: v.path }; if (!(await this._openViewSheet(a)) && !this._sheetO) hvNavigate(this._path(v.path)); return true; }
+    const a = { kind: 'navigate', navigation_path: v.path }; if (!(await this._openViewSheet(a, { side: 'left' })) && !this._sheetO) hvNavigate(this._path(v.path)); return true; }
   // a left-to-right swipe on the Home Screen (screensaver not showing) opens the Home app. It starts away from the left edge (the sidebar swipe) and
   // never inside a popup, sheet, Calendar / Reminders, the Assistant or arrange mode; right-to-left (swipe page) and pull-down (screensaver) are untouched.
   _homeSwBind(on) {
@@ -6593,7 +6597,7 @@ class HVHubCard extends HTMLElement {
     const s = hvSheet(Object.assign({ full: this._config.full_height_popups !== false }, o, { edit: 'edit' in o ? o.edit : this._penFn(), day: o.day === true, parent: this.shadowRoot, launch: () => [this.shadowRoot.querySelector('.bg'), this._w],
       onClose: () => { this._sheetO = null; if (o.onClose) o.onClose(); this._layout(); } }));
     this._sheetO = s; if (this._hass) s.hass = this._hass; return s; }
-  async _openViewSheet(a) {
+  async _openViewSheet(a, opt) {
     const np = a.navigation_path || 'home', dash = this._dash();
     if (np.startsWith('/') && !np.startsWith(`/${dash}/`)) return false; // another dashboard: navigate
     const vp = np.replace(new RegExp(`^/${dash}/`), '').replace(/^\//, '').replace(/[?#].*$/, '');
@@ -6604,7 +6608,7 @@ class HVHubCard extends HTMLElement {
     const live = HVT.cfg || cfg, lv = live && (live.views || []).find(x => String(x.path || '') === vp) || v;
     const mode = hvMode(hvViewTheme(live, lv), this._hass), day = mode === 'day';
     if (day) { hvThemeOver('day'); cards = cards.filter(x => !hvIsBgCard(x)); } // Day: the light grey sheet instead of the page's dark background card
-    this._openSheet({ label: v.title || a.name || vp, bg: v.background || '', day, dayBg: '#eeeef0', edit: this._penFn({ view: vp, dash }), onClose: () => { if (HVT.over) hvThemeOver(''); }, build: (bd, frame) => {
+    this._openSheet({ label: v.title || a.name || vp, bg: v.background || '', day, dayBg: '#eeeef0', side: opt && opt.side, edit: this._penFn({ view: vp, dash }), onClose: () => { if (HVT.over) hvThemeOver(''); }, build: (bd, frame) => {
       bd._hvOwnTheme = true; bd._hvThemeVal = mode; // the page's cards (and Page Grid tiles) follow this, not the Home Screen
       if (day) bd.style.cssText += ';' + HV_DAY_VARS + ';--primary-text-color:#1c1c1e;--secondary-text-color:rgba(60,60,67,.72)'; // native cards styled with the --hv-* colours
       const els = cards.map(c0 => { const cfg2 = c0.type === 'custom:homeview-grid-card' ? Object.assign({}, c0, { swipe_back: false, edge_sidebar: false, block_pull_refresh: false }) : c0;
@@ -7285,7 +7289,7 @@ class HVHubEditor extends HTMLElement {
     const data = Object.assign({}, HVHubCard.defaults, { calendar_show_weather: true, apps: HUB_APPS }, this._config); data.bg_blur_level = hvBgLevel(this._config); // an older bg_transparency shows as its level
     if (!this._form) { const f = this._form = document.createElement('ha-form');
       f.computeLabel = s => LABELS[s.name] || s.name;
-      f.computeHelper = s => s.name === 'bg_blur_level' ? `1 Solid · 2 Heavy · 3 Medium · 4 Light · 5 Clear (now: ${HV_BG_LEVELS[hvBgLevel(this._config)].name}). The preview updates while you drag.` : s.name === 'bg_freeze' ? 'On: the background keeps the photo it had when the Home Screen opened (the Photos card still changes); it moves to the current photo only while the page is out of sight (screensaver up, another view, app in the background). Off: it follows the Photos card.' : s.name === 'swipe_open_home' ? 'On: swipe right on the screensaver, or on the Home Screen when the screensaver is not showing, to open the Home app. The screensaver also shows a lock-screen-style Home button in the bottom corner.' : s.name === 'ss_hold' ? 'On: the screensaver does not start by itself behind the Home Screen (and uses nothing there); swipe the page away to start it, on the photo the Photos card shows. Off: Wallpanel\'s idle timer runs as before.' : s.name === 'dim' ? 'Darkens the top and bottom of the page so the text stays readable. Each Background blur level scales it (lighter for Light and Clear).' : s.name === 'photo_viewer_add' ? 'The viewer button that opens the gallery (the gallery keeps its own “Add photos” upload button).' : s.name === 'side_sizes' ? hubUnitsNote(this._config) : s.name === 'photo_source' ? 'The photo viewer, the gallery and uploads all use this folder. Empty = the screensaver\'s folder (Media → My media). Uploading needs a media-source:// folder and an administrator.' : s.name === 'apps' ? 'Each app: label, icon, gradient colours and what it does (open a view, Now Playing, Weather, Calendar, photos, or any tap action). Calendar opens an iPad-style popup. hv:calendar draws today’s date. Empty Calendars uses this card’s calendar_entities; Save new events to picks the calendar that stores them.' : undefined;
+      f.computeHelper = s => s.name === 'bg_blur_level' ? `1 Solid · 2 Heavy · 3 Medium · 4 Light · 5 Clear (now: ${HV_BG_LEVELS[hvBgLevel(this._config)].name}). The preview updates while you drag.` : s.name === 'bg_freeze' ? 'On: the background keeps the photo it had when the Home Screen opened (the Photos card still changes); it moves to the current photo only while the page is out of sight (screensaver up, another view, app in the background). Off: it follows the Photos card.' : s.name === 'swipe_open_home' ? 'On: swipe right on the screensaver, or on the Home Screen when the screensaver is not showing, to open the Home app. The screensaver also shows a lock-screen-style Home button in the bottom-left corner.' : s.name === 'ss_hold' ? 'On: the screensaver does not start by itself behind the Home Screen (and uses nothing there); swipe the page away to start it, on the photo the Photos card shows. Off: Wallpanel\'s idle timer runs as before.' : s.name === 'dim' ? 'Darkens the top and bottom of the page so the text stays readable. Each Background blur level scales it (lighter for Light and Clear).' : s.name === 'photo_viewer_add' ? 'The viewer button that opens the gallery (the gallery keeps its own “Add photos” upload button).' : s.name === 'side_sizes' ? hubUnitsNote(this._config) : s.name === 'photo_source' ? 'The photo viewer, the gallery and uploads all use this folder. Empty = the screensaver\'s folder (Media → My media). Uploading needs a media-source:// folder and an administrator.' : s.name === 'apps' ? 'Each app: label, icon, gradient colours and what it does (open a view, Now Playing, Weather, Calendar, photos, or any tap action). Calendar opens an iPad-style popup. hv:calendar draws today’s date. Empty Calendars uses this card’s calendar_entities; Save new events to picks the calendar that stores them.' : undefined;
       { const h1 = f.computeHelper; f.computeHelper = s => s.name === 'assistant_enabled' ? 'Talk to an Assist pipeline with this device\'s microphone (or type). Timers ("set a timer for 15 minutes", "pause / cancel the timer") run right here, full screen.' : s.name === 'assistant_pipeline' ? 'Which assistant answers (Settings → Voice assistants).' : h1(s); }
       { const h3 = f.computeHelper; f.computeHelper = s => s.name === 'assistant_orb' ? 'On: the mic shows only an animated orb near the top (the dashboard stays clear); tap the orb for the chat. Off: the full chat opens.'
         : s.name === 'assistant_continue' ? 'After every reply the mic opens again in the same conversation, until you tap outside the orb, say one of the phrases below, or say nothing for a few seconds (Close after silence).'
@@ -8660,10 +8664,10 @@ const hvSsOv = {
     this.host.style.cssText = `position:fixed;inset:0;z-index:${z + 1};pointer-events:none;opacity:${isFinite(op) ? op : 1};transition:opacity .4s linear`;
     this.face.update(this.hass(), new Date()); },
   start() { if (this.iv) return; this.iv = setInterval(() => { try { this.tick(); } catch (e) { /* next tick */ } try { hvSsHome.tick(); } catch (e) {} }, 250); } };
-/* swipe_open_home on the screensaver: a lock-screen-style Home button (bottom right) and a left-to-right swipe each stop the screensaver and open
+/* swipe_open_home on the screensaver: a lock-screen-style Home button (bottom left) and a left-to-right swipe each stop the screensaver and open
    the Home app (as tapping its icon does). Its own layer just above Wallpanel's and the style faces, only while the setting is on and a screensaver
    is showing (every style); only the button takes touches, so a tap anywhere else still reaches Wallpanel and dismisses it as before. */
-const HV_SS_HOME_CSS = `.hb{all:unset;pointer-events:auto;cursor:pointer;position:absolute;right:calc(28px + env(safe-area-inset-right, 0px));bottom:calc(28px + env(safe-area-inset-bottom, 0px));
+const HV_SS_HOME_CSS = `.hb{all:unset;pointer-events:auto;cursor:pointer;position:absolute;left:calc(28px + env(safe-area-inset-left, 0px));bottom:calc(28px + env(safe-area-inset-bottom, 0px));
 width:60px;height:60px;border-radius:50%;box-sizing:border-box;display:flex;align-items:center;justify-content:center;color:#fff;background:rgba(28,28,32,.34);border:1px solid rgba(255,255,255,.34);
 backdrop-filter:blur(18px) saturate(1.4);-webkit-backdrop-filter:blur(18px) saturate(1.4);transition:transform .15s ease,background .15s;-webkit-tap-highlight-color:transparent}
 .hb:active{transform:scale(.92);background:rgba(28,28,32,.5)} .hb:focus-visible{outline:2px solid #fff;outline-offset:3px} .hb ha-icon{--mdc-icon-size:28px;display:flex}`;
