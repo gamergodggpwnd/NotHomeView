@@ -6031,7 +6031,7 @@ const HV_SET_PAGES = [
       { h: 'Background blur', lvl: true, f: ['bg_blur_level'] }, { h: 'Advanced', f: ['dim'] },
       { h: 'Photos tile', f: ['photo_tap', 'photo_label', 'photo_viewer_nav', 'photo_viewer_swipe', 'photo_viewer_add', 'photo_gallery_upload', 'photo_viewer_pause'] }] },
   { id: 'screensaver', t: 'Screensaver', i: 'mdi:monitor-shimmer', c: '#5856d6', g: 1, d: 'The screensaver face and how it starts from the Home Screen.',
-    sec: [{ f: ['screensaver_style'] }, { f: ['swipe_screensaver', 'ss_hold'] }, { f: ['@wallpanel'] }, { h: 'Advanced', f: ['screensaver_colors'] }] },
+    sec: [{ bare: true, f: ['@sspick'] }, { f: ['swipe_screensaver', 'ss_hold'] }, { f: ['@wallpanel'] }] }, // the style carousel + its colours (screensaver_style / screensaver_colors)
   { id: 'gestures', t: 'Gestures', i: 'mdi:gesture-swipe', c: '#34c759', g: 1, d: 'Swipes on the Home Screen.',
     sec: [{ f: ['swipe_open_home', 'swipe_page'] }, { f: ['edge_sidebar', 'block_pull_refresh'] }] },
   { id: 'apps', t: 'Apps', i: 'mdi:apps', c: '#007aff', g: 2, d: 'The app icons on the Home Screen and what each one opens.',
@@ -6052,6 +6052,7 @@ const HV_SET_ACTS = {
   '@setup': { l: 'Create NotHomeView dashboard', h: 'Make a new NotHomeView dashboard from your own devices (adds a dashboard; this one is not changed).', i: 'mdi:view-dashboard-edit' },
   '@wallpanel': { l: 'Wallpaper & clock settings', h: 'This dashboard\'s Wallpanel screensaver: photos, timing, clock.', i: 'mdi:monitor-shimmer' },
   '@sidecards': { l: 'Extra tile cards', h: 'Pick the cards beside Photos (Add card) in the Home Screen card\'s editor.', i: 'mdi:card-plus-outline' },
+  '@sspick': { l: 'Screensaver style', h: 'Photo clock, Info dashboard, Abstract fluid, Modern typographic or Whimsical minimalist: swipe or tap to choose. Screensaver colors for the chosen style (colour pickers, swatches, reset to default colors) are underneath.', pick: true },
   '@appsnote': { l: '', h: 'To add apps or move them around on the Home Screen, use General › Edit Home Screen (Add App, drag to reorder).', note: true } };
 const HV_SET_CSS = `
 .se{--fg:#fff;--fg2:rgba(235,235,245,.6);--fg3:rgba(235,235,245,.3);--card:#1c1c1e;--sep:rgba(84,84,88,.65);--blue:#0a84ff;--on:#30d158;--off:rgba(120,120,128,.32);--fld:rgba(118,118,128,.24);--sel:#0a84ff;
@@ -6083,7 +6084,7 @@ const HV_SET_CSS = `
 .intro{display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px;padding:22px 20px 20px;border-radius:12px;background:var(--card);margin:0 0 24px}
 .intro .sq{width:64px;height:64px;border-radius:15px}.intro .sq ha-icon{--mdc-icon-size:40px}.intro b{font-size:22px;font-weight:700}.intro p{margin:0;font-size:15px;color:var(--fg2);line-height:1.35;max-width:520px}
 .gh{margin:0 16px 7px;font-size:13px;text-transform:uppercase;letter-spacing:.02em;color:var(--fg2)}
-.r{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:14px;row-gap:3px;min-height:46px;padding:9px 16px;position:relative;box-sizing:border-box}
+.r{display:grid;grid-template-columns:minmax(min(45%,240px),1fr) minmax(0,auto);align-items:center;column-gap:14px;row-gap:3px;min-height:46px;padding:9px 16px;position:relative;box-sizing:border-box}
 .r > .l{font-size:17px;line-height:1.28;min-width:0}.r > small{grid-column:1 / -1}
 .r + .r::before{content:'';position:absolute;top:0;left:16px;right:0;border-top:.5px solid var(--sep)}
 .r .tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}.r .l{font-size:17px;line-height:1.28}.r small{font-size:13px;line-height:1.38;color:var(--fg2);overflow-wrap:anywhere}
@@ -6095,7 +6096,7 @@ button.r{all:unset;box-sizing:border-box;cursor:pointer;display:flex;align-items
 .sw::after{content:'';position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:0 3px 8px rgba(0,0,0,.15),0 1px 1px rgba(0,0,0,.16);transition:transform .2s}
 .sw[aria-checked="true"]{background:var(--on)}.sw[aria-checked="true"]::after{transform:translateX(20px)}
 .sw:disabled,.r select:disabled,.r input:disabled,.r textarea:disabled,.ci:disabled{opacity:.5;cursor:default}
-.sv{position:relative;display:flex;align-items:center;justify-content:flex-end;max-width:min(340px,58vw)}
+.sv{position:relative;display:flex;align-items:center;justify-content:flex-end;min-width:0;max-width:100%}
 .sv select{-webkit-appearance:none;appearance:none;border:0;outline:0;background:none;color:var(--fg2);font:17px ${FONT};text-align:right;text-align-last:right;padding:4px 24px 4px 0;max-width:100%;min-width:60px;cursor:pointer;text-overflow:ellipsis;white-space:nowrap;overflow:hidden}
 .sv ha-icon{position:absolute;right:0;--mdc-icon-size:18px;display:flex;color:var(--fg3);pointer-events:none}
 .sv option{color:#000;background:#fff}
@@ -6123,7 +6124,7 @@ button.r{all:unset;box-sizing:border-box;cursor:pointer;display:flex;align-items
 .fm{padding:10px 12px 12px;--mdc-theme-primary:var(--blue);--primary-color:var(--blue)}
 :host([hv-day]) .fm{--primary-text-color:#000;--secondary-text-color:rgba(60,60,67,.6);--card-background-color:#fff;--ha-card-background:#fff;--input-fill-color:rgba(118,118,128,.08);--mdc-text-field-fill-color:rgba(118,118,128,.08);--divider-color:rgba(60,60,67,.2)}
 .tst{position:fixed;left:50%;bottom:calc(22px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);max-width:min(520px,90%);padding:11px 18px;border-radius:22px;background:rgba(44,44,46,.96);color:#fff;font-size:15px;line-height:1.3;box-shadow:0 10px 30px rgba(0,0,0,.35);opacity:0;pointer-events:none;transition:opacity .2s;z-index:3}
-.tst.on{opacity:1}.tst.err{background:#ff453a}`;
+.tst.on{opacity:1}.grp.bare{background:none;overflow:visible;margin-bottom:28px}.grp.bare > .r{padding:0}.tst.err{background:#ff453a}`;
 const hvSetNorm = (k, v) => { // the value written for an option: undefined = remove the key (empty, or the default), as in the card editor
   if (v === undefined || v === null || v === '' || (typeof v === 'number' && isNaN(v)) || (Array.isArray(v) && !v.length && k !== 'apps')) return undefined;
   if (k !== 'apps' && HVHubCard.defaults[k] === v) return undefined; if (k === 'calendar_show_weather' && v === true) return undefined;
@@ -6171,7 +6172,7 @@ function hvOpenSettings(hub, app, from) {
     .map(k => [k, (S[k].attributes && S[k].attributes.friendly_name) || k]).sort((a, b) => a[1].localeCompare(b[1])); };
   const rowHtml = (k, x, d, dis) => { const lb = label(k), hp = help(k), D = dis ? ' disabled' : '', tx = `<div class="tx"><span class="l">${esc(lb)}</span>${hp ? `<small>${esc(hp)}</small>` : ''}</div>`;
     const ln = `<span class="l">${esc(lb)}</span>`, sm = hp ? `<small>${esc(hp)}</small>` : ''; // one-line rows: label | control, the helper underneath
-    const a = HV_SET_ACTS[k]; if (a) { if (a.note) return `<div class="r note"><small>${esc(a.h)}</small></div>`;
+    const a = HV_SET_ACTS[k]; if (a) { if (a.note) return `<div class="r note"><small>${esc(a.h)}</small></div>`; if (a.pick) return `<div class="r stk" data-k="${k}" aria-label="${esc(a.l)}"><div data-sspick></div></div>`;
       const off = k === '@wallpanel' && !customElements.get('wallpanel-view') ? ' disabled' : (k === '@sidecards' || k === '@setup') && (dis || st.nohub) ? ' disabled' : '';
       return `<button class="r act" data-act="${k.slice(1)}"${off}><span class="sq" style="--c:var(--blue)"><ha-icon icon="${a.i}"></ha-icon></span>${tx}<ha-icon class="ch" icon="mdi:chevron-right"></ha-icon></button>`; }
     if (!x) return ''; const sel = x.selector || {}, t = Object.keys(sel)[0], o = sel[t] || {}, v = d[k];
@@ -6233,7 +6234,7 @@ function hvOpenSettings(hub, app, from) {
     if (all) h += `<div class="intro"><span class="sq" style="--c:${p.c}"><ha-icon icon="${p.i}"></ha-icon></span><b>${esc(p.t)}</b><p>${esc(p.d)}</p></div>`;
     let any = false;
     for (const sc of p.sec) { const ks = sc.f.map(fname).filter(k => all || hit(k, q)); if (!ks.length) continue; any = true;
-      h += (sc.h ? `<div class="gh">${esc(sc.h)}</div>` : '') + `<div class="grp${sc.lvl ? ' lvg' : ''}">${ks.map(k => rowHtml(k, F[k], d, dis)).join('')}</div>`; }
+      h += (sc.h ? `<div class="gh">${esc(sc.h)}</div>` : '') + `<div class="grp${sc.lvl ? ' lvg' : ''}${sc.bare ? ' bare' : ''}">${ks.map(k => rowHtml(k, F[k], d, dis)).join('')}</div>`; }
     if (!any) h += `<div class="grp"><div class="empty">No results for “${esc(st.q.trim())}” on this page.</div></div>`;
     return h; };
   const formsMount = () => { if (!pane) return; const els = [...pane.querySelectorAll('[data-form]')]; if (!els.length) return;
@@ -6242,8 +6243,15 @@ function hvOpenSettings(hub, app, from) {
       let f = forms.get(k); if (!f) { f = document.createElement('ha-form'); f.computeLabel = s0 => s0.name === k ? '' : hvHubLabel(s0); f.computeHelper = () => undefined;
         f.addEventListener('value-changed', ev => { ev.stopPropagation(); const v = ev.detail.value && ev.detail.value[k]; f.data = { [k]: v }; save(k, v); }); forms.set(k, f); }
       f.hass = H(); f.schema = [fields()[k]].filter(Boolean); f.data = { [k]: data()[k] }; f.disabled = ro(); box.appendChild(f); } }); };
+  // Screensaver: the shared style picker as a carousel, in its own shadow root (the faces' CSS and Settings' CSS stay apart)
+  let ssPick = null; const ssShim = { get _hass() { return H(); }, _status: (m, k) => { if (k === 'err') flash(m, true); else if (k === 'ok') flash('Saved'); } };
+  const ssRefresh = async () => { try { const q = { type: 'lovelace/config', force: true }; if (dash()) q.url_path = dash(); const c = await H().callWS(q); if (c && typeof c === 'object') useCfg(c); } catch (e) {}
+    const h = live(); if (h && !h._sheetO && s && s.host.isConnected) h._sheetO = s; };
+  const ssMount = () => { const box = pane && pane.querySelector('[data-sspick]'); if (!box) return; const inner = ssPick && ssPick.shadowRoot.firstElementChild;
+    if (!ssPick || !inner || inner._dead) { ssPick = document.createElement('div'); ssPick.className = 'ssh'; ssPick.attachShadow({ mode: 'open' }).appendChild(hvSsPicker(ssShim, { mode: 'carousel', onPick: ssRefresh })); }
+    box.appendChild(ssPick); const pk = ssPick.shadowRoot.firstElementChild; if (pk && pk._recenter) pk._recenter(); };
   const paintSide = () => { if (list) list.innerHTML = sideHtml(); };
-  const paintPane = () => { if (!pane) return; const sy = pane.scrollTop; for (const f of forms.values()) f.remove(); pane.innerHTML = paneHtml(); pane.scrollTop = sy; formsMount(); pvPaint(hvBgLevel(st.cfg || {})); albCheck(); };
+  const paintPane = () => { if (!pane) return; const sy = pane.scrollTop; for (const f of forms.values()) f.remove(); if (ssPick) ssPick.remove(); pane.innerHTML = paneHtml(); ssMount(); pane.scrollTop = sy; formsMount(); pvPaint(hvBgLevel(st.cfg || {})); albCheck(); };
   const paint = () => { if (!root) return;
     if (!st.ready) { root.classList.remove('pg'); list.innerHTML = '<div class="grp"><div class="empty">Loading…</div></div>'; pane.innerHTML = ''; return; }
     if (st.nohub) { root.classList.add('nohub', 'pg'); root.classList.remove('wide'); side.style.display = 'none';
@@ -9051,25 +9059,74 @@ function hvSsColorPanel(card, getStyle, onFacePaint) {
   };
   paint(); box._repaint = paint; return box;
 }
-function hvSsPicker(card) {
-  const p = document.createElement('div'); p.className = 'sp'; p.setAttribute('role', 'radiogroup'); p.setAttribute('aria-label', 'Screensaver style');
-  p.innerHTML = `<style>${HV_SS_PICK_CSS}</style><div class="lb">Screensaver style</div><div class="ls"></div><div class="colors-host"></div><div class="note"></div>`;
+// Settings › Screensaver: the same picker as a horizontal, swipeable wallpaper-style carousel (bigger live faces, one style at a time)
+const HV_SS_CAR_CSS = `
+.spc{margin:0;--cw:min(440px,72cqw);position:relative;container-type:inline-size}
+.spc .cr{position:relative;display:flex;gap:16px;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch;
+ padding:8px calc((100% - var(--cw)) / 2) 6px;border:0;border-radius:0;background:none;scrollbar-width:none;touch-action:pan-x pan-y}
+.spc .cr::-webkit-scrollbar{display:none}
+.spc .cd{all:unset;box-sizing:border-box;cursor:pointer;flex:0 0 var(--cw);scroll-snap-align:center;scroll-snap-stop:always;border-radius:20px;transform:scale(.9);opacity:.6;transition:transform .28s ease,opacity .28s ease}
+.spc .cd.fo{transform:none;opacity:1}
+.spc .cd .th{width:100%;height:auto;aspect-ratio:16/10;border-radius:20px;border:.5px solid var(--sep,rgba(255,255,255,.14));box-shadow:0 10px 28px rgba(0,0,0,.28);transition:box-shadow .2s}
+.spc .cd[aria-checked="true"] .th{box-shadow:0 0 0 3px var(--blue,#0a84ff),0 10px 28px rgba(0,0,0,.28)}
+.spc .cd .th.ph{padding:0 0 16px 20px;font-size:clamp(24px,5.2vw,38px)}
+.spc .cinf{text-align:center;margin:14px 8px 0;min-height:46px}
+.spc .cinf .nm{justify-content:center;font-size:20px;font-weight:600;color:var(--fg,#fff)}
+.spc .cinf .sb{font-size:15px;color:var(--fg2,rgba(235,235,245,.6))}
+.spc .cinf .cur{display:none;color:#30d158;background:rgba(48,209,88,.16)}.spc .cinf.on .cur{display:inline-block}
+.spc .dots{display:flex;justify-content:center;gap:9px;margin:12px 0 2px}
+.spc .dots button{all:unset;cursor:pointer;width:8px;height:8px;border-radius:50%;background:var(--fg3,rgba(235,235,245,.3));transition:background .2s}
+.spc .dots button[aria-current="true"]{background:var(--fg,#fff)}
+.spc .co{margin:22px 0 0;padding:14px 16px 16px;border:0;border-radius:12px;background:var(--card,#1c1c1e)}
+.spc .co .cl{font-size:13px;font-weight:400;text-transform:uppercase;letter-spacing:.02em;color:var(--fg2,rgba(235,235,245,.6))}
+.spc .rn{color:var(--fg,#fff);font-size:15px}.spc .pick{border-color:var(--sep,rgba(255,255,255,.25))}
+.spc .hex{color:var(--fg,#fff);background:var(--fld,rgba(118,118,128,.24));border-color:transparent;font-size:13px}
+.spc .sw b{border-color:var(--sep,rgba(255,255,255,.35))}.spc .sw b[aria-current="true"]{border-color:var(--fg,#fff);box-shadow:0 0 0 2px var(--blue,#0a84ff)}
+.spc .rst{background:var(--fld,rgba(118,118,128,.24));color:var(--blue,#0a84ff);font-size:15px;font-weight:500}.spc .rst:hover{background:var(--fld,rgba(118,118,128,.24));filter:brightness(1.1)}
+.spc .co .hint,.spc .note{font-size:13px;color:var(--fg2,rgba(235,235,245,.6))}.spc .note{margin:8px 16px 0}
+@media (max-width:560px){.spc{--cw:78cqw}.spc .cr{gap:12px}}
+.spc .vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}`;
+// o.mode 'carousel' (Settings) or the vertical list (the Screensaver settings popup); o.onPick(v, saved) after a style is stored
+function hvSsPicker(card, o) { o = o || {}; const car = o.mode === 'carousel';
+  const p = document.createElement('div'); p.className = car ? 'sp spc' : 'sp'; p.setAttribute('role', 'radiogroup'); p.setAttribute('aria-label', 'Screensaver style');
+  p.innerHTML = car ? `<style>${HV_SS_PICK_CSS}${HV_SS_CAR_CSS}</style><div class="ls cr" data-no-sheet-drag></div><div class="cinf" aria-live="polite"><div class="nm"><span class="cn"></span><span class="cur">Current</span></div><div class="sb"></div></div><div class="dots"></div><div class="colors-host"></div><div class="note"></div>`
+    : `<style>${HV_SS_PICK_CSS}</style><div class="lb">Screensaver style</div><div class="ls"></div><div class="colors-host"></div><div class="note"></div>`;
   const ls = p.querySelector('.ls'), host = p.querySelector('.colors-host'), faces = [];
   const cur = () => hvSs.get();
   const paintFaces = (style, cols) => { const st = style || cur(), c = cols || hvSsColors.get(st);
     for (const f of faces) { if (f.s === st) f.applyColors(c); else f.applyColors(hvSsColors.get(f.s)); } };
-  for (const o of HV_SSS) { const b = document.createElement('button'); b.className = 'it'; b.dataset.v = o.v; b.setAttribute('role', 'radio');
-    b.innerHTML = `<div class="th${o.v === 'photo' ? ' ph' : ''}">${o.v === 'photo' ? '<span class="pt"></span>' : ''}</div><div class="tx"><div class="nm">${o.l}<span class="cur">Current</span></div><div class="sb">${o.s}</div></div><div class="rd"><svg viewBox="0 0 24 24"><path fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>`;
-    if (o.v !== 'photo') { const f = new HVSsFace(o.v, true); f.applyColors(hvSsColors.get(o.v)); b.querySelector('.th').appendChild(f.el); faces.push(f); }
-    b.addEventListener('click', async () => { if (b.getAttribute('aria-checked') === 'true') return; const prev = cur(); paint(o.v); colors._repaint(); card._status('Saving style…');
-      try { const saved = await hvSs.set(o.v, card._hass); if (p.isConnected) paint(hvSs.get()); card._status(`Style: ${o.l} ✓ ${saved ? 'Saved for this dashboard.' : 'Saved in this browser.'}`, 'ok'); }
-      catch (e) { paint(prev); colors._repaint(); card._status('Style not saved: ' + (e && (e.message || e.code) || e), 'err'); } });
+  const pick = async v => { const b = ls.querySelector(`[data-v="${v}"]`), o2 = HV_SSS.find(x => x.v === v); if (!b || !o2 || b.getAttribute('aria-checked') === 'true') return; const prev = cur(); paint(v); colors._repaint(); card._status('Saving style…');
+    try { const saved = await hvSs.set(v, card._hass); if (p.isConnected) { paint(hvSs.get()); colors._repaint(); paintFaces(); } card._status(`Style: ${o2.l} ✓ ${saved ? 'Saved for this dashboard.' : 'Saved in this browser.'}`, 'ok'); if (o.onPick) o.onPick(v, saved); }
+    catch (e) { paint(prev); colors._repaint(); card._status('Style not saved: ' + (e && (e.message || e.code) || e), 'err'); } };
+  for (const o2 of HV_SSS) { const b = document.createElement('button'); b.className = car ? 'it cd' : 'it'; b.dataset.v = o2.v; b.setAttribute('role', 'radio');
+    b.innerHTML = car ? `<div class="th${o2.v === 'photo' ? ' ph' : ''}">${o2.v === 'photo' ? '<span class="pt"></span>' : ''}</div><span class="vh">${o2.l}. ${o2.s}</span>`
+      : `<div class="th${o2.v === 'photo' ? ' ph' : ''}">${o2.v === 'photo' ? '<span class="pt"></span>' : ''}</div><div class="tx"><div class="nm">${o2.l}<span class="cur">Current</span></div><div class="sb">${o2.s}</div></div><div class="rd"><svg viewBox="0 0 24 24"><path fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>`;
+    if (car) b.setAttribute('aria-label', o2.l);
+    if (o2.v !== 'photo') { const f = new HVSsFace(o2.v, true); f.applyColors(hvSsColors.get(o2.v)); b.querySelector('.th').appendChild(f.el); faces.push(f); }
+    b.addEventListener('click', () => { if (car) center(o2.v, true); pick(o2.v); });
     ls.appendChild(b); }
-  const paint = v => { for (const b of ls.children) b.setAttribute('aria-checked', String(b.dataset.v === v)); };
+  // carousel: the card nearest the middle is "focused" (name, subtitle, dots); letting go of a swipe on another card selects it
+  let foc = cur(), user = false, touch = false, setT = 0;
+  const info = () => { if (!car) return; const x = HV_SSS.find(z => z.v === foc) || HV_SSS[0], inf = p.querySelector('.cinf'); inf.querySelector('.cn').textContent = x.l; inf.querySelector('.sb').textContent = x.s; inf.classList.toggle('on', foc === cur());
+    for (const b of ls.children) b.classList.toggle('fo', b.dataset.v === foc); for (const d of p.querySelectorAll('.dots button')) d.setAttribute('aria-current', String(d.dataset.v === foc)); };
+  const near = () => { const r = ls.getBoundingClientRect(), cx = r.left + r.width / 2; let best = null, dd = 1e9; for (const b of ls.children) { const q = b.getBoundingClientRect(), d = Math.abs(q.left + q.width / 2 - cx); if (d < dd) { dd = d; best = b; } } return best; };
+  const center = (v, smooth) => { const b = ls.querySelector(`[data-v="${v}"]`); if (!b || !ls.clientWidth) return; foc = v; info(); ls.scrollTo({ left: Math.max(0, b.offsetLeft - (ls.clientWidth - b.offsetWidth) / 2), behavior: smooth ? 'smooth' : 'auto' }); };
+  const settle = () => { if (touch) return; const b = near(); if (!b) return; if (b.dataset.v !== foc) { foc = b.dataset.v; info(); } if (user) { user = false; if (b.dataset.v !== cur()) pick(b.dataset.v); } };
+  if (car) { const dots = p.querySelector('.dots');
+    for (const o2 of HV_SSS) { const d = document.createElement('button'); d.dataset.v = o2.v; d.setAttribute('aria-label', o2.l); d.addEventListener('click', () => { center(o2.v, true); pick(o2.v); }); dots.appendChild(d); }
+    ls.addEventListener('scroll', () => { if (!ls.clientWidth || !p.isConnected) return; if (touch) user = true; const b = near(); if (b && b.dataset.v !== foc) { foc = b.dataset.v; info(); } clearTimeout(setT); setT = setTimeout(settle, 140); }, { passive: true });
+    ls.addEventListener('touchstart', () => { touch = true; }, { passive: true }); // a swipe = the carousel scrolled under the finger (a vertical drag picks nothing)
+    for (const t of ['touchend', 'touchcancel']) ls.addEventListener(t, () => { touch = false; clearTimeout(setT); setT = setTimeout(settle, 220); }, { passive: true });
+    ls.addEventListener('wheel', () => { user = true; }, { passive: true });
+    ls.addEventListener('keydown', e => { if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return; e.preventDefault(); const i = HV_SSS_V.indexOf(foc) + (e.key === 'ArrowRight' ? 1 : -1), v = HV_SSS_V[i]; if (v) { center(v, true); pick(v); ls.querySelector(`[data-v="${v}"]`).focus({ preventScroll: true }); } });
+    let w0 = 0; const fit = () => { const w = ls.clientWidth; if (!w) { w0 = 0; return; } if (w !== w0 && !touch) { w0 = w; center(user ? foc : cur(), false); } }; // also re-centres after the page is shown again
+    if (window.ResizeObserver) new ResizeObserver(fit).observe(ls); requestAnimationFrame(fit);
+    p._recenter = () => { user = false; w0 = ls.clientWidth; center(cur(), false); }; } // after being moved in the DOM (its scroll position resets)
+  const paint = v => { for (const b of ls.children) b.setAttribute('aria-checked', String(b.dataset.v === v)); info(); };
   const colors = hvSsColorPanel(card, cur, paintFaces); host.appendChild(colors);
   const upd = () => { const d = new Date(); faces.forEach(f => f.update(card._hass, d)); const pt = p.querySelector('.pt'); if (pt) pt.textContent = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }).replace(/\s?[AP]M$/i, ''); };
   p.querySelector('.note').textContent = card._hass && card._hass.user && card._hass.user.is_admin ? 'Applies at once, for this dashboard (also kept on its Home Screen card). Preview shows it.' : 'Applies at once, for this dashboard in this browser.';
-  paint(cur()); paintFaces(); upd(); const iv = setInterval(() => { if (!p.isConnected) { clearInterval(iv); return; } upd(); }, 1000);
+  paint(cur()); paintFaces(); upd(); const iv = setInterval(() => { if (!p.isConnected) { clearInterval(iv); p._dead = true; return; } upd(); }, 1000);
   return p; }
 { const orig = HVScreensaverCard.prototype._renderForm;
   HVScreensaverCard.prototype._renderForm = function () { orig.call(this); if (!this._form) return;
