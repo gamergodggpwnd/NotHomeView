@@ -1231,7 +1231,8 @@ HVEditButtonCard.schema = [
   { name: 'edit_menu', selector: { boolean: {} } },
   { name: 'screensaver_icon', selector: { icon: {} } }];
 HVEditButtonCard.editorDefaults = true;
-Object.assign(LABELS, { edit_menu: 'Old pencil menu option (no longer used)' });
+Object.assign(LABELS, { edit_menu: 'Old pencil menu option (no longer used)', show_homie: 'Show Homie (an animated tile with the NotHomeView house mascot)' });
+Object.assign(HELPERS, { show_homie: 'Homie waves, walks, sits and reacts to the weather in a tile beside Photos; tap him for a bigger Homie popup. Move, resize or delete the tile in Edit Home Screen.' });
 Object.assign(HELPERS, { edit_menu: 'Kept for older dashboards; it changes nothing. The pencil always opens Settings: the Device pages theme is in General, and General › Edit Home Screen turns on edit mode.' });
 Object.assign(LABELS, { show_edit_button: 'Show the edit pencil', show_screensaver_button: 'Show the screensaver button (below the pencil)', screensaver_icon: 'Screensaver button icon (empty = mdi:monitor-shimmer)' });
 Object.assign(HELPERS, { show_screensaver_button: 'Opens the Wallpanel screensaver settings for this dashboard. Only shown when Wallpanel is installed.' });
@@ -3957,9 +3958,12 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
     const head = t => { const d = document.createElement('div'); d.className = 't'; d.textContent = t; m.appendChild(d); };
     const row = (ico, txt, sub, fn) => { const b = document.createElement('button'); b.setAttribute('role', 'menuitem'); b.innerHTML = `${ico}<span class="tx"><span></span>${sub ? '<small></small>' : ''}</span>`;
       b.querySelector('.tx > span').textContent = txt; if (sub) b.querySelector('small').textContent = sub; b.addEventListener('click', e => { e.stopPropagation(); fn(); }); m.appendChild(b); return b; };
-    const list = () => { m.innerHTML = ''; head('Add App'); const xs = HUB_APP_CATALOG.filter(x => !k.have.has(x.key) && this.avail(x, k));
-      if (!xs.length) { const d = document.createElement('div'); d.className = 'em'; d.textContent = 'All apps are on the Home Screen'; m.appendChild(d); }
+    const list = () => { m.innerHTML = ''; head('Add App'); const xs = HUB_APP_CATALOG.filter(x => !k.have.has(x.key) && this.avail(x, k)), c0 = this.hub._config || {};
+      const homie = c0.show_homie !== true && !(c0.side_cards || []).some(x => x && x.type === HV_HOMIE_T); // Homie is a tile (beside Photos), not an app icon
+      if (!xs.length && !homie) { const d = document.createElement('div'); d.className = 'em'; d.textContent = 'All apps are on the Home Screen'; m.appendChild(d); }
       for (const x of xs) row(this.icoHtml(x), x.name, '', () => { if (x.key === 'home' || x.key === 'security') choose(x); else { close(); this.add(x, k); } });
+      if (homie) row(`<span class="ai" style="background:linear-gradient(180deg,#5ccdff 0%,#2ba6e0 100%);color:#fff">${HV_HOMIE_ICO}</span>`, 'Homie', 'Animated tile with the house mascot', () => { close();
+        this.change(raw => { raw.show_homie = true; this.edit(raw, 'side', () => {}); }); hvToast('Homie added · saved when you tap Done', 'hv-arrange'); });
       hvEcl.place(m, anchor); const f = m.querySelector('button'); if (f) f.focus({ preventScroll: true }); };
     // Home and Security: the icon always comes back; the choice is what the page behind it shows
     const choose = x => { m.innerHTML = ''; head(x.key === 'home' ? 'Home page' : 'Security page'); const home = x.key === 'home';
@@ -3981,7 +3985,7 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
   find(el) { return this.items().find(x => x.el === el); },
   box(it) { return (it.kind === 'app' ? (it.el.querySelector('.ico') || it.el) : it.el).getBoundingClientRect(); },
   label(it) { const c = this.hub._config; if (it.kind === 'app') return (c.apps[it.i] && c.apps[it.i].name) || 'App'; if (it.kind === 'photo') return c.photo_label || 'Photos'; if (it.kind === 'cal') return c.calendar_title || 'Calendar';
-    const s = (c.side_cards || []).filter(x => x && x.type)[it.i] || {}, st = s.entity && this.hub._hass && this.hub._hass.states[s.entity];
+    const s = (c.side_cards || []).filter(x => x && x.type)[it.i] || ((this.hub._sideEls || [])[it.i] || {})._cfg || {}, st = s.entity && this.hub._hass && this.hub._hass.states[s.entity];
     return s.name || s.title || (st && st.attributes.friendly_name) || hvTileTypeName(s.type); },
   units(it) { const c = this.hub._config; if (it.kind === 'cal') return c.calendar_size === 'wide2' ? 3 : c.calendar_size === 'wide' ? 2 : 1; return it.kind === 'photo' ? (c.photo_size === 'big' ? 3 : c.photo_size === 'square' ? 1 : 2) : it.kind === 'side' ? (hubTileSizes(c)[it.i] || 1) : 1; },
   tick() { const h = this.hub; if (!h) return; if (!h.isConnected || h._sheetO) { this.exit(false); return; }
@@ -4037,7 +4041,8 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
   sideWrite(raw, rows) { const had = Array.isArray(raw.side_tiles); raw.side_cards = rows.map(r => r.card);
     if (had || rows.some(r => r.tile)) raw.side_tiles = rows.map(r => r.tile || {}); if (String(raw.side_sizes || '').trim()) raw.side_sizes = rows.map(r => (r.sz === 3 ? 'B' : r.sz === 2 ? 'W' : 'S')).join(', '); },
   edit(raw, kind, fn) { if (kind === 'app') { if (!Array.isArray(raw.apps) || !raw.apps.length) raw.apps = HUB_APPS.map(a => Object.assign({}, a)); fn(raw.apps); }
-    else { const rows = this.sideRows(raw); fn(rows); this.sideWrite(raw, rows); } },
+    else { const rows = this.sideRows(raw); if (raw.show_homie === true && !rows.some(r => r.card.type === HV_HOMIE_T)) rows.push({ card: { type: HV_HOMIE_T }, tile: null, sz: String(raw.side_sizes || '').trim() ? 1 : null });
+      fn(rows); if (!rows.some(r => r.card.type === HV_HOMIE_T)) delete raw.show_homie; this.sideWrite(raw, rows); } },
   move(kind, i, j) { this.change(raw => this.edit(raw, kind, a => { const t = a.splice(i, 1)[0]; a.splice(j, 0, t); })); },
   setUnits(it, u) { if (this.units(it) === u) return; this.change(raw => { if (it.kind === 'photo') { raw.photo_size = u === 3 ? 'big' : u === 2 ? 'wide' : 'square'; return; }
     this.edit(raw, 'side', rows => { const r = rows[it.i]; if (!r) return; r.tile = Object.assign({}, r.tile || {}, { size: u === 3 ? 'big' : u === 2 ? 'wide' : 'square' }); if (r.sz != null) r.sz = u; }); }); },
@@ -6046,7 +6051,7 @@ const HV_SET_PAGES = [
       { h: 'Conversation', f: ['assistant_orb', 'assistant_continue', 'assistant_dismiss_phrases', 'assistant_silence_timeout', 'assistant_end_of_speech_pause', 'assistant_history_retention'] },
       { h: 'Quiet mode: Auto', f: ['assistant_quiet_volume_entity', 'assistant_quiet_volume_below', 'assistant_quiet_focus_entity', 'assistant_quiet_start', 'assistant_quiet_end'] }] },
   { id: 'layout', t: 'Layout & weather', i: 'mdi:view-dashboard', c: '#ff9500', g: 2, d: 'The Photos and extra tiles\' sizes, the app icons\' size, and the weather.',
-    sec: [{ h: 'Photos tile', f: ['photo_size', 'photo_max_aspect'] }, { h: 'Extra tiles', f: ['side_sizes', 'row_units', 'side_tiles', 'side_portrait', 'max_icon', '@sidecards'] },
+    sec: [{ h: 'Photos tile', f: ['photo_size', 'photo_max_aspect'] }, { h: 'Extra tiles', f: ['show_homie', 'side_sizes', 'row_units', 'side_tiles', 'side_portrait', 'max_icon', '@sidecards'] },
       { h: 'Weather', f: ['weather_entity', 'location_name', 'weather_sky_header'] }] }];
 // rows that do something instead of changing an option
 const HV_SET_ACTS = {
@@ -6136,6 +6141,7 @@ const hvSetNorm = (k, v) => { // the value written for an option: undefined = re
   return v; };
 const hvSetApply = (node, k, v) => { const was = hvBgLevel(node), n = hvSetNorm(k, v); if (n === undefined) delete node[k]; else node[k] = n; // Night theme = the default: the key goes
   if (k === 'bg_blur_level') { delete node.bg_transparency; if (Number(v) !== was) delete node.blur; } // a level replaces the older transparency (same look); a new level drops an older px blur
+  if (k === 'show_homie' && n !== true && (node.side_cards || []).some(x => x && x.type === HV_HOMIE_T)) hvHubArr.sideWrite(node, hvHubArr.sideRows(node).filter(r => r.card.type !== HV_HOMIE_T)); // off: the Homie tile goes
   return node; };
 // the home-screen editor's fields by name (selectors from HUB_SCHEMA: the pipelines and the album link field as the card editor shows them)
 const hvSetFields = sch => { const m = {}; const w = l => l.forEach(x => { if (x.schema) w(x.schema); else if (x.name) m[x.name] = x; }); w(sch); return m; };
@@ -6851,7 +6857,7 @@ class HVHubCard extends HTMLElement {
   constructor() { super(); this.attachShadow({ mode: 'open' }); this._layer = 0; }
   static get defaults() { return { theme: 'night', person: '', morning_start: 5, afternoon_start: 12, evening_start: 17, greeting_morning: 'Good morning', greeting_afternoon: 'Good afternoon',
     greeting_evening: 'Good evening', photo_source_mode: 'media', photo_album_url: '', photo_source: '', photo_interval: 25, photo_order: 'random', blur: 32, dim: 0.32, bg_blur_level: 3, photo_backdrop: true, bg_freeze: true, photo_tap: 'viewer', photo_viewer_nav: true, photo_viewer_swipe: true, photo_viewer_add: true, photo_gallery_upload: true, photo_viewer_pause: true, photo_label: 'Photos', photo_max_aspect: 2.6,
-    show_calendar: true, calendar_size: 'full', calendar_layout: 'wide', calendar_columns: 3, calendar_days: 7, calendar_title: 'Calendar', calendar_min_height: 240, max_icon: 140, edge_sidebar: true, ss_hold: true, weather_entity: '', photo_size: 'wide', side_portrait: 'below', side_sizes: '', row_units: 3, block_pull_refresh: true, calendar_rows: 'auto', swipe_screensaver: 'auto', swipe_open_home: false, full_height_popups: true, popup_edit: true, assistant_enabled: false, assistant_pipeline: 'preferred', assistant_theme: 'same', assistant_button: true, assistant_speak: true, assistant_auto_listen: true, assistant_orb: true, assistant_continue: true, assistant_silence_timeout: 5, assistant_end_of_speech_pause: 2, assistant_history_retention: 'forever', assistant_dismiss_phrases: "thank you, thanks, thanks jarvis, thank you jarvis, goodbye, bye, good bye, that's all, that's it, never mind, nevermind, stop, cancel, no thanks, I'm done", assistant_quiet_volume_below: 5, assistant_quiet_start: '23:30', assistant_quiet_end: '10:00', timer_sound: true }; }
+    show_calendar: true, calendar_size: 'full', calendar_layout: 'wide', calendar_columns: 3, calendar_days: 7, calendar_title: 'Calendar', calendar_min_height: 240, max_icon: 140, edge_sidebar: true, ss_hold: true, weather_entity: '', photo_size: 'wide', side_portrait: 'below', side_sizes: '', row_units: 3, block_pull_refresh: true, calendar_rows: 'auto', swipe_screensaver: 'auto', swipe_open_home: false, show_homie: false, full_height_popups: true, popup_edit: true, assistant_enabled: false, assistant_pipeline: 'preferred', assistant_theme: 'same', assistant_button: true, assistant_speak: true, assistant_auto_listen: true, assistant_orb: true, assistant_continue: true, assistant_silence_timeout: 5, assistant_end_of_speech_pause: 2, assistant_history_retention: 'forever', assistant_dismiss_phrases: "thank you, thanks, thanks jarvis, thank you jarvis, goodbye, bye, good bye, that's all, that's it, never mind, nevermind, stop, cancel, no thanks, I'm done", assistant_quiet_volume_below: 5, assistant_quiet_start: '23:30', assistant_quiet_end: '10:00', timer_sound: true }; }
   static getStubConfig(hass) { return { apps: HUB_APPS.map(a => Object.assign({}, a)), calendar_entities: Object.keys((hass && hass.states) || {}).filter(k => k.startsWith('calendar.')).slice(0, 3) }; }
   static getConfigElement() { return document.createElement('homeview-hub-card-editor'); }
   setConfig(c) { if (!c) throw new Error('Invalid configuration'); this._hvRaw = c; const old = this._config, nc = Object.assign({}, HVHubCard.defaults, c);
@@ -7149,7 +7155,8 @@ class HVHubCard extends HTMLElement {
   }
   // Side slot (Square photos): any cards (picked in the editor), right of the Photos tile, or below the row when there's no room
   async _makeSide() {
-    const c = this._config, list = Array.isArray(c.side_cards) ? c.side_cards.filter(x => x && x.type) : [], sig = JSON.stringify(list);
+    const c = this._config, list0 = Array.isArray(c.side_cards) ? c.side_cards.filter(x => x && x.type) : [];
+    const list = c.show_homie === true && !list0.some(x => x.type === HV_HOMIE_T) ? list0.concat({ type: HV_HOMIE_T }) : list0, sig = JSON.stringify(list); // show_homie: Homie's tile (last, until arranged)
     if (sig !== this._sideSig || !this._sideEls) { this._sideSig = sig; const tok = this._sideTok = (this._sideTok || 0) + 1;
       const helpers = list.length && window.loadCardHelpers ? await window.loadCardHelpers() : null; if (tok !== this._sideTok) return;
       const pool = (this._sideEls || []).filter(w => !w._dead).map(w => ({ j: JSON.stringify(w._cfg), w }));
@@ -7157,6 +7164,7 @@ class HVHubCard extends HTMLElement {
       this._sideEls = list.map(cfg => { const j = JSON.stringify(cfg), pi = pool.findIndex(x => x.j === j); if (pi >= 0) return pool.splice(pi, 1)[0].w;
         const wrap = document.createElement('div'); wrap.className = 'tile'; let el; try { el = helpers ? helpers.createCardElement(cfg) : document.createElement('div'); } catch (e) { el = document.createElement('div'); el.textContent = String(e); }
         if (this._hass) el.hass = this._hass; if (this._edit != null) el.editMode = this._edit; if (el.tagName && el.tagName.startsWith('HOMEVIEW-')) el.setAttribute('floor', ''); // readable text, like Page Grid tiles
+        el._hvHub = this;
         el.addEventListener('ll-rebuild', ev => { ev.stopPropagation(); wrap._dead = true; this._sideSig = null; this._makeSide(); }); wrap.appendChild(el); wrap._card = el; wrap._cfg = cfg;
         wrap.addEventListener('click', ev => { const o = hubTileOpt(this._config, this._sideEls.indexOf(wrap));
           // 1.32.0: tapping the body of a Now Playing tile opens the Music sheet (like the Music app); its buttons, seek bar and volume / output popovers keep their own taps
@@ -7703,6 +7711,7 @@ const HUB_SCHEMA = [
   { type: 'expandable', name: '', flatten: true, title: 'Layout & weather', icon: 'mdi:view-dashboard-outline', schema: [
     { type: 'grid', name: '', schema: [{ name: 'photo_size', selector: { select: { mode: 'dropdown', options: [{ value: 'wide', label: 'Wide (2 units; alone it fills the row)' }, { value: 'big', label: '4 × 6: two wide, 2 rows (on the row below)' }, { value: 'square', label: 'Square (1 unit)' }] } } }, n_('photo_max_aspect', 0.8, 4, 0.1)] },
     { type: 'grid', name: '', schema: [{ name: 'side_sizes', selector: { text: {} } }, n_('row_units', 1, 6)] },
+    { name: 'show_homie', selector: { boolean: {} } },
     { name: 'side_tiles', selector: { object: { multiple: true, label_field: 'size', description_field: 'fit', fields: {
       size: { label: 'Size', selector: { select: { mode: 'dropdown', options: [{ value: 'square', label: 'Square (1 unit)' }, { value: 'wide', label: 'Wide (2 units)' }, { value: 'big', label: '4 × 6: two wide, 2 rows (on the row below)' }] } } },
       fit: { label: 'Fit', selector: { select: { mode: 'dropdown', options: [{ value: 'auto', label: 'Auto (centre pictures, fill the rest)' }, { value: 'contain', label: 'Centre & fit inside' }, { value: 'fill', label: 'Fill the tile' }] } } },
@@ -7717,7 +7726,7 @@ const HUB_SCHEMA = [
     { type: 'grid', name: '', schema: [{ name: 'edge_sidebar', selector: { boolean: {} } }, { name: 'block_pull_refresh', selector: { boolean: {} } }] },
     { name: 'full_height_popups', selector: { boolean: {} } },
     { name: 'popup_edit', selector: { boolean: {} } },
-    { name: 'screensaver_style', selector: { select: { mode: 'dropdown', options: [{ value: 'photo', label: 'Photo clock (default)' }, { value: 'info', label: 'Info dashboard' }, { value: 'fluid', label: 'Abstract fluid' }, { value: 'typo', label: 'Modern typographic' }, { value: 'whimsy', label: 'Whimsical minimalist' }] } } },
+    { name: 'screensaver_style', selector: { select: { mode: 'dropdown', options: [{ value: 'photo', label: 'Photo clock (default)' }, { value: 'info', label: 'Info dashboard' }, { value: 'fluid', label: 'Abstract fluid' }, { value: 'typo', label: 'Modern typographic' }, { value: 'whimsy', label: 'Whimsical minimalist' }, { value: 'homie', label: 'Homie' }] } } },
     { name: 'screensaver_colors', selector: { object: {} } },
     { name: 'swipe_screensaver', selector: { select: { mode: 'dropdown', options: [{ value: 'auto', label: 'Auto (when the screensaver is on here)' }, { value: 'on', label: 'On' }, { value: 'off', label: 'Off' }] } } }, { name: 'ss_hold', selector: { boolean: {} } }, { name: 'swipe_open_home', selector: { boolean: {} } }, { name: 'swipe_page', selector: { navigation: {} } }] }];
 Object.assign(LABELS, { photo_source_mode: 'Photo source', photo_album_url: 'Album link', apps: 'Apps (drag to reorder, pencil to edit)', person: 'Person (empty = the logged-in user)', fallback_person: 'Fallback person (no match)', ring_color: 'Avatar ring colour / gradient',
@@ -8838,7 +8847,8 @@ const HV_SSS = [
   { v: 'info', l: 'Info dashboard', s: 'Date, clock, weather and now playing' },
   { v: 'fluid', l: 'Abstract fluid', s: 'Glassy shapes on a soft gradient' },
   { v: 'typo', l: 'Modern typographic', s: 'Oversized numerals, white hands' },
-  { v: 'whimsy', l: 'Whimsical minimalist', s: 'Embossed numerals, dusty rose' }];
+  { v: 'whimsy', l: 'Whimsical minimalist', s: 'Embossed numerals, dusty rose' },
+  { v: 'homie', l: 'Homie', s: 'Homie waves, dances, and reacts to the weather' }];
 const HV_SSS_V = HV_SSS.map(x => x.v);
 // Meaningful colours per style (defaults match the reference designs). Only non-defaults are persisted.
 const HV_SS_COLS = {
@@ -8859,7 +8869,13 @@ const HV_SS_COLS = {
   whimsy: [
     { k: 'bg', l: 'Background', d: '#dcbdba' },
     { k: 'text', l: 'Hands', d: '#6d3431' },
-    { k: 'accent', l: 'Second hand', d: '#ea5ab4' }] };
+    { k: 'accent', l: 'Second hand', d: '#ea5ab4' }],
+  homie: [
+    { k: 'bg', l: 'Background', d: '#1a1a1a' },
+    { k: 'text', l: 'Weekday / date', d: '#e6e6e6' },
+    { k: 'body', l: 'Homie: house walls', d: '#fff6ea' },
+    { k: 'roof', l: 'Homie: roof, chimney and shoes', d: '#41bdf5' },
+    { k: 'limb', l: 'Homie: arms and legs', d: '#2b2f33' }] };
 const HV_SS_SWATCH = ['#ffffff', '#0b0b0c', '#97a9af', '#5c9a68', '#f06aa8', '#5b78f0', '#6c7cf2', '#dcbdba', '#6d3431', '#ea5ab4', '#ffd166', '#118ab2', '#073b4c', '#ef476f'];
 const hvSsDeep = (root, sel, d = 0) => { if (!root || d > 12) return null;
   if (root.shadowRoot) { const r = hvSsDeep(root.shadowRoot, sel, d + 1); if (r) return r; }
@@ -8944,6 +8960,216 @@ const hvSsColors = {
     } catch (e) { saved = false; }
     hvSsOv.tick(true); try { for (const h of HV_HUBS) if (h.isConnected && h._bgMode) h._bgMode(); } catch (e) {} return saved; } };
 // ---- faces (sized with container units, so one renderer draws the full screen and the picker thumbnails)
+// ---- Homie: NotHomeView's own house mascot (an original character: a rounded cream house with a sky-blue cap roof and chimney, a face on the front wall,
+// charcoal arms and legs, sky-blue shoes). One renderer (HVHomie) draws him for the Homie screensaver style (HVSsFace 'homie': full screen, the Settings
+// picker thumbnail and the parked wallpaper), the Home Screen card (homeview-homie-card) and its popup. Cartoon only: nothing here calls a service.
+const HV_HOMIE_T = 'custom:homeview-homie-card';
+const HV_HOMIE_ICO = '<svg viewBox="0 0 100 100" width="70%" height="70%" aria-hidden="true"><rect x="22" y="40" width="56" height="48" rx="13" fill="#fff6ea"/><path d="M14 50Q13 43 20 38L44 20Q50 15 56 20L80 38Q87 43 86 50Q85 55 79 55H21Q15 55 14 50Z" fill="#1f7fb4"/><rect x="66" y="19" width="8" height="16" rx="2" fill="#1f7fb4"/><ellipse cx="41" cy="66" rx="3.6" ry="5" fill="#141414"/><ellipse cx="59" cy="66" rx="3.6" ry="5" fill="#141414"/><path d="M43 75Q50 81 57 75" fill="none" stroke="#2a1c1c" stroke-width="2.6" stroke-linecap="round"/></svg>';
+const HV_HOMIE_SVG = `<svg class="hmv" viewBox="0 0 100 124" aria-hidden="true" focusable="false">
+<g class="lg l"><path class="lmb" d="M40 94v13"/><ellipse class="sho" cx="38" cy="111" rx="8.4" ry="4.8"/></g>
+<g class="lg r"><path class="lmb" d="M60 94v13"/><ellipse class="sho" cx="62" cy="111" rx="8.4" ry="4.8"/></g>
+<g class="tor">
+<rect class="rf" x="66" y="15" width="9" height="21" rx="2.4"/>
+<rect class="wal" x="18" y="40" width="64" height="58" rx="16"/>
+<path class="rf" d="M9 52Q8 44 16 38L42 17Q50 10.5 58 17L84 38Q92 44 91 52Q90 58 82 58H18Q10 58 9 52Z"/>
+<g class="fc"><path class="ebw" d="M34 61.5Q38.5 58.5 43 61.5M57 61.5Q61.5 58.5 66 61.5"/>
+<g class="ey"><ellipse cx="39" cy="70" rx="4.6" ry="6.4"/><ellipse cx="61" cy="70" rx="4.6" ry="6.4"/><circle class="hl" cx="40.6" cy="67.4" r="1.6"/><circle class="hl" cx="62.6" cy="67.4" r="1.6"/></g>
+<circle class="bl" cx="29.5" cy="79" r="4.6"/><circle class="bl" cx="70.5" cy="79" r="4.6"/>
+<path class="mo sm" d="M42.5 79.5Q50 87 57.5 79.5"/><path class="mo so" d="M45 81Q50 84.5 55 81"/>
+<path class="mo wd" d="M40.5 78.5Q50 80 59.5 78.5Q58 90.5 50 90.5Q42 90.5 40.5 78.5Z"/><ellipse class="mo oh" cx="50" cy="83" rx="3.4" ry="4.2"/></g>
+<g class="ar l"><path class="lmb" d="M19 74Q11 81 10 91"/></g><g class="ar r"><path class="lmb" d="M81 74Q89 81 90 91"/></g></g>
+<g class="umb"><path class="uh" d="M95 62V24"/><path class="uc" d="M69 27Q95 -3 121 27Q114.5 22 108 27Q101.5 22 95 27Q88.5 22 82 27Q75.5 22 69 27Z"/></g>
+</svg>`;
+const HV_HOMIE_LAMP = `<svg viewBox="0 0 40 240" aria-hidden="true"><path d="M20 0V150" stroke="currentColor" stroke-width="1.6" opacity=".55"/>
+<path class="sh" d="M7 172Q7 150 20 150Q33 150 33 172Z"/><circle class="bu" cx="20" cy="176" r="6.5"/><g class="pc"><path d="M29 168V232" stroke="currentColor" stroke-width="1.3" opacity=".7"/><circle cx="29" cy="234" r="2.6" fill="currentColor"/></g></svg>`;
+const HV_HOMIE_BUG = '<svg viewBox="0 0 40 26" aria-hidden="true"><g class="lgs"><path d="M12 18l-5 6M20 19v6M28 18l5 6M12 12l-7-2M28 12l7-2"/></g><ellipse cx="20" cy="14" rx="12" ry="8"/><circle cx="31" cy="11" r="5"/><circle class="e" cx="33" cy="10" r="1.3"/></svg>';
+const HV_HOMIE_CSS = `
+.hms{--hs:30cqh;--gy:9cqh;--lmb:var(--hv-ss-limb,#2b2f33)}
+.hm-card{--hs:58cqh;--gy:9cqh}
+.hz .hm *,.hz .hwx i,.hz .hbg *,.hz .hflash{animation-play-state:paused !important} /* not .hm itself: its state tells a paused host (the parked wallpaper) apart */
+.hm{position:absolute;bottom:var(--gy);left:50%;height:var(--hs);aspect-ratio:100/124;transform:translateX(-50%);z-index:3}
+.hm.bh{z-index:1}
+.hmf{width:100%;height:100%;transition:transform .2s}.hm.fl .hmf{transform:scaleX(-1)}
+.hmv{width:100%;height:100%;display:block;overflow:visible;transform-origin:50% 100%;transition:transform .35s ease}
+.hmv .lmb{fill:none;stroke:var(--lmb);stroke-width:8.5;stroke-linecap:round}
+.hmv .wal{fill:var(--hv-ss-body,#fff6ea);stroke:rgba(0,0,0,.08);stroke-width:1.2}.hmv .rf,.hmv .sho,.hmv .uc{fill:var(--hv-ss-roof,#41bdf5)}
+.hmv .ey ellipse{fill:#141414}.hmv .hl{fill:#fff}.hmv .bl{fill:#ffb6a3;opacity:.85}.hmv .ebw{fill:none;stroke:#2b2b2b;stroke-width:1.8;stroke-linecap:round;transition:transform .3s}
+.hmv .mo{display:none;fill:none;stroke:#2a1c1c;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}.hmv .mo.wd{fill:#3a2222}.hmv .mo.oh{fill:#3a2222;stroke:none}
+.hm[data-m="sm"] .mo.sm,.hm[data-m="wd"] .mo.wd,.hm[data-m="so"] .mo.so,.hm[data-m="oh"] .mo.oh{display:inline}
+.hmv .uh{stroke:var(--lmb);stroke-width:2.4;stroke-linecap:round}.hmv .umb{display:none}.hm.umb .umb{display:inline}
+.hmv .ar,.hmv .lg,.hmv .tor,.hmv .ey,.hmv .ebw{transform-box:view-box;transition:transform .3s ease}
+.hmv .ar.l{transform-origin:19px 74px}.hmv .ar.r{transform-origin:81px 74px}.hmv .lg.l{transform-origin:40px 95px}.hmv .lg.r{transform-origin:60px 95px}
+.hmv .tor{transform-origin:50px 96px}.hmv .ey{transform-origin:50px 70px;animation:hmblink 5.2s infinite}
+@keyframes hmblink{0%,93%,100%{transform:scaleY(1)}95.5%{transform:scaleY(.12)}}
+@keyframes hmbob{0%,100%{transform:translateY(0)}50%{transform:translateY(-1.6px)}}
+@keyframes hmstep{from{transform:translateY(0)}to{transform:translateY(-2.6px)}}
+@keyframes hmleg{from{transform:rotate(20deg)}to{transform:rotate(-20deg)}}
+@keyframes hmarm{from{transform:rotate(-16deg)}to{transform:rotate(16deg)}}
+@keyframes hmwave{from{transform:rotate(-132deg)}to{transform:rotate(-96deg)}}
+@keyframes hmwavel{from{transform:rotate(132deg)}to{transform:rotate(96deg)}}
+@keyframes hmdr{from{transform:rotate(-140deg)}to{transform:rotate(-112deg)}}
+@keyframes hmdl{from{transform:rotate(112deg)}to{transform:rotate(140deg)}}
+@keyframes hmdance{0%,100%{transform:translateY(0) rotate(-6deg)}25%{transform:translateY(-9%) rotate(0)}50%{transform:translateY(0) rotate(6deg)}75%{transform:translateY(-9%) rotate(0)}}
+@keyframes hmstomp{0%{transform:translateY(0)}35%{transform:translateY(-16%) scaleY(1.04)}62%{transform:translateY(0) scaleY(.88)}80%,100%{transform:translateY(0) scaleY(1)}}
+@keyframes hmjump{0%,100%{transform:translateY(0)}30%{transform:translateY(-12%)}}
+@keyframes hmshiver{from{transform:translateX(-1.4px)}to{transform:translateX(1.4px)}}
+.hm[data-p="idle"] .tor,.hm[data-p="peek"] .tor{animation:hmbob 2.4s ease-in-out infinite}
+.hm[data-p="walk"] .lg.l{animation:hmleg .46s ease-in-out infinite alternate}.hm[data-p="walk"] .lg.r{animation:hmleg .46s ease-in-out infinite alternate-reverse}
+.hm[data-p="walk"] .ar.l{animation:hmarm .46s ease-in-out infinite alternate}.hm[data-p="walk"] .ar.r{animation:hmarm .46s ease-in-out infinite alternate}
+.hm[data-p="walk"] .tor{animation:hmstep .23s ease-in-out infinite alternate}
+.hm[data-p="wave"] .ar.r{animation:hmwave .42s ease-in-out infinite alternate}.hm[data-p="wave"] .tor{animation:hmbob 1.2s ease-in-out infinite}
+.hm.umb .ar.r{animation:none !important;transform:rotate(-100deg) !important}.hm.umb[data-p="wave"] .ar.l{animation:hmwavel .42s ease-in-out infinite alternate}
+.hm[data-p="dance"] .ar.r{animation:hmdr .45s ease-in-out infinite alternate}.hm[data-p="dance"] .ar.l{animation:hmdl .45s ease-in-out infinite alternate}
+.hm[data-p="dance"] .hmv{animation:hmdance .9s ease-in-out infinite}.hm[data-p="dance"] .lg.l{animation:hmleg .45s ease-in-out infinite alternate}
+.hm[data-p="sit"] .hmv{transform:translateY(11%)}.hm[data-p="sit"] .lg.l{transform:rotate(64deg)}.hm[data-p="sit"] .lg.r{transform:rotate(-64deg)}
+.hm[data-p="sit"] .ar.l{transform:rotate(-22deg)}.hm[data-p="sit"] .ar.r{transform:rotate(22deg)}.hm[data-p="sit"] .tor{animation:hmbob 3.4s ease-in-out infinite}
+.hm[data-p="reach"] .ar.r{transform:rotate(-150deg)}.hm[data-p="pull"] .ar.r{transform:rotate(-136deg)}.hm[data-p="pull"] .tor{transform:translateY(2px)}
+.hm[data-p="notice"] .tor{transform:rotate(-7deg)}.hm[data-p="notice"] .ey{animation:none;transform:translate(-2px,2.5px)}
+.hm[data-p="stomp"] .hmv{animation:hmstomp .65s ease-in-out}.hm[data-p="stomp"] .lg.r{transform:rotate(-26deg)}.hm[data-p="stomp"] .ar.l{transform:rotate(40deg)}.hm[data-p="stomp"] .ar.r{transform:rotate(-40deg)}
+.hm[data-p="startle"] .hmv{animation:hmjump .5s ease-out}.hm[data-p="startle"] .ar.l{transform:rotate(-131deg)}.hm[data-p="startle"] .ar.r{transform:rotate(131deg)}
+.hm[data-p="peek"] .ey{animation:none;transform:translateX(3px)}.hm[data-p="peek"] .tor{transform:rotate(5deg)}
+.hm[data-p="shade"] .ar.r{transform:rotate(156deg)}.hm[data-p="shade"] .ey{animation:none;transform:scaleY(.55)}.hm[data-p="shade"] .tor{animation:hmbob 1.6s ease-in-out infinite}
+.hm[data-p="shiver"] .hmv{animation:hmshiver .11s linear infinite alternate}.hm[data-p="shiver"] .ar.l{transform:rotate(-58deg)}.hm[data-p="shiver"] .ar.r{transform:rotate(58deg)}
+.hm[data-p="catch"] .ar.l{transform:rotate(148deg)}.hm[data-p="catch"] .ar.r{transform:rotate(-148deg)}.hm[data-p="catch"] .ey{animation:none;transform:translateY(-2.5px)}.hm[data-p="catch"] .tor{animation:hmbob 1s ease-in-out infinite}
+.hm[data-p="lean"] .hmv{transform:rotate(9deg)}.hm[data-p="lean"] .ar.r{transform:rotate(-74deg)}.hm[data-p="lean"] .ar.l{transform:rotate(30deg)}
+.hm[data-p="peer"] .hmv{transform:translateY(-2%) scale(1.05)}.hm[data-p="peer"] .ey{animation:none;transform:scaleY(.42)}.hm[data-p="peer"] .ebw{transform:translateY(2.2px)}
+.hlamp{position:absolute;top:0;height:74cqh;aspect-ratio:40/240;transform:translateX(-50%);opacity:0;transition:opacity .6s;z-index:2;color:var(--hv-ss-text,#e6e6e6);pointer-events:none}
+.hlamp svg{width:100%;height:100%;display:block;overflow:visible}.hlamp .sh{fill:color-mix(in srgb,var(--hv-ss-text,#e6e6e6) 70%,#c9b79c)}
+.hlamp .bu{fill:color-mix(in srgb,var(--hv-ss-text,#e6e6e6) 45%,#888);transition:fill .5s,filter .5s}.hlamp .pc{transition:transform .25s ease}.hlamp.pl .pc{transform:translateY(7px)}
+.hlamp.vis{opacity:1}.hms.lit .hlamp .bu{fill:#ffd45e;filter:drop-shadow(0 0 6px #ffd45e) drop-shadow(0 0 16px rgba(255,212,94,.8))}
+.hglow{position:absolute;inset:0 -30%;pointer-events:none;z-index:4;opacity:0;transition:opacity 1.4s ease;mix-blend-mode:screen;
+ background:radial-gradient(circle at var(--lx,20%) 62%,rgba(255,214,110,.46),rgba(255,214,110,.14) 42%,rgba(255,214,110,0) 72%)}.hms.lit .hglow{opacity:1}
+.hbg{position:absolute;bottom:calc(var(--gy) - 1cqh);height:3cqh;aspect-ratio:40/26;transform:translateX(-50%);z-index:3;transition:left 1.1s ease-in,opacity .45s}
+.hbg svg{width:100%;height:100%;display:block;overflow:visible;animation:hmcrawl 1.4s ease-in-out infinite alternate}.hbg ellipse,.hbg circle{fill:#151515;stroke:color-mix(in srgb,var(--hv-ss-text,#e6e6e6) 55%,transparent);stroke-width:1.4}
+.hbg .e{fill:#fff;stroke:none}.hbg .lgs path{stroke:#151515;stroke-width:2;stroke-linecap:round;animation:hmlegs .18s linear infinite alternate}
+.hbg.fl svg{transform:scaleX(-1)}.hbg.pf svg{animation:hmpoof .45s ease-in forwards}
+.hbg.pf::after{content:'';position:absolute;left:50%;top:50%;width:4cqh;height:4cqh;margin:-2cqh 0 0 -2cqh;border-radius:50%;border:.5cqh dotted color-mix(in srgb,var(--hv-ss-text,#e6e6e6) 70%,transparent);animation:hmpuff .6s ease-out forwards}
+.hbg.sc{opacity:0}
+@keyframes hmcrawl{from{transform:translateX(-.6cqh)}to{transform:translateX(.6cqh)}}@keyframes hmlegs{from{transform:translateY(0)}to{transform:translateY(-1px)}}
+@keyframes hmpoof{to{transform:scale(.1,.05);opacity:0}}@keyframes hmpuff{from{transform:scale(.3);opacity:1}to{transform:scale(1.8);opacity:0}}
+.hwx{position:absolute;inset:0 -30%;overflow:hidden;pointer-events:none;z-index:5}.hwx i{position:absolute;display:block}
+.hwx[data-w="rain"] i,.hwx[data-w="storm"] i{top:-8%;width:.4cqh;height:5cqh;border-radius:1cqh;background:linear-gradient(rgba(124,200,245,0),#6dbdf0);animation:hmrain .85s linear infinite}
+.hwx[data-w="snow"] i{top:-4%;width:1.3cqh;height:1.3cqh;border-radius:50%;background:#fff;opacity:.85;box-shadow:0 0 .6cqh rgba(255,255,255,.6);animation:hmsnow 7s linear infinite}
+.hwx[data-w="hail"] i{top:-4%;width:.9cqh;height:.9cqh;border-radius:50%;background:#eef6ff;animation:hmrain 1.1s linear infinite}
+.hwx[data-w="wind"] i{left:-30%;height:.4cqh;width:18cqh;border-radius:1cqh;background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--hv-ss-text,#e6e6e6) 45%,transparent),transparent);animation:hmwind 2.4s linear infinite}
+.hwx[data-w="fog"] i{left:-20%;width:140%;height:18cqh;background:linear-gradient(transparent,rgba(205,210,220,.2),transparent);filter:blur(1.5cqh);animation:hmfog 12s ease-in-out infinite alternate}
+.hwx[data-w="sun"] i{right:calc(18.75% - 8cqh);top:-8cqh;width:40cqh;height:40cqh;border-radius:50%;background:radial-gradient(circle,rgba(255,206,92,.5),rgba(255,206,92,.12) 45%,rgba(255,206,92,0) 70%);animation:hmsun 6s ease-in-out infinite alternate}
+.hm-card .hwx{opacity:.6}
+@keyframes hmrain{to{transform:translateY(118cqh)}}@keyframes hmsnow{to{transform:translate(6cqh,112cqh) rotate(200deg)}}
+@keyframes hmwind{to{transform:translateX(180cqw)}}@keyframes hmfog{to{transform:translateX(12%)}}@keyframes hmsun{to{transform:scale(1.12);opacity:.8}}
+.hflash{position:absolute;inset:0 -30%;background:#fff;opacity:0;pointer-events:none;z-index:7}.hflash.go{animation:hmflash 1.1s ease-out}
+@keyframes hmflash{0%{opacity:0}6%{opacity:.8}14%{opacity:0}22%{opacity:.55}38%,100%{opacity:0}}`;
+// the weather Homie reacts to: the Home Screen card's weather entity, else the first weather.* (as the Info dashboard does)
+function hvHomieWx(hass, we) { const S = (hass && hass.states) || {};
+  if (!we) { try { const lv = hvSsLv(), hub = lv && lv.config && hvHubCfgOf(lv.config); we = (hub && hub.weather_entity) || null; } catch (e) { /* none */ } }
+  if (!we || !S[we]) we = Object.keys(S).find(k => k.startsWith('weather.')) || null; const w = we && S[we];
+  return w && !['unavailable', 'unknown'].includes(w.state) ? w.state : null; }
+const HV_HOMIE_WX = { sunny: 'sun', 'clear-night': '', partlycloudy: '', cloudy: '', rainy: 'rain', pouring: 'rain', 'lightning-rainy': 'storm', lightning: 'storm0', snowy: 'snow', 'snowy-rainy': 'snow', hail: 'hail', windy: 'wind', 'windy-variant': 'wind', fog: 'fog', exceptional: '' };
+class HVHomie {
+  // mode: 'ss' (full screensaver, also the popup), 'thumb' (picker preview: idle + wave), 'card' (Home Screen tile: calmer)
+  constructor(stage, mode, opt) { this.st = stage; this.mode = mode; this.big = mode === 'ss'; this.opt = opt || {};
+    stage.classList.add('hms', 'hm-' + mode);
+    stage.insertAdjacentHTML('beforeend', `<div class="hwx"></div><div class="hglow"></div>${this.big ? `<div class="hlamp">${HV_HOMIE_LAMP}</div>` : ''}<div class="hbugs"></div>`
+      + `<div class="hm" data-p="idle" data-m="sm"><div class="hmf">${HV_HOMIE_SVG}</div></div><div class="hflash"></div>`);
+    this.hm = stage.querySelector('.hm'); this.wx = stage.querySelector('.hwx'); this.lamp = stage.querySelector('.hlamp'); this.bugs = stage.querySelector('.hbugs');
+    this.x = 50; this.q = []; this.bag = []; this.first = true; this.wand = false; this.cond = undefined; this.wxDue = false; this.lit = false; this.on = false; this.t = 0; this.gone = 0; this.nb = { l: 38, r: 62 }; }
+  pose(p, m) { this.hm.dataset.p = p || 'idle'; this.hm.dataset.m = m || 'sm'; }
+  // frozen: detached, the page hidden, the parked wallpaper (its CSS pauses every animation) or the host says so (the card under a sheet / the screensaver)
+  frozen() { if (!this.st.isConnected || document.hidden) return true;
+    try { if (String(getComputedStyle(this.hm).animationPlayState).includes('paused')) return true; } catch (e) {}
+    return !!(this.opt.pause && this.opt.pause()); }
+  wait(ms, fn) { clearTimeout(this.t); this.t = setTimeout(() => this.gate(fn), ms); }
+  gate(fn) { if (this.frozen()) { this.st.classList.add('hz'); if (!this.st.isConnected && ++this.gone > 40) { this.on = false; return; } this.t = setTimeout(() => this.gate(fn), 600); return; }
+    this.gone = 0; this.st.classList.remove('hz'); fn(); }
+  start() { if (this.on) return; this.on = true; this.gone = 0; this.wait(this.first ? 500 : 300, () => this.next()); }
+  stop() { this.on = false; clearTimeout(this.t); }
+  walk(x, fn) { x = Math.max(8, Math.min(92, x)); const dx = x - this.x; if (Math.abs(dx) < 1) { fn(); return; }
+    this.hm.classList.toggle('fl', dx < 0); this.pose('walk'); const ms = Math.round(Math.abs(dx) * (this.mode === 'card' ? 70 : 62));
+    this.hm.style.transition = `left ${ms}ms linear`; this.hm.style.left = x + '%'; this.x = x; this.wait(ms, () => { this.hm.classList.remove('fl'); fn(); }); }
+  next() { if (!this.on) return; const s = this.q.shift(); if (!s) { this.plan(); return; }
+    if (s.cb) try { s.cb(); } catch (e) {}
+    if (s.behind != null) this.hm.classList.toggle('bh', !!s.behind);
+    if (s.walk != null) { this.walk(s.walk, () => this.next()); return; }
+    this.pose(s.p, s.m); this.wait(s.d || 1000, () => this.next()); }
+  // wander between behaviours; the first is a greeting, a new weather condition gets its reaction next
+  plan() { let b; const pool = this.mode === 'thumb' ? ['wave'] : this.mode === 'card' ? ['wave', 'sit', 'wave', 'hop'] : ['wave', 'sit', 'dance', 'lights', 'bugs', 'peek', 'wave'];
+    if (this.first) { b = 'greet'; this.first = false; } else if (this.wxDue && this.mode !== 'thumb') { b = 'weather'; this.wxDue = false; }
+    else if (!this.wand) { b = 'wander'; } else { if (!this.bag.length) { this.bag = this.seq ? pool.slice().sort(() => Math.random() - 0.5) : pool.slice(); this.seq = true; if (this.cond && this.mode !== 'thumb') this.bag.splice(1 + Math.floor(Math.random() * 3), 0, 'weather'); } b = this.bag.shift(); }
+    this.wand = b === 'wander';
+    this.q = this.beh(b); this.next(); }
+  rnd(a, b) { return a + Math.random() * (b - a); }
+  beh(b) { const nb = this.nb, card = this.mode === 'card', thumb = this.mode === 'thumb', idle = (d, m) => ({ p: 'idle', m, d });
+    if (thumb) return b === 'wander' ? [idle(2600)] : [{ p: 'wave', m: 'wd', d: 2400 }, idle(600)];
+    if (b === 'greet') return [{ behind: false }, { p: 'wave', m: 'wd', d: 2800 }, idle(700)];
+    if (b === 'wave') return [{ p: 'wave', m: 'wd', d: 2400 }, idle(500)];
+    if (b === 'wander') { let x; if (card) x = this.rnd(26, 74); else { const r = Math.random(); x = r < 0.4 ? this.rnd(12, nb.l - 6) : r < 0.75 ? this.rnd(nb.l + 4, nb.r - 4) : this.rnd(nb.r + 6, 88); }
+      return [{ behind: false, walk: x }, idle(Math.round(this.rnd(card ? 2400 : 1400, card ? 4200 : 2800)))]; }
+    if (b === 'hop') return [{ p: 'stomp', d: 650 }, idle(1600)];
+    if (b === 'sit') return [{ walk: card ? this.x : (this.x < 50 ? nb.l + 3 : nb.r - 3) }, { p: 'sit', m: 'so', d: card ? 6000 : 5200 }, idle(700)];
+    if (b === 'dance') return [{ walk: this.x < 50 ? Math.max(14, nb.l - 12) : Math.min(86, nb.r + 12) }, { p: 'dance', m: 'wd', d: 3800 }, idle(600)];
+    if (b === 'lights') { const lx = this.x < 50 ? 18 : 82; return [{ walk: lx }, { cb: () => this.lampAt(lx, true) }, idle(900), { p: 'reach', d: 800 },
+      { cb: () => { this.lamp.classList.add('pl'); this.lit = !this.lit; this.st.classList.toggle('lit', this.lit); setTimeout(() => this.lamp && this.lamp.classList.remove('pl'), 420); }, p: 'pull', d: 700 },
+      { p: 'idle', m: 'wd', d: 1700 }, { cb: () => { if (!this.lit) this.lamp.classList.remove('vis'); }, p: 'idle', d: 500 }]; }
+    if (b === 'bugs') { const n = 1 + Math.floor(Math.random() * 3), side = this.x < 50 ? 1 : -1, bx = Math.max(12, Math.min(88, this.x + side * this.rnd(16, 24))), list = [];
+      return [{ cb: () => { this.bugs.innerHTML = ''; for (let i = 0; i < n; i++) { const g = document.createElement('div'); g.className = 'hbg' + (side < 0 ? '' : ' fl'); g.innerHTML = HV_HOMIE_BUG;
+          const x0 = bx + (i ? side * (4 + i * 4) : 0); g.style.left = x0 + '%'; this.bugs.appendChild(g); list.push(g); } } }, { p: 'notice', m: 'oh', d: 1000 }, { walk: bx - side * 5 },
+        { cb: () => setTimeout(() => { if (list[0]) list[0].classList.add('pf'); list.slice(1).forEach((g, i) => { g.style.left = (side > 0 ? 112 + i * 6 : -12 - i * 6) + '%'; g.classList.add('sc'); }); }, 330), p: 'stomp', d: 700 },
+        { p: 'idle', m: 'wd', d: 1500 }, { cb: () => { this.bugs.innerHTML = ''; }, p: 'idle', d: 300 }]; }
+    if (b === 'peek') { const x0 = Math.max(10, nb.l - 12); return [{ walk: x0 }, { behind: true }, { walk: nb.l + 4 }, { p: 'peek', d: 1900 }, { walk: x0 }, { behind: false }, { p: 'wave', m: 'wd', d: 1400 }, idle(400)]; }
+    if (b === 'weather') { const c = this.cond || '', k = HV_HOMIE_WX[c] || '';
+      if (k === 'sun') return [{ p: 'shade', m: 'wd', d: 2800 }, idle(600)];
+      if (k === 'snow') return [{ p: 'shiver', d: 2000 }, { p: 'catch', m: 'wd', d: 2400 }, idle(500)];
+      if (k === 'storm' || k === 'storm0') return card ? [{ p: 'idle', m: 'so', d: 2200 }] : [{ cb: () => this.flash(), p: 'startle', m: 'oh', d: 1100 }, { walk: Math.max(10, nb.l - 12) }, { behind: true },
+        { walk: nb.l + 4 }, { p: 'peek', m: 'so', d: 2000 }, { walk: Math.max(10, nb.l - 12) }, { behind: false }, idle(600)];
+      if (k === 'wind') return [{ walk: card ? 40 : Math.max(10, nb.l - 6) }, { p: 'lean', d: 3800 }, idle(500)];
+      if (k === 'fog') return [{ p: 'peer', d: 3200 }, idle(500)];
+      if (k === 'rain' || k === 'hail') return [{ p: 'wave', m: 'wd', d: 2000 }, idle(800)];
+      return [{ p: 'wave', m: 'wd', d: 2000 }, idle(500)]; }
+    return [idle(1500)]; }
+  lampAt(x, vis) { if (!this.lamp) return; this.lamp.style.left = `calc(${x}% + 4.6cqh)`; /* the pull cord under his raised right hand */ this.st.style.setProperty('--lx', ((x + 30) / 1.6).toFixed(1) + '%'); /* .hglow is 160% wide */ this.lamp.classList.toggle('vis', !!vis); }
+  flash() { const f = this.st.querySelector('.hflash'); if (!f || !this.big) return; f.classList.remove('go'); void f.offsetWidth; f.classList.add('go'); }
+  setWx(cond) { const k = HV_HOMIE_WX[cond] || '', kind = k === 'storm0' ? '' : k; this.hm.classList.toggle('umb', ['rain', 'storm', 'hail'].includes(k));
+    if (this.wx.dataset.w === kind) return; this.wx.dataset.w = kind; let h = ''; const n = { rain: 38, storm: 46, hail: 30, snow: 28, wind: 7, fog: 3, sun: 1 }[kind] || 0, few = this.mode === 'card' ? 0.55 : this.mode === 'thumb' ? 0.4 : 1;
+    for (let i = 0, m = Math.max(kind ? 1 : 0, Math.round(n * few)); i < m; i++) { const l = (i * 61.8 % 100).toFixed(1), dl = -((i * 0.37) % (kind === 'snow' ? 7 : kind === 'wind' ? 2.4 : kind === 'fog' ? 12 : 1)).toFixed(2);
+      h += kind === 'wind' ? `<i style="top:${(12 + i * 11) % 90}%;animation-delay:${(-i * 0.7).toFixed(2)}s"></i>` : kind === 'fog' ? `<i style="top:${20 + i * 24}%;animation-delay:${-i * 4}s"></i>` : kind === 'sun' ? '<i></i>' : `<i style="left:${l}%;animation-delay:${dl}s"></i>`; }
+    this.wx.innerHTML = h; }
+  // refresh from the face / card tick: weather (a new condition plays its reaction next) and the big number's edges (where he sits, peeks, leans)
+  update(hass, we) { if (this.opt.pause) { const z = !!this.opt.pause() || document.hidden; if (z) this.st.classList.add('hz'); } // the card: pause at once (the runner resumes it)
+    const c = hvHomieWx(hass, we); if (c !== this.cond) { if (this.cond !== undefined || c) this.wxDue = !!c; this.cond = c; this.setWx(c); }
+    if (this.big) { const n = this.st.querySelector('.hdn'); if (n) { const a = this.st.getBoundingClientRect(), b = n.getBoundingClientRect(); if (a.width && b.width) this.nb = { l: (b.left - a.left) / a.width * 100, r: (b.right - a.left) / a.width * 100 }; } }
+    this.start(); } }
+// the Home Screen card: <homeview-homie-card> (Add App › Homie or show_homie on the Home Screen card puts it in the tile row). Tap = the larger Homie popup.
+class HVHomieCard extends HTMLElement {
+  static getStubConfig() { return {}; }
+  setConfig(c) { this._config = c || {}; }
+  getCardSize() { return 3; }
+  set hass(h) { this._hass = h; if (!this._hm) this._build(); this._tick(); }
+  connectedCallback() { if (!this._hm) this._build(); clearInterval(this._iv); this._iv = setInterval(() => this._tick(), 1000); this._tick(); }
+  disconnectedCallback() { clearInterval(this._iv); this._iv = 0; }
+  _hub() { if (this._hvHub && this._hvHub.isConnected) return this._hvHub; let n = this; for (let i = 0; i < 30 && n; i++) { n = n.parentNode || n.host; if (n instanceof HVHubCard) return n; } return null; }
+  _paused() { const h = this._hub(), w = typeof ssWallpanel === 'function' ? ssWallpanel() : null;
+    return !!((h && h._sheetO) || (typeof hvSsOv !== 'undefined' && hvSsOv._up && hvSsOv.host && hvSsOv.host.isConnected) || (w && w.screensaverRunning && w.screensaverRunning()) || !this.offsetParent); }
+  _build() { const r = this.shadowRoot || this.attachShadow({ mode: 'open' });
+    r.innerHTML = `<style>${HV_HOMIE_CSS}
+:host{display:block;width:100%;height:100%}.w{height:100%;display:flex;flex-direction:column;align-items:center;gap:var(--lg,9px)}
+.pw{all:unset;box-sizing:border-box;cursor:pointer;position:relative;flex:1;min-height:0;width:100%;border-radius:calc(var(--I,110px) * .26);overflow:hidden;background:var(--hv-ss-bg,#1a1a1a);box-shadow:0 10px 30px rgba(0,0,0,.18);-webkit-tap-highlight-color:transparent}
+.pw:active{transform:scale(.98)}.pw:focus-visible{outline:2px solid #fff;outline-offset:3px}.hst{position:absolute;inset:0;container-type:size}
+.lb{font-size:var(--lfs,17px);line-height:var(--lh,22px);font-weight:500;color:#fff;text-shadow:0 1px 6px rgba(0,0,0,.35);white-space:nowrap}</style>
+<div class="w"><button class="pw" aria-label="Homie"><div class="hst"></div></button><span class="lb">Homie</span></div>`;
+    this._hm = new HVHomie(r.querySelector('.hst'), 'card', { pause: () => this._paused() });
+    r.querySelector('.pw').addEventListener('click', e => { const h = this._hub(); if (!h || h._edit || hvHubArr.hub === h || h._sheetO) return; e.stopPropagation(); hvOpenHomie(h); }); }
+  _tick() { if (!this._hm) return; const cols = hvSsColors.get('homie') || {}, k = JSON.stringify(cols); if (k !== this._ck) { this._ck = k;
+      for (const d of HV_SS_COLS.homie) { const v = hvSsHex(cols[d.k]); if (v && v !== d.d) this.style.setProperty('--hv-ss-' + d.k, v); else this.style.removeProperty('--hv-ss-' + d.k); } }
+    const h = this._hub(); this._hm.update(this._hass || (h && h._hass), (h && h._config && h._config.weather_entity) || null); } }
+if (!customElements.get('homeview-homie-card')) customElements.define('homeview-homie-card', HVHomieCard);
+(window.customCards = window.customCards || []).push({ type: 'homeview-homie-card', name: 'NotHomeView Homie', description: 'Homie, the NotHomeView house mascot, as an animated Home Screen tile (tap for the bigger Homie popup).', preview: true });
+// the larger popup: Homie on the date stage with everything he does (a Home Screen sheet; it never starts Wallpanel or changes the screensaver)
+function hvOpenHomie(hub) { if (!hub || hub._sheetO) return null; const cols = hvSsColors.get('homie') || {}; let iv = 0;
+  return hub._openSheet({ label: 'Homie', day: false, bg: hvSsHex(cols.bg) || HV_SS_COLS.homie[0].d, onClose: () => clearInterval(iv),
+    build: bd => { const st = document.createElement('style'); st.textContent = HV_SS_FACE_CSS + '.hpop{position:relative;height:100%;min-height:300px;border-radius:20px;overflow:hidden}'; bd.appendChild(st);
+      const box = document.createElement('div'); box.className = 'hpop'; box.setAttribute('role', 'img'); box.setAttribute('aria-label', 'Homie'); bd.appendChild(box);
+      const face = new HVSsFace('homie'); box.appendChild(face.el); const up = () => { try { face.applyColors(hvSsColors.get('homie')); face.update(hub._hass, new Date()); } catch (e) {} };
+      up(); iv = setInterval(up, 1000); return { set hass(h) {} }; } }); }
 const HV_SS_FACE_CSS = `
 .f,.f *{pointer-events:none !important}
 .f{position:absolute;inset:0;container-type:size;overflow:hidden;font-family:${FONT};-webkit-font-smoothing:antialiased;user-select:none}
@@ -8995,7 +9221,12 @@ const HV_SS_FACE_CSS = `
 .whimsy .n{position:absolute;font-family:"Avenir Next","Helvetica Neue",${FONT};font-weight:400;font-size:15cqh;line-height:1;color:var(--hv-ss-bg,#d2b3b1);transform:translate(-50%,-50%);
  text-shadow:-.25cqh -.25cqh .3cqh rgba(110,70,72,.55),.25cqh .25cqh .35cqh rgba(255,240,238,.9);transition:opacity 1.2s ease}
 .whimsy svg.h{position:absolute;inset:0;width:100%;height:100%}
-`;
+/* homie */
+.f.homie{background:var(--hv-ss-bg,#1a1a1a)}
+.homie .hwd{position:absolute;left:0;right:0;top:6cqh;text-align:center;color:var(--hv-ss-text,#e6e6e6);font:700 7.6cqh/1 ui-rounded,"SF Pro Rounded","Nunito","Varela Round",${FONT};letter-spacing:.05em}
+.homie .htm{position:absolute;left:0;right:0;top:15.5cqh;text-align:center;color:color-mix(in srgb,var(--hv-ss-text,#e6e6e6) 55%,transparent);font:600 3.6cqh/1 ui-rounded,"SF Pro Rounded",${FONT};letter-spacing:.08em;font-variant-numeric:tabular-nums}
+.homie .hdn{position:absolute;left:50%;top:59%;transform:translate(-50%,-50%);z-index:2;white-space:nowrap;color:color-mix(in srgb,var(--hv-ss-text,#e6e6e6) 34%,var(--hv-ss-bg,#1a1a1a));font:700 62cqh/.8 ui-rounded,"SF Pro Rounded",${FONT};letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+` + HV_HOMIE_CSS;
 const hvSsSvgNS = 'http://www.w3.org/2000/svg';
 // glassy digit shapes (box 100 x 140): [x, y, w, h, radius, rotate]
 const HV_SS_DG = { 0: [[0, 0, 100, 140, 46]], 1: [[0, 8, 32, 32, 16], [46, 0, 40, 140, 20]], 2: [[0, 0, 100, 66, 33], [34, 28, 34, 112, 17, 38], [0, 106, 100, 34, 17]],
@@ -9081,6 +9312,11 @@ class HVSsFace {
   _u_whimsy(d) { const ha = this._hands(d, 64, 50), ma = d.getMinutes() * 6;
     this._nums.forEach((n, i) => { const a = (i + 1) * 30, dist = x => { const v = Math.abs(((a - x) % 360 + 540) % 360 - 180); return v; }, m = Math.min(dist(ha), dist(ma));
       n.style.opacity = String(m <= 75 ? 1 : m <= 110 ? 0.45 : 0.08); }); }
+  // ---- Homie: weekday, a small time, the huge day number and Homie (HVHomie) living around it
+  _b_homie() { const f = this.el; f.innerHTML = '<div class="stg"><div class="hwd"></div><div class="htm"></div><div class="hdn"></div></div>'; this._hmo = new HVHomie(f.querySelector('.stg'), this.thumb ? 'thumb' : 'ss'); }
+  _u_homie(d, hass) { const f = this.el, L = (hass && hass.locale && hass.locale.language) || undefined, q = c => f.querySelector(c), set = (c, t) => { const e = q(c); if (e.textContent !== t) e.textContent = t; };
+    set('.hwd', d.toLocaleDateString(L, { weekday: 'long' })); set('.htm', d.toLocaleTimeString(L, { hour: 'numeric', minute: '2-digit' })); set('.hdn', String(d.getDate()));
+    this._hmo.update(hass); }
   update(hass, d) { d = d || new Date(); try { this['_u_' + this.s](d, hass); } catch (e) { /* keep the last frame */ } }
 }
 // Photo clock: tint Wallpanel's clock overlay only (never recolour photos)
