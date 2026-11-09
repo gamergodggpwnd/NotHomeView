@@ -4760,11 +4760,11 @@ const HUB_CSS = `:host{display:block;position:relative;font-family:${FONT};color
 .bgi.on{opacity:1}
 :host(:not([bgphoto])) .bgi{display:none}
 .tint{position:absolute;inset:0;background:radial-gradient(120% 90% at 20% 10%,#4b3a66 0%,#1c1a33 55%,#0d0f1a 100%);opacity:var(--tint,.24);transition:opacity .2s ease}
-:host(:not([bgphoto])) .tint{display:none}
-.ssface{position:absolute;inset:0;pointer-events:none;z-index:0}
-:host([sswall]) .bgi,:host([sswall]) .tint,:host([sswall]) .dim{display:none}
+:host(:not([bgphoto]):not([sswall])) .tint{display:none}
+.ssface{position:absolute;inset:calc(-2 * var(--blur,32px));pointer-events:none;z-index:0;filter:blur(var(--blur,32px)) saturate(var(--sat,1.35));transform:scale(1.08)}
+:host([sswall]) .bgi{display:none}
 .dim{position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,calc(var(--dim,.35) + .08)) 0%,rgba(0,0,0,var(--dim,.35)) 40%,rgba(0,0,0,calc(var(--dim,.35) + .12)) 100%)}
-:host([bgphoto]) .dim{--dk:calc(var(--dim,.32) * var(--dsc,.55));--m:var(--dmix,0);background:linear-gradient(180deg,rgba(0,0,0,calc(var(--m) * (var(--dim,.32) + .08) + (1 - var(--m)) * var(--dk) * .95)) 0%,rgba(0,0,0,calc(var(--m) * (var(--dim,.32) + .01) + (1 - var(--m)) * var(--dk) * .38)) 35%,rgba(0,0,0,calc(var(--m) * (var(--dim,.32) + .04) + (1 - var(--m)) * var(--dk) * .32)) 60%,rgba(0,0,0,calc(var(--m) * (var(--dim,.32) + .12) + (1 - var(--m)) * var(--dk) * .88)) 100%),rgba(255,255,255,calc(var(--bgt,.6) * .09))}
+:host([bgphoto]) .dim,:host([sswall]) .dim{--dk:calc(var(--dim,.32) * var(--dsc,.55));--m:var(--dmix,0);background:linear-gradient(180deg,rgba(0,0,0,calc(var(--m) * (var(--dim,.32) + .08) + (1 - var(--m)) * var(--dk) * .95)) 0%,rgba(0,0,0,calc(var(--m) * (var(--dim,.32) + .01) + (1 - var(--m)) * var(--dk) * .38)) 35%,rgba(0,0,0,calc(var(--m) * (var(--dim,.32) + .04) + (1 - var(--m)) * var(--dk) * .32)) 60%,rgba(0,0,0,calc(var(--m) * (var(--dim,.32) + .12) + (1 - var(--m)) * var(--dk) * .88)) 100%),rgba(255,255,255,calc(var(--bgt,.6) * .09))}
 .w{position:relative;z-index:1;box-sizing:border-box;display:flex;flex-direction:column;padding:var(--pt,24px) var(--px,32px) var(--pb,20px);gap:var(--gap,24px);min-height:var(--h,auto)}
 .top{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex:none}
 .gr{text-transform:uppercase;font-size:var(--gfs,22px);line-height:1.22;letter-spacing:.01em;text-shadow:0 1px 8px rgba(0,0,0,.25);min-width:0}
@@ -7362,7 +7362,9 @@ class HVHubCard extends HTMLElement {
   // Lives inside .bg so swipe-down (_ssPose) slides it with the page; Photos tile cycling is untouched.
   _ssWallPaint() { const bg = this.shadowRoot && this.shadowRoot.querySelector('.bg'); if (!bg) return;
     const st = (typeof hvSs !== 'undefined' && hvSs.get) ? hvSs.get() : 'photo'; let host = bg.querySelector(':scope > .ssface');
-    if (st === 'photo') { if (host) { try { host.remove(); } catch (e) {} } this._ssWall = null; this.removeAttribute('sswall'); return; }
+    // Solid = plain wallpaper only (same as photo backdrop off); no parked style face.
+    if (st === 'photo' || this._lvl === 1 || HV_BG_LEVELS[this._lvl || 3] === HV_BG_LEVELS[1]) {
+      if (host) { try { host.remove(); } catch (e) {} } this._ssWall = null; this.removeAttribute('sswall'); return; }
     this.setAttribute('sswall', '');
     if (!host) { host = document.createElement('div'); host.className = 'ssface'; host.setAttribute('aria-hidden', 'true');
       const sr = host.attachShadow({ mode: 'open' });
@@ -7383,7 +7385,7 @@ class HVHubCard extends HTMLElement {
     // Styled screensaver: never use the Photos-tile photo as the page wallpaper (Photos tile still cycles).
     const ss = (typeof hvSs !== 'undefined' && hvSs.get) ? hvSs.get() : 'photo', photoBg = ss === 'photo';
     this.toggleAttribute('bgphoto', photoBg && c.photo_backdrop !== false && !!this._cur && L !== HV_BG_LEVELS[1]);
-    this.toggleAttribute('sswall', !photoBg); try { this._ssWallPaint(); } catch (e) {} }
+    this.toggleAttribute('sswall', !photoBg && L !== HV_BG_LEVELS[1]); try { this._ssWallPaint(); } catch (e) {} }
   _paintPhoto(instant, dir) { if (!this._cur) return; this._bgMode(); const L = this._layer, bg = `url("${this._cur.replace(/"/g, '%22')}")`;
     const set = this._pis || []; if (set.length > 1) { const on = set[L], off = set[1 - L];
       if (instant) { on.style.transition = 'none'; off.style.transition = 'none'; }
