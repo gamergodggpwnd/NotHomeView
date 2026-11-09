@@ -8953,22 +8953,26 @@ const HV_SS_FACE_CSS = `
 .stg{position:absolute;top:50%;left:50%;width:min(100cqw,128cqh);height:min(100cqh,calc(100cqw * 100 / 128));transform:translate(-50%,-50%);container-type:size}
 /* info */
 .f.info{background:var(--hv-ss-bg,#97a9af)}
-.info .dt{position:absolute;left:6cqw;top:7cqh;color:var(--hv-ss-text,#fff);font-weight:700;font-size:11.5cqh;letter-spacing:-.02em;line-height:1}
-.info .dn{position:absolute;left:6cqw;top:16cqh;color:var(--hv-ss-clock,#0b0b0c);font-weight:600;font-size:39cqh;line-height:1;letter-spacing:-.04em}
-.info .an{position:absolute;right:5cqw;top:4cqh;width:47cqh;height:47cqh}
-.info .mu{position:absolute;left:6cqw;bottom:6cqh;width:30cqw}
-.info .art{width:23cqh;height:23cqh;border-radius:2.2cqh;background:linear-gradient(160deg,#b9d7ee,#6f9ccc);background-size:cover;background-position:center;box-shadow:0 .6cqh 2cqh rgba(0,0,0,.18)}
-.info .tt{margin-top:2.6cqh;color:var(--hv-ss-clock,#25282b);font-weight:700;font-size:3.6cqh;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.info .ar{color:color-mix(in srgb,var(--hv-ss-clock,#282c30) 60%,transparent);font-size:3.4cqh;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.info .pb{display:inline-flex;align-items:center;gap:1.4cqh;margin-top:1.6cqh;padding:1.2cqh 3.4cqh 1.2cqh 2.6cqh;border-radius:99cqh;background:rgba(60,72,78,.22);color:var(--hv-ss-clock,#202326);font-weight:600;font-size:3.8cqh}
-.info .pb i{width:0;height:0;border-left:2.4cqh solid var(--hv-ss-clock,#202326);border-top:1.5cqh solid transparent;border-bottom:1.5cqh solid transparent}
-.info .nt{position:absolute;left:38cqw;top:57cqh;width:7cqh;height:7cqh}
-.info .wx{position:absolute;left:50cqw;top:54cqh;right:3cqw}
-.info .ct{color:var(--hv-ss-text,#fff);font-weight:700;font-size:4.6cqh;display:flex;align-items:center;gap:1cqh;white-space:nowrap}
-.info .ct svg{width:3.2cqh;height:3.2cqh}
-.info .tp{color:var(--hv-ss-clock,#0b0b0c);font-weight:500;font-size:18cqh;line-height:1.02;letter-spacing:-.03em}
-.info .ci{width:6cqh;height:5cqh;margin-top:1cqh}
-.info .cn,.info .hl{color:var(--hv-ss-clock,#1f2326);font-weight:500;font-size:3.8cqh;line-height:1.3}
+/* two columns: date over now playing (left), clock over weather (right); each centred on its column, bottoms level */
+.info .lc{position:absolute;left:6cqw;top:6cqh;bottom:4cqh;width:max-content;display:flex;flex-direction:column;align-items:center;justify-content:space-between;gap:3cqh}
+.info .dd{text-align:center}
+.info .dt{color:var(--hv-ss-text,#fff);font-weight:700;font-size:11cqh;letter-spacing:-.02em;line-height:1}
+.info .dn{margin-top:-.5cqh;color:var(--hv-ss-clock,#0b0b0c);font-weight:600;font-size:36cqh;line-height:1;letter-spacing:-.04em}
+.info .rc{position:absolute;right:5cqw;top:4cqh;bottom:4cqh;width:max-content;min-width:36cqh;display:flex;flex-direction:column;align-items:center;justify-content:space-between;gap:3cqh}
+.info .an{position:relative;width:36cqh;height:36cqh;flex:none}
+.info .mu{position:relative;width:24cqw;flex:none;align-self:flex-start;margin-left:-2cqw} /* tucked into the bottom-left corner (4cqw / 4cqh in) */
+.info .art{width:18cqh;height:18cqh;border-radius:1.8cqh;background:linear-gradient(160deg,#b9d7ee,#6f9ccc);background-size:cover;background-position:center;box-shadow:0 .6cqh 2cqh rgba(0,0,0,.18)}
+.info .tt{margin-top:2.1cqh;color:var(--hv-ss-clock,#25282b);font-weight:700;font-size:2.9cqh;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.info .ar{color:color-mix(in srgb,var(--hv-ss-clock,#282c30) 60%,transparent);font-size:2.7cqh;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.info .pb{display:inline-flex;align-items:center;gap:1.1cqh;margin-top:1.3cqh;padding:1cqh 2.7cqh 1cqh 2.1cqh;border-radius:99cqh;background:rgba(60,72,78,.22);color:var(--hv-ss-clock,#202326);font-weight:600;font-size:3cqh}
+.info .pb i{width:0;height:0;border-left:1.9cqh solid var(--hv-ss-clock,#202326);border-top:1.2cqh solid transparent;border-bottom:1.2cqh solid transparent}
+.info .nt{position:absolute;left:calc(18cqh + 11cqw);top:4cqh;width:5.6cqh;height:5.6cqh} /* inside .mu: up and to the right of the artwork */
+.info .wx{position:relative;left:-5cqw;white-space:nowrap} /* contents left-aligned as before; 5% of the width left of centred-under-the-clock */
+.info .ct{color:var(--hv-ss-text,#fff);font-weight:700;font-size:5.6cqh;display:flex;align-items:center;gap:1.2cqh;white-space:nowrap}
+.info .ct svg{width:3.9cqh;height:3.9cqh}
+.info .tp{color:var(--hv-ss-clock,#0b0b0c);font-weight:500;font-size:23cqh;line-height:1.02;letter-spacing:-.03em}
+.info .ci{width:7.4cqh;height:6.2cqh;margin-top:1cqh}
+.info .cn,.info .hl{color:var(--hv-ss-clock,#1f2326);font-weight:500;font-size:4.6cqh;line-height:1.3}
 /* fluid */
 .f.fluid{isolation:isolate;background:radial-gradient(ellipse 70% 75% at 50% 50%,var(--hv-ss-bg,#f06aa8) 0%,color-mix(in srgb,var(--hv-ss-bg,#f06aa8) 55%,#fff) 40%,color-mix(in srgb,var(--hv-ss-accent,#5b78f0) 35%,#fff) 75%,color-mix(in srgb,var(--hv-ss-accent,#5b78f0) 55%,#e8e4ff) 100%)}
 .fluid .bl{position:absolute;left:18cqw;top:14cqh;width:64cqw;height:72cqh;z-index:0;background:radial-gradient(circle at 40% 45%,var(--hv-ss-accent,#5b78f0) 0%,color-mix(in srgb,var(--hv-ss-accent,#5b78f0) 80%,#4f8bf0) 35%,color-mix(in srgb,var(--hv-ss-accent,#5b78f0) 55%,transparent) 60%,rgba(240,110,180,0) 75%);
@@ -9012,12 +9016,11 @@ class HVSsFace {
   _svg(vb) { const s = document.createElementNS(hvSsSvgNS, 'svg'); s.setAttribute('viewBox', vb); s.setAttribute('class', 'h'); return s; }
   _ln(s, a) { const l = document.createElementNS(hvSsSvgNS, a.t || 'line'); for (const k of Object.keys(a)) if (k !== 't') l.setAttribute(k, a[k]); s.appendChild(l); return l; }
   // ---- info dashboard
-  _b_info() { const f = this.el; f.innerHTML = `<div class="stg"><div class="dt"></div><div class="dn"></div><div class="an"></div>
-    <svg class="nt" viewBox="0 0 24 24"><path fill="var(--hv-ss-text,#fff)" d="M21 3v12.5a3.5 3.5 0 1 1-2-3.16V7H9v10.5A3.5 3.5 0 1 1 7 14.34V3h14z"/></svg>
-    <div class="mu"><div class="art"></div><div class="tt"></div><div class="ar"></div><div class="pb"><i></i><span>Play</span></div></div>
-    <div class="wx"><div class="ct"><span class="cy"></span><svg viewBox="0 0 24 24"><path fill="var(--hv-ss-text,#fff)" d="M21 3 3 10.5l7.5 3L13.5 21z"/></svg></div><div class="tp"></div>
+  _b_info() { const f = this.el; f.innerHTML = `<div class="stg"><div class="lc"><div class="dd"><div class="dt"></div><div class="dn"></div></div>
+    <div class="mu"><svg class="nt" viewBox="0 0 24 24"><path fill="var(--hv-ss-text,#fff)" d="M21 3v12.5a3.5 3.5 0 1 1-2-3.16V7H9v10.5A3.5 3.5 0 1 1 7 14.34V3h14z"/></svg><div class="art"></div><div class="tt"></div><div class="ar"></div><div class="pb"><i></i><span>Play</span></div></div></div>
+    <div class="rc"><div class="an"></div><div class="wx"><div class="ct"><span class="cy"></span><svg viewBox="0 0 24 24"><path fill="var(--hv-ss-text,#fff)" d="M21 3 3 10.5l7.5 3L13.5 21z"/></svg></div><div class="tp"></div>
     <svg class="ci" viewBox="0 0 30 24"><circle cx="19" cy="8" r="5" fill="var(--hv-ss-clock,#2b2f33)"/><g stroke="var(--hv-ss-clock,#2b2f33)" stroke-width="1.6" stroke-linecap="round"><path d="M19 0.5v1.8M26.5 8h-1.8M24.3 2.7l-1.3 1.3M13.7 2.7 15 4"/></g><path fill="var(--hv-ss-clock,#2b2f33)" stroke="var(--hv-ss-bg,#97a9af)" stroke-width="1.4" d="M7 22a5 5 0 0 1-.6-9.96A7 7 0 0 1 19.6 14 4 4 0 0 1 19 22z"/></svg>
-    <div class="cn"></div><div class="hl"></div></div></div>`;
+    <div class="cn"></div><div class="hl"></div></div></div></div>`;
     const s = this._svg('0 0 200 200'); s.style.cssText = 'width:100%;height:100%'; s.removeAttribute('class');
     for (let i = 0; i < 60; i++) { const a = i * Math.PI / 30, big = i % 5 === 0; if (big) continue; const r1 = 93, r2 = 88;
       this._ln(s, { x1: 100 + r1 * Math.sin(a), y1: 100 - r1 * Math.cos(a), x2: 100 + r2 * Math.sin(a), y2: 100 - r2 * Math.cos(a), stroke: 'var(--hv-ss-clock,#1a1d20)', 'stroke-width': 1.3 }); }
