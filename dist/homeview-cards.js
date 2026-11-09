@@ -4606,7 +4606,7 @@ function hvSheet(o) { // o: { parent, launch() -> [els], label, bg, build(bd, fr
   if (day) sh.style.setProperty('--sbg', o.dayBg || '#eeeef0'); else if (o.bg) sh.style.setProperty('--sbg', o.bg);
   // cards inside report their own visibility / rebuilds: never let that reach the launch page's section (it would hide the hub)
   for (const t of ['card-visibility-changed', 'll-rebuild', 'll-upgrade']) host.addEventListener(t, e => e.stopPropagation());
-  (o.parent || document.body).appendChild(host);
+  (o.parent || document.body).appendChild(host); if (o.zIndex) host.style.zIndex = o.zIndex;
   const pr = document.createElement('div'); pr.style.cssText = 'position:absolute;width:0;height:var(--hv-safe-top, env(safe-area-inset-top, 0px))'; sr.appendChild(pr);
   const safeT = pr.getBoundingClientRect().height || 0; pr.remove();
   const vw = innerWidth, vh = innerHeight, st = Math.round(Math.max(safeT + 10, vh * (vw > 700 ? 0.035 : 0.02)));
@@ -6520,13 +6520,16 @@ class HVHubCard extends HTMLElement {
   // blurred -> sharp, with the clock); past the threshold (or a fast flick) the page carries on off the bottom while Wallpanel
   // starts right away; the preview holds until Wallpanel's own layer is up, then the page is put back underneath. Below the
   // threshold it springs back. Transforms / opacity only.
-  // swipe_open_home: open the Home app exactly as tapping its icon does (its sheet, else its page); without a Home app on this Home Screen, the My Home (or home) view
-  async _openHome() { if (this._sheetO || this._edit || hvHubArr.hub === this || !this._config) return false; const apps = this._config.apps || [], i = apps.findIndex(a => hvHubAppKey(a) === 'home');
-    if (i >= 0) { const a0 = apps[i]; if ((a0.kind || 'navigate') === 'navigate' && a0.open_as !== 'page') {
-      if (!(await this._openViewSheet(a0, { side: 'left' })) && !this._sheetO) this._runApp(null, i, true); return true; }
+  // swipe_open_home: open the Home app as a left-edge sheet; without a Home app on this Home Screen, the My Home (or home) view
+  // opt.overSs: slide over the running screensaver (do not stop it or fall back to navigating the page underneath)
+  async _openHome(opt) { if (this._sheetO || this._edit || hvHubArr.hub === this || !this._config) return false; const overSs = !!(opt && opt.overSs), sheetOpt = { side: 'left', overSs };
+    const apps = this._config.apps || [], i = apps.findIndex(a => hvHubAppKey(a) === 'home');
+    if (i >= 0) { const a0 = apps[i]; if (overSs || ((a0.kind || 'navigate') === 'navigate' && a0.open_as !== 'page')) {
+      if (!(await this._openViewSheet(a0, sheetOpt)) && !this._sheetO) { if (!overSs) this._runApp(null, i, true); }
+      return !!(this._sheetO || !overSs); }
       this._runApp(null, i); return true; }
     const cfg = await this._loadCfg(), vs = (cfg && cfg.views) || [], v = vs.find(x => x.path === 'my-home') || vs.find(x => x.path === 'home'); if (!v || this._sheetO) return false;
-    const a = { kind: 'navigate', navigation_path: v.path }; if (!(await this._openViewSheet(a, { side: 'left' })) && !this._sheetO) hvNavigate(this._path(v.path)); return true; }
+    const a = { kind: 'navigate', navigation_path: v.path }; if (!(await this._openViewSheet(a, sheetOpt)) && !this._sheetO) { if (!overSs) hvNavigate(this._path(v.path)); return !overSs; } return true; }
   // a left-to-right swipe on the Home Screen (screensaver not showing) opens the Home app. It starts away from the left edge (the sidebar swipe) and
   // never inside a popup, sheet, Calendar / Reminders, the Assistant or arrange mode; right-to-left (swipe page) and pull-down (screensaver) are untouched.
   _homeSwBind(on) {
@@ -6594,8 +6597,11 @@ class HVHubCard extends HTMLElement {
   _penGo(target) { if (this._galO) this._galO.close(); if (this._sheetO) this._sheetO.close(); if (this._assistO) this._assistO.close(); if (this._fs) this._fs.close();
     if (HVTM.scr && HVTM.scr.close) HVTM.scr.close(); setTimeout(() => hvPopEdit(this, target || { card: this }), 380); }
   _openSheet(o) { if (this._sheetO) return null;
-    const s = hvSheet(Object.assign({ full: this._config.full_height_popups !== false }, o, { edit: 'edit' in o ? o.edit : this._penFn(), day: o.day === true, parent: this.shadowRoot, launch: () => [this.shadowRoot.querySelector('.bg'), this._w],
-      onClose: () => { this._sheetO = null; if (o.onClose) o.onClose(); this._layout(); } }));
+    let parent = this.shadowRoot, launch = () => [this.shadowRoot.querySelector('.bg'), this._w], zIndex;
+    if (o.overSs) { const w = ssWallpanel(); parent = (w && w.parentNode) || document.body; launch = () => [];
+      let z = 1000; try { const n = parseInt(getComputedStyle(w).zIndex, 10); if (n > 0) z = n; } catch (e) {} zIndex = z + 3; }
+    const s = hvSheet(Object.assign({ full: this._config.full_height_popups !== false }, o, { edit: 'edit' in o ? o.edit : this._penFn(), day: o.day === true, parent, launch, zIndex,
+      onClose: () => { this._sheetO = null; if (o.overSs) { try { hvSsHome.over = false; hvSsKeep.off('sheet'); } catch (e) {} } if (o.onClose) o.onClose(); this._layout(); } }));
     this._sheetO = s; if (this._hass) s.hass = this._hass; return s; }
   async _openViewSheet(a, opt) {
     const np = a.navigation_path || 'home', dash = this._dash();
@@ -6608,7 +6614,7 @@ class HVHubCard extends HTMLElement {
     const live = HVT.cfg || cfg, lv = live && (live.views || []).find(x => String(x.path || '') === vp) || v;
     const mode = hvMode(hvViewTheme(live, lv), this._hass), day = mode === 'day';
     if (day) { hvThemeOver('day'); cards = cards.filter(x => !hvIsBgCard(x)); } // Day: the light grey sheet instead of the page's dark background card
-    this._openSheet({ label: v.title || a.name || vp, bg: v.background || '', day, dayBg: '#eeeef0', side: opt && opt.side, edit: this._penFn({ view: vp, dash }), onClose: () => { if (HVT.over) hvThemeOver(''); }, build: (bd, frame) => {
+    this._openSheet({ label: v.title || a.name || vp, bg: v.background || '', day, dayBg: '#eeeef0', side: opt && opt.side, overSs: opt && opt.overSs, edit: this._penFn({ view: vp, dash }), onClose: () => { if (HVT.over) hvThemeOver(''); }, build: (bd, frame) => {
       bd._hvOwnTheme = true; bd._hvThemeVal = mode; // the page's cards (and Page Grid tiles) follow this, not the Home Screen
       if (day) bd.style.cssText += ';' + HV_DAY_VARS + ';--primary-text-color:#1c1c1e;--secondary-text-color:rgba(60,60,67,.72)'; // native cards styled with the --hv-* colours
       const els = cards.map(c0 => { const cfg2 = c0.type === 'custom:homeview-grid-card' ? Object.assign({}, c0, { swipe_back: false, edge_sidebar: false, block_pull_refresh: false }) : c0;
@@ -7289,7 +7295,7 @@ class HVHubEditor extends HTMLElement {
     const data = Object.assign({}, HVHubCard.defaults, { calendar_show_weather: true, apps: HUB_APPS }, this._config); data.bg_blur_level = hvBgLevel(this._config); // an older bg_transparency shows as its level
     if (!this._form) { const f = this._form = document.createElement('ha-form');
       f.computeLabel = s => LABELS[s.name] || s.name;
-      f.computeHelper = s => s.name === 'bg_blur_level' ? `1 Solid · 2 Heavy · 3 Medium · 4 Light · 5 Clear (now: ${HV_BG_LEVELS[hvBgLevel(this._config)].name}). The preview updates while you drag.` : s.name === 'bg_freeze' ? 'On: the background keeps the photo it had when the Home Screen opened (the Photos card still changes); it moves to the current photo only while the page is out of sight (screensaver up, another view, app in the background). Off: it follows the Photos card.' : s.name === 'swipe_open_home' ? 'On: swipe right on the screensaver, or on the Home Screen when the screensaver is not showing, to open the Home app. The screensaver also shows a lock-screen-style Home button in the bottom-left corner.' : s.name === 'ss_hold' ? 'On: the screensaver does not start by itself behind the Home Screen (and uses nothing there); swipe the page away to start it, on the photo the Photos card shows. Off: Wallpanel\'s idle timer runs as before.' : s.name === 'dim' ? 'Darkens the top and bottom of the page so the text stays readable. Each Background blur level scales it (lighter for Light and Clear).' : s.name === 'photo_viewer_add' ? 'The viewer button that opens the gallery (the gallery keeps its own “Add photos” upload button).' : s.name === 'side_sizes' ? hubUnitsNote(this._config) : s.name === 'photo_source' ? 'The photo viewer, the gallery and uploads all use this folder. Empty = the screensaver\'s folder (Media → My media). Uploading needs a media-source:// folder and an administrator.' : s.name === 'apps' ? 'Each app: label, icon, gradient colours and what it does (open a view, Now Playing, Weather, Calendar, photos, or any tap action). Calendar opens an iPad-style popup. hv:calendar draws today’s date. Empty Calendars uses this card’s calendar_entities; Save new events to picks the calendar that stores them.' : undefined;
+      f.computeHelper = s => s.name === 'bg_blur_level' ? `1 Solid · 2 Heavy · 3 Medium · 4 Light · 5 Clear (now: ${HV_BG_LEVELS[hvBgLevel(this._config)].name}). The preview updates while you drag.` : s.name === 'bg_freeze' ? 'On: the background keeps the photo it had when the Home Screen opened (the Photos card still changes); it moves to the current photo only while the page is out of sight (screensaver up, another view, app in the background). Off: it follows the Photos card.' : s.name === 'swipe_open_home' ? 'On: swipe right on the screensaver, or on the Home Screen when the screensaver is not showing, to open the Home app. The screensaver also shows a lock-screen-style Home button in the bottom-left corner. Opening Home from the screensaver slides the app over it, without turning the screensaver off.' : s.name === 'ss_hold' ? 'On: the screensaver does not start by itself behind the Home Screen (and uses nothing there); swipe the page away to start it, on the photo the Photos card shows. Off: Wallpanel\'s idle timer runs as before.' : s.name === 'dim' ? 'Darkens the top and bottom of the page so the text stays readable. Each Background blur level scales it (lighter for Light and Clear).' : s.name === 'photo_viewer_add' ? 'The viewer button that opens the gallery (the gallery keeps its own “Add photos” upload button).' : s.name === 'side_sizes' ? hubUnitsNote(this._config) : s.name === 'photo_source' ? 'The photo viewer, the gallery and uploads all use this folder. Empty = the screensaver\'s folder (Media → My media). Uploading needs a media-source:// folder and an administrator.' : s.name === 'apps' ? 'Each app: label, icon, gradient colours and what it does (open a view, Now Playing, Weather, Calendar, photos, or any tap action). Calendar opens an iPad-style popup. hv:calendar draws today’s date. Empty Calendars uses this card’s calendar_entities; Save new events to picks the calendar that stores them.' : undefined;
       { const h1 = f.computeHelper; f.computeHelper = s => s.name === 'assistant_enabled' ? 'Talk to an Assist pipeline with this device\'s microphone (or type). Timers ("set a timer for 15 minutes", "pause / cancel the timer") run right here, full screen.' : s.name === 'assistant_pipeline' ? 'Which assistant answers (Settings → Voice assistants).' : h1(s); }
       { const h3 = f.computeHelper; f.computeHelper = s => s.name === 'assistant_orb' ? 'On: the mic shows only an animated orb near the top (the dashboard stays clear); tap the orb for the chat. Off: the full chat opens.'
         : s.name === 'assistant_continue' ? 'After every reply the mic opens again in the same conversation, until you tap outside the orb, say one of the phrases below, or say nothing for a few seconds (Close after silence).'
@@ -8664,36 +8670,58 @@ const hvSsOv = {
     this.host.style.cssText = `position:fixed;inset:0;z-index:${z + 1};pointer-events:none;opacity:${isFinite(op) ? op : 1};transition:opacity .4s linear`;
     this.face.update(this.hass(), new Date()); },
   start() { if (this.iv) return; this.iv = setInterval(() => { try { this.tick(); } catch (e) { /* next tick */ } try { hvSsHome.tick(); } catch (e) {} }, 250); } };
-/* swipe_open_home on the screensaver: a lock-screen-style Home button (bottom left) and a left-to-right swipe each stop the screensaver and open
-   the Home app (as tapping its icon does). Its own layer just above Wallpanel's and the style faces, only while the setting is on and a screensaver
+/* swipe_open_home on the screensaver: a lock-screen-style Home button (bottom left) and a left-to-right swipe each open the
+   Home app as a sheet over the running screensaver (it stays up until you close Home). Its own layer just above Wallpanel's and the style faces, only while the setting is on and a screensaver
    is showing (every style); only the button takes touches, so a tap anywhere else still reaches Wallpanel and dismisses it as before. */
 const HV_SS_HOME_CSS = `.hb{all:unset;pointer-events:auto;cursor:pointer;position:absolute;left:calc(28px + env(safe-area-inset-left, 0px));bottom:calc(28px + env(safe-area-inset-bottom, 0px));
 width:60px;height:60px;border-radius:50%;box-sizing:border-box;display:flex;align-items:center;justify-content:center;color:#fff;background:rgba(28,28,32,.34);border:1px solid rgba(255,255,255,.34);
 backdrop-filter:blur(18px) saturate(1.4);-webkit-backdrop-filter:blur(18px) saturate(1.4);transition:transform .15s ease,background .15s;-webkit-tap-highlight-color:transparent}
 .hb:active{transform:scale(.92);background:rgba(28,28,32,.5)} .hb:focus-visible{outline:2px solid #fff;outline-offset:3px} .hb ha-icon{--mdc-icon-size:28px;display:flex}`;
+// while Home is opening or sitting over the screensaver, keep Wallpanel from treating those touches as "stop" or as a photo swipe
+const hvSsKeep = {
+  reasons: new Set(), w: null, stop: null, hint: null,
+  on(reason) { this.reasons.add(reason); this._install(); },
+  off(reason) { this.reasons.delete(reason); if (!this.reasons.size) this._uninstall(); },
+  _install() { const w = ssWallpanel(); if (!w || this.stop || typeof w.stopScreensaver !== 'function') return;
+    this.w = w; this.stop = w.stopScreensaver; this.hint = typeof w.handleInteractionEvent === 'function' ? w.handleInteractionEvent : null;
+    const self = this; w.stopScreensaver = function() { if (self.reasons.size) return; return self.stop.apply(this, arguments); };
+    if (this.hint) w.handleInteractionEvent = function(e) { if (self.reasons.size) return; return self.hint.apply(this, arguments); }; },
+  _uninstall() { if (this.w && this.stop) this.w.stopScreensaver = this.stop; if (this.w && this.hint) this.w.handleInteractionEvent = this.hint;
+    this.w = null; this.stop = null; this.hint = null; }
+};
 const hvSsHome = {
-  host: null, g: null, press: 0, at: 0,
+  host: null, g: null, press: 0, at: 0, over: false,
   on() { try { const lv = hvSsLv(), hub = lv && lv.config && hvHubCfgOf(lv.config); return !!(hub && hub.swipe_open_home === true); } catch (e) { return false; } },
   hide() { const h = this.host; this.host = null; if (h) { try { h.remove(); } catch (e) {} } },
-  tick() { const w = ssWallpanel(), show = !!w && hvSsOv.showing(w) && this.on(); if (!show) { if (Date.now() - this.press > 1500) this.hide(); return; } // a press on the button keeps it for its pointerup
+  tick() { const w = ssWallpanel(), show = !!w && hvSsOv.showing(w) && this.on() && !this.over; if (!show) { if (Date.now() - this.press > 1500) this.hide(); return; } // a press on the button keeps it for its pointerup
     if (!this.host || !this.host.isConnected || this.host.parentNode !== w.parentNode) { this.hide(); const h = document.createElement('div'); h.id = 'hv-ss-home'; const sr = h.attachShadow({ mode: 'open' });
       sr.innerHTML = `<style>${HV_SS_HOME_CSS}</style><button class="hb" type="button" aria-label="Open Home"><ha-icon icon="mdi:home"></ha-icon></button>`; const b = sr.querySelector('.hb');
-      b.addEventListener('pointerdown', ev => { ev.stopPropagation(); this.press = Date.now(); }); for (const t of ['touchstart', 'mousedown']) b.addEventListener(t, ev => ev.stopPropagation(), { passive: true });
+      b.addEventListener('pointerdown', ev => { ev.stopPropagation(); this.press = Date.now(); hvSsKeep.on('btn'); }); for (const t of ['touchstart', 'mousedown']) b.addEventListener(t, ev => ev.stopPropagation(), { passive: true });
       b.addEventListener('pointerup', ev => { ev.stopPropagation(); if (this.press) this.go(); }); b.addEventListener('click', ev => { ev.preventDefault(); ev.stopPropagation(); this.go(); });
       w.parentNode.appendChild(h); this.host = h; }
     let z = parseInt(getComputedStyle(w).zIndex, 10); if (!(z > 0)) z = 1000; const op = Number(getComputedStyle(w).opacity);
     this.host.style.cssText = `position:fixed;inset:0;z-index:${z + 2};pointer-events:none;opacity:${isFinite(op) ? op : 1}`; },
-  // stop the screensaver first (as a tap does), then open the Home app on the Home Screen card of this dashboard
+  // keep the screensaver running and slide the Home app over it
   go() { if (Date.now() - this.at < 900) return; this.at = Date.now(); this.press = 0; const w = ssWallpanel();
-    try { if (w && w.screensaverRunning && w.screensaverRunning() && typeof w.stopScreensaver === 'function') w.stopScreensaver(); } catch (e) {} this.hide(); try { hvSsOv.hide(); } catch (e) {}
-    setTimeout(() => { const hs = [...HV_HUBS].filter(h => h.isConnected && h._config && h._config.swipe_open_home === true), hub = hs.find(h => h.getClientRects().length) || hs[0];
-      if (hub) { hub._openHome(); return; } const lv = hvSsLv(), vs = (lv && lv.config && lv.config.views) || [], v = vs.find(x => x.path === 'my-home') || vs.find(x => x.path === 'home');
-      if (v) hvNavigate(`/${(lv && lv.urlPath) || ssDash() || 'lovelace'}/${v.path}`); }, 80); } };
+    let running = false; try { running = !!(w && w.screensaverRunning && w.screensaverRunning()); } catch (e) {}
+    const hs = [...HV_HUBS].filter(h => h.isConnected && h._config && h._config.swipe_open_home === true), hub = hs.find(h => h.getClientRects().length) || hs[0];
+    if (running && hub) { hvSsKeep.on('sheet'); this.over = true; this.hide();
+      Promise.resolve(hub._openHome({ overSs: true })).then(() => { if (!hub._sheetO) { this.over = false; hvSsKeep.off('sheet'); } }).catch(() => { this.over = false; hvSsKeep.off('sheet'); });
+      hvSsKeep.off('btn'); hvSsKeep.off('swipe'); return; }
+    this.hide(); try { if (running && w && typeof w.stopScreensaver === 'function') w.stopScreensaver(); } catch (e) {} try { hvSsOv.hide(); } catch (e) {}
+    if (hub) { hub._openHome(); return; } const lv = hvSsLv(), vs = (lv && lv.config && lv.config.views) || [], v = vs.find(x => x.path === 'my-home') || vs.find(x => x.path === 'home');
+    if (v) hvNavigate(`/${(lv && lv.urlPath) || ssDash() || 'lovelace'}/${v.path}`); } };
 // the screensaver swipe: a clear left-to-right swipe (not a tap, not a nudge) while the Home layer is up
-addEventListener('touchstart', e => { hvSsHome.g = null; if (!hvSsHome.host || e.touches.length !== 1) return; const t = e.touches[0]; hvSsHome.g = { x: t.clientX, y: t.clientY, t: Date.now() }; }, { capture: true, passive: true });
+addEventListener('touchstart', e => { hvSsHome.g = null; if (!hvSsHome.host || e.touches.length !== 1) return; const t = e.touches[0], path = e.composedPath ? e.composedPath() : [];
+  const btn = !!(hvSsHome.host && (path.includes(hvSsHome.host) || path.some(n => n.classList && n.classList.contains('hb')))); if (btn) hvSsKeep.on('btn');
+  hvSsHome.g = { x: t.clientX, y: t.clientY, t: Date.now(), btn }; }, { capture: true, passive: true });
+addEventListener('touchmove', e => { const s = hvSsHome.g; if (!s || !hvSsHome.host || !e.touches[0]) return; const t = e.touches[0], dx = t.clientX - s.x, dy = t.clientY - s.y;
+  if (dx >= 40 && Math.abs(dy) <= dx * 0.6) hvSsKeep.on('swipe'); }, { capture: true, passive: true });
 addEventListener('touchend', e => { const s = hvSsHome.g; if (!s) return; setTimeout(() => { hvSsHome.g = null; }, 0); const t = e.changedTouches[0], dx = t.clientX - s.x, dy = t.clientY - s.y;
-  if (dx >= 80 && Math.abs(dy) <= dx * 0.6 && Date.now() - s.t <= 900) hvSsHome.go(); }, { capture: true, passive: true });
-addEventListener('touchcancel', () => { hvSsHome.g = null; }, true);
+  if (dx >= 80 && Math.abs(dy) <= dx * 0.6 && Date.now() - s.t <= 900) { hvSsKeep.on('swipe'); hvSsHome.go(); }
+  else if (s.btn) setTimeout(() => { if (!hvSsHome.over) hvSsKeep.off('btn'); }, 400);
+  else { hvSsKeep.off('swipe'); hvSsKeep.off('btn'); } }, { capture: true, passive: true });
+addEventListener('touchcancel', () => { hvSsHome.g = null; hvSsKeep.off('swipe'); if (!hvSsHome.over) hvSsKeep.off('btn'); }, true);
 if (!window.__hvSsStyles) { window.__hvSsStyles = true; hvSsOv.start(); }
 // ---- picker + colour controls in the screensaver settings popup
 const HV_SS_PICK_CSS = `
