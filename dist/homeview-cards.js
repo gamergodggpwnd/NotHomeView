@@ -4291,6 +4291,8 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
       if (!xs.length) { const d = document.createElement('div'); d.className = 'em'; d.textContent = 'All apps are on the Home Screen'; m.appendChild(d); }
       for (const x of xs) if (x.ca) row(this.icoHtml({ kind: 'external', custom_app: x.ca.id }), x.name, 'Custom app', () => { close(); this.addExt(x.ca); });
         else row(this.icoHtml(x), x.name, '', () => { if (x.key === 'home' || x.key === 'security') choose(x); else { close(); this.add(x, k); } });
+      const sep = document.createElement('div'); sep.className = 'sep'; m.appendChild(sep); // always under the list (or the empty-state line)
+      row('<span class="ai" style="background:#5e5ce6;color:#fff"><ha-icon icon="mdi:apps-box"></ha-icon></span>', 'Custom App', 'Open another app on this device', () => { close(); this.newCustomApp(); });
       hvEcl.place(m, anchor); const f = m.querySelector('button'); if (f) f.focus({ preventScroll: true }); };
     // Home and Security: the icon always comes back; the choice is what the page behind it shows
     const choose = x => { m.innerHTML = ''; head(x.key === 'home' ? 'Home page' : 'Security page'); const home = x.key === 'home';
@@ -4300,6 +4302,13 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
       hvEcl.place(m, anchor); const f = m.querySelector('button'); if (f) f.focus({ preventScroll: true }); };
     wrap.querySelector('.scrim').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); close(); });
     hvEcl.lay.appendChild(wrap); list(); },
+  // leave arrange (saving first) and open Settings on New Custom App; on close, come back to arrange so Add App can place it
+  async newCustomApp() { const h = this.hub; if (!h || this.busy) return;
+    if (!(await this.exit(true))) return;
+    const s = hvOpenSettings(h, null, null, { page: 'customapps', sub: 'ca-new', onClose: () => {
+      setTimeout(() => { const n = [...HV_HUBS].find(x => x.isConnected && x._w && !hvInDialog(x) && this.ok(x));
+        if (n) { this.enter(n); hvToast('Tap Add App to place your custom app', 'hv-arrange'); } }, 450); } });
+    if (!s) hvToast('Couldn\'t open Settings. Try Settings › Custom Apps.', 'hv-arrange'); },
   // a custom app (Settings › Custom Apps): its entry there stays the truth for the name, icon and link; this keeps a copy for older versions
   addExt(e) { const a = { kind: 'external', custom_app: e.id, name: String(e.name || 'App'), icon: e.icon || 'mdi:application', color_from: hvExtCol(e.color), color_to: hvExtShade(e.color, 0.3) };
     this.change(raw => this.edit(raw, 'app', l => l.push(a))); hvToast(`${a.name} added · tap an empty spot to save`, 'hv-arrange'); },
@@ -6742,7 +6751,7 @@ const HV_ABOUT_CSS = `
 .ibtn{all:unset;box-sizing:border-box;cursor:pointer;display:flex;align-items:center;justify-content:center;width:100%;min-height:50px;border-radius:12px;background:var(--blue);color:#fff;font-size:17px;font-weight:600;margin:0 0 12px}
 .ibtn.sec{background:var(--card);color:var(--blue)}.ibtn:disabled{opacity:.5;cursor:default}
 .warn{margin:0 0 12px;padding:12px 16px;border-radius:12px;background:color-mix(in srgb,#ff9f0a 18%,var(--card));font-size:15px;line-height:1.38}`;
-function hvOpenSettings(hub, app, from) {
+function hvOpenSettings(hub, app, from, goTo) {
   const live = () => { for (const h of HV_HUBS) if (h.isConnected && h._w && !hvInDialog(h)) return h; return null; };
   if (!hub || !hub.isConnected) hub = live();
   if (hvOpenSettings.cur && hvOpenSettings.cur.host.isConnected) return null; // one Settings at a time
@@ -6750,7 +6759,7 @@ function hvOpenSettings(hub, app, from) {
   const H = () => (hub && hub._hass) || (from && from._hass) || (document.querySelector('home-assistant') || {}).hass; if (!H()) return null;
   const lvOf = () => { const r = hvFindRoot(hub && hub.isConnected ? hub : from) || hvFindRoot(live()); return (r && r.lovelace) || hvSsLv(); };
   const clone = o => JSON.parse(JSON.stringify(o)), dash = () => { const lv = lvOf(); return (lv && lv.urlPath) || ssDash(); };
-  const st = { sub: null, unotes: {}, page: null, q: '', cfg: null, views: [], nohub: false, ready: false, pipes: null, alb: null, albQ: null, wide: false, peek: false, why: '' };
+  const st = { sub: (goTo && goTo.sub) || null, unotes: {}, page: (goTo && goTo.page) || null, q: '', cfg: null, views: [], nohub: false, ready: false, pipes: null, alb: null, albQ: null, wide: false, peek: false, why: '' };
   const useCfg = c => { const n = c && hvHubCfgOf(c); st.cfg = n ? clone(n) : null; st.nohub = !!c && !n; st.ready = !!c;
     st.views = ((c && c.views) || []).map((v, i) => ({ path: v.path != null && v.path !== '' ? String(v.path) : String(i), title: v.title || v.path || 'View ' + (i + 1) })); };
   const lv0 = lvOf(); useCfg(lv0 && lv0.config ? lv0.config : hub && hub._hvRaw ? { views: [{ cards: [hub._hvRaw] }] } : null); if (!(lv0 && lv0.config)) st.ready = false;
@@ -6973,7 +6982,7 @@ function hvOpenSettings(hub, app, from) {
   const day = hvMode((st.cfg || {}).theme, H()) === 'day';
   s = hvSheet({ full: (st.cfg || {}).full_height_popups !== false, label: 'Settings', day, dayBg: '#f2f2f7', bg: '#000', parent: document.body, // over the page: a save that rebuilds the view keeps the sheet
     launch: () => { const h = live(); return h ? [h.shadowRoot.querySelector('.bg'), h._w] : []; },
-    onClose: () => { hvOpenSettings.cur = null; clearInterval(ssKeep); ssBump(); clearTimeout(tstT); if (ro0) ro0.disconnect(); for (const h of HV_HUBS) if (h._sheetO === s) { h._sheetO = null; h._layout(); } },
+    onClose: () => { hvOpenSettings.cur = null; clearInterval(ssKeep); ssBump(); clearTimeout(tstT); if (ro0) ro0.disconnect(); for (const h of HV_HUBS) if (h._sheetO === s) { h._sheetO = null; h._layout(); } if (goTo && typeof goTo.onClose === 'function') try { goTo.onClose(); } catch (e) {} },
     build: bd => { const sty = document.createElement('style'); sty.textContent = HV_SET_CSS + HV_ABOUT_CSS; bd.appendChild(sty); root = document.createElement('div'); root.className = 'se'; bd.appendChild(root);
       root.innerHTML = '<div class="side"><h1 class="bt">Settings</h1><label class="srch"><ha-icon icon="mdi:magnify"></ha-icon><input type="search" placeholder="Search" aria-label="Search settings" enterkeyhint="search" autocomplete="off"></label><div class="sl"></div></div><div class="pane" role="region" aria-label="Settings page"></div><div class="tst" role="status" aria-live="polite"></div>';
       side = root.querySelector('.side'); pane = root.querySelector('.pane'); list = root.querySelector('.sl');
