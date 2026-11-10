@@ -8611,6 +8611,259 @@ for (const [tag, cls, name, description] of CARDS) {
   if (!customElements.get(tag)) customElements.define(tag, cls);
   if (!window.customCards.some(c => c.type === tag)) window.customCards.push({ type: tag, name, description, preview: true });
 }
+/* ---------------- Glass page (homeview-glass-page) ----------------
+   A whole-screen page of frosted-glass tiles (made for a panel view of the V2 dashboard): a 2 × 2 thermostat with chevrons, an analog
+   clock on a glass disc, a scene ("Good Night"), an intercom, a door lock and a light. Off = clear glass with white icon and text; on =
+   bright white glass with dark icon and text and, for a moment, the new state in the subtitle (the light shows its brightness). Tap toggles
+   with a springy press and a light bloom from the finger. Light tiles: press and drag up / down (or hold, then drag) to set the brightness,
+   the tile fills from the bottom and shows the % while dragging. Hold any other tile for more-info. Every entity is set in the card editor;
+   a tile without one shows "Set entity". Landscape: 3 × 3 (thermostat 2 × 2, clock and scene beside it, three tiles below); portrait: 2
+   columns. Services are only called when a tile is tapped or dragged. */
+const HVG_SLOTS = ['scene', 'intercom', 'lock', 'light'];
+const HVG_DEF = { thermostat: ['Thermostat', 'Living Room'], scene: ['Good Night', 'Scene'], intercom: ['Intercom', 'Everywhere'], lock: ['Door Lock', 'Front Door'], light: ['Lights', 'Entryway'] };
+const HVG_ICON = {
+  scene: '<svg viewBox="0 0 48 48" aria-hidden="true"><path class="mo" d="M27.6 9.4a15.6 15.6 0 1 0 12 23.8 13 13 0 0 1-12-23.8z"/><path class="s1" d="M34.5 6l1.3 3.6 3.6 1.3-3.6 1.3-1.3 3.6-1.3-3.6-3.6-1.3 3.6-1.3z"/><path class="s2" d="M41 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/></svg>',
+  intercom: '<svg viewBox="0 0 48 48" aria-hidden="true">' + Array.from({ length: 11 }, (_, i) => { const x = (i - 5) * 3.4, h = Math.max(7, 2 * Math.sqrt(18.5 * 18.5 - x * x) * .9); return `<rect class="w" style="--i:${i}" x="${(23.1 + x).toFixed(2)}" y="${(24 - h / 2).toFixed(2)}" width="1.8" height="${h.toFixed(2)}" rx=".9"/>`; }).join('') + '</svg>',
+  lock: '<svg viewBox="0 0 48 48" aria-hidden="true"><path class="sh" d="M16 22v-6a8 8 0 0 1 16 0v6" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"/><rect x="11.5" y="21" width="25" height="19" rx="4"/></svg>',
+  light: '<svg viewBox="0 0 48 48" aria-hidden="true"><circle class="gl" cx="24" cy="40" r="13"/><path class="cn" d="M14 36h20l7 12H7z"/><rect x="15" y="2" width="18" height="3.6" rx="1.8"/><rect x="22.6" y="5" width="2.8" height="8"/><path d="M24 12.5c-9.6 0-17 6.6-18 16.6-.1 1 .7 1.9 1.7 1.9h32.6c1 0 1.8-.9 1.7-1.9C41 19.1 33.6 12.5 24 12.5z"/><rect x="6" y="31.6" width="36" height="2.6" rx="1.3" opacity=".55"/><path class="bu" d="M17.5 35h13a6.5 6.5 0 0 1-13 0z"/></svg>',
+  down: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9l8 6.5 8-6.5" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  up: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 15.5l8-6.5 8 6.5" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>' };
+const HVG_CSS = `
+:host{display:block;position:relative;height:var(--hvg-h,100dvh);min-height:300px;overflow:hidden;font-family:${FONT};color:#fff;container-type:size;
+ -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+.bg{position:absolute;inset:0;overflow:hidden;background:linear-gradient(160deg,#6461e6 0%,#5856dd 45%,#4c49d0 100%)}
+.bg i{position:absolute;left:50%;top:50%;width:150cqmax;border-radius:2.2cqmin;transform:translate(-50%,-50%) rotate(var(--a)) translateY(var(--o));height:var(--h);background:var(--c)}
+.bg i:nth-child(1){--a:42deg;--o:-38cqmin;--h:24cqmin;--c:linear-gradient(90deg,rgba(176,176,255,.6),rgba(140,140,255,.42))}
+.bg i:nth-child(2){--a:42deg;--o:-8cqmin;--h:13cqmin;--c:rgba(46,42,170,.62)}
+.bg i:nth-child(3){--a:42deg;--o:24cqmin;--h:26cqmin;--c:linear-gradient(90deg,rgba(140,140,255,.45),rgba(110,110,245,.25))}
+.bg i:nth-child(4){--a:45deg;--o:50cqmin;--h:10cqmin;--c:rgba(40,36,160,.6)}
+.bg i:nth-child(5){--a:-48deg;--o:-44cqmin;--h:20cqmin;--c:rgba(44,40,168,.55)}
+.bg i:nth-child(6){--a:-48deg;--o:-10cqmin;--h:22cqmin;--c:linear-gradient(90deg,rgba(160,160,255,.35),rgba(130,130,250,.5))}
+.bg i:nth-child(7){--a:-45deg;--o:16cqmin;--h:9cqmin;--c:rgba(38,34,150,.58)}
+.bg i:nth-child(8){--a:-48deg;--o:46cqmin;--h:24cqmin;--c:rgba(176,176,255,.5)}
+.bg i:nth-child(9){--a:45deg;--o:78cqmin;--h:18cqmin;--c:rgba(130,128,250,.4)}
+:host([bg=none]) .bg{display:none}
+.st{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:1.6cqmin}
+.gr{--g:1.9cqmin;container-type:size;display:grid;gap:var(--g);grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(3,minmax(0,1fr));
+ grid-template-areas:"th th ck" "th th sc" "ic lk li";--cell:calc((100cqh - 3.2cqmin - var(--g) * 2) / 3);width:min(100%,calc(100cqh - 3.2cqmin));height:min(100%,calc(100cqw - 3.2cqmin))}
+@container (max-aspect-ratio: 4/5){.gr{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(4,minmax(0,1fr));grid-template-areas:"th ck" "th sc" "ic lk" "li .";
+ width:min(100%,calc((100cqh - 3.2cqmin) * .5));height:min(100%,calc((100cqw - 3.2cqmin) * 2))}}
+.t{--r:calc(min((100cqw - var(--g) * 2) / 3, (100cqh - var(--g) * 2) / 3) * .135);all:unset;box-sizing:border-box;position:relative;display:block;border-radius:var(--r);overflow:hidden;cursor:pointer;container-type:size;isolation:isolate;
+ background:linear-gradient(150deg,rgba(255,255,255,.08),rgba(255,255,255,.02) 55%,rgba(255,255,255,.05));-webkit-backdrop-filter:blur(2.5px) saturate(1.15);backdrop-filter:blur(2.5px) saturate(1.15);
+ box-shadow:0 1.2cqmin 3.4cqmin rgba(16,8,80,.22),inset 0 1px 1.5px rgba(255,255,255,.35),inset 0 -.5cqmin 1.2cqmin rgba(24,12,110,.18);
+ transform:translateZ(0) scale(1);transition:transform .5s cubic-bezier(.34,1.7,.5,1),color .3s;touch-action:manipulation;color:#fff}
+.t:focus-visible{outline:3px solid rgba(255,255,255,.9);outline-offset:3px}
+.gr > .th{grid-area:th}.gr > .ck{grid-area:ck}.gr > [data-s=scene]{grid-area:sc}.gr > [data-s=intercom]{grid-area:ic}.gr > [data-s=lock]{grid-area:lk}.gr > [data-s=light]{grid-area:li}
+.t::before{content:'';position:absolute;inset:0;border-radius:inherit;padding:1px;z-index:3;pointer-events:none;
+ background:linear-gradient(135deg,rgba(255,255,255,.9),rgba(255,255,255,.28) 35%,rgba(255,255,255,.08) 70%,rgba(255,255,255,.22));
+ -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}
+.t::after{content:'';position:absolute;left:0;right:0;top:0;height:34%;z-index:0;pointer-events:none;background:linear-gradient(rgba(255,255,255,.08),rgba(255,255,255,0))}
+.fl{position:absolute;inset:0;z-index:0;background:linear-gradient(180deg,rgba(255,255,255,.95),rgba(246,246,255,.86));opacity:0;transition:opacity .3s ease}
+.t.on .fl{opacity:1}.t.on{color:#1e1c45}
+.t.dn{transform:translateZ(0) scale(.96);transition:transform .14s ease-out,color .3s}
+.bl{position:absolute;z-index:1;width:var(--d);height:var(--d);left:var(--x);top:var(--y);margin:calc(var(--d) / -2) 0 0 calc(var(--d) / -2);border-radius:50%;pointer-events:none;
+ background:radial-gradient(circle,rgba(255,255,255,.55) 0%,rgba(255,255,255,.18) 40%,rgba(255,255,255,0) 70%);animation:hvgbl .7s ease-out forwards}
+@keyframes hvgbl{from{transform:scale(.05);opacity:1}to{transform:scale(1);opacity:0}}
+/* the light's brightness: a brighter glass that fills from the bottom while dragging */
+.lv{position:absolute;inset:0;z-index:1;pointer-events:none;background:linear-gradient(180deg,rgba(255,255,255,.98),rgba(250,248,255,.9));transform-origin:50% 100%;transform:scaleY(var(--p,0));opacity:0;transition:opacity .25s,transform .08s linear}
+.t.drag .lv{opacity:1}.t.drag .fl{opacity:0}
+.pc{position:absolute;inset:0;z-index:4;display:flex;align-items:center;justify-content:center;font-size:24cqmin;font-weight:700;letter-spacing:-.02em;opacity:0;transform:scale(.85);
+ transition:opacity .25s,transform .35s cubic-bezier(.34,1.56,.64,1);pointer-events:none;color:#fff;text-shadow:0 1px 6px rgba(20,10,90,.35);font-variant-numeric:tabular-nums}
+.pc.dk{color:#1e1c45;text-shadow:none}
+.t.drag .pc{opacity:1;transform:none}.t.drag .in{opacity:0;transform:scale(.92)}
+.in{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;text-align:center;padding:16cqmin 7cqmin 0;transition:opacity .25s,transform .35s cubic-bezier(.34,1.56,.64,1)}
+.ic{width:33cqmin;height:33cqmin;margin:0 0 9cqmin;display:flex;align-items:center;justify-content:center;transition:opacity .3s}
+.ic svg{width:100%;height:100%;fill:currentColor;overflow:visible}
+.tt{font-size:10.4cqmin;font-weight:700;line-height:1.28;letter-spacing:-.005em;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sb{position:relative;font-size:9.8cqmin;line-height:1.3;height:1.3em;width:100%;opacity:.62;transition:opacity .3s}
+.sb span{position:absolute;inset:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:opacity .3s,transform .3s}.sb .b{opacity:0;transform:translateY(30%)}
+.t.flash .sb .a{opacity:0;transform:translateY(-30%)}.t.flash .sb .b{opacity:1;transform:none}
+.t.on .sb{opacity:.56}
+.t.un{cursor:default}.t.un .ic,.t.un .tt{opacity:.5}.t.un .sb{opacity:.75;font-style:italic}
+.t.pd .ic{animation:hvgpd 1s ease-in-out infinite}@keyframes hvgpd{50%{opacity:.35}}
+/* icons */
+.sh{transform-origin:32px 22px;transition:transform .45s cubic-bezier(.34,1.56,.64,1)}.t.open .sh{transform:translate(0,-4.5px) rotate(18deg)}
+.gl{fill:url(#hvgglow);opacity:0;transform:scale(.4);transform-origin:24px 40px;transition:opacity .35s,transform .45s cubic-bezier(.34,1.56,.64,1)}
+.cn{fill:url(#hvgcone);opacity:0;transition:opacity .35s}.bu{fill:currentColor;transition:fill .3s}
+.t.on .gl{opacity:1;transform:none}.t.on .cn{opacity:1}.t.on .bu{fill:#ffcc4d}
+.s1,.s2{transform-box:fill-box;transform-origin:50% 50%}.t.tw .s1{animation:hvgtw 1.1s ease-in-out 2}.t.tw .s2{animation:hvgtw 1.1s ease-in-out .25s 2}.t.tw .mo{animation:hvgmo 1.2s ease-in-out}
+@keyframes hvgtw{0%,100%{transform:none;opacity:1}40%{transform:scale(1.6) rotate(20deg);opacity:.35}70%{transform:scale(.8);opacity:1}}
+@keyframes hvgmo{50%{transform:rotate(-12deg)}}.mo{transform-box:fill-box;transform-origin:50% 50%}
+.w{transform-box:fill-box;transform-origin:50% 50%}.t.talk .w{animation:hvgw .9s ease-in-out calc(var(--i) * -.11s) infinite alternate}@keyframes hvgw{from{transform:scaleY(.35)}to{transform:scaleY(1.15)}}
+/* thermostat */
+.th .in{justify-content:flex-end;padding:0 6% 7%}
+.num{position:absolute;left:0;right:0;top:20%;height:52%;display:flex;align-items:center;justify-content:center;font-size:49cqmin;font-weight:500;letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums;transition:transform .35s cubic-bezier(.34,1.56,.64,1)}
+.num small{font-size:.42em;font-weight:500;letter-spacing:0;margin:0 0 .55em .04em;align-self:flex-end}
+.num.bump{transform:scale(1.04)}
+.th .tt{font-size:5cqmin}.th .sb{font-size:5cqmin}@container (max-aspect-ratio: 4/5){.gr > .t{--r:calc((100cqw - var(--g)) / 2 * .135)}.th .tt{font-size:8.6cqmin}.th .sb{font-size:8cqmin}.th .num{font-size:52cqmin}.th .lab{width:66%}.th .cv{width:20cqmin;height:20cqmin}}.th .lab{width:62%;display:flex;flex-direction:column;align-items:center}
+.cv{all:unset;position:absolute;bottom:7%;width:12.5cqmin;height:12.5cqmin;display:flex;align-items:center;justify-content:center;border-radius:50%;cursor:pointer;z-index:4;transition:transform .4s cubic-bezier(.34,1.7,.5,1),background .2s}
+.cv svg{width:78%;height:78%}.cv.d{left:9%}.cv.u{right:9%}.cv:active,.cv.dn{transform:scale(.86);background:rgba(255,255,255,.18)}.t.on .cv:active{background:rgba(30,28,69,.08)}
+.cv:focus-visible{outline:3px solid currentColor}.cv:disabled{opacity:.3;cursor:default}
+/* clock */
+.ck{display:flex;align-items:center;justify-content:center;container-type:size;min-width:0;min-height:0}
+.disc{position:relative;width:100cqmin;height:100cqmin;border-radius:50%;background:linear-gradient(150deg,rgba(255,255,255,.08),rgba(255,255,255,.02) 55%,rgba(255,255,255,.05));-webkit-backdrop-filter:blur(2.5px) saturate(1.15);backdrop-filter:blur(2.5px) saturate(1.15);
+ box-shadow:0 1.2cqmin 3.4cqmin rgba(16,8,80,.22),inset 0 1px 1.5px rgba(255,255,255,.35),inset 0 -.6cqmin 1.4cqmin rgba(24,12,110,.18)}
+.disc::before{content:'';position:absolute;inset:0;border-radius:50%;padding:1px;background:linear-gradient(135deg,rgba(255,255,255,.75),rgba(255,255,255,.12) 50%,rgba(255,255,255,.06));
+ -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}
+.disc::after{content:'';position:absolute;inset:0;border-radius:50%;background:linear-gradient(rgba(255,255,255,.16),rgba(255,255,255,0) 40%)}
+.disc svg{position:absolute;inset:0;width:100%;height:100%}
+@media (prefers-reduced-motion:reduce){.t,.t.dn,.pc,.in,.num,.cv,.sh,.gl{transition-duration:.01s!important}.bl{display:none}.t.tw *,.t.talk .w,.t.pd .ic{animation:none!important}}`;
+const HVG_CLOCK = `<svg viewBox="0 0 100 100" aria-hidden="true"><defs>${''}</defs>`
+  + Array.from({ length: 12 }, (_, i) => `<rect x="48.5" y="6" width="3" height="10.5" rx="1.5" fill="#fff" transform="rotate(${i * 30} 50 50)"/>`).join('')
+  + '<g class="hd hh"><rect x="47.4" y="24" width="5.2" height="29" rx="2.6" fill="#fff"/></g><g class="hd hm"><rect x="47.9" y="10" width="4.2" height="43" rx="2.1" fill="#fff"/></g>'
+  + '<g class="hd hs"><rect x="49.45" y="11" width="1.1" height="49" rx=".55" fill="#fff"/><rect x="48.6" y="57" width="2.8" height="12" rx="1.4" fill="#fff"/></g><circle cx="50" cy="50" r="2.4" fill="#fff"/><circle cx="50" cy="50" r="1" fill="#5d57e6"/></svg>';
+class HVGlassPage extends HTMLElement {
+  setConfig(c) { if (!c || typeof c !== 'object') throw new Error('Invalid configuration'); this._config = Object.assign({}, c); this._sig = null;
+    if (this.shadowRoot && this._built) { this._head(); this._render(); } }
+  set hass(h) { this._hass = h; this._render(); }
+  get hass() { return this._hass; }
+  getCardSize() { return 12; }
+  getGridOptions() { return { columns: 'full', rows: 12 }; }
+  static getStubConfig(hass) { const ids = Object.keys((hass && hass.states) || {}), f = (re, pref) => (pref && ids.find(k => re.test(k) && pref.test(k))) || ids.find(k => re.test(k)) || '';
+    const o = { thermostat_entity: f(/^climate\./), scene_entity: f(/^(scene|script)\./, /night|sleep|bed/i), lock_entity: f(/^lock\./, /front/i), light_entity: f(/^light\./, /entry|hall|porch/i) };
+    for (const k of Object.keys(o)) if (!o[k]) delete o[k]; return o; }
+  static getConfigElement() { const e = document.createElement('homeview-card-editor'); e.cardClass = this; return e; }
+  connectedCallback() { if (!this.shadowRoot) this.attachShadow({ mode: 'open' }); if (!this._built) this._build(); this._tick(); this._render(); }
+  disconnectedCallback() { clearTimeout(this._ct); this._ct = 0; for (const k of Object.keys(this._t || {})) clearTimeout(this._t[k]); }
+  // --- config helpers
+  _c(k) { const c = this._config || {}; return c[k]; }
+  _ent(s) { const id = this._c(s + '_entity'); return typeof id === 'string' && /^[a-z_]+\.[\w-]+$/i.test(id) ? id : ''; }
+  _st(s) { const id = this._ent(s); return id && this._hass ? this._hass.states[id] : undefined; }
+  _name(s) { const v = this._c(s + '_name'); return v != null && v !== '' ? String(v) : HVG_DEF[s][0]; }
+  _sub(s) { const v = this._c(s + '_subtitle'); return v != null && v !== '' ? String(v) : HVG_DEF[s][1]; }
+  _dim(st) { if (!st || !/^light\./.test(st.entity_id)) return false; const m = st.attributes.supported_color_modes; if (Array.isArray(m)) return m.some(x => x !== 'onoff');
+    return st.attributes.brightness != null || ((st.attributes.supported_features || 0) & 1) === 1; }
+  _pct(st) { const b = st && st.attributes.brightness; return b == null ? (st && st.state === 'on' ? 100 : 0) : Math.max(1, Math.min(100, Math.round(b / 2.55))); }
+  // --- build once
+  _build() { const r = this.shadowRoot; this._built = true; this._t = {}; this._prev = {}; this._pend = {};
+    const tile = s => `<button class="t" data-s="${s}" type="button"><span class="fl"></span>${s === 'light' ? '<span class="lv"></span><span class="pc"></span>' : ''}<span class="in"><span class="ic">${HVG_ICON[s]}</span><span class="tt"></span><span class="sb"><span class="a"></span><span class="b"></span></span></span></button>`;
+    r.innerHTML = `<style>${HVG_CSS}</style><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><radialGradient id="hvgglow"><stop offset="0" stop-color="#ffe08a" stop-opacity=".95"/><stop offset=".55" stop-color="#ffcc4d" stop-opacity=".35"/><stop offset="1" stop-color="#ffcc4d" stop-opacity="0"/></radialGradient>`
+      + `<linearGradient id="hvgcone" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffd76a" stop-opacity=".75"/><stop offset="1" stop-color="#ffd76a" stop-opacity="0"/></linearGradient></defs></svg>`
+      + `<div class="bg" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="st"><div class="gr">`
+      + `<div class="t th" data-s="thermostat" role="group"><span class="fl"></span><span class="num" aria-live="polite"></span><button class="cv d" type="button" data-dir="-1">${HVG_ICON.down}</button><button class="cv u" type="button" data-dir="1">${HVG_ICON.up}</button>`
+      + `<span class="in"><span class="lab"><span class="tt"></span><span class="sb"><span class="a"></span><span class="b"></span></span></span></span></div>`
+      + `<div class="ck" aria-hidden="true"><div class="disc">${HVG_CLOCK}</div></div>${HVG_SLOTS.map(tile).join('')}</div></div>`;
+    r.querySelectorAll('.t').forEach(el => this._wire(el)); this._head(); }
+  _head() { this.setAttribute('bg', this._c('background') === 'none' ? 'none' : 'indigo'); const h = this._c('height'); if (h && /^[\w.%() +*/-]+$/.test(String(h))) this.style.setProperty('--hvg-h', String(h)); else this.style.removeProperty('--hvg-h'); }
+  // --- clock (transform only; ticks once a second)
+  _tick() { const r = this.shadowRoot; if (!r || !this.isConnected) return; const d = new Date(), s = d.getSeconds(), m = d.getMinutes() + s / 60, h = (d.getHours() % 12) + m / 60;
+    const set = (c, a) => { const g = r.querySelector('.' + c); if (g) g.setAttribute('transform', `rotate(${a} 50 50)`); };
+    set('hh', h * 30); set('hm', m * 6); set('hs', s * 6); clearTimeout(this._ct); this._ct = setTimeout(() => this._tick(), 1000 - d.getMilliseconds() + 5); }
+  // --- live state
+  _render() { const r = this.shadowRoot; if (!r || !this._built || !this._hass || !this._config) return;
+    const sig = JSON.stringify(['thermostat'].concat(HVG_SLOTS).map(s => { const st = this._st(s); return [this._ent(s), st && st.state, st && st.attributes, this._name(s), this._sub(s), this._pend[s] || 0]; }).concat([this._tmp, this._c('show_current_temp'), this._c('intercom_action')]));
+    if (sig === this._sig) return; this._sig = sig; this._paintTh(); for (const s of HVG_SLOTS) this._paint(s); }
+  _paint(s) { const el = this.shadowRoot.querySelector(`.t[data-s="${s}"]`); if (!el) return; const st = this._st(s), id = this._ent(s), d = id.split('.')[0];
+    const set = this._c('intercom_action') && s === 'intercom'; const un = !id && !set, gone = id && !st;
+    el.querySelector('.tt').textContent = this._name(s); el.querySelector('.sb .a').textContent = un ? (s === 'intercom' ? 'Set action' : 'Set entity') : gone ? 'Not found' : this._sub(s);
+    el.classList.toggle('un', !!(un || gone)); const state = st ? st.state : '';
+    let on = false, txt = '';
+    if (st) { if (d === 'lock') { on = state !== 'locked'; txt = { locked: 'Locked', unlocked: 'Unlocked', locking: 'Locking…', unlocking: 'Unlocking…', jammed: 'Jammed', open: 'Open', opening: 'Opening…' }[state] || state; el.classList.toggle('open', state !== 'locked' && state !== 'locking'); }
+      else if (d === 'scene' || d === 'script' || d === 'button' || d === 'input_button') { on = d === 'script' && state === 'on'; txt = 'Activated'; }
+      else if (d === 'light') { on = state === 'on'; txt = on ? (this._dim(st) ? this._pct(st) + '%' : 'On') : 'Off'; }
+      else { on = ['on', 'open', 'playing', 'home', 'active'].includes(state); txt = on ? 'On' : state === 'off' ? 'Off' : state; } }
+    if (s === 'intercom') on = on || el.classList.contains('talk');
+    if (el._hold && s === 'scene') on = true;
+    el.classList.toggle('on', !!on && !el.classList.contains('un'));
+    const key = st ? state + '|' + (d === 'light' ? this._pct(st) : '') : ''; const prev = this._prev[s]; this._prev[s] = key;
+    if (this._pend[s] && key !== this._pend[s].key) this._pend[s] = 0; // the new state arrived
+    el.classList.toggle('pd', !!this._pend[s]); const b = el.querySelector('.sb .b');
+    if (prev !== undefined && prev !== key && st && !el.classList.contains('drag') && d !== 'scene') this._flash(el, txt); else if (!el.classList.contains('flash')) b.textContent = txt;
+    if (d === 'lock' && /ing$/.test(state)) { b.textContent = txt; el.classList.add('flash'); }
+    const lab = this._name(s) + ', ' + (un ? (s === 'intercom' ? 'no action set' : 'no entity set') : gone ? 'entity not found' : (txt || this._sub(s)));
+    el.setAttribute('aria-label', lab); if (d === 'lock' || d === 'light' || d === 'switch' || d === 'fan' || d === 'input_boolean') el.setAttribute('aria-pressed', String(!!on)); else el.removeAttribute('aria-pressed');
+    if (s === 'light' && st && this._dim(st)) { el.style.touchAction = 'none'; el.setAttribute('aria-valuetext', on ? this._pct(st) + '%' : 'Off'); } else { el.style.touchAction = ''; el.removeAttribute('aria-valuetext'); } }
+  _flash(el, txt, ms) { const b = el.querySelector('.sb .b'); b.textContent = txt; el.classList.add('flash'); const s = el.dataset.s; clearTimeout(this._t['f' + s]);
+    this._t['f' + s] = setTimeout(() => el.classList.remove('flash'), ms || 1700); }
+  _tgt(st) { const a = st.attributes; return a.temperature != null ? Number(a.temperature) : a.target_temp_low != null ? Number(a.target_temp_low) : null; }
+  _fmt(v) { if (v == null || !isFinite(v)) return '--'; const r = Math.round(v * 10) / 10; return Number.isInteger(r) ? String(r) : `${Math.trunc(r)}<small>.${Math.round(Math.abs(r % 1) * 10)}</small>`; }
+  _paintTh() { const el = this.shadowRoot.querySelector('.th'), st = this._st('thermostat'), id = this._ent('thermostat'); el.querySelector('.tt').textContent = this._name('thermostat');
+    let sub = this._sub('thermostat'); if (st && this._c('show_current_temp') && st.attributes.current_temperature != null) sub += ' · ' + Math.round(st.attributes.current_temperature) + '°';
+    el.querySelector('.sb .a').textContent = !id ? 'Set entity' : !st ? 'Not found' : sub; el.classList.toggle('un', !st);
+    const tg = st ? (this._tmp != null ? this._tmp : this._tgt(st)) : null; el.querySelector('.num').innerHTML = this._fmt(tg);
+    const act = st && (st.attributes.hvac_action != null ? ['heating', 'cooling', 'drying', 'preheating', 'defrosting'].includes(st.attributes.hvac_action) : !['off', 'unavailable', 'unknown'].includes(st.state));
+    el.classList.toggle('on', !!act); const ok = st && tg != null && st.state !== 'off';
+    el.querySelectorAll('.cv').forEach(b => { b.disabled = !ok; b.setAttribute('aria-label', (b.dataset.dir > 0 ? 'Raise ' : 'Lower ') + this._name('thermostat') + (tg != null ? ', set to ' + tg + '°' : '')); });
+    el.setAttribute('aria-label', this._name('thermostat') + (st ? ', ' + (tg != null ? 'set to ' + tg + '°' : st.state) : ', no entity set')); }
+  // --- services (only from a tap / drag)
+  // s: the tile shows "pending" until its state changes (or a moment after the call returns without a change)
+  _call(d, sv, data, s) { if (!this._hass) return Promise.resolve(); const clr = ms => { clearTimeout(this._t['p' + s]); this._t['p' + s] = setTimeout(() => { if (this._pend[s]) { this._pend[s] = 0; this._sig = null; this._render(); } }, ms); };
+    if (s) { this._pend[s] = { key: this._prev[s], n: (this._pend[s] && this._pend[s].n || 0) + 1 }; this._sig = null; this._render(); clr(8000); }
+    return Promise.resolve(this._hass.callService(d, sv, data)).then(() => { if (s && this._pend[s]) clr(1200); }).catch(e => { if (s) { this._pend[s] = 0; this._sig = null; this._render(); const el = this.shadowRoot.querySelector(`.t[data-s="${s}"]`); if (el) this._flash(el, 'Couldn’t reach it', 2500); }
+      console.warn('homeview-glass-page:', d + '.' + sv, e && e.message); }); }
+  _more(id) { if (id) fire(this, 'hass-more-info', { entityId: id }); }
+  _tap(s, el) { const id = this._ent(s), st = this._st(s), d = id.split('.')[0];
+    if (s === 'intercom') { const a = this._c('intercom_action'); el.classList.add('talk', 'on'); clearTimeout(this._t.talk); this._t.talk = setTimeout(() => { el.classList.remove('talk'); this._sig = null; this._render(); }, 3000);
+      if (a && a.action && a.action !== 'none') fire(this, 'hass-action', { config: { entity: id || undefined, tap_action: a }, action: 'tap' }); else if (id) this._more(id); return; }
+    if (!st) return;
+    if (d === 'lock') { const lk = st.state === 'locked' || st.state === 'locking';
+      if (lk && this._c('unlock_confirm') && !el._arm) { el._arm = true; this._flash(el, 'Tap again to unlock', 3000); clearTimeout(this._t.arm); this._t.arm = setTimeout(() => { el._arm = false; }, 3000); return; }
+      el._arm = false; this._call('lock', lk ? 'unlock' : 'lock', { entity_id: id }, s); return; }
+    if (d === 'scene' || d === 'script') { el._hold = true; el.classList.add('on', 'tw'); this._flash(el, 'Activated', 1600); clearTimeout(this._t.sc);
+      this._t.sc = setTimeout(() => { el._hold = false; el.classList.remove('tw'); this._sig = null; this._render(); }, 1600); this._call(d, 'turn_on', { entity_id: id }); return; }
+    if (d === 'button' || d === 'input_button') { this._flash(el, 'Pressed'); this._call(d, 'press', { entity_id: id }); return; }
+    if (d === 'light') { this._call('light', st.state === 'on' ? 'turn_off' : 'turn_on', { entity_id: id }, s); return; }
+    if (['switch', 'fan', 'input_boolean', 'media_player', 'humidifier'].includes(d)) { this._call(d === 'media_player' ? 'media_player' : d, 'toggle', { entity_id: id }, s); return; }
+    this._more(id); }
+  _step(dir) { const st = this._st('thermostat'); if (!st) return; const a = st.attributes, step = Number(this._c('temp_step')) || Number(a.target_temp_step) || (this._hass.config && this._hass.config.unit_system && /F/.test(this._hass.config.unit_system.temperature) ? 1 : 0.5);
+    const cur = this._tmp != null ? this._tmp : this._tgt(st); if (cur == null) return; const lo = a.min_temp != null ? Number(a.min_temp) : -Infinity, hi = a.max_temp != null ? Number(a.max_temp) : Infinity;
+    const v = Math.min(hi, Math.max(lo, Math.round((cur + dir * step) / step) * step)); this._tmp = Math.round(v * 10) / 10; this._sig = null; this._render();
+    const n = this.shadowRoot.querySelector('.num'); n.classList.add('bump'); setTimeout(() => n.classList.remove('bump'), 160);
+    clearTimeout(this._t.th); this._t.th = setTimeout(() => { const t = this._tmp, id = this._ent('thermostat'), s2 = this._st('thermostat'); if (t == null || !s2) return;
+      const data = { entity_id: id }; if (s2.attributes.temperature == null && s2.attributes.target_temp_low != null) { const w = Number(s2.attributes.target_temp_high) - Number(s2.attributes.target_temp_low); data.target_temp_low = t; data.target_temp_high = Math.round((t + (isFinite(w) ? w : 2)) * 10) / 10; } else data.temperature = t;
+      this._call('climate', 'set_temperature', data).then(() => { clearTimeout(this._t.th2); this._t.th2 = setTimeout(() => { this._tmp = null; this._sig = null; this._render(); }, 2500); }); }, 700); }
+  _bloom(el, x, y) { if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return; const r = el.getBoundingClientRect(), b = document.createElement('span'); b.className = 'bl';
+    const d = Math.hypot(r.width, r.height) * 1.4; b.style.cssText = `--d:${d}px;--x:${x - r.left}px;--y:${y - r.top}px`; el.appendChild(b); b.addEventListener('animationend', () => b.remove()); setTimeout(() => b.remove(), 900); }
+  // --- pointer handling: tap / hold / drag (light brightness)
+  _wire(el) { const s = el.dataset.s;
+    if (s === 'thermostat') { el.addEventListener('click', e => { const b = e.target.closest('.cv'); if (b) { e.stopPropagation(); if (!b.disabled) this._step(Number(b.dataset.dir)); return; } });
+      let ht = 0; el.addEventListener('pointerdown', e => { if (e.target.closest('.cv')) return; clearTimeout(ht); ht = setTimeout(() => this._more(this._ent('thermostat')), 550); });
+      ['pointerup', 'pointercancel', 'pointerleave'].forEach(t => el.addEventListener(t, () => clearTimeout(ht))); return; }
+    let p = null; const end = () => { el.classList.remove('dn'); };
+    el.addEventListener('pointerdown', e => { if (e.button > 0) return; const st = this._st(s), dim = s === 'light' && this._dim(st) && st.state !== 'unavailable';
+      p = { id: e.pointerId, x: e.clientX, y: e.clientY, t: Date.now(), dim, moved: false, drag: false, held: false, h: el.getBoundingClientRect().height, start: st && st.state === 'on' ? this._pct(st) : 0 };
+      el.classList.add('dn'); if (dim) try { el.setPointerCapture(e.pointerId); } catch (x) {}
+      clearTimeout(this._t.h); this._t.h = setTimeout(() => { if (!p || p.moved) return; p.held = true; if (p.dim) this._dragStart(el, p); else { end(); this._more(this._ent(s)); } }, 550); });
+    el.addEventListener('pointermove', e => { if (!p || e.pointerId !== p.id) return; const dx = e.clientX - p.x, dy = e.clientY - p.y;
+      if (!p.moved && Math.hypot(dx, dy) > 8) { p.moved = true; if (p.dim && Math.abs(dy) >= Math.abs(dx) * 0.7) this._dragStart(el, p); else if (!p.drag) { clearTimeout(this._t.h); end(); } }
+      if (p.drag) { e.preventDefault(); this._dragMove(el, p, Math.max(1, Math.min(100, Math.round(p.start - dy / p.h * 100)))); } });
+    const up = e => { if (!p || (e.pointerId != null && e.pointerId !== p.id)) return; clearTimeout(this._t.h); const q = p; p = null; end();
+      if (q.drag) { this._dragEnd(el, q); return; } if (e.type !== 'pointerup' || q.moved || q.held) return; this._bloom(el, e.clientX, e.clientY); this._tap(s, el); };
+    el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up); el.addEventListener('lostpointercapture', e => { if (p && p.drag) up(Object.assign({ type: 'pointercancel', pointerId: e.pointerId })); });
+    el.addEventListener('click', e => { if (e.detail === 0) this._tap(s, el); }); // keyboard (Enter / Space)
+    el.addEventListener('keydown', e => { if (s !== 'light') return; const st = this._st(s); if (!this._dim(st) || !['ArrowUp', 'ArrowDown'].includes(e.key)) return; e.preventDefault();
+      const v = Math.max(1, Math.min(100, (st.state === 'on' ? this._pct(st) : 0) + (e.key === 'ArrowUp' ? 10 : -10))); this._call('light', 'turn_on', { entity_id: this._ent(s), brightness_pct: v }, s); });
+    el.addEventListener('contextmenu', e => e.preventDefault()); }
+  _dragStart(el, p) { if (p.drag) return; p.drag = true; p.last = null; p.sent = 0; p.v = p.start || 0; clearTimeout(this._t.h); el.classList.remove('dn'); el.classList.add('drag'); this._dragShow(el, p.v); }
+  _dragShow(el, v) { el.style.setProperty('--p', String(v / 100)); const pc = el.querySelector('.pc'); pc.textContent = v + '%'; pc.classList.toggle('dk', v >= 55); }
+  _dragMove(el, p, v) { if (v === p.v) return; p.v = v; this._dragShow(el, v); const now = Date.now();
+    if (now - p.sent >= 200) { p.sent = now; p.last = v; this._call('light', 'turn_on', { entity_id: this._ent('light'), brightness_pct: v }); } // at most ~5 a second
+    else { clearTimeout(this._t.dr); this._t.dr = setTimeout(() => { if (p.drag && p.v !== p.last) { p.sent = Date.now(); p.last = p.v; this._call('light', 'turn_on', { entity_id: this._ent('light'), brightness_pct: p.v }); } }, 200 - (now - p.sent)); } }
+  _dragEnd(el, p) { clearTimeout(this._t.dr); p.drag = false; if (p.v !== p.last && (p.last != null || p.v !== p.start)) this._call('light', 'turn_on', { entity_id: this._ent('light'), brightness_pct: p.v }, 'light'); // the final value
+    setTimeout(() => { el.classList.remove('drag'); this._flash(el, p.v + '%'); this._sig = null; this._render(); }, 120); }
+}
+HVGlassPage.sizePresets = false; HVGlassPage.layoutSection = false;
+HVGlassPage.schema = [
+  { name: 'background', selector: { select: { mode: 'dropdown', options: [{ value: 'indigo', label: 'Indigo glass (built in)' }, { value: 'none', label: 'None (the dashboard background shows through)' }] } } },
+  { type: 'expandable', name: '', flatten: true, title: 'Thermostat', icon: 'mdi:thermostat', schema: [{ name: 'thermostat_entity', selector: { entity: { domain: 'climate' } } },
+    { name: 'thermostat_name', selector: { text: {} } }, { name: 'thermostat_subtitle', selector: { text: {} } }, { name: 'temp_step', selector: { number: { min: 0.1, max: 5, step: 0.1, mode: 'box' } } }, { name: 'show_current_temp', selector: { boolean: {} } }] },
+  { type: 'expandable', name: '', flatten: true, title: 'Scene tile (Good Night)', icon: 'mdi:weather-night', schema: [{ name: 'scene_entity', selector: { entity: { domain: ['scene', 'script', 'button', 'input_button', 'light', 'switch'] } } },
+    { name: 'scene_name', selector: { text: {} } }, { name: 'scene_subtitle', selector: { text: {} } }] },
+  { type: 'expandable', name: '', flatten: true, title: 'Intercom', icon: 'mdi:waveform', schema: [{ name: 'intercom_action', selector: { ui_action: {} } }, { name: 'intercom_entity', selector: { entity: {} } },
+    { name: 'intercom_name', selector: { text: {} } }, { name: 'intercom_subtitle', selector: { text: {} } }] },
+  { type: 'expandable', name: '', flatten: true, title: 'Door lock', icon: 'mdi:lock', schema: [{ name: 'lock_entity', selector: { entity: { domain: ['lock', 'light', 'switch'] } } },
+    { name: 'lock_name', selector: { text: {} } }, { name: 'lock_subtitle', selector: { text: {} } }, { name: 'unlock_confirm', selector: { boolean: {} } }] },
+  { type: 'expandable', name: '', flatten: true, title: 'Light', icon: 'mdi:ceiling-light', schema: [{ name: 'light_entity', selector: { entity: { domain: ['light', 'switch', 'fan', 'input_boolean'] } } },
+    { name: 'light_name', selector: { text: {} } }, { name: 'light_subtitle', selector: { text: {} } }] },
+  { name: 'height', selector: { text: {} } }];
+Object.assign(LABELS, { background: 'Background', thermostat_entity: 'Thermostat', thermostat_name: 'Name', thermostat_subtitle: 'Subtitle', temp_step: 'Chevron step (°)', show_current_temp: 'Show the room temperature after the subtitle',
+  scene_entity: 'Scene or script', scene_name: 'Name', scene_subtitle: 'Subtitle', intercom_action: 'Tap action', intercom_entity: 'Entity (optional, for more-info / hold)', intercom_name: 'Name', intercom_subtitle: 'Subtitle',
+  lock_entity: 'Lock', lock_name: 'Name', lock_subtitle: 'Subtitle', unlock_confirm: 'Tap twice to unlock', light_entity: 'Light', light_name: 'Name', light_subtitle: 'Subtitle', height: 'Height (CSS, default 100dvh)' });
+Object.assign(HELPERS, { temp_step: 'Empty: the thermostat\'s own step (0.5 °C or 1 °F).', light_entity: 'A dimmable light: drag up / down on the tile for brightness. Others just toggle.',
+  intercom_action: 'What tapping Intercom does, e.g. call a script that starts a broadcast.', height: 'Use 100dvh in a panel view with kiosk mode; e.g. calc(100dvh - 56px) when the header shows.' });
+if (!customElements.get('homeview-glass-page')) customElements.define('homeview-glass-page', HVGlassPage);
+if (!(window.customCards = window.customCards || []).some(c => c.type === 'homeview-glass-page')) window.customCards.push({ type: 'homeview-glass-page', name: 'NotHomeView Glass Page', description: 'A whole page of frosted-glass tiles: thermostat, clock, scene, intercom, lock and a light with in-tile brightness. For a panel view.', preview: true });
 console.info(`%c HOMEVIEW-CARDS %c ${HV_VERSION} `, 'color:#fff;background:#6e5ad2;font-weight:700;border-radius:4px 0 0 4px', 'color:#6e5ad2;background:#ece8ff;border-radius:0 4px 4px 0');
 /* ---------------- My Home page + Home Screen swipe page (1.6.0-dev) ----------------
    homeview-myhome-card: an Apple Home "My Home" style page in NotHomeView's dark glass: title + clock, summary pills (climate range,
