@@ -3688,7 +3688,8 @@ const HV_ECL_CSS = `:host{all:initial;--gtx:#fff;--gbg:rgba(28,30,42,.34);--gbi:
 .cv{position:absolute;inset:0;border-radius:var(--rr,22px);pointer-events:auto;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;cursor:pointer;outline:1.5px dashed rgba(255,255,255,.5);outline-offset:-1px;background:rgba(255,255,255,.035)}
 :host([day]) .cv{outline-color:rgba(60,60,67,.35)}
 .c.arr .cv{cursor:grab;animation:jig .5s ease-in-out infinite alternate} @keyframes jig{from{transform:rotate(-.6deg)}to{transform:rotate(.6deg)}}
-.c.off .cv{animation:none;opacity:0}
+.c.off .cv{animation:none;opacity:0} .c.off .b,.c.off .rz{visibility:hidden}
+.lay.hdrag .c.arr:not(.off){opacity:0;pointer-events:none;transition:opacity .12s} .lay.hdrag .c.arr:not(.off) *{pointer-events:none} .c.hc.app .cv{outline:0;background:none;animation:none} .c.hc.app .b.m{top:calc(var(--mt,0px) - 12px);right:calc(var(--mi,0px) - 12px)}
 .abar{position:fixed;z-index:2;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 14px);display:flex;align-items:center;gap:8px;padding:6px 6px 6px 16px;border-radius:999px;pointer-events:auto;font-size:13px;white-space:nowrap;max-width:calc(100vw - 16px)}
 .abar span{overflow:hidden;text-overflow:ellipsis;opacity:.8} .abar button{all:unset;box-sizing:border-box;min-height:40px;padding:0 18px;border-radius:999px;font-size:15px;font-weight:600;cursor:pointer;touch-action:manipulation}
 .abar .ok{background:color-mix(in srgb,var(--acc) 82%,transparent);color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.3)} .abar .no{background:rgba(127,127,127,.16)}
@@ -3710,7 +3711,7 @@ const HV_ECL_CSS = `:host{all:initial;--gtx:#fff;--gbg:rgba(28,30,42,.34);--gbi:
 .ghost{position:fixed;pointer-events:none;border-radius:var(--rr,22px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;padding:8px;overflow:hidden;font-size:13px;font-weight:600;transform-origin:center;box-shadow:0 18px 40px rgba(0,0,20,.45),inset 0 1px 0 rgba(255,255,255,.3)}
 .ghost ha-icon,.ghost ha-state-icon{--mdc-icon-size:30px;display:flex} .ghost span{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .hint{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 18px);padding:9px 16px;border-radius:999px;font-size:13px;font-weight:600;pointer-events:none;z-index:3}
-.scrim{position:fixed;inset:0;pointer-events:auto;z-index:3}
+.scrim{position:fixed;inset:0;pointer-events:auto;z-index:3} .scrim.gls{background:rgba(0,0,0,.32);animation:gfade .18s} @keyframes gfade{from{opacity:0}} .galh{position:fixed;inset:0;z-index:4;pointer-events:none}
 .menu{position:fixed;z-index:4;pointer-events:auto;min-width:212px;max-width:calc(100vw - 16px);padding:6px 0;border-radius:18px;overflow:hidden;animation:pop .12s ease-out;transform-origin:top right;--gbg:rgba(28,30,42,.5)}
 :host([day]) .menu{--gbg:rgba(255,255,255,.72)}
 @keyframes pop{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:none}}
@@ -3736,7 +3737,7 @@ const hvEcl = { host: null, sr: null, lay: null, ctl: new WeakMap(), timer: null
     const h = this.host = document.createElement('div'); h.id = 'hv-edit-layer'; const sr = this.sr = h.attachShadow({ mode: 'open' });
     sr.innerHTML = `<style>${HV_ECL_CSS}</style><div class="lay"></div>`; this.lay = sr.querySelector('.lay'); document.body.appendChild(h);
     // 1.32.0: added once (not once per layer), and the touchmove block is only live during a tile drag and never for a touch in a dialog
-    if (!this._gl) { this._gl = true; this._stop = e => { if ((this.drag || hvHubArr.drag) && e.cancelable && !hvInUi(e)) e.preventDefault(); }; // finger drags move the tile, never the page
+    if (!this._gl) { this._gl = true; this._stop = e => { if ((this.drag || hvHubArr.drag || hvHubArr.down) && e.cancelable && !hvInUi(e)) e.preventDefault(); }; // finger drags move the tile, never the page
       addEventListener('scroll', () => this.kick(), { capture: true, passive: true }); addEventListener('resize', () => this.kick());
       addEventListener('keydown', e => { if (e.key === 'Escape' && this.rs) this.endResize(); if (e.key === 'Escape' && (this.menu || this.drag)) { if (this.drag) this.endDrag(false); this.closeMenu(); } }, true); }
     this.tmBind(true); },
@@ -3870,7 +3871,7 @@ const hvEcl = { host: null, sr: null, lay: null, ctl: new WeakMap(), timer: null
       b.innerHTML = '<span>Hold to move · drag a corner to resize</span><button class="no">Cancel</button><button class="ok">Done</button>'; this.lay.appendChild(b); }
     b.querySelector('.no').onclick = e => { e.stopPropagation(); this.arrange(g, false, true); }; b.querySelector('.ok').onclick = e => { e.stopPropagation(); this.arrange(g, false); }; },
   // ---- the ⋯ menu ----
-  closeMenu() { if (!this.menu) return; this.menu.remove(); this.menu = null; },
+  closeMenu() { if (!this.menu) return; const m = this.menu; this.menu = null; try { if (m._off) m._off(); } catch (e) {} m.remove(); },
   openMenu(g, k, anchor) { this.closeMenu(); this.ensure(); const i = g._kids.indexOf(k), n = g._kids.length;
     const wrap = this.menu = document.createElement('div'); wrap.innerHTML = '<div class="scrim"></div><div class="menu" role="menu"></div>';
     const m = wrap.querySelector('.menu'), close = () => this.closeMenu(), t0 = Date.now();
@@ -3946,6 +3947,11 @@ function hvHomeCells(c, t, nSideSizes) { const m = /^([a-z]+)(?::(\d+))?$/.exec(
   if (k === 'cal') { const z = hwSize('calendar', hwCalSize(c.calendar_size)); return [z[2], z[3]]; }
   if (k === 'w') { const x = (c.home_cards || [])[i] || {}, z = hwSize(x.type, x.size); return [z[2], z[3]]; } return [1, 1]; }
 // rows a dense grid of N columns needs for these blocks (in order)
+function hvGridPack(blocks, N) { const occ = [], out = []; const free = (r, c0, w, h) => { for (let y = r; y < r + h; y++) for (let x = c0; x < c0 + w; x++) if (occ[y] && occ[y][x]) return false; return true; };
+  for (const [w0, h] of blocks) { const w = Math.min(w0, N); let at = null;
+    for (let r = 0; !at && r < 400; r++) for (let x = 0; x + w <= N; x++) if (free(r, x, w, h)) { for (let y = r; y < r + h; y++) { occ[y] = occ[y] || []; for (let z = x; z < x + w; z++) occ[y][z] = 1; } at = [x, r]; break; }
+    out.push(at || [0, 0]); }
+  return out; }
 function hvGridRows(blocks, N) { const occ = []; let rows = 0; const free = (r, c0, w, h) => { for (let y = r; y < r + h; y++) for (let x = c0; x < c0 + w; x++) if (occ[y] && occ[y][x]) return false; return true; };
   for (const [w0, h] of blocks) { const w = Math.min(w0, N); let done = false;
     for (let r = 0; !done && r < 400; r++) for (let x = 0; x + w <= N; x++) if (free(r, x, w, h)) { for (let y = r; y < r + h; y++) { occ[y] = occ[y] || []; for (let z = x; z < x + w; z++) occ[y][z] = 1; } rows = Math.max(rows, r + h); done = true; break; } }
@@ -4011,7 +4017,8 @@ function hwCalHtml(hub, cfg, cells) { const ids = hwCalIds(hub); if (!ids.length
   const none = t => `<div class="no">${list ? t : 'Loading…'}</div>`;
   if (sz === 'date') return `<div class="c-d"><div class="md">${esc(now.toLocaleDateString(L, { weekday: 'short' }).toUpperCase())} ${esc(now.toLocaleDateString(L, { month: 'short' }).toUpperCase())}</div><div class="dn2">${day}</div></div>`;
   const up = on(now, t1).filter(e => e.ad || (e.en || e.st) > now), tm = on(t1, t2);
-  if (sz === 'small') { const nx = up.length ? up : tm; return `<div class="c-s"><div class="wd">${wd(now)}</div><div class="dn">${day}</div><div class="evs">${nx.slice(0, 2).map(evRow).join('') || none('No more events today')}</div></div>`; }
+  if (sz === 'small') { const nx = up.slice(0, 2).map(evRow).concat(tm.slice(0, Math.max(0, 2 - up.length)).map(e => evRow(e).replace(/<span>/, '<span>Tomorrow · '))); // late in the day: tomorrow's first ones
+    return `<div class="c-s"><div class="wd">${wd(now)}</div><div class="dn">${day}</div><div class="evs">${nx.join('') || none('No more events today')}</div></div>`; }
   const tmCol = (n0) => `<div class="col tm"><div class="th">TOMORROW</div>${tm.slice(0, n0).map(evRow).join('') || none('No events')}</div>`;
   if (sz === 'medium') return `<div class="c-m"><div class="col"><div class="wd">${wd(now)}</div><div class="dn">${day}</div>${up.slice(0, 3).map(evRow).join('') || none('No more events today')}</div>${tmCol(4)}</div>`;
   // timed views: hours down the left, events as coloured blocks
@@ -4074,12 +4081,42 @@ const HW_CSS = `
 .apps.hg > .app{justify-self:center;align-self:start}.apps.hg > .tile,.apps.hg > .phw{width:100%;height:100%;min-width:0;min-height:0}
 .apps.hg > .phw{gap:var(--lg,9px)}.apps.hg > .phw .pw{width:100%}
 .apps.hg > .hgp{border-radius:calc(var(--I,110px) * .26);background:rgba(255,255,255,.06);box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.14)}.apps.hg > .hgp.hga{background:none;box-shadow:none}
-.apps.hg > .lift{position:absolute !important;z-index:40;pointer-events:none;transition:none;filter:drop-shadow(0 18px 28px rgba(0,0,0,.35))}
+.apps.hg{isolation:isolate}.apps.hg > .lift{position:absolute !important;z-index:1000;pointer-events:none;transition:none;filter:drop-shadow(0 18px 28px rgba(0,0,0,.35))}
+:host([hv-arr]) .apps.hg > .app:not(.lift) .ico{animation:hvjig .5s ease-in-out infinite alternate} @keyframes hvjig{from{transform:rotate(-1.4deg)}to{transform:rotate(1.4deg)}}
 :host([hgrid]) .mid{display:block}:host([hgrid]) .row,:host([hgrid]) .below,:host([hgrid]) .calw{display:none !important}`;
 /* Home Screen arrange: one grid (home_layout) for the apps, Photos, the extra tiles, the Calendar and the cards. Press and move (or hold) lifts an item
    and the others make room as it moves; drop to place it. Tap = its menu, the corner handle = its sizes. Add App / Add Card in the bar.
    Tapping an empty spot of the Home Screen saves and leaves (no Done / Cancel); HA's edit mode saves too. An older Home Screen is shown in the grid
    while arranging and keeps its classic layout unless something is changed. */
+const HV_GAL_CSS = `
+:host{all:initial;font-family:${FONT};color:#fff;-webkit-tap-highlight-color:transparent}
+*{box-sizing:border-box}ha-icon{display:inline-flex}
+.sheet{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(1080px,calc(100vw - 48px));height:min(760px,calc(100vh - 48px));display:grid;grid-template-columns:268px 1fr;border-radius:30px;overflow:hidden;pointer-events:auto;
+ background:rgba(30,30,32,.86);backdrop-filter:blur(34px) saturate(1.4);-webkit-backdrop-filter:blur(34px) saturate(1.4);box-shadow:0 30px 80px rgba(0,0,0,.5),inset 0 0 0 .5px rgba(255,255,255,.14);animation:gpop .2s cubic-bezier(.2,.8,.2,1)}
+@keyframes gpop{from{opacity:0;transform:translate(-50%,-48%) scale(.97)}to{opacity:1;transform:translate(-50%,-50%)}}
+.side{min-width:0;padding:22px 14px;border-right:.5px solid rgba(255,255,255,.12);overflow-y:auto;display:flex;flex-direction:column;gap:14px}.main{min-width:0}
+.srch{display:flex;align-items:center;gap:7px;height:40px;padding:0 11px;border-radius:12px;background:rgba(118,118,128,.24);color:rgba(235,235,245,.6)}.srch ha-icon{--mdc-icon-size:20px}
+.srch input{all:unset;flex:1;min-width:0;font-size:17px;color:#fff}.srch input::placeholder{color:rgba(235,235,245,.6)}.srch input::-webkit-search-cancel-button{filter:invert(1);opacity:.6}
+.prov{display:flex;flex-direction:column;gap:2px}.pr{all:unset;cursor:pointer;display:flex;align-items:center;gap:12px;padding:8px 10px;border-radius:12px;font-size:17px;font-weight:500;color:#fff}
+.pr:hover{background:rgba(255,255,255,.06)}.pr.on{background:rgba(255,255,255,.14)}.pr:focus-visible,.pv:focus-visible,.x:focus-visible{outline:2px solid #0a84ff;outline-offset:2px}
+.pi{flex:none;width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;overflow:hidden;color:#fff;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.15)}.pi ha-icon{--mdc-icon-size:21px}.pi img{width:90% !important;height:90% !important}
+.main{overflow-y:auto;padding:26px 30px 40px;overscroll-behavior:contain}.hd{margin:0 44px 20px 0}.hd h2{margin:0;font-size:30px;font-weight:700;letter-spacing:-.01em}.hd p{margin:4px 0 0;font-size:15px;color:rgba(235,235,245,.6);line-height:1.35}
+.ph{display:flex;align-items:center;gap:14px}.ph .pi{width:56px;height:56px;border-radius:14px}.ph .pi ha-icon{--mdc-icon-size:34px}
+.wall{display:grid;grid-template-columns:repeat(var(--gc,8),var(--gu,76px));grid-auto-rows:calc(var(--gu,76px) + 10px);gap:var(--gg,14px);grid-auto-flow:row dense;padding-bottom:12px}
+.pv{all:unset;cursor:pointer;position:relative;display:flex;flex-direction:column;min-width:0;min-height:0;transition:transform .15s}.pv:active{transform:scale(.97)}
+.pv .cv{position:relative;flex:1;min-height:0;display:block;border-radius:calc(var(--I,60px) * .32);overflow:hidden;box-shadow:0 10px 26px rgba(0,0,0,.3)}
+.pv .hw > .hwi{position:absolute;inset:0;border-radius:inherit;box-shadow:none}.pv .hw{cursor:pointer}
+.pv .hpv{background:var(--hv-ss-bg,#1a1a1a)}.pv .hst{position:absolute;inset:0;container-type:size}
+.pv .badge{position:absolute;left:8px;top:8px;display:inline-flex;align-items:center;gap:4px;padding:3px 8px 3px 5px;border-radius:99px;font-size:11px;font-weight:600;background:rgba(0,0,0,.45);backdrop-filter:blur(8px)}.pv .badge ha-icon{--mdc-icon-size:14px;color:#30d158}
+.pv .cap{flex:none;height:34px;padding-top:6px;display:flex;flex-direction:column;align-items:center;text-align:center;line-height:1.2;overflow:hidden}.pv .cap b{font-size:13px;font-weight:600;white-space:nowrap}.pv .cap small{font-size:11px;color:rgba(235,235,245,.6);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.pv.no .cv{opacity:.4;filter:saturate(.4)}.pv.no{cursor:default}.pv.no:active{transform:none}
+.em{grid-column:1/-1;padding:40px 0;text-align:center;color:rgba(235,235,245,.6);font-size:16px}
+.x{all:unset;cursor:pointer;position:absolute;right:16px;top:16px;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(118,118,128,.3);color:rgba(235,235,245,.8)}.x ha-icon{--mdc-icon-size:20px}
+@media (max-width:719px){.sheet{left:0;top:auto;bottom:0;transform:none;width:100vw;height:calc(100vh - max(24px,env(safe-area-inset-top,0px) + 12px));border-radius:26px 26px 0 0;grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);animation:gup .24s cubic-bezier(.2,.8,.2,1)}
+ @keyframes gup{from{transform:translateY(30%);opacity:.4}to{transform:none;opacity:1}}
+ .side{border-right:0;border-bottom:.5px solid rgba(255,255,255,.12);padding:18px 16px 12px;overflow:visible;gap:12px}.srch{margin-right:46px}
+ .prov{flex-direction:row;overflow-x:auto;gap:8px;scrollbar-width:none}.prov::-webkit-scrollbar{display:none}.pr{flex:none;padding:6px 12px 6px 6px;border-radius:99px;background:rgba(118,118,128,.18);font-size:15px;gap:8px}.pr .pi{width:28px;height:28px;border-radius:8px}.pr.on{background:rgba(255,255,255,.22)}
+ .main{padding:18px 16px calc(30px + env(safe-area-inset-bottom,0px))}.hd h2{font-size:24px}.x{top:18px}}`;
 const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: null, rs: null, dirty: false, busy: false, conv: false,
   ok(h) { return !!(h && h._w && h.isConnected && !h._sheetO && h._config && h._config.arrange !== false && !hvInDialog(h) && hvEclOK(h)); },
   raw() { return JSON.parse(JSON.stringify(this.hub._hvRaw || {})); },
@@ -4135,12 +4172,9 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
     const head = t => { const d = document.createElement('div'); d.className = 't'; d.textContent = t; m.appendChild(d); };
     const row = (ico, txt, sub, fn) => { const b = document.createElement('button'); b.setAttribute('role', 'menuitem'); b.innerHTML = `${ico}<span class="tx"><span></span>${sub ? '<small></small>' : ''}</span>`;
       b.querySelector('.tx > span').textContent = txt; if (sub) b.querySelector('small').textContent = sub; b.addEventListener('click', e => { e.stopPropagation(); fn(); }); m.appendChild(b); return b; };
-    const list = () => { m.innerHTML = ''; head('Add App'); const xs = HUB_APP_CATALOG.filter(x => !k.have.has(x.key) && this.avail(x, k)), c0 = this.hub._config || {};
-      const homie = c0.show_homie !== true && !(c0.side_cards || []).some(x => x && x.type === HV_HOMIE_T); // Homie is a tile (beside Photos), not an app icon
-      if (!xs.length && !homie) { const d = document.createElement('div'); d.className = 'em'; d.textContent = 'All apps are on the Home Screen'; m.appendChild(d); }
+    const list = () => { m.innerHTML = ''; head('Add App'); const xs = HUB_APP_CATALOG.filter(x => !k.have.has(x.key) && this.avail(x, k));
+      if (!xs.length) { const d = document.createElement('div'); d.className = 'em'; d.textContent = 'All apps are on the Home Screen'; m.appendChild(d); }
       for (const x of xs) row(this.icoHtml(x), x.name, '', () => { if (x.key === 'home' || x.key === 'security') choose(x); else { close(); this.add(x, k); } });
-      if (homie) row(`<span class="ai" style="background:linear-gradient(180deg,#5ccdff 0%,#2ba6e0 100%);color:#fff">${HV_HOMIE_ICO}</span>`, 'Homey', 'Animated tile with the house mascot', () => { close();
-        this.change(raw => { raw.show_homie = true; this.edit(raw, 'side', () => {}); }); hvToast('Homey added · tap an empty spot to save', 'hv-arrange'); });
       hvEcl.place(m, anchor); const f = m.querySelector('button'); if (f) f.focus({ preventScroll: true }); };
     // Home and Security: the icon always comes back; the choice is what the page behind it shows
     const choose = x => { m.innerHTML = ''; head(x.key === 'home' ? 'Home page' : 'Security page'); const home = x.key === 'home';
@@ -4153,22 +4187,57 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
   add(x, k, mode) { const a = this.entry(x, k); this.change(raw => this.edit(raw, 'app', l => l.push(a)));
     if (mode) this.pend = (this.pend || []).filter(p => p.key !== x.key).concat({ key: x.key, mode, path: x.key === 'home' ? k.homePath : 'security' });
     hvToast(`${a.name} added · tap an empty spot to save`, 'hv-arrange'); },
-  // ---- Add Card: a Weather or Calendar card (iOS-style widget) in one of its sizes; shown at once, saved with the rest
-  cardPicker(anchor) { if (!this.hub || this.busy) return; hvEcl.closeMenu(); hvEcl.ensure(); const h = this.hub, S = (h._hass && h._hass.states) || {}, wx = hwWxId(h), cal = hwCalIds(h).length, N = (h._hgM || {}).N || 8;
-    const wrap = hvEcl.menu = document.createElement('div'); wrap.innerHTML = '<div class="scrim"></div><div class="menu apk" role="menu" aria-label="Add Card"></div>';
-    const m = wrap.querySelector('.menu'), close = () => hvEcl.closeMenu();
-    const head = t => { const d = document.createElement('div'); d.className = 't'; d.textContent = t; m.appendChild(d); };
-    const row = (ico, txt, sub, fn, dis) => { const b = document.createElement('button'); b.setAttribute('role', 'menuitem'); b.innerHTML = `${ico}<span class="tx"><span></span><small></small></span>`; if (dis) b.disabled = true;
-      b.querySelector('.tx > span').textContent = txt; b.querySelector('small').textContent = sub; b.addEventListener('click', e => { e.stopPropagation(); fn(); }); m.appendChild(b); return b; };
-    const ico = (ty, k) => `<span class="ai" style="background:${ty === 'calendar' ? '#1c1c1e' : k === 'sunset' ? 'linear-gradient(180deg,#2d3e63 0%,#c9725a 100%)' : 'linear-gradient(180deg,#f7fafd 0%,#cfe0f1 100%)'};color:${ty === 'calendar' ? '#ff453a' : k === 'sunset' ? '#ffd60a' : '#ff9f0a'}"><ha-icon icon="${ty === 'calendar' ? (k === 'xl' ? 'mdi:view-week-outline' : 'mdi:calendar-today') : k === 'sunset' ? 'mdi:weather-sunset' : 'mdi:weather-partly-cloudy'}"></ha-icon></span>`;
-    head('Add Card · Weather');
-    for (const [k, t, w, hh] of HW_SIZES.weather) { const why = !wx ? 'No weather entity in Home Assistant' : k === 'sunset' && !S['sun.sun'] ? 'Needs the sun.sun entity (Sun integration)' : '';
-      row(ico('weather', k), t, why || `${w} × ${hh}`, () => { close(); this.addCard('weather', k); }, !!why); }
-    const s = document.createElement('div'); s.className = 'sep'; m.appendChild(s); head('Add Card · Calendar');
-    for (const [k, t, w, hh] of HW_SIZES.calendar) { const why = !cal ? 'No calendar in Home Assistant' : '';
-      row(ico('calendar', k), t, why || (k === 'xl' && N < 8 ? `${w} × ${hh} · shows as Large on this screen` : `${w} × ${hh}`), () => { close(); this.addCard('calendar', k); }, !!why); }
-    wrap.querySelector('.scrim').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); close(); });
-    hvEcl.lay.appendChild(wrap); hvEcl.place(m, anchor); const f = m.querySelector('button:not([disabled])'); if (f) f.focus({ preventScroll: true }); },
+  // ---- Add Card: a gallery like the iPad widget gallery (search, the providers on the left, live previews at their real sizes on the right).
+  // Weather and Calendar cards (home_cards) and Homey (his tile: show_homie / the Homey side card). Tap a preview = add it at that size.
+  hasHomey() { const c = this.hub._config || {}; return c.show_homie === true || (c.side_cards || []).some(x => x && x.type === HV_HOMIE_T); },
+  addHomey(k) { if (!this.hub || this.hasHomey()) return; const u = k === 'big' ? 3 : k === 'wide' ? 2 : 1;
+    this.change(raw => { raw.show_homie = true; this.edit(raw, 'side', rows => { const r = rows.find(x => x.card.type === HV_HOMIE_T); if (r && k !== 'square') { r.tile = Object.assign({}, r.tile || {}, { size: k }); if (r.sz != null) r.sz = u; } }); });
+    hvToast('Homey added · tap an empty spot to save', 'hv-arrange');
+    setTimeout(() => { const h = this.hub, i = h && (h._sideEls || []).findIndex(w => w._cfg && w._cfg.type === HV_HOMIE_T), el = i >= 0 && h._hgMap && h._hgMap.get('s:' + i); if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }, 400); },
+  galItems() { const h = this.hub, S = (h._hass && h._hass.states) || {}, wx = hwWxId(h), cal = hwCalIds(h).length, hm = this.hasHomey();
+    const P = { weather: { name: 'Weather', ico: 'mdi:weather-partly-cloudy', bg: 'linear-gradient(180deg,#5ac8fa 0%,#2f8fe0 100%)', desc: 'Current conditions, the next hours and the days ahead, from your weather entity.', sizes: HW_SIZES.weather },
+      calendar: { name: 'Calendar', ico: 'mdi:calendar-today', bg: '#fff', fg: '#ff3b30', desc: "Today's date and what's coming up, from your calendars.", sizes: HW_SIZES.calendar },
+      homey: { name: 'Homey', ico: '', bg: 'linear-gradient(180deg,#5ccdff 0%,#2ba6e0 100%)', desc: 'The NotHomeView house mascot, as a living tile on your Home Screen. There is one Homey.', sizes: [['square', 'Small', 2, 2], ['wide', 'Medium', 4, 2], ['big', 'Large', 4, 4]] } };
+    const why = (p, k) => p === 'weather' ? (!wx ? 'No weather entity in Home Assistant' : k === 'sunset' && !S['sun.sun'] ? 'Needs the sun.sun entity (Sun integration)' : '') : p === 'calendar' ? (!cal ? 'No calendar in Home Assistant' : '') : (hm ? 'Already on your Home Screen' : '');
+    return { P, why, hm }; },
+  cardPicker() { if (!this.hub || this.busy) return; hvEcl.closeMenu(); hvEcl.ensure(); const h = this.hub, { P, why, hm } = this.galItems();
+    const wrap = hvEcl.menu = document.createElement('div'); wrap.innerHTML = '<div class="scrim gls"></div>'; const host = document.createElement('div'); host.className = 'galh'; wrap.appendChild(host);
+    const sr = host.attachShadow({ mode: 'open' }), homeys = [], close = () => hvEcl.closeMenu(), st = { p: 'sugg', q: '' };
+    sr.innerHTML = `<style>${HW_CSS}${HV_HOMIE_CSS}${HV_GAL_CSS}</style><div class="sheet" role="dialog" aria-label="Add Card" aria-modal="true"><div class="side"><label class="srch"><ha-icon icon="mdi:magnify"></ha-icon><input type="search" placeholder="Search Cards" aria-label="Search Cards" autocomplete="off" enterkeyhint="search"></label><div class="prov" role="listbox"></div></div><div class="main"><div class="hd"></div><div class="wall"></div></div><button class="x" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button></div>`;
+    const $ = q => sr.querySelector(q), wall = $('.wall'), main = $('.main'), prov = $('.prov'), inp = $('input');
+    wrap._off = () => { for (const x of homeys) { clearInterval(x.iv); x.hm.stop(); } homeys.length = 0; }; // hvEcl.closeMenu: stop Homey's previews
+    const icoHtml = p => p === 'homey' ? `<span class="pi" style="background:${P.homey.bg}">${HV_HOMIE_ICO}</span>` : `<span class="pi" style="background:${P[p].bg};color:${P[p].fg || '#fff'}"><ha-icon icon="${P[p].ico}"></ha-icon></span>`;
+    const SUGG = [['weather', 'medium'], ['calendar', 'small'], ['homey', 'square'], ['weather', 'small'], ['calendar', 'date'], ['weather', 'sunset'], ['calendar', 'medium'], ['homey', 'wide'], ['weather', 'large'], ['calendar', 'large'], ['calendar', 'xl']];
+    const match = p => { const q = st.q.trim().toLowerCase(); if (!q) return true; const x = P[p]; return [x.name, x.desc, ...x.sizes.map(s => s[1])].join(' ').toLowerCase().includes(q) || (p === 'homey' && /homie|mascot|house/.test(q)); };
+    const geo = () => { const W = Math.max(200, wall.clientWidth || main.clientWidth - 40), gg = W < 520 ? 10 : 14, gc = W >= 8 * 58 + 7 * gg ? 8 : 4, gu = Math.max(30, Math.min(76, Math.floor((W - (gc - 1) * gg) / gc)));
+      wall.style.setProperty('--gc', gc); wall.style.setProperty('--gu', gu + 'px'); wall.style.setProperty('--gg', gg + 'px'); wall.style.setProperty('--hu', ((2 * gu + gg) / 1.55).toFixed(1) + 'px'); wall.style.setProperty('--I', Math.round(gu * 0.8) + 'px'); return { gc }; };
+    const preview = (p, k, cap) => { const s = P[p].sizes.find(x => x[0] === k) || P[p].sizes[0], { gc } = geo(), w = Math.min(s[2], gc), hh = w < s[2] ? 4 : s[3], no = why(p, k), b = document.createElement('button');
+      b.className = 'pv' + (no ? ' no' : ''); b.style.gridColumn = `span ${w}`; b.style.gridRow = `span ${hh}`; b.dataset.p = p; b.dataset.k = k; b.setAttribute('role', 'listitem');
+      b.setAttribute('aria-label', `${P[p].name} · ${s[1]}${no ? ' · ' + no : ''}`); if (no && !(p === 'homey' && hm)) b.setAttribute('aria-disabled', 'true');
+      if (p === 'homey') { b.innerHTML = `<span class="cv hpv"><span class="hst"></span>${hm ? '<span class="badge"><ha-icon icon="mdi:check"></ha-icon>On your Home Screen</span>' : ''}</span>`;
+        const stg = b.querySelector('.hst'), cols = hvSsColors.get('homie') || {}; for (const d of HV_SS_COLS.homie) { const v = hvSsHex(cols[d.k]); if (v && v !== d.d) b.style.setProperty('--hv-ss-' + d.k, v); }
+        requestAnimationFrame(() => { if (!stg.isConnected) return; const hmo = new HVHomie(stg, 'card', { pause: () => !stg.isConnected }), x = { hm: hmo, iv: 0 }; hmo.update(h._hass, (h._config || {}).weather_entity || null);
+          x.iv = setInterval(() => { if (!stg.isConnected) { clearInterval(x.iv); hmo.stop(); return; } hmo.update(h._hass, (h._config || {}).weather_entity || null); }, 1000); homeys.push(x); }); }
+      else { const ty = p === 'weather' ? 'weather' : 'calendar'; b.innerHTML = `<span class="cv hw" data-ty="${ty}" data-sz="${k}"><span class="hwi">${hwHtml(h, { type: ty, size: k }, [w, hh])}</span></span>`; }
+      const c = document.createElement('span'); c.className = 'cap'; c.innerHTML = '<b></b><small></small>'; c.querySelector('b').textContent = cap || (p === 'homey' ? 'Homey' : P[p].name); c.querySelector('small').textContent = no || `${s[1]} · ${s[2]} × ${s[3]}${w < s[2] ? ' (shows as Large here)' : ''}`; b.appendChild(c);
+      b.addEventListener('click', e => { e.stopPropagation(); if (no) { if (p === 'homey' && hm) hvToast('Homey is already on your Home Screen', 'hv-arrange'); return; } close(); if (p === 'homey') this.addHomey(k); else this.addCard(p, k); });
+      return b; };
+    const side = () => { prov.innerHTML = ''; const row = (key, label, ico) => { const b = document.createElement('button'); b.className = 'pr' + (st.p === key ? ' on' : ''); b.dataset.p = key; b.setAttribute('role', 'option'); b.setAttribute('aria-selected', String(st.p === key));
+        b.innerHTML = `${ico}<span></span>`; b.querySelector('span:last-child').textContent = label; b.addEventListener('click', e => { e.stopPropagation(); st.p = key; paint(); }); prov.appendChild(b); };
+      row('sugg', 'Suggestions', '<span class="pi" style="background:linear-gradient(180deg,#bf5af2 0%,#7d3cff 100%)"><ha-icon icon="mdi:star-four-points"></ha-icon></span>');
+      for (const p of ['weather', 'calendar', 'homey']) if (match(p)) row(p, P[p].name, icoHtml(p)); };
+    const paint = () => { wrap._off(); if (st.p !== 'sugg' && !match(st.p)) st.p = 'sugg'; side(); wall.innerHTML = ''; const hd = $('.hd');
+      if (st.p === 'sugg') { hd.innerHTML = '<h2>Suggestions</h2>'; const list = SUGG.filter(([p, k]) => match(p) && (!why(p, k) || (p === 'homey' && hm && k === 'square')));
+        for (const [p, k] of list) wall.appendChild(preview(p, k));
+        if (!list.length) { const d = document.createElement('div'); d.className = 'em'; d.textContent = st.q ? `No cards match “${st.q}”` : 'No cards available'; wall.appendChild(d); } }
+      else { const x = P[st.p]; hd.innerHTML = `<div class="ph">${icoHtml(st.p)}<div><h2></h2><p></p></div></div>`; hd.querySelector('h2').textContent = x.name; hd.querySelector('p').textContent = x.desc;
+        for (const s of x.sizes) wall.appendChild(preview(st.p, s[0], s[1])); }
+      main.scrollTop = 0; };
+    inp.addEventListener('input', () => { st.q = inp.value; paint(); }); inp.addEventListener('keydown', e => { if (e.key === 'Escape') { e.stopPropagation(); if (inp.value) { inp.value = ''; st.q = ''; paint(); } else close(); } });
+    $('.x').addEventListener('click', e => { e.stopPropagation(); close(); });
+    host.addEventListener('pointerdown', e => e.stopPropagation()); // inside the sheet: never the Home Screen's empty-spot tap
+    wrap.querySelector('.scrim').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); close(); }); // outside: closes the gallery only
+    hvEcl.lay.appendChild(wrap); paint(); requestAnimationFrame(() => { if (host.isConnected) paint(); }); const f = prov.querySelector('.pr'); if (f) f.focus({ preventScroll: true }); },
   addCard(type, size) { let n = 0; this.change(raw => this.edit(raw, 'card', a => { a.push({ type, size }); n = a.length - 1; }));
     hvToast(`${type === 'weather' ? 'Weather' : 'Calendar'} card added · tap an empty spot to save`, 'hv-arrange');
     setTimeout(() => { const el = this.hub && this.hub._hgMap && this.hub._hgMap.get('w:' + n); if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }, 80); },
@@ -4176,16 +4245,18 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
   items() { const h = this.hub, out = []; if (!h || !h._hgMap) return out;
     for (const [tok, g] of h._hgMap) { if (!g.isConnected) continue; const m = /^([a-z]+)(?::(\d+))?$/.exec(tok), k = m[1], i = Number(m[2] || 0);
       const kind = k === 'a' ? 'app' : k === 'p' ? 'photo' : k === 's' ? 'side' : k === 'cal' ? 'cal' : 'card';
-      out.push({ tok, kind, i, g, el: kind === 'app' ? (g.querySelector('.ico') || g) : kind === 'photo' ? (g.querySelector('.pw') || g) : (g.querySelector(':scope > .hwi') || g) }); }
+      out.push({ tok, kind, i, g, el: kind === 'app' ? g : kind === 'photo' ? (g.querySelector('.pw') || g) : (g.querySelector(':scope > .hwi') || g), ico: kind === 'app' ? g.querySelector('.ico') : null }); }
     return out; },
   find(g) { return this.items().find(x => x.g === g); },
-  box(it) { return it.el.getBoundingClientRect(); },
+  // an app's target is its whole cell (the icon and its label), not only the icon, so a slightly off-centre press still picks it up
+  box(it) { const r = it.el.getBoundingClientRect(), M = this.hub && this.hub._hgM; if (it.kind !== 'app' || !M || !r.width) return r;
+    const w = Math.max(r.width, M.C), h = Math.max(r.height, M.R), l = r.left + r.width / 2 - w / 2; return { left: l, top: r.top, width: w, height: h, right: l + w, bottom: r.top + h }; },
   label(it) { const c = this.hub._config; if (it.kind === 'app') return (c.apps[it.i] && c.apps[it.i].name) || 'App'; if (it.kind === 'photo') return c.photo_label || 'Photos'; if (it.kind === 'cal') return c.calendar_title || 'Calendar';
     if (it.kind === 'card') { const x = (c.home_cards || [])[it.i] || {}, ty = x.type === 'calendar' ? 'calendar' : 'weather'; return `${ty === 'calendar' ? 'Calendar' : 'Weather'} · ${hwSize(ty, x.size)[1]}`; }
     const s = (c.side_cards || []).filter(x => x && x.type)[it.i] || ((this.hub._sideEls || [])[it.i] || {})._cfg || {}, st = s.entity && this.hub._hass && this.hub._hass.states[s.entity];
     return s.name || s.title || (st && st.attributes.friendly_name) || hvTileTypeName(s.type); },
   tick() { const h = this.hub; if (!h) return; if (!h.isConnected || h._sheetO) { if (!this.dirty) this.exit(false); else if (!this._lost) { this._lost = true; this.exit(true).then(ok => { this._lost = false; if (!ok && this.hub === h) this.exit(false); }); } return; }
-    hvEcl.ensure(); this.bar(true); const lay = hvEcl.lay, day = h.hasAttribute('hv-day'); if (hvEcl.host.hasAttribute('day') !== day) hvEcl.host.toggleAttribute('day', day);
+    hvEcl.ensure(); this.bar(true); const lay = hvEcl.lay, day = h.hasAttribute('hv-day'); lay.classList.toggle('hdrag', !!this.drag); if (hvEcl.host.hasAttribute('day') !== day) hvEcl.host.toggleAttribute('day', day);
     const live = new Set(), vh = innerHeight;
     for (const it of this.items()) { let c = this.ctl.get(it.g);
       if (!c) { c = document.createElement('div'); c.className = 'c arr hc'; const g = it.g;
@@ -4195,8 +4266,9 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
         c.querySelector('.m').addEventListener('click', e => { e.stopPropagation(); const x = this.find(g); if (x) this.menu(x, c.querySelector('.m')); });
         lay.appendChild(c); this.ctl.set(g, c); }
       live.add(c); const r = this.box(it), vis = r.width > 0 && r.bottom > 0 && r.top < vh; c.style.display = vis ? '' : 'none'; if (!vis) continue;
-      const app = it.kind === 'app', bs = app ? 30 : Math.max(30, Math.min(42, Math.round(Math.min(r.width, r.height) * 0.36))), bi = app ? 24 : Math.max(24, bs - 10); c.classList.toggle('app', app); let rr = getComputedStyle(it.el).borderTopLeftRadius;
+      const app = it.kind === 'app', bs = app ? 30 : Math.max(30, Math.min(42, Math.round(Math.min(r.width, r.height) * 0.36))), bi = app ? 24 : Math.max(24, bs - 10); c.classList.toggle('app', app); let rr = getComputedStyle(it.ico || it.el).borderTopLeftRadius;
       if (!rr || rr === '0px') rr = app ? Math.round(r.width * 0.23) + 'px' : '22px';
+      if (app) { const ir = it.ico && it.ico.getBoundingClientRect(); c.style.setProperty('--mi', (ir && ir.width ? Math.round(r.right - ir.right) : 0) + 'px'); c.style.setProperty('--mt', (ir && ir.height ? Math.round(ir.top - r.top) : 0) + 'px'); }
       c.style.setProperty('--bs', bs + 'px'); c.style.setProperty('--bi', bi + 'px'); c.style.setProperty('--rr', rr); c.style.width = r.width + 'px'; c.style.height = r.height + 'px';
       c.style.transform = `translate(${Math.round(r.left)}px,${Math.round(r.top)}px)`; c.classList.toggle('off', !!(this.rs && this.rs.g === it.g) || !!(this.drag && this.drag.g === it.g));
       if (!app) { const z = c.querySelector('.rz'), ab = hvEcl.sr && hvEcl.sr.querySelector('.abar'), br = ab && ab.getBoundingClientRect(); // keep the corner handle clear of the bar (phones)
@@ -4206,8 +4278,8 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
   press(it, e) { if ((e.button != null && e.button > 0) || this.drag || this.rs) return; e.preventDefault(); e.stopPropagation(); hvEcl.closeMenu();
     const cv = e.currentTarget, g = it.g, p = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, mode: '' };
     try { cv.setPointerCapture(p.id); } catch (x) {}
-    const off = () => { clearTimeout(p.t); cv.removeEventListener('pointermove', mv); cv.removeEventListener('pointerup', up); cv.removeEventListener('pointercancel', up); };
-    const go = () => { if (p.mode) return; p.mode = 'drag'; off(); const x = this.find(g); if (x) this.startDrag(x, cv, p); };
+    const off = () => { clearTimeout(p.t); this.down = false; cv.removeEventListener('pointermove', mv); cv.removeEventListener('pointerup', up); cv.removeEventListener('pointercancel', up); };
+    this.down = true; const go = () => { if (p.mode) return; p.mode = 'drag'; off(); const x = this.find(g); if (x) this.startDrag(x, cv, p); };
     const mv = ev => { if (ev.pointerId !== p.id) return; if (ev.cancelable) ev.preventDefault(); p.x = ev.clientX; p.y = ev.clientY; if (Math.hypot(p.x - p.x0, p.y - p.y0) > 8) go(); };
     const up = ev => { if (ev.pointerId !== p.id) return; off(); try { cv.releasePointerCapture(p.id); } catch (x) {}
       if (!p.mode && ev.type === 'pointerup') { const x = this.find(g), c = this.ctl.get(g); if (x && c) this.menu(x, c.querySelector('.m')); } };
@@ -4221,25 +4293,32 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
       clearTimeout(n._hvFt); n._hvFt = setTimeout(() => { n.style.transition = ''; }, 300); } },
   startDrag(it, cv, p) { const ap = this.grid(), g = it.g; if (!ap || g.parentNode !== ap) return; const ar = ap.getBoundingClientRect(), r = g.getBoundingClientRect();
     const ph = document.createElement('div'); ph.className = 'hgp' + (it.kind === 'app' ? ' hga' : ''); ph.style.gridColumn = g.style.gridColumn; ph.style.gridRow = g.style.gridRow;
-    const d = this.drag = { it, g, ph, ap, tok: it.tok, o0: this.order(ap), id: p.id, x0: p.x0, y0: p.y0, x: p.x, y: p.y, sy0: scrollY, cv, tgt: null, at: 0, done: null };
+    const M = this.hub._hgM || { C: r.width, R: r.height, gx: 0, gy: 0, N: 8 }, cw = g._hvCells || [1, 1], ow = cw[0] * M.C + (cw[0] - 1) * M.gx, cl = r.left + r.width / 2 - ow / 2;
+    const d = this.drag = { it, g, ph, ap, tok: it.tok, o0: this.order(ap), id: p.id, x0: p.x0, y0: p.y0, x: p.x, y: p.y, sy0: scrollY, cv, ox: p.x0 - cl, oy: p.y0 - r.top, best: -1, at: 0 };
     ap.insertBefore(ph, g); g.classList.add('lift'); Object.assign(g.style, { left: (r.left - ar.left) + 'px', top: (r.top - ar.top) + 'px', width: r.width + 'px', height: r.height + 'px', margin: '0' });
     d.mv = ev => { if (ev.pointerId !== d.id) return; if (ev.cancelable) ev.preventDefault(); d.x = ev.clientX; d.y = ev.clientY; this.moveDrag(); };
     d.up = ev => { if (ev.pointerId !== d.id) return; this.endDrag(); };
     try { cv.setPointerCapture(p.id); } catch (x) {} cv.addEventListener('pointermove', d.mv); cv.addEventListener('pointerup', d.up); cv.addEventListener('pointercancel', d.up);
-    d.iv = setInterval(() => this.dragTick(), 40); if (navigator.vibrate) try { navigator.vibrate(12); } catch (x) {} this.moveDrag(); this.tick(); },
+    d.iv = setInterval(() => this.dragTick(), 40); if (navigator.vibrate) try { navigator.vibrate(12); } catch (x) {} if (hvEcl.lay) hvEcl.lay.classList.add('hdrag'); this.moveDrag(); this.tick(); },
   moveDrag() { const d = this.drag; if (!d) return; d.g.style.transform = `translate(${d.x - d.x0}px,${d.y - d.y0 + (scrollY - d.sy0)}px) scale(1.06)`; },
-  dragTick() { const d = this.drag; if (!d) return; const ap = d.ap, vh = innerHeight, ez = 56;
+  // where the hole goes: the slot (DOM position) whose packing puts the dragged item nearest the cell under the finger. Uses the grid model
+  // (cells, spans, row dense packing), not the items' on-screen boxes, so items still sliding (FLIP) are never targets and nothing overlaps.
+  slots() { const d = this.drag, M = this.hub._hgM, kids = [...d.ap.children].filter(n => n !== d.g && n !== d.ph), me = d.g._hvCells || [1, 1], out = [];
+    for (let k = 0; k <= kids.length; k++) { const bl = kids.map(n => n._hvCells || [1, 1]); bl.splice(k, 0, me); out.push(hvGridPack(bl, M.N)[k]); }
+    return { kids, out }; },
+  dragTick() { const d = this.drag; if (!d) return; const ap = d.ap, vh = innerHeight, ez = 56, M = this.hub._hgM; if (!M) return;
     if (d.y < ez && scrollY > 0) { scrollBy(0, -14); this.moveDrag(); } else if (d.y > vh - ez && scrollY + vh < document.documentElement.scrollHeight) { scrollBy(0, 14); this.moveDrag(); } // near the edges: the page follows
-    const ar = ap.getBoundingClientRect(), kids = [...ap.children].filter(n => n !== d.g); let tgt = null;
-    for (const n of kids) { if (n === d.ph) continue; const L = ar.left + n.offsetLeft, T = ar.top + n.offsetTop; if (d.x >= L && d.x <= L + n.offsetWidth && d.y >= T && d.y <= T + n.offsetHeight) { tgt = n; break; } }
-    if (!tgt) { const last = kids[kids.length - 1]; if (last && last !== d.ph) { const T = ar.top + last.offsetTop; if (d.y > T + last.offsetHeight || (d.y >= T && d.x > ar.left + last.offsetLeft + last.offsetWidth)) tgt = 'end'; } } // past the last item
-    if (tgt !== d.tgt) { d.tgt = tgt; d.at = Date.now(); d.done = null; return; }
-    if (!tgt || d.done === tgt || Date.now() - d.at < 110) return; d.done = tgt;
-    const m = this.snap(ap); if (tgt === 'end') ap.appendChild(d.ph); else { const L = [...ap.children]; if (L.indexOf(tgt) > L.indexOf(d.ph)) tgt.after(d.ph); else tgt.before(d.ph); }
+    const ar = ap.getBoundingClientRect(), me = d.g._hvCells || [1, 1], pw = M.C + M.gx, phh = M.R + M.gy;
+    const cx = Math.max(0, Math.min(M.N - Math.min(me[0], M.N), (d.x - d.ox - ar.left) / pw)), cy = Math.max(0, (d.y - d.oy - ar.top) / phh); // the cell the item's top-left is over
+    const { kids, out } = this.slots(), all = [...ap.children].filter(n => n !== d.g), cur = Math.min(kids.length, all.indexOf(d.ph)), dist = k => Math.hypot(out[k][0] - cx, (out[k][1] - cy) * 1.15);
+    let best = cur; for (let k = 0; k < out.length; k++) if (dist(k) < dist(best) - 1e-6) best = k;
+    if (best === cur || dist(cur) - dist(best) < 0.35) { d.best = -1; return; } // stay put unless clearly better (no flicker between two slots)
+    if (best !== d.best) { d.best = best; d.at = Date.now(); return; } if (Date.now() - d.at < 80) return; d.best = -1;
+    const m = this.snap(ap); if (best >= kids.length) ap.appendChild(d.ph); else ap.insertBefore(d.ph, kids[best]);
     this.flip(m); if (navigator.vibrate) try { navigator.vibrate(6); } catch (x) {} this.tick(); },
   endDrag() { const d = this.drag; if (!d) return; this.drag = null; clearInterval(d.iv); try { d.cv.releasePointerCapture(d.id); } catch (x) {}
     d.cv.removeEventListener('pointermove', d.mv); d.cv.removeEventListener('pointerup', d.up); d.cv.removeEventListener('pointercancel', d.up);
-    const g = d.g, r0 = g.getBoundingClientRect(); g.classList.remove('lift'); for (const k of ['left', 'top', 'width', 'height', 'margin', 'transform']) g.style[k] = '';
+    if (hvEcl.lay) hvEcl.lay.classList.remove('hdrag'); const g = d.g, r0 = g.getBoundingClientRect(); g.classList.remove('lift'); for (const k of ['left', 'top', 'width', 'height', 'margin', 'transform']) g.style[k] = '';
     if (d.ph.parentNode) d.ph.replaceWith(g); this.flip(new Map([[g, r0]]));
     const now = this.order(d.ap); if (JSON.stringify(now) !== JSON.stringify(d.o0)) this.change(raw => { raw.home_layout = this.merge(now); }); else this.tick(); },
   // the grid's order with the items shown here in their new order (items not drawn yet keep their places)
@@ -5642,7 +5721,7 @@ function hvQuietNow(c, h) {
   return { mode, quiet, why, desc: desc + (quiet ? ` Quiet now (${why.toLowerCase()}).` : ' Not quiet right now.') }; }
 // 1.32.0: a spoken "thank you" / "goodbye" ends the conversation. Only when the words are (almost) the whole utterance: every word has to
 // be part of a dismissal phrase or a filler ("ok", "very much", "for now", ...); "thanks, also turn off the lights" stays a request.
-const HV_DISMISS = "thank you, thanks, thanks jarvis, thank you jarvis, goodbye, bye, good bye, that's all, that's it, never mind, nevermind, stop, cancel, no thanks, I'm done";
+const HV_DISMISS = "thank you, thanks, thanks jarvis, thank you jarvis, thanks homey, thank you homey, thanks homie, thank you homie, goodbye, bye, good bye, that's all, that's it, never mind, nevermind, stop, cancel, no thanks, I'm done";
 const HV_DISMISS_FILL = ['ok', 'okay', 'alright', 'all right', 'great', 'perfect', 'cool', 'awesome', 'oh', 'well', 'so', 'and', 'then', 'now', 'for now', 'very much', 'so much', 'a lot', 'again', 'buddy', 'mate', 'assistant'];
 const hvNorm = t => String(t || '').toLowerCase().replace(/[’‘`´]/g, "'").replace(/[^a-z0-9'\s]+/g, ' ').replace(/\s+/g, ' ').trim();
 // 1.32.0: seconds of continuous quiet, after you started speaking, before the request is sent (assistant_end_of_speech_pause, 1-5, default 2)
@@ -5671,9 +5750,19 @@ const hvHistAdd = (c, r, x) => { x = String(x || '').trim(); if (!x) return; con
  * (dist/wakeword/, next to this file) load only when it is turned on. Mic -> AudioWorklet (16 kHz, 80 ms frames of 1280 samples) ->
  * melspectrogram -> embedding (76 mel frames) -> hey_jarvis (16 embeddings) -> score; over the threshold (Low 0.7 / Medium 0.5 /
  * High 0.35) the assistant opens exactly like a tap on the mic. Paused (mic released) while the assistant is open, for 3 s after it
- * closes (its own voice can't re-trigger it), and while the page is hidden. Not on iPhone / iPad (no always-on mic for web pages). */
-const HV_WW_LS = 'nothomeview-wakeword', HV_WW_SENS_LS = 'nothomeview-wakeword-sensitivity', HV_WW_TH = { low: 0.7, medium: 0.5, high: 0.35 };
-const hvWwOn = () => { try { return localStorage.getItem(HV_WW_LS) === 'on'; } catch (e) { return false; } };
+ * closes (its own voice can't re-trigger it), and while the page is hidden. Not on iPhone / iPad (no always-on mic for web pages).
+ * "Hey Homey" (also "Hey Homie" / "Homie") is a second phrase with its own toggle: its own wake word head (wakeword/hey_homey.onnx, an
+ * openWakeWord model trained for those phrases; see wakeword/README.md) runs on the same melspectrogram + embedding features. Without that
+ * file the toggle says so and stays off: the Hey Jarvis model is never used for it. Both on: either phrase opens the assistant. */
+const HV_WW_LS = 'nothomeview-wakeword', HV_WW_HM_LS = 'nothomeview-wakeword-homey', HV_WW_SENS_LS = 'nothomeview-wakeword-sensitivity', HV_WW_TH = { low: 0.7, medium: 0.5, high: 0.35 };
+const HV_WW_HEADS = { jarvis: { file: 'hey_jarvis_v0.1.onnx', ls: HV_WW_LS, say: 'Hey Jarvis' }, homey: { file: 'hey_homey.onnx', ls: HV_WW_HM_LS, say: 'Hey Homey' } };
+const hvWwPh = k => { if (k === 'homey' && HVWW.hmOk === false) return false; try { return localStorage.getItem(HV_WW_HEADS[k].ls) === 'on'; } catch (e) { return false; } }; // this phrase is on here
+const hvWwPhs = () => Object.keys(HV_WW_HEADS).filter(hvWwPh);
+const hvWwOn = () => hvWwPhs().length > 0; // any wake word on (the listener runs)
+const hvWwSay = () => hvWwPhs().map(k => `“${HV_WW_HEADS[k].say}”`).join(' or ') || '“Hey Jarvis”';
+// is the Hey Homey model next to this file? (one small HEAD request, only when someone looks at the toggle or turns it on)
+const hvWwHmCheck = () => HVWW.hmP || (HVWW.hmP = fetch(hvWwBase() + HV_WW_HEADS.homey.file, { method: 'HEAD', cache: 'no-store' }).then(r => r.ok, () => false)
+  .then(ok => { HVWW.hmOk = ok; if (!ok) HVWW.hmP = null; return ok; }));
 const hvWwSens = () => { try { const v = localStorage.getItem(HV_WW_SENS_LS); return v in HV_WW_TH ? v : 'medium'; } catch (e) { return 'medium'; } };
 const hvWwSupport = () => { const ua = navigator.userAgent || '';
   if (/iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return false;
@@ -5685,20 +5774,27 @@ const hvWwBase = () => { let u = (window.__nhvLoader && window.__nhvLoader.url) 
 const HV_WW_WORKLET = `registerProcessor('hv-ww',class extends AudioWorkletProcessor{constructor(){super();this.r=sampleRate/16000;this.t=0;this.l=0;this.b=new Float32Array(1280);this.n=0}
 process(i){const c=i[0]&&i[0][0];if(!c||!c.length)return true;let t=this.t;while(t<c.length-1){const k=Math.floor(t),f=t-k,a=k<0?this.l:c[k],b=c[k+1];this.b[this.n++]=Math.max(-1,Math.min(1,a+(b-a)*f))*32767;
 if(this.n===1280){this.port.postMessage(this.b.slice(0));this.n=0}t+=this.r}this.t=t-c.length;this.l=c[c.length-1];return true}})`;
-const HVWW = { st: 'off', msg: '', run: null, ac: null, wl: null, stream: null, src: null, node: null, q: [], busy: false, cool: 0, ct: null, pill: null, last: 0, fired: null };
+const HVWW = { st: 'off', msg: '', run: null, ac: null, wl: null, stream: null, src: null, node: null, q: [], busy: false, cool: 0, ct: null, pill: null, last: 0, fired: null, heads: {}, hmOk: null, hmP: null };
 const hvWwLoad = () => HVWW.loadP || (HVWW.loadP = (async () => { const base = hvWwBase();
   const ort = await import(base + 'ort.wasm.min.mjs'); ort.env.wasm.numThreads = 1; ort.env.wasm.wasmPaths = base; ort.env.logLevel = 'error';
   const o = { executionProviders: ['wasm'], graphOptimizationLevel: 'all' }, ld = n => ort.InferenceSession.create(base + n, o);
-  const [mel, emb, ww] = await Promise.all([ld('melspectrogram.onnx'), ld('embedding_model.onnx'), ld('hey_jarvis_v0.1.onnx')]);
-  HVWW.ort = ort; HVWW.ses = { mel, emb, ww }; return HVWW.ses; })().catch(e => { HVWW.loadP = null; throw e; }));
-const hvWwReset = () => { HVWW.raw = new Float32Array(1760); HVWW.mel = new Float32Array(76 * 32).fill(1); HVWW.feat = new Float32Array(16 * 96); HVWW.nf = 0; HVWW.warm = 20; HVWW.q = []; };
+  const [mel, emb] = await Promise.all([ld('melspectrogram.onnx'), ld('embedding_model.onnx')]);
+  HVWW.ort = ort; HVWW.ld = ld; HVWW.ses = { mel, emb }; return HVWW.ses; })().catch(e => { HVWW.loadP = null; throw e; }));
+// the wake word heads for the phrases that are on (each loaded once); n = the embeddings it reads (16 for openWakeWord's own models)
+const hvWwHeads = async () => { await hvWwLoad(); const out = [];
+  for (const k of hvWwPhs()) { const H = HVWW.heads[k] || (HVWW.heads[k] = HVWW.ld(HV_WW_HEADS[k].file).then(ses => { let n = 16; try { const md = ses.inputMetadata && ses.inputMetadata[0], sh = md && (md.shape || md.dimensions); if (sh && Number(sh[1]) > 0) n = Math.min(32, Number(sh[1])); } catch (e) {} return { k, ses, n }; }).catch(e => { delete HVWW.heads[k]; throw e; }));
+    out.push(await H); }
+  HVWW.on = out; return out; };
+const hvWwReset = () => { HVWW.raw = new Float32Array(1760); HVWW.mel = new Float32Array(76 * 32).fill(1); HVWW.feat = new Float32Array(32 * 96); HVWW.nf = 0; HVWW.warm = 20; HVWW.q = []; };
 // one 80 ms frame (1280 samples, int16 scale) -> wake word score (null while the buffers fill)
 const hvWwStep = async f => { const W = HVWW, T = W.ort.Tensor, S = W.ses; W.raw.copyWithin(0, 1280); W.raw.set(f, 480);
   let o = await S.mel.run({ [S.mel.inputNames[0]]: new T('float32', W.raw.slice(), [1, 1760]) }); const md = o[S.mel.outputNames[0]].data, nF = Math.min(76, Math.floor(md.length / 32));
   W.mel.copyWithin(0, nF * 32); for (let i = 0; i < nF * 32; i++) W.mel[(76 - nF) * 32 + i] = md[i] / 10 + 2;
   o = await S.emb.run({ [S.emb.inputNames[0]]: new T('float32', W.mel.slice(), [1, 76, 32, 1]) }); const e = o[S.emb.outputNames[0]].data;
-  W.feat.copyWithin(0, 96); W.feat.set(e.subarray(0, 96), 15 * 96); W.nf++; if (W.warm > 0) W.warm--; if (W.nf < 16) return null;
-  o = await S.ww.run({ [S.ww.inputNames[0]]: new T('float32', W.feat.slice(), [1, 16, 96]) }); return o[S.ww.outputNames[0]].data[0]; };
+  W.feat.copyWithin(0, 96); W.feat.set(e.subarray(0, 96), 31 * 96); W.nf++; if (W.warm > 0) W.warm--; let best = null;
+  for (const hd of W.on || []) { if (W.nf < hd.n) continue; const r = await hd.ses.run({ [hd.ses.inputNames[0]]: new T('float32', W.feat.slice((32 - hd.n) * 96), [1, hd.n, 96]) }), sc = r[hd.ses.outputNames[0]].data[0];
+    if (best == null || sc > best.sc) best = { k: hd.k, sc }; }
+  return best; }; // the highest score of the phrases that are on (and which one)
 const hvWwHub = () => { const a = [...HV_HUBS].filter(h => h.isConnected && h._hass && h._config && h._config.assistant_enabled === true); return a.find(h => h.getClientRects().length) || a[0] || null; };
 const hvWwWant = () => hvWwOn() && hvWwSupport() && !document.hidden && !!hvWwHub() && ![...HV_HUBS].some(h => h._assistO) && Date.now() >= HVWW.cool;
 const hvWwEmit = () => { const p = HVWW.pill, show = HVWW.st === 'listening' || HVWW.st === 'tap';
@@ -5708,7 +5804,7 @@ const hvWwEmit = () => { const p = HVWW.pill, show = HVWW.st === 'listening' || 
 .p{display:flex;align-items:center;gap:7px;padding:6px 12px 6px 9px;border-radius:16px;background:rgba(10,12,22,.38);-webkit-backdrop-filter:blur(14px) saturate(1.4);backdrop-filter:blur(14px) saturate(1.4);box-shadow:inset 0 0 0 1px rgba(255,255,255,.16),0 4px 14px rgba(0,0,0,.18);font-size:12.5px;font-weight:500;color:rgba(255,255,255,.86);white-space:nowrap}
 .d{width:8px;height:8px;border-radius:50%;background:#34c759;box-shadow:0 0 0 4px rgba(52,199,89,.22)} :host([tap]) .d{background:#8e8e93;box-shadow:0 0 0 4px rgba(142,142,147,.22)}
 ha-icon{--mdc-icon-size:14px;display:flex;opacity:.85}</style><div class="p" role="status"><span class="d"></span><ha-icon icon="mdi:microphone"></ha-icon><span class="t"></span></div>`; document.body.appendChild(el); }
-  const el = HVWW.pill; el.hidden = false; el.toggleAttribute('tap', HVWW.st === 'tap'); el.shadowRoot.querySelector('.t').textContent = HVWW.st === 'tap' ? 'Tap the screen to start “Hey Jarvis”' : 'Listening for “Hey Jarvis”'; };
+  const el = HVWW.pill; el.hidden = false; el.toggleAttribute('tap', HVWW.st === 'tap'); el.shadowRoot.querySelector('.t').textContent = HVWW.st === 'tap' ? `Tap the screen to start ${hvWwSay()}` : `Listening for ${hvWwSay()}`; };
 const hvWwStop = () => { HVWW.run = null; try { if (HVWW.node) { HVWW.node.port.onmessage = null; HVWW.node.disconnect(); } if (HVWW.src) HVWW.src.disconnect(); } catch (e) {} HVWW.node = HVWW.src = null; HVWW.q = [];
   if (HVWW.stream) { HVWW.stream.getTracks().forEach(t => t.stop()); HVWW.stream = null; } if (HVWW.st !== 'error' || !hvWwOn()) HVWW.st = hvWwOn() && hvWwSupport() ? 'paused' : 'off'; hvWwEmit(); };
 // an audio context made in a tap (turning the setting on) keeps running; one made without a tap waits for the first touch on the page
@@ -5718,7 +5814,7 @@ const hvWwTap = () => { const ac = HVWW.ac; if (ac && ac.state !== 'running') ac
 addEventListener('pointerdown', hvWwTap, true); addEventListener('keydown', hvWwTap, true);
 const hvWwStart = async () => { if (HVWW.run) return; const tok = HVWW.run = {}; HVWW.st = 'loading'; HVWW.msg = ''; hvWwEmit();
   const gone = () => HVWW.run !== tok;
-  try { await hvWwLoad(); if (gone()) return;
+  try { if (hvWwPh('homey') && !(await hvWwHmCheck()) && !hvWwPh('jarvis')) { hvWwStop(); return; } await hvWwHeads(); if (gone()) return;
     const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: false, autoGainControl: true, channelCount: 1 } });
     if (gone()) { stream.getTracks().forEach(t => t.stop()); return; } HVWW.stream = stream;
     let ac = hvWwCtx(), src; try { src = ac.createMediaStreamSource(stream); } catch (e) { try { ac.close(); } catch (e2) {} HVWW.ac = null; const C = window.AudioContext || window.webkitAudioContext; ac = HVWW.ac = new C(); HVWW.wl = null; src = ac.createMediaStreamSource(stream); } // a browser that can't mix rates: native rate, the worklet resamples
@@ -5732,27 +5828,78 @@ const hvWwStart = async () => { if (HVWW.run) return; const tok = HVWW.run = {};
     console.warn('NotHomeView: wake word', e); hvWwEmit(); } };
 const hvWwChunk = (f, tok) => { if (HVWW.run !== tok) return; HVWW.q.push(f); if (HVWW.q.length > 6) HVWW.q.splice(0, HVWW.q.length - 6); if (!HVWW.busy) hvWwPump(tok); };
 const hvWwPump = async tok => { HVWW.busy = true;
-  try { while (HVWW.q.length && HVWW.run === tok) { const sc = await hvWwStep(HVWW.q.shift()); if (sc == null) continue; HVWW.last = sc;
-      if (sc >= HV_WW_TH[hvWwSens()] && HVWW.warm <= 0 && HVWW.run === tok) { hvWwFire(sc); break; } } }
+  try { while (HVWW.q.length && HVWW.run === tok) { const b = await hvWwStep(HVWW.q.shift()); if (b == null) continue; HVWW.last = b.sc;
+      if (b.sc >= HV_WW_TH[hvWwSens()] && HVWW.warm <= 0 && HVWW.run === tok) { hvWwFire(b.sc, b.k); break; } } }
   catch (e) { console.warn('NotHomeView: wake word', e); } HVWW.busy = false; };
 // heard: the assistant opens like a tap on the mic (the wake mic is released first; it resumes 3 s after the assistant closes)
-const hvWwFire = sc => { const hub = hvWwHub(); HVWW.fired = { t: Date.now(), score: Math.round(sc * 1000) / 1000 }; hvWwStop(); if (hub && !hub._assistO) hub._openAssist(); hvWwSync(); };
+const hvWwFire = (sc, k) => { const hub = hvWwHub(); HVWW.fired = { t: Date.now(), score: Math.round(sc * 1000) / 1000, phrase: k || 'jarvis' }; hvWwStop(); if (hub && !hub._assistO) hub._openAssist(); hvWwSync(); };
 const hvWwSync = () => { clearTimeout(HVWW.ct); if (hvWwOn() && Date.now() < HVWW.cool) HVWW.ct = setTimeout(hvWwSync, HVWW.cool - Date.now() + 30);
   if (hvWwWant()) hvWwStart(); else if (HVWW.run || HVWW.st !== (hvWwOn() && hvWwSupport() ? 'paused' : 'off')) hvWwStop(); };
 document.addEventListener('visibilitychange', () => hvWwSync()); addEventListener('pageshow', () => hvWwSync());
+// turn one phrase on / off on this device (the assistant panel and Settings); Hey Homey only once its model file is there
+const hvWwToggle = async k => { if (!hvWwSupport() || !HV_WW_HEADS[k]) return false; const on = !hvWwPh(k), ls = HV_WW_HEADS[k].ls;
+  if (on) { try { hvWwCtx().resume().catch(() => {}); } catch (e) {} } // in the tap: the audio context may run later without another one
+  if (on && k === 'homey' && !(await hvWwHmCheck())) { try { localStorage.removeItem(ls); } catch (e) {} hvToast('“Hey Homey” needs its wake word model (wakeword/hey_homey.onnx). See the wake word README.'); return false; }
+  try { if (on) localStorage.setItem(ls, 'on'); else localStorage.removeItem(ls); } catch (e) {}
+  if (on) hvWwLoad().catch(() => {}); hvWwStop(); HVWW.st = 'off'; hvWwSync(); return on; };
 window.__hvWakeWord = HVWW; // state for debugging (st, last score, fired)
+// Homey as the compact assistant popup (assistant_face: 'homie'): his head only, the house plate of the original artwork (HV_HOMEY_PC.body, no body,
+// arms, legs or shoes), with three moods painted over his own face (face-coloured patches + new eyes / mouth, in house-plate px):
+// smiling (listening, speaking, idle: bob, blink, talking mouth while speaking), thinking (st=thinking: tilt, eyes looking around, "hmm"
+// mouth, thought dots) and confused (mood=confused, set when Assist fails or didn't hear / understand: wobble, uneven eyes, squiggle mouth, "?").
+const hvHomeyHead = mini => { const P = '#fefbf3', D = '#2b2d30', E1 = [75.5, 156, 14.5, 20], E2 = [150, 166, 15, 20];
+  const patchEyes = [E1, E2].map(([x, y, a, b]) => `<ellipse cx="${x}" cy="${y}" rx="${a + 4.5}" ry="${b + 4.5}" fill="${P}"/>`).join(''), patchMouth = `<ellipse cx="106" cy="198" rx="31" ry="15" fill="${P}"/>`;
+  const eye = ([x, y, a, b], s, dx, dy) => `<ellipse cx="${x + (dx || 0)}" cy="${y + (dy || 0)}" rx="${a * (s || 1)}" ry="${b * (s || 1)}" fill="${D}"/><circle cx="${x + (dx || 0) - a * 0.32 * (s || 1)}" cy="${y + (dy || 0) - b * 0.38 * (s || 1)}" r="${4.2 * (s || 1)}" fill="#fff"/>`;
+  return `<svg class="hh${mini ? ' mini' : ''}" viewBox="-26 -54 336 352" aria-hidden="true"><g class="hq">${mini ? '' : '<text x="236" y="14" class="q1">?</text>'}</g><g class="hdots">${mini ? '' : '<circle cx="250" cy="10" r="9"/><circle cx="276" cy="-14" r="12"/><circle cx="300" cy="-44" r="15"/>'}</g>
+<g class="hhd"><image href="${HV_HOMEY_PC.body[2]}" width="284" height="286"/>
+<g class="x-talk">${patchMouth}<path class="tm" d="M83 190 Q106 224 130 190 Q106 199 83 190Z" fill="${D}"/></g>
+<g class="x-think">${patchEyes}${patchMouth}<g class="pu">${eye(E1, 0.82, 3, -4)}${eye(E2, 0.82, 3, -4)}</g><path d="M93 201 Q109 195 124 198" fill="none" stroke="${D}" stroke-width="6.5" stroke-linecap="round"/></g>
+<g class="x-conf">${patchEyes}${patchMouth}${eye(E1, 1.04)}${eye(E2, 0.66, 0, 3)}<path d="M58 124 Q76 110 94 121" fill="none" stroke="${D}" stroke-width="6" stroke-linecap="round"/><path d="M136 143 L165 150" fill="none" stroke="${D}" stroke-width="6" stroke-linecap="round"/>
+<path d="M82 201 q7 -8 14 0 t14 0 t14 0 t12 -1" fill="none" stroke="${D}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g class="x-lids">${[E1, E2].map(([x, y, a, b]) => `<ellipse cx="${x}" cy="${y}" rx="${a + 3}" ry="${b + 3}" fill="${P}"/><path d="M${x - a + 1} ${y + 2} Q${x} ${y + 10} ${x + a - 1} ${y + 2}" fill="none" stroke="${D}" stroke-width="5" stroke-linecap="round"/>`).join('')}</g></g></svg>`; };
+const HV_HEAD_CSS = `
+.hh{display:none;position:absolute;overflow:visible}:host([face=homie]) .hh{display:block}
+:host([face=homie]) .bo{--os:128px;border-radius:0}:host([face=homie][cap]) .bo{--os:104px}:host([face=homie]) .bo > span{display:none}
+:host([face=homie]) .bo .hh{inset:-6%;width:112%;height:112%;filter:drop-shadow(0 10px 18px rgba(0,0,0,.35))}
+:host([face=homie]) .hd .orb::before,:host([face=homie]) .hd .orb::after{display:none}:host([face=homie]) .hd .orb .hh{inset:-12%;width:124%;height:124%}
+.hh g{transform-box:fill-box}.hh .hhd{transform-origin:50% 92%;animation:hhbob 2.6s ease-in-out infinite}
+.hh .x-talk,.hh .x-think,.hh .x-conf,.hh .hq,.hh .hdots{opacity:0}.hh .x-lids{opacity:0;animation:hhblink 4.2s infinite}
+.hh .q1{font:800 92px/1 ${FONT};fill:#fff;stroke:#2b2d30;stroke-width:6px;paint-order:stroke}.hh .hdots circle{fill:#fff;stroke:#2b2d30;stroke-width:5}
+@keyframes hhbob{0%,100%{transform:translateY(0) rotate(0)}50%{transform:translateY(-5px) rotate(1.4deg)}}
+@keyframes hhblink{0%,93%,100%{opacity:0}95%,97%{opacity:1}}
+/* smiling while speaking: the mouth talks */
+:host([st=speaking]:not([mood=confused])) .hh .x-talk{opacity:1}:host([st=speaking]:not([mood=confused])) .hh .tm{transform-box:fill-box;transform-origin:50% 0;animation:hhtalk .32s ease-in-out infinite alternate}
+@keyframes hhtalk{from{transform:scaleY(.35)}to{transform:scaleY(1)}}
+:host([st=listening]:not([mood=confused])) .hh .hhd{animation-duration:1.6s}
+/* thinking: tilted, eyes look around, thought dots */
+:host([st=thinking]:not([mood=confused])) .hh .x-think{opacity:1}:host([st=thinking]:not([mood=confused])) .hh .x-lids{animation:none}
+:host([st=thinking]:not([mood=confused])) .hh .hhd{animation:hhthink 2.4s ease-in-out infinite}
+:host([st=thinking]:not([mood=confused])) .hh .pu{animation:hhlook 2.4s ease-in-out infinite}
+:host([st=thinking]:not([mood=confused])) .hh .hdots{opacity:1}:host([st=thinking]:not([mood=confused])) .hh .hdots circle{animation:hhdot 1.2s ease-in-out infinite}
+.hh .hdots circle:nth-child(2){animation-delay:.2s !important}.hh .hdots circle:nth-child(3){animation-delay:.4s !important}
+@keyframes hhthink{0%,100%{transform:rotate(-8deg) translateY(0)}50%{transform:rotate(-4deg) translateY(-3px)}}
+@keyframes hhlook{0%,100%{transform:translate(0,0)}30%{transform:translate(-7px,-2px)}60%{transform:translate(5px,-5px)}}
+@keyframes hhdot{0%,100%{opacity:.25}50%{opacity:1}}
+/* confused: wobble, uneven eyes, squiggle mouth, a question mark */
+:host([mood=confused]) .hh .x-conf{opacity:1}:host([mood=confused]) .hh .x-lids{animation:none}:host([mood=confused]) .hh .hhd{animation:hhconf 1.1s ease-in-out infinite}
+:host([mood=confused]) .hh .hq{opacity:1;transform-origin:50% 100%;animation:hhq 1.1s ease-in-out infinite}
+@keyframes hhconf{0%,100%{transform:rotate(-7deg)}50%{transform:rotate(7deg)}}
+@keyframes hhq{0%,100%{transform:translateY(0) rotate(-8deg)}50%{transform:translateY(-8px) rotate(8deg)}}
+.hh.mini .hhd{animation-duration:3.4s}
+@media (prefers-reduced-motion:reduce){.hh *{animation:none !important}}`;
 function hvAssist(hub, o) {
   o = o || {}; let compact = !!o.orb;
   const c = hub._config, h0 = hub._hass; const theme = c.assistant_theme && c.assistant_theme !== 'same' ? c.assistant_theme : c.theme;
   const host = document.createElement('homeview-assist'), sr = host.attachShadow({ mode: 'open' }); host.toggleAttribute('night', hvMode(theme, h0) !== 'day');
-  sr.innerHTML = `<style>${ASSIST_CSS}</style><div class="ov"><div class="ow"><button class="bo" aria-label="Open the chat"><span class="ha"></span><span class="ri"></span><span class="co"><span class="bd1"></span><span class="bd2"></span><span class="sp"></span><span class="li"></span></span></button>
+  sr.innerHTML = `<style>${ASSIST_CSS}${HV_HEAD_CSS}</style><div class="ov"><div class="ow"><button class="bo" aria-label="Open the chat"><span class="ha"></span><span class="ri"></span><span class="co"><span class="bd1"></span><span class="bd2"></span><span class="sp"></span><span class="li"></span></span></button>
     <div class="ost" role="status"><span class="wave" aria-hidden="true"><i style="--k:.5"></i><i style="--k:.8"></i><i style="--k:1"></i><i style="--k:.6"></i><i style="--k:.9"></i><i style="--k:.45"></i><i style="--k:.7"></i></span><span class="olt"></span></div>
     <div class="ohint">Tap the orb to see the chat</div><div class="cap" hidden aria-live="polite"><div class="q"></div><div class="a"></div><div class="mt"><span class="why"></span><span>Tap orb for chat</span></div></div></div></div>
     <div class="wrap"><div class="bg"></div>
     <div class="cd" role="dialog" aria-modal="true" aria-label="Assistant"><div class="col" style="flex:1 1 auto">
     <div class="hd"><div class="grab" aria-hidden="true"></div><div class="orb" aria-hidden="true"></div><div class="ti"><b>Assistant</b><span class="pl"></span></div><button class="hb" aria-label="Show earlier messages" aria-pressed="false" hidden><ha-icon icon="mdi:history"></ha-icon></button><button class="qb" aria-label="Quiet mode, wake word and chat history on this device" aria-expanded="false"><ha-icon></ha-icon><span></span></button><button class="x" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button></div>
     <div class="qp" hidden><div class="qh">Quiet mode · this device</div><div class="seg" role="radiogroup" aria-label="Quiet mode"><button data-q="off" role="radio">Off</button><button data-q="on" role="radio">On</button><button data-q="auto" role="radio">Auto</button></div><div class="qd"></div>
-    <div class="qh qh2">Wake word · this device</div><div class="wwb"><div class="wwr"><div class="wwl"><b>Wake word</b><span>“Hey Jarvis”</span></div><button class="tgl" role="switch" aria-checked="false" aria-label="Wake word “Hey Jarvis” on this device"><i></i></button></div>
+    <div class="qh qh2">Wake word · this device</div><div class="wwb"><div class="wwr"><div class="wwl"><b>Hey Jarvis</b><span>Say “Hey Jarvis”</span></div><button class="tgl" data-ww="jarvis" role="switch" aria-checked="false" aria-label="Wake word “Hey Jarvis” on this device"><i></i></button></div>
+    <div class="wwr"><div class="wwl"><b>Hey Homey</b><span class="wwhs">Say “Hey Homey”, “Hey Homie” or “Homie”</span></div><button class="tgl" data-ww="homey" role="switch" aria-checked="false" aria-label="Wake word “Hey Homey” on this device"><i></i></button></div>
     <div class="qd wwd">Listens on this device only while the dashboard is open.</div><div class="qd wwx" hidden></div>
     <div class="wws"><div class="wwst"><span>Sensitivity</span><span>fewer false starts ↔ hears from farther</span></div><div class="seg sm" role="radiogroup" aria-label="Wake word sensitivity"><button data-w="low" role="radio">Low</button><button data-w="medium" role="radio">Medium</button><button data-w="high" role="radio">High</button></div></div></div>
     <div class="wwna" hidden><ha-icon icon="mdi:information-outline"></ha-icon><span>Not available on this device. Use the mic button instead.</span></div>
@@ -5763,6 +5910,9 @@ function hvAssist(hub, o) {
     </div></div><button class="jump" aria-label="Show the newest message">Newest ↓</button></div>`;
   const $ = s => sr.querySelector(s), wrap = $('.wrap'), bd = $('.bd'), log = $('.log'), mic = $('.mic'), inp = $('input'), orb = $('.orb'), jump = $('.jump');
   const ov = $('.ov'), bo = $('.bo'), olt = $('.olt'), cap = $('.cap'); host.toggleAttribute('orb', compact);
+  if (o.face === 'homie') { host.setAttribute('face', 'homie'); bo.insertAdjacentHTML('beforeend', hvHomeyHead()); orb.insertAdjacentHTML('beforeend', hvHomeyHead(true)); bo.setAttribute('aria-label', 'Open the chat (Homey)');
+    $('.ohint').textContent = 'Tap Homey for the chat'; cap.querySelector('.mt span:last-child').textContent = 'Tap Homey for chat'; }
+  const oops = () => host.setAttribute('mood', 'confused'); // Homey looks confused (the orb ignores it) until the next try
   const pipe = c.assistant_pipeline && c.assistant_pipeline !== 'preferred' ? c.assistant_pipeline : null; let convId = null, rec = null, unsub = null, closed = false, player = null, runTok = 0, micS = null, keepCap = false;
   // 1.32.0: the orb (compact) view: status under the orb, the caption (quiet mode / no voice) and closing itself a few seconds after the reply
   let asked = false, capMode = compact, capWhy = '', capShown = false, dt = null;
@@ -5771,7 +5921,7 @@ function hvAssist(hub, o) {
     cap.querySelector('.why').innerHTML = why ? `<ha-icon icon="${er ? 'mdi:alert-circle-outline' : 'mdi:volume-off'}"></ha-icon>${esc(why)}` : ''; cap.classList.toggle('er', !!er);
     cap.hidden = false; capShown = true; host.setAttribute('cap', ''); };
   const hideCap = () => { cap.hidden = true; capShown = false; host.removeAttribute('cap'); };
-  const st = s => { host.setAttribute('st', s); if (!compact) return; clearTimeout(dt); dt = null; olt.textContent = orbLabel[s] || (asked ? '' : 'Listening…');
+  const st = s => { host.setAttribute('st', s); if (s === 'listening' || s === 'thinking') host.removeAttribute('mood'); if (!compact) return; clearTimeout(dt); dt = null; olt.textContent = orbLabel[s] || (asked ? '' : 'Listening…');
     if (s === 'listening' && !keepCap) hideCap();
     if (s === 'idle' && asked) { const n = capShown ? (cap.querySelector('.a').textContent.length + cap.querySelector('.q').textContent.length) : 0;
       dt = setTimeout(() => { if (compact) close(); }, capShown ? Math.max(5000, Math.min(14000, 4000 + n * 55)) : 2500); } };
@@ -5853,7 +6003,7 @@ function hvAssist(hub, o) {
     const msg = { type: 'assist_pipeline/run', start_stage: 'intent', end_stage: speak ? 'tts' : 'intent', input: { text }, conversation_id: convId };
     if (pipe) msg.pipeline = pipe; let streamed = '', answered = false, cont = false; const re = m.querySelector('.re');
     const failed = er => { if (tok !== runTok) return; if (speak && !answered && /text.to.speech|tts/i.test(er || '')) { endRun(); run(text, tok, false, m); return; } // no voice for the reply: answer silently
-      if (!answered) re.textContent = ''; note(m, er || 'The assistant could not answer.'); st('idle'); micOff(); };
+      if (!answered) re.textContent = ''; note(m, er || 'The assistant could not answer.'); st('idle'); oops(); micOff(); };
     try { unsub = hub._hass.connection.subscribeMessage(ev => { if (tok !== runTok) return; const d = ev.data || {};
       if (ev.type === 'intent-progress') { const dl = d.chat_log_delta; if (dl && typeof dl.content === 'string') { streamed += dl.content; re.textContent = streamed; keep(); } }
       else if (ev.type === 'intent-end') { answered = true; const o = d.intent_output || {}, r = o.response || {}; convId = o.conversation_id || convId;
@@ -5864,7 +6014,7 @@ function hvAssist(hub, o) {
         const bad = agentErr(sp, r.response_type), quota = bad && /resource.exhausted|quota|rate.limit|\b429\b|too many requests/i.test(sp);
         // an agent error can carry the provider's raw error payload (JSON): show only its first sentence
         const shown = bad ? ((sp.split(/\s*[{\[]|\n|\.:/)[0] || '').trim().replace(/[:\s]+$/, '') || 'Sorry, something went wrong.') : sp;
-        fill(m, shown || (r.response_type === 'error' ? 'Sorry, something went wrong.' : 'Done.'), ex); st(speak ? 'thinking' : 'idle');
+        fill(m, shown || (r.response_type === 'error' ? 'Sorry, something went wrong.' : 'Done.'), ex); st(speak ? 'thinking' : 'idle'); if (bad || r.response_type === 'error') oops();
         cont = !bad && r.response_type !== 'error' && (o.continue_conversation === true || /\?["”'’)\s]*$/.test(shown || ''));
         const an = `“${(pinfoCache || {}).name || 'This assistant'}”`;
         if (bad && !/timer/i.test(text)) note(m, quota ? `${an} couldn't answer: its AI service has hit its usage limit (quota) for now. Try again later, or pick another assistant in the Home Screen settings.`
@@ -5905,7 +6055,7 @@ function hvAssist(hub, o) {
     if (keepCap) cap.querySelector('.why').innerHTML = '<ha-icon icon="mdi:microphone"></ha-icon>Listening… say “thank you” to finish'; st('listening'); sugEl.hidden = true; stick = true; const lm = liveMsg(), lt = lm.querySelector('.lt');
     const drop = () => { if (lm.isConnected) lm.remove(); };
     try { stream = micLive() ? micS : await md.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } }); micS = stream; } // the open mic is reused for a follow-up
-    catch (e) { st('idle'); drop(); const n = e && e.name;
+    catch (e) { st('idle'); oops(); drop(); const n = e && e.name;
       note(null, n === 'NotAllowedError' || n === 'SecurityError' ? 'Microphone access was blocked. Allow the microphone for this site (browser or app settings), or type your request below.'
         : n === 'NotFoundError' || n === 'OverconstrainedError' ? 'No microphone was found on this device. Type your request below.' : "The microphone couldn't start (" + (e && e.message || n) + '). Type your request below.'); return; }
     if (closed) { micOff(); return; }
@@ -5938,7 +6088,7 @@ function hvAssist(hub, o) {
         if (!window.__hvWorklet) window.__hvWorklet = ac.audioWorklet.addModule(URL.createObjectURL(new Blob([`registerProcessor('hv-rec',class extends AudioWorkletProcessor{process(i){const c=i[0]&&i[0][0];if(c)this.port.postMessage(c.slice(0));return true}})`], { type: 'text/javascript' })));
         await window.__hvWorklet; proc = new AudioWorkletNode(ac, 'hv-rec'); proc.port.onmessage = e => onPcm(e.data); srcN.connect(proc); }
       else { proc = ac.createScriptProcessor(4096, 1, 1); proc.onaudioprocess = e => onPcm(e.inputBuffer.getChannelData(0)); srcN.connect(proc); proc.connect(ac.destination); } }
-    catch (e) { stopAudio(); micOff(); rec = null; st('idle'); drop(); note(null, "The microphone couldn't start (" + (e && e.message || e) + '). Type your request below.'); return; }
+    catch (e) { stopAudio(); micOff(); rec = null; st('idle'); oops(); drop(); note(null, "The microphone couldn't start (" + (e && e.message || e) + '). Type your request below.'); return; }
     endRun(); const msg = { type: 'assist_pipeline/run', start_stage: 'stt', end_stage: 'stt', input: { sample_rate: 16000, no_vad: true }, timeout: 90 }; if (pipe) msg.pipeline = pipe;
     const cap_ = () => { if (rec && rec.finish === finish) finish(); };
     let safety = setTimeout(cap_, compact ? 15000 : 60000); // nothing heard: stop (15 s on the orb, 60 s on the reading page)
@@ -5946,7 +6096,7 @@ function hvAssist(hub, o) {
     let heard = false; const quietEnd = () => { clearTimeout(sil); if (closed) return; if (rec && rec.finish === finish) rec.stop(); rec = null; keepCap = false; micOff(); if (compact) close(); else st('idle'); };
     const silT = (Number(c.assistant_silence_timeout) > 0 ? Number(c.assistant_silence_timeout) : 5) * 1000;
     const sil = fol ? setTimeout(() => { if (!heard && tok === runTok) quietEnd(); }, compact ? silT : Math.max(silT, 60000)) : null; // after a reply: 5 s on the orb, 60 s on the reading page
-    const fail = m => { clearTimeout(safety); clearTimeout(sil); if (fol && !heard) { quietEnd(); return; } finish(); rec = null; endRun(); st('idle'); drop(); micOff(); note(null, m); };
+    const fail = m => { clearTimeout(safety); clearTimeout(sil); if (fol && !heard) { quietEnd(); return; } finish(); rec = null; endRun(); st('idle'); oops(); drop(); micOff(); note(null, m); };
     // speech started (card VAD): the "nothing said" close (assistant_silence_timeout) no longer applies to this turn
     onSpeech = () => { if (tok !== runTok || heard) return; heard = true; clearTimeout(sil); clearTimeout(safety); safety = setTimeout(cap_, 45000); if (lt) lt.textContent = 'Hearing you…'; };
     if (vSpeech) onSpeech();
@@ -5955,7 +6105,7 @@ function hvAssist(hub, o) {
       else if (ev.type === 'stt-vad-start') onSpeech(); // not sent with no_vad; kept for older cores that ignore it
       else if (ev.type === 'stt-vad-end') { if (!vSpeech) finish(); }
       else if (ev.type === 'stt-end') { clearTimeout(safety); clearTimeout(sil); finish(); rec = null; endRun(); const t = ((d.stt_output || {}).text || '').trim();
-        if (!t) { if (fol) { drop(); quietEnd(); return; } st('idle'); drop(); micOff(); say("Sorry, I didn't catch that."); return; } typeIn(lm, t);
+        if (!t) { if (fol) { drop(); quietEnd(); return; } st('idle'); oops(); drop(); micOff(); say("Sorry, I didn't catch that."); return; } typeIn(lm, t);
         if (hvIsDismiss(t, c.assistant_dismiss_phrases)) { micOff(); asked = true; keepCap = false; hvHistAdd(c, 'u', t); say('Goodbye.'); if (compact) { cap.querySelector('.q').textContent = `“${t}”`; showCap(null, 'Goodbye.', ''); }
           st('done'); setTimeout(close, 1100); return; } // "thank you" / "goodbye": no request, the assistant closes
         ask(t, lm); }
@@ -5970,8 +6120,11 @@ function hvAssist(hub, o) {
     qb.querySelector('ha-icon').setAttribute('icon', q.mode === 'off' ? 'mdi:volume-high' : q.quiet ? 'mdi:volume-off' : 'mdi:volume-medium');
     qb.querySelector('span').textContent = 'Quiet: ' + ({ off: 'Off', on: 'On', auto: 'Auto' })[q.mode]; qb.classList.toggle('on', q.mode !== 'off');
     qp.querySelectorAll('[data-q]').forEach(b => { const on = b.dataset.q === q.mode; b.classList.toggle('sel', on); b.setAttribute('aria-checked', String(on)); }); qp.querySelector('.qd').textContent = q.desc;
-    const wok = hvWwSupport(), won = wok && hvWwOn(), ws = hvWwSens(), tg = qp.querySelector('.tgl'), wx = qp.querySelector('.wwx');
-    tg.setAttribute('aria-checked', String(won)); tg.disabled = !wok; qp.querySelector('.wwb').classList.toggle('dis', !wok); qp.querySelector('.wwna').hidden = wok;
+    const wok = hvWwSupport(), won = wok && hvWwOn(), ws = hvWwSens(), wx = qp.querySelector('.wwx');
+    for (const tg of qp.querySelectorAll('.tgl[data-ww]')) { const k = tg.dataset.ww, miss = k === 'homey' && HVWW.hmOk === false; tg.setAttribute('aria-checked', String(wok && hvWwPh(k))); tg.disabled = !wok || miss; }
+    if (wok && HVWW.hmOk == null && !qp.hidden) hvWwHmCheck().then(() => { if (!closed) qPaint(); });
+    qp.querySelector('.wwhs').textContent = HVWW.hmOk === false ? 'Needs its model file (wakeword/hey_homey.onnx): see the wake word README' : 'Say “Hey Homey”, “Hey Homie” or “Homie”';
+    qp.querySelector('.wwb').classList.toggle('dis', !wok); qp.querySelector('.wwna').hidden = wok;
     qp.querySelectorAll('[data-w]').forEach(b => { const on = b.dataset.w === ws; b.classList.toggle('sel', on); b.setAttribute('aria-checked', String(on)); });
     wx.hidden = !(won && HVWW.st === 'error'); wx.textContent = HVWW.msg || '';
     const hk = hvHistKeep(c), n = hvHistLoad(c).length; qp.querySelectorAll('[data-h]').forEach(b => { const on = b.dataset.h === hk; b.classList.toggle('sel', on); b.setAttribute('aria-checked', String(on)); });
@@ -5979,8 +6132,7 @@ function hvAssist(hub, o) {
   qb.addEventListener('click', () => { qp.hidden = !qp.hidden; qb.setAttribute('aria-expanded', String(!qp.hidden)); qPaint(); });
   qp.addEventListener('click', e => { const p = e.composedPath(), b = p.find(n => n.dataset && n.dataset.q), h = p.find(n => n.dataset && n.dataset.h);
     if (b) { hvQuietSet(b.dataset.q); qPaint(); }
-    if (p.includes(qp.querySelector('.tgl')) && hvWwSupport()) { const on = !hvWwOn(); try { if (on) localStorage.setItem(HV_WW_LS, 'on'); else localStorage.removeItem(HV_WW_LS); } catch (e2) {}
-      if (on) { try { hvWwCtx().resume().catch(() => {}); } catch (e2) {} hvWwLoad().catch(() => {}); } HVWW.st = 'off'; hvWwSync(); qPaint(); } // made in this tap: the audio context may run later without another tap
+    const wt = p.find(n => n.classList && n.classList.contains('tgl') && n.dataset.ww); if (wt && !wt.disabled) hvWwToggle(wt.dataset.ww).then(() => { if (!closed) qPaint(); }), qPaint(); // made in this tap: the audio context may run later without another tap
     const w = p.find(n => n.dataset && n.dataset.w); if (w) { try { localStorage.setItem(HV_WW_SENS_LS, w.dataset.w); } catch (e2) {} qPaint(); }
     if (h) { try { localStorage.setItem(HV_HKEEP_LS, h.dataset.h); } catch (e2) {} hvHistLoad(c); qPaint(); } // prunes at once
     if (p.includes(qp.querySelector('.hcl'))) { hvHistSave([]); log.querySelectorAll('.old').forEach(x => x.remove()); qPaint(); } }); qPaint();
@@ -6254,7 +6406,8 @@ const HV_SET_PAGES = [
       { h: 'Layout', f: ['calendar_layout', 'calendar_columns', 'calendar_days', 'calendar_size', 'calendar_rows', 'calendar_title', 'calendar_min_height'] }] },
   { id: 'assistant', t: 'Assistant & timer', i: 'mdi:microphone', c: 'linear-gradient(135deg,#ff5f9e,#a646f0 52%,#3d7bff)', g: 2, d: 'Talk or type to Home Assistant\'s Assist, timers and quiet mode.',
     sec: [{ f: ['assistant_enabled', 'assistant_button'] }, { f: ['assistant_pipeline', 'assistant_theme'] }, { f: ['assistant_auto_listen', 'assistant_speak', 'timer_sound'] },
-      { h: 'Conversation', f: ['assistant_orb', 'assistant_continue', 'assistant_dismiss_phrases', 'assistant_silence_timeout', 'assistant_end_of_speech_pause', 'assistant_history_retention'] },
+      { h: 'Conversation', f: ['assistant_orb', 'assistant_face', 'assistant_continue', 'assistant_dismiss_phrases', 'assistant_silence_timeout', 'assistant_end_of_speech_pause', 'assistant_history_retention'] },
+      { h: 'Wake word · this device', f: ['@wwjarvis', '@wwhomey'] },
       { h: 'Quiet mode: Auto', f: ['assistant_quiet_volume_entity', 'assistant_quiet_volume_below', 'assistant_quiet_focus_entity', 'assistant_quiet_start', 'assistant_quiet_end'] }] },
   { id: 'layout', t: 'Layout & weather', i: 'mdi:view-dashboard', c: '#ff9500', g: 2, d: 'The Photos and extra tiles\' sizes, the app icons\' size, and the weather.',
     sec: [{ h: 'Photos tile', f: ['photo_size', 'photo_max_aspect'] }, { h: 'Extra tiles', f: ['show_homie', 'side_sizes', 'row_units', 'side_tiles', 'side_portrait', 'max_icon', '@sidecards'] },
@@ -6268,6 +6421,8 @@ const HV_SET_ACTS = {
   '@about': { l: 'About', h: 'This device, Home Assistant and NotHomeView versions, Wi-Fi network, battery.', i: 'mdi:information-outline', nav: true },
   '@update': { l: 'Software Update', h: 'Home Assistant updates: Core, OS, Supervisor, add-ons, HACS, NotHomeView release. Check now, install.', i: 'mdi:cellphone-arrow-down', nav: true },
   '@sspick': { l: 'Screensaver style', h: 'Photo clock, Info dashboard, Abstract fluid, Modern typographic or Whimsical minimalist: swipe or tap to choose. Screensaver colors for the chosen style (colour pickers, swatches, reset to default colors) are underneath.', pick: true },
+  '@wwjarvis': { l: 'Hey Jarvis', h: 'Say “Hey Jarvis” to open the assistant. Listens on this device only, while the dashboard is open; no audio leaves the browser. Sensitivity is in the assistant\'s own settings (Quiet).', ww: 'jarvis' },
+  '@wwhomey': { l: 'Hey Homey', h: 'Say “Hey Homey” (also “Hey Homie” or just “Homie”) to open the assistant. On this device only, like Hey Jarvis; both can be on.', ww: 'homey' },
   '@appsnote': { l: '', h: 'To add apps or move them around on the Home Screen, use General › Edit Home Screen (Add App, drag to reorder).', note: true } };
 const HV_SET_CSS = `
 .se{--fg:#fff;--fg2:rgba(235,235,245,.6);--fg3:rgba(235,235,245,.3);--card:#1c1c1e;--sep:rgba(84,84,88,.65);--blue:#0a84ff;--on:#30d158;--off:rgba(120,120,128,.32);--fld:rgba(118,118,128,.24);--sel:#0a84ff;
@@ -6458,7 +6613,11 @@ function hvOpenSettings(hub, app, from) {
     .map(k => [k, (S[k].attributes && S[k].attributes.friendly_name) || k]).sort((a, b) => a[1].localeCompare(b[1])); };
   const rowHtml = (k, x, d, dis) => { const lb = label(k), hp = help(k), D = dis ? ' disabled' : '', tx = `<div class="tx"><span class="l">${esc(lb)}</span>${hp ? `<small>${esc(hp)}</small>` : ''}</div>`;
     const ln = `<span class="l">${esc(lb)}</span>`, sm = hp ? `<small>${esc(hp)}</small>` : ''; // one-line rows: label | control, the helper underneath
-    const a = HV_SET_ACTS[k]; if (a) { if (a.note) return `<div class="r note"><small>${esc(a.h)}</small></div>`; if (a.pick) return `<div class="r stk" data-k="${k}" aria-label="${esc(a.l)}"><div data-sspick></div></div>`;
+    const a = HV_SET_ACTS[k]; if (a) { if (a.note) return `<div class="r note"><small>${esc(a.h)}</small></div>`;
+      if (a.ww) { const ok = hvWwSupport(), miss = a.ww === 'homey' && HVWW.hmOk === false, on = ok && hvWwPh(a.ww);
+        if (ok && a.ww === 'homey' && HVWW.hmOk == null) hvWwHmCheck().then(() => { if (root && root.isConnected) paintPane(); });
+        const why = !ok ? 'Not available on this device (iPhone / iPad). Use the mic button instead.' : miss ? 'Needs its wake word model (wakeword/hey_homey.onnx, next to homeview-cards.js): see the wake word README.' : a.h;
+        return `<div class="r" data-wwr="${k}"><span class="l">${esc(a.l)}</span><button class="sw" role="switch" data-ww="${a.ww}" aria-checked="${on}" aria-label="${esc(a.l)} wake word on this device"${!ok || miss ? ' disabled' : ''}></button><small>${esc(why)}</small></div>`; } if (a.pick) return `<div class="r stk" data-k="${k}" aria-label="${esc(a.l)}"><div data-sspick></div></div>`;
       if (a.nav) { const n = k === '@update' ? hvUpdCount(H()) : 0; return `<button class="r act nav" data-act="${k.slice(1)}" aria-label="${esc(a.l)}${n ? ', ' + n + ' available' : ''}"><span class="sq" style="--c:#8e8e93"><ha-icon icon="${a.i}"></ha-icon></span><span class="tx"><span class="l">${esc(a.l)}</span></span>${n ? `<span class="bdg">${n}</span>` : ''}<ha-icon class="ch" icon="mdi:chevron-right"></ha-icon></button>`; }
       const off = k === '@wallpanel' && !customElements.get('wallpanel-view') ? ' disabled' : (k === '@sidecards' || k === '@setup') && (dis || st.nohub) ? ' disabled' : '';
       return `<button class="r act" data-act="${k.slice(1)}"${off}><span class="sq" style="--c:var(--blue)"><ha-icon icon="${a.i}"></ha-icon></span>${tx}<ha-icon class="ch" icon="mdi:chevron-right"></ha-icon></button>`; }
@@ -6639,6 +6798,7 @@ function hvOpenSettings(hub, app, from) {
         if (st.wide && q && !pageHit(pageOf(st.page || 'general'), q)) { const m = HV_SET_PAGES.find(p => pageHit(p, q)); if (m) st.page = m.id; } paintSide(); if (st.wide || st.page) paintPane(); });
       root.addEventListener('click', e => { const t = e.target.closest && e.target.closest('[data-go],[data-act],.sw,.ci'); if (!t || t.disabled) return;
         if (t.dataset.go) { go(t.dataset.go); return; } if (t.dataset.act) { act(t.dataset.act, t); return; }
+        if (t.dataset.ww) { hvWwToggle(t.dataset.ww).then(() => paintPane()); return; } // per device, not the dashboard
         if (t.classList.contains('sw')) { const v = t.getAttribute('aria-checked') !== 'true'; t.setAttribute('aria-checked', String(v)); save(t.dataset.k, v); return; }
         if (t.classList.contains('ci')) { const k = t.dataset.k, cur = (Array.isArray(data()[k]) ? data()[k] : []).map(x => typeof x === 'string' ? x : x && x.entity).filter(Boolean), on = t.getAttribute('aria-checked') !== 'true';
           t.setAttribute('aria-checked', String(on)); save(k, on ? cur.concat(t.dataset.e) : cur.filter(x => x !== t.dataset.e)); } });
@@ -7063,7 +7223,7 @@ class HVHubCard extends HTMLElement {
   constructor() { super(); this.attachShadow({ mode: 'open' }); this._layer = 0; }
   static get defaults() { return { theme: 'night', person: '', morning_start: 5, afternoon_start: 12, evening_start: 17, greeting_morning: 'Good morning', greeting_afternoon: 'Good afternoon',
     greeting_evening: 'Good evening', photo_source_mode: 'media', photo_album_url: '', photo_source: '', photo_interval: 25, photo_order: 'random', blur: 32, dim: 0.32, bg_blur_level: 3, photo_backdrop: true, bg_freeze: true, photo_tap: 'viewer', photo_viewer_nav: true, photo_viewer_swipe: true, photo_viewer_add: true, photo_gallery_upload: true, photo_viewer_pause: true, photo_label: 'Photos', photo_max_aspect: 2.6,
-    show_calendar: true, calendar_size: 'full', calendar_layout: 'wide', calendar_columns: 3, calendar_days: 7, calendar_title: 'Calendar', calendar_min_height: 240, max_icon: 140, edge_sidebar: true, ss_hold: true, weather_entity: '', photo_size: 'wide', side_portrait: 'below', side_sizes: '', row_units: 3, block_pull_refresh: true, calendar_rows: 'auto', swipe_screensaver: 'auto', swipe_open_home: false, show_homie: false, full_height_popups: true, popup_edit: true, assistant_enabled: false, assistant_pipeline: 'preferred', assistant_theme: 'same', assistant_button: true, assistant_speak: true, assistant_auto_listen: true, assistant_orb: true, assistant_continue: true, assistant_silence_timeout: 5, assistant_end_of_speech_pause: 2, assistant_history_retention: 'forever', assistant_dismiss_phrases: "thank you, thanks, thanks jarvis, thank you jarvis, goodbye, bye, good bye, that's all, that's it, never mind, nevermind, stop, cancel, no thanks, I'm done", assistant_quiet_volume_below: 5, assistant_quiet_start: '23:30', assistant_quiet_end: '10:00', timer_sound: true }; }
+    show_calendar: true, calendar_size: 'full', calendar_layout: 'wide', calendar_columns: 3, calendar_days: 7, calendar_title: 'Calendar', calendar_min_height: 240, max_icon: 140, edge_sidebar: true, ss_hold: true, weather_entity: '', photo_size: 'wide', side_portrait: 'below', side_sizes: '', row_units: 3, block_pull_refresh: true, calendar_rows: 'auto', swipe_screensaver: 'auto', swipe_open_home: false, show_homie: false, full_height_popups: true, popup_edit: true, assistant_enabled: false, assistant_pipeline: 'preferred', assistant_theme: 'same', assistant_button: true, assistant_speak: true, assistant_auto_listen: true, assistant_orb: true, assistant_face: 'orb', assistant_continue: true, assistant_silence_timeout: 5, assistant_end_of_speech_pause: 2, assistant_history_retention: 'forever', assistant_dismiss_phrases: "thank you, thanks, thanks jarvis, thank you jarvis, thanks homey, thank you homey, thanks homie, thank you homie, goodbye, bye, good bye, that's all, that's it, never mind, nevermind, stop, cancel, no thanks, I'm done", assistant_quiet_volume_below: 5, assistant_quiet_start: '23:30', assistant_quiet_end: '10:00', timer_sound: true }; }
   static getStubConfig(hass) { return { apps: HUB_APPS.map(a => Object.assign({}, a)), calendar_entities: Object.keys((hass && hass.states) || {}).filter(k => k.startsWith('calendar.')).slice(0, 3) }; }
   static getConfigElement() { return document.createElement('homeview-hub-card-editor'); }
   setConfig(c) { if (!c) throw new Error('Invalid configuration'); this._hvRaw = c; const old = this._config, nc = Object.assign({}, HVHubCard.defaults, c);
@@ -7104,7 +7264,7 @@ class HVHubCard extends HTMLElement {
   _tpillPaint() { const p = this._tpill; if (!p) return; const s = HVTM.st, on = !!s && this._config.assistant_enabled === true && !(HVTM.scr && HVTM.scr.isConnected); p.hidden = !on;
     if (on) { const t = s.done ? 'Done' : hvFmtLeft(HVTM.left()) + (s.paused != null ? ' ❚❚' : ''); const sp = p.querySelector('span'); if (sp.textContent !== t) sp.textContent = t; } }
   _openAssist() { if (this._assistO || !this._hass) return; hvSpkUnlock(); HVTM.opts.sound = this._config.timer_sound !== false; const al = this._config.assistant_auto_listen !== false;
-    this._assistO = hvAssist(this, { orb: al && this._config.assistant_orb !== false }); hvWwSync(); if (al) this._assistO.listen(true); }
+    this._assistO = hvAssist(this, { orb: al && this._config.assistant_orb !== false, face: this._config.assistant_face === 'homie' ? 'homie' : 'orb' }); hvWwSync(); if (al) this._assistO.listen(true); }
   disconnectedCallback() { HV_HUBS.delete(this); setTimeout(hvWwSync, 0); hvTimerPills.delete(this._tpf); if (this._assistO) this._assistO.close(); clearInterval(this._ssHoldIv); this._ssHoldIv = null; this._edgeBind(false); hvPTR.set(this, false); this._ssBind(false); this._homeSwBind(false); if (this._galO) this._galO.close(); if (this._sheetO) { const so = this._sheetO, d0 = ssDash(); this._sheetO = null; if (so !== hvOpenSettings.cur) so.close(); // Settings (on document.body) survives a view rebuild: hand it to the new card, close it only if the card is really gone
     else setTimeout(() => { if (hvOpenSettings.cur !== so) return; const n = ssDash() === d0 && [...HV_HUBS].find(x => x.isConnected && !hvInDialog(x)); if (n) { if (!n._sheetO) n._sheetO = so; } else so.close(); }, 1200); } this._ssPause(false); clearInterval(this._tick); clearTimeout(this._timer); this._timer = null;
     removeEventListener('resize', this._bound); removeEventListener('orientationchange', this._bound); removeEventListener('hv-layout', this._bound); if (window.visualViewport) visualViewport.removeEventListener('resize', this._bound);
@@ -7954,6 +8114,7 @@ const HUB_SCHEMA = [
     { name: 'assistant_theme', selector: { select: { mode: 'dropdown', options: [{ value: 'same', label: 'Same as the device pages theme' }].concat(HV_THEME_OPTS) } } },
     { type: 'grid', name: '', schema: [{ name: 'assistant_auto_listen', selector: { boolean: {} } }, { name: 'assistant_speak', selector: { boolean: {} } }, { name: 'timer_sound', selector: { boolean: {} } }] },
     { type: 'grid', name: '', schema: [{ name: 'assistant_orb', selector: { boolean: {} } }, { name: 'assistant_continue', selector: { boolean: {} } }] },
+    { name: 'assistant_face', selector: { select: { mode: 'dropdown', options: [{ value: 'orb', label: 'Orb' }, { value: 'homie', label: 'Homey' }] } } },
     { name: 'assistant_dismiss_phrases', selector: { text: { multiline: true } } },
     { type: 'grid', name: '', schema: [{ name: 'assistant_silence_timeout', selector: { number: { min: 2, max: 30, step: 1, mode: 'box', unit_of_measurement: 's' } } },
       { name: 'assistant_end_of_speech_pause', selector: { number: { min: 1, max: 5, step: 0.5, mode: 'box', unit_of_measurement: 's' } } }] },
@@ -7993,7 +8154,7 @@ Object.assign(LABELS, { photo_source_mode: 'Photo source', photo_album_url: 'Alb
   popup_edit: 'Edit pencil next to ✕ in popups (admins only): opens the editor of the card the popup belongs to',
   assistant_enabled: 'Assistant on this Home Screen', assistant_button: 'Mic button beside the avatar', assistant_pipeline: 'Assist pipeline', assistant_theme: 'Assistant look',
   assistant_auto_listen: 'Start listening when it opens', assistant_speak: 'Speak the replies', timer_sound: 'Timer alert sound',
-  assistant_orb: 'Mic opens a floating orb (tap it for the chat)', assistant_continue: 'Keep listening until dismissed', assistant_dismiss_phrases: 'Phrases that end the conversation', assistant_silence_timeout: 'Close after silence', assistant_end_of_speech_pause: 'Pause before sending', assistant_history_retention: 'Chat history', assistant_quiet_volume_entity: 'Volume sensor of the device (optional)', assistant_quiet_volume_below: 'Quiet when the volume is under',
+  assistant_orb: 'Mic opens a floating orb (tap it for the chat)', assistant_face: 'Compact popup', assistant_continue: 'Keep listening until dismissed', assistant_dismiss_phrases: 'Phrases that end the conversation', assistant_silence_timeout: 'Close after silence', assistant_end_of_speech_pause: 'Pause before sending', assistant_history_retention: 'Chat history', assistant_quiet_volume_entity: 'Volume sensor of the device (optional)', assistant_quiet_volume_below: 'Quiet when the volume is under',
   assistant_quiet_focus_entity: 'Focus / Do Not Disturb sensor (optional)', assistant_quiet_start: 'Quiet hours from', assistant_quiet_end: 'Quiet hours until',
   location_name: 'Weather location name (empty = Home Assistant\'s)', weather_sky_header: 'Weather popup: animated sky header (sunny, partly cloudy, cloudy, rain, snow; night sky after sunset)', swipe_screensaver: 'Swipe down for screensaver (grab bar at the top)', swipe_page: 'Swipe left for this page (button page; it slides in from the right, swipe right to come back, page dots)', ss_hold: 'Keep the screensaver paused while the Home Screen is showing', swipe_open_home: 'Swipe to open the Home app',
   side_tiles: 'Extra tile options, in order (1st = first extra tile): size, fit, tap opens enlarged view' });
@@ -8008,7 +8169,8 @@ const hvHubSchemaAlbum = (sch, album) => { const fix = l => l.map(x => x.name ==
 function hvHubHelp(s, cfg, albSt) { cfg = cfg || {};
   let f = s => s.name === 'bg_blur_level' ? `1 Solid · 2 Heavy · 3 Medium · 4 Light · 5 Clear (now: ${HV_BG_LEVELS[hvBgLevel(cfg)].name}). The preview updates while you drag.` : s.name === 'bg_freeze' ? 'On: the background keeps the photo it had when the Home Screen opened (the Photos card still changes); it moves to the current photo only while the page is out of sight (screensaver up, another view, app in the background). Off: it follows the Photos card.' : s.name === 'swipe_open_home' ? 'On: swipe right on the screensaver, or on the Home Screen when the screensaver is not showing, to open the Home app. The screensaver also shows a lock-screen-style Home button in the bottom-left corner. Opening Home from the screensaver slides the app over it, without turning the screensaver off.' : s.name === 'ss_hold' ? 'On: the screensaver does not start by itself behind the Home Screen (and uses nothing there); swipe the page away to start it, on the photo the Photos card shows. Off: Wallpanel\'s idle timer runs as before.' : s.name === 'dim' ? 'Darkens the top and bottom of the page so the text stays readable. Each Background blur level scales it (lighter for Light and Clear).' : s.name === 'photo_viewer_add' ? 'The viewer button that opens the gallery (the gallery keeps its own “Add photos” upload button).' : s.name === 'side_sizes' ? hubUnitsNote(cfg) : s.name === 'photo_source' ? 'The photo viewer, the gallery and uploads all use this folder. Empty = the screensaver\'s folder (Media → My media). Uploading needs a media-source:// folder and an administrator.' : s.name === 'apps' ? 'Each app: label, icon, gradient colours and what it does (open a view, Now Playing, Weather, Calendar, photos, or any tap action). Calendar opens an iPad-style popup. hv:calendar draws today’s date. Empty Calendars uses this card’s calendar_entities; Save new events to picks the calendar that stores them.' : undefined;
   { const h1 = f; f = s => s.name === 'assistant_enabled' ? 'Talk to an Assist pipeline with this device\'s microphone (or type). Timers ("set a timer for 15 minutes", "pause / cancel the timer") run right here, full screen.' : s.name === 'assistant_pipeline' ? 'Which assistant answers (Settings → Voice assistants).' : h1(s); }
-  { const h3 = f; f = s => s.name === 'assistant_orb' ? 'On: the mic shows only an animated orb near the top (the dashboard stays clear); tap the orb for the chat. Off: the full chat opens.'
+  { const h3 = f; f = s => s.name === 'assistant_orb' ? 'On: the mic shows only an animated orb (or Homey) near the top (the dashboard stays clear); tap it for the chat. Off: the full chat opens.'
+        : s.name === 'assistant_face' ? 'What the compact popup shows: the rainbow Orb, or Homey\'s animated head (he smiles while listening and speaking, thinks while Assist works, and looks confused when something goes wrong). Tap him for the chat.'
 
         : s.name === 'assistant_continue' ? 'After every reply the mic opens again in the same conversation, until you tap outside the orb, say one of the phrases below, or say nothing for a few seconds (Close after silence).'
         : s.name === 'assistant_dismiss_phrases' ? 'Comma-separated. Saying one of them (alone, or with words like "ok", "very much", "for now") closes the assistant without sending it; "thanks, also turn off the lights" is still a request.'
