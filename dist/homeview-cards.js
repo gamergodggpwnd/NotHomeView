@@ -4299,6 +4299,7 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
     d.mv = ev => { if (ev.pointerId !== d.id) return; if (ev.cancelable) ev.preventDefault(); d.x = ev.clientX; d.y = ev.clientY; this.moveDrag(); };
     d.up = ev => { if (ev.pointerId !== d.id) return; this.endDrag(); };
     try { cv.setPointerCapture(p.id); } catch (x) {} cv.addEventListener('pointermove', d.mv); cv.addEventListener('pointerup', d.up); cv.addEventListener('pointercancel', d.up);
+    d.app = it.kind === 'app'; if (d.app) d.base = this.base(d); // an app: the cards stay where they are (see appTick)
     d.iv = setInterval(() => this.dragTick(), 40); if (navigator.vibrate) try { navigator.vibrate(12); } catch (x) {} if (hvEcl.lay) hvEcl.lay.classList.add('hdrag'); this.moveDrag(); this.tick(); },
   moveDrag() { const d = this.drag; if (!d) return; d.g.style.transform = `translate(${d.x - d.x0}px,${d.y - d.y0 + (scrollY - d.sy0)}px) scale(1.06)`; },
   // where the hole goes: the slot (DOM position) whose packing puts the dragged item nearest the cell under the finger. Uses the grid model
@@ -4310,11 +4311,37 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
     if (d.y < ez && scrollY > 0) { scrollBy(0, -14); this.moveDrag(); } else if (d.y > vh - ez && scrollY + vh < document.documentElement.scrollHeight) { scrollBy(0, 14); this.moveDrag(); } // near the edges: the page follows
     const ar = ap.getBoundingClientRect(), me = d.g._hvCells || [1, 1], pw = M.C + M.gx, phh = M.R + M.gy;
     const cx = Math.max(0, Math.min(M.N - Math.min(me[0], M.N), (d.x - d.ox - ar.left) / pw)), cy = Math.max(0, (d.y - d.oy - ar.top) / phh); // the cell the item's top-left is over
+    if (d.app) return this.appTick(d, cx, cy, Math.floor((d.x - ar.left) / pw), Math.floor((d.y - ar.top) / phh));
     const { kids, out } = this.slots(), cur = Math.min(kids.length, kids.filter(n => n.compareDocumentPosition(d.ph) & Node.DOCUMENT_POSITION_FOLLOWING).length), dist = k => Math.hypot(out[k][0] - cx, (out[k][1] - cy) * 1.15);
     let best = cur; for (let k = 0; k < out.length; k++) if (dist(k) < dist(best) - 1e-6) best = k;
     if (best === cur || dist(cur) - dist(best) < 0.35) { d.best = -1; return; } // stay put unless clearly better (no flicker between two slots)
     if (best !== d.best) { d.best = best; d.at = Date.now(); return; } if (Date.now() - d.at < 120) return; d.best = -1; // the same better slot for 120 ms before anything moves
     const m = this.snap(ap); if (best >= kids.length) ap.appendChild(d.ph); else ap.insertBefore(d.ph, kids[best]);
+    this.flip(m); if (navigator.vibrate) try { navigator.vibrate(6); } catch (x) {} this.tick(); },
+  // dragging an app: the layout as it is now (grid model): the cards' cells, the cells the apps (and the hole) fill, and the other apps in reading order
+  base(d) { const M = this.hub._hgM, its = [...d.ap.children].filter(n => n === d.ph || (n !== d.g && n._hvTok)), isApp = n => n === d.ph || /^a:/.test(n._hvTok), rd = (a, b) => a[1] - b[1] || a[0] - b[0];
+    const pos = hvGridPack(its.map(n => n === d.ph ? (d.g._hvCells || [1, 1]) : (n._hvCells || [1, 1])), M.N), P = new Map(its.map((n, i) => [n, pos[i]]));
+    const cells = its.filter(isApp).map(n => P.get(n)).sort(rd);
+    return { apps: its.filter(n => n !== d.ph && isApp(n)).sort((a, b) => rd(P.get(a), P.get(b))), cells, j: cells.indexOf(P.get(d.ph)),
+      cards: its.filter(n => !isApp(n)).map(n => ({ n, at: P.get(n), w: Math.min((n._hvCells || [1, 1])[0], M.N), h: (n._hvCells || [1, 1])[1] })) }; },
+  // an app moves only among the apps' cells (the others shift along, in their order); the cards stay put. Held over a card for 120 ms (finger inside
+  // its cells), that card makes room (the hole goes where the finger is in the whole order, so the card shifts on); then it stays put again
+  appTick(d, cx, cy, pc, pr) { const ap = d.ap, B = d.base, M = this.hub._hgM, hold = key => { if (d.want !== key) { d.want = key; d.at = Date.now(); return false; } if (Date.now() - d.at < 120) return false; d.want = null; return true; };
+    const card = B.cards.find(c => pc >= c.at[0] && pc < c.at[0] + c.w && pr >= c.at[1] && pr < c.at[1] + c.h);
+    if (d.lock && (!card || card.n !== d.lock)) d.lock = null; // left the card that just moved: it can be pushed again
+    if (card) { if (card.n === d.lock || !hold('c:' + card.n._hvTok)) return;
+      const kids = [...ap.children].filter(n => n !== d.g && n !== d.ph && n._hvTok), me = d.g._hvCells || [1, 1], out = [];
+      for (let k = 0; k <= kids.length; k++) { const bl = kids.map(n => n._hvCells || [1, 1]); bl.splice(k, 0, me); out.push(hvGridPack(bl, M.N)[k]); }
+      const cur = kids.filter(n => n.compareDocumentPosition(d.ph) & Node.DOCUMENT_POSITION_FOLLOWING).length, dist = k => Math.hypot(out[k][0] - cx, (out[k][1] - cy) * 1.15);
+      let best = cur; for (let k = 0; k < out.length; k++) if (dist(k) < dist(best) - 1e-6) best = k; d.lock = card.n; if (best === cur) return;
+      const m = this.snap(ap); if (best >= kids.length) ap.appendChild(d.ph); else ap.insertBefore(d.ph, kids[best]); d.base = this.base(d);
+      this.flip(m); if (navigator.vibrate) try { navigator.vibrate(6); } catch (x) {} this.tick(); return; }
+    if (d.want && d.want[0] === 'c') d.want = null;
+    const dist = k => Math.hypot(B.cells[k][0] - cx, (B.cells[k][1] - cy) * 1.15); let best = B.j; for (let k = 0; k < B.cells.length; k++) if (dist(k) < dist(best) - 1e-6) best = k;
+    if (best === B.j || dist(B.j) - dist(best) < 0.35) { d.want = null; return; } if (!hold('s:' + best)) return; // the same better cell for 120 ms
+    const L = []; let a = 0; B.cells.forEach((c, k) => L.push([k === best ? d.ph : B.apps[a++], c])); for (const c of B.cards) L.push([c.n, c.at]);
+    L.sort((x, y) => x[1][1] - y[1][1] || x[1][0] - y[1][0]); // reading order of where each one starts: a dense grid draws that order exactly there (the empty cells stay the same)
+    const m = this.snap(ap); let ref = null; for (let i = L.length - 1; i >= 0; i--) { const n = L[i][0]; if (n.nextSibling !== ref || n.parentNode !== ap) ap.insertBefore(n, ref); ref = n; } B.j = best;
     this.flip(m); if (navigator.vibrate) try { navigator.vibrate(6); } catch (x) {} this.tick(); },
   endDrag() { const d = this.drag; if (!d) return; this.drag = null; clearInterval(d.iv); try { d.cv.releasePointerCapture(d.id); } catch (x) {}
     d.cv.removeEventListener('pointermove', d.mv); d.cv.removeEventListener('pointerup', d.up); d.cv.removeEventListener('pointercancel', d.up);
