@@ -9131,32 +9131,38 @@ const HV_HOMEY = (() => {
     if (p.umb) umbrella(ctx, ops, B2);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
   }
-  // the rain umbrella (the original rain art, drawn): blue canopy over his roof, shaft up from the raised wall-arm hand, a dark J handle in his grip
-  function umbrella(ctx, ops, B2) { const o = ops.find(q => /^(hand_)?arm[WR]$/.test(q.k || '')), body = ops.find(q => q.k === 'body' || q.k === 'bodyR'); if (!o || !body) return;
-    const [hx, hy] = ap(o.m, /armW$/.test(o.k) ? [34, 89] : [375, 89]), [px, py] = ap(body.m, [208, 8]);
-    const R = 124, Hd = 52, cx = px + (hx - px) * 0.1, cy = py - 42, a = clamp(Math.atan2(cx - hx, hy - cy), -0.26, 0.26), OL = 'rgb(43,45,48)', side = hx < px ? 1 : -1;
-    ctx.setTransform(B2[0], B2[3], B2[1], B2[4], B2[2], B2[5]); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    const ux = Math.sin(a), uy = -Math.cos(a), tx = cx + ux * Hd, ty = cy + uy * Hd; // canopy axis (up) and its top
-    // shaft: from just below the grip to the top of the canopy (straight through the hub)
-    ctx.beginPath(); ctx.moveTo(hx - ux * 6, hy - uy * 6); ctx.lineTo(tx + ux * 9, ty + uy * 9); ctx.strokeStyle = 'rgb(98,103,110)'; ctx.lineWidth = 5; ctx.stroke(); // a dark steel shaft that still reads on the dark screensaver
-    // canopy, in its own tilted frame: rim on y 0 (x -R..R), dome up to y -Hd, an 8-panel scalloped underside
-    const m = mul(B2, T(cx, cy), Rot(a * 180 / Math.PI)); ctx.setTransform(m[0], m[3], m[1], m[4], m[2], m[5]);
-    const n = 8, tip = i => -R + 2 * R * i / n, dome = () => { ctx.beginPath(); ctx.moveTo(-R, 0); ctx.bezierCurveTo(-R, -Hd * 1.25, R, -Hd * 1.25, R, 0);
-      for (let i = n; i > 0; i--) ctx.quadraticCurveTo((tip(i) + tip(i - 1)) / 2, -14, tip(i - 1), 0); ctx.closePath(); };
+  // the rain umbrella (the original rain art, drawn), one rigid piece on one axis: the rod runs from the hook in his raised wall-arm hand
+  // straight through the canopy hub (where the ribs meet) to the tip; the cover is tilted by exactly that angle. His hand is drawn again over the hook, fingers wrapped round it
+  function umbrella(ctx, ops, B2) { const o = ops.find(q => q.k === 'armW' || q.k === 'armR'), body = ops.find(q => q.k === 'body' || q.k === 'bodyR'); if (!o || !body) return;
+    const [hx, hy] = ap(o.m, o.k === 'armW' ? [34, 89] : [375, 89]), [px, py] = ap(body.m, [208, 8]);
+    const R = 124, Hd = 52, HB = Hd * 0.94, OL = 'rgb(43,45,48)', ROD = 'rgb(98,103,110)', side = hx < px ? 1 : -1;
+    const hbx = px + (hx - px) * 0.2, hby = py - 85, a = Math.atan2(hbx - hx, hy - hby), ux = Math.sin(a), uy = -Math.cos(a); // hub over his roof; u: the umbrella's axis (up)
+    const nx = -uy * side, ny = ux * side, at = (k, s2) => [hx + ux * k + nx * (s2 || 0), hy + uy * k + ny * (s2 || 0)]; // n: across the rod, toward his body
+    const W = () => ctx.setTransform(B2[0], B2[3], B2[1], B2[4], B2[2], B2[5]); W(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    // rod: hook to hub to tip, one straight line
+    const tip = [hbx + ux * 10, hby + uy * 10]; ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(tip[0], tip[1]); ctx.strokeStyle = ROD; ctx.lineWidth = 5; ctx.stroke();
+    // canopy in the umbrella's own frame (rotated by a): hub at (0, -HB), rim on y 0 (x -R..R), dome up to y -Hd, an 8-panel scalloped underside
+    const m = mul(B2, T(hbx - ux * HB, hby - uy * HB), Rot(a * 180 / Math.PI)); ctx.setTransform(m[0], m[3], m[1], m[4], m[2], m[5]);
+    const n = 8, rt = i => -R + 2 * R * i / n, dome = () => { ctx.beginPath(); ctx.moveTo(-R, 0); ctx.bezierCurveTo(-R, -Hd * 1.25, R, -Hd * 1.25, R, 0);
+      for (let i = n; i > 0; i--) ctx.quadraticCurveTo((rt(i) + rt(i - 1)) / 2, -14, rt(i - 1), 0); ctx.closePath(); };
+    const rib = i => { ctx.moveTo(0, -HB); ctx.quadraticCurveTo(rt(i) * 0.98, -Hd * 0.7, rt(i), 0); };
     dome(); ctx.fillStyle = 'rgb(112,191,247)'; ctx.fill();
     ctx.save(); dome(); ctx.clip(); ctx.fillStyle = 'rgba(74,150,214,.45)'; // every other panel a shade darker
-    for (let i = 1; i < n; i += 2) { ctx.beginPath(); ctx.moveTo(0, -Hd * 0.94); ctx.quadraticCurveTo(tip(i) * 0.98, -Hd * 0.7, tip(i), 0); ctx.lineTo(tip(i + 1), 0); ctx.quadraticCurveTo(tip(i + 1) * 0.98, -Hd * 0.7, 0, -Hd * 0.94); ctx.fill(); }
+    for (let i = 1; i < n; i += 2) { ctx.beginPath(); rib(i); ctx.lineTo(rt(i + 1), 0); ctx.quadraticCurveTo(rt(i + 1) * 0.98, -Hd * 0.7, 0, -HB); ctx.fill(); }
     ctx.beginPath(); ctx.ellipse(-R * 0.35, -Hd * 0.62, R * 0.32, Hd * 0.16, -0.18, 0, Math.PI * 2); ctx.fillStyle = 'rgba(255,255,255,.22)'; ctx.fill(); ctx.restore(); // a soft shine
-    ctx.strokeStyle = 'rgb(74,150,214)'; ctx.lineWidth = 3;
-    for (let i = 1; i < n; i++) { ctx.beginPath(); ctx.moveTo(0, -Hd * 0.94); ctx.quadraticCurveTo(tip(i) * 0.98, -Hd * 0.7, tip(i), 0); ctx.stroke(); }
+    ctx.strokeStyle = 'rgb(74,150,214)'; ctx.lineWidth = 3; for (let i = 1; i < n; i++) { ctx.beginPath(); rib(i); ctx.stroke(); }
     dome(); ctx.strokeStyle = OL; ctx.lineWidth = 5; ctx.stroke();
-    ctx.beginPath(); ctx.arc(0, -Hd * 0.94 - 9, 4.5, 0, Math.PI * 2); ctx.fillStyle = OL; ctx.fill(); // finial
-    for (let i = 0; i <= n; i++) { ctx.beginPath(); ctx.arc(tip(i), 0, 3, 0, Math.PI * 2); ctx.fill(); } // rib tips
-    // the J handle: down past his hand along the shaft, the hook curling back toward his body (over the hand)
-    ctx.setTransform(B2[0], B2[3], B2[1], B2[4], B2[2], B2[5]);
-    const bx = hx - ux * 30, by = hy - uy * 30, r = 14, nx = -uy * side, ny = ux * side; // nx,ny: across the shaft, toward his body
-    const J = () => { ctx.beginPath(); ctx.moveTo(hx + ux * 12, hy + uy * 12); ctx.lineTo(bx, by); ctx.arc(bx + nx * r, by + ny * r, r, Math.atan2(-ny, -nx), Math.atan2(-ny, -nx) + Math.PI * side, side < 0); };
-    J(); ctx.strokeStyle = 'rgb(98,103,110)'; ctx.lineWidth = 12; ctx.stroke(); J(); ctx.strokeStyle = 'rgb(28,29,32)'; ctx.lineWidth = 8; ctx.stroke(); }
+    ctx.fillStyle = OL; ctx.beginPath(); ctx.arc(0, -HB, 4, 0, Math.PI * 2); ctx.fill(); // hub
+    ctx.beginPath(); ctx.arc(0, -HB - 10, 4.5, 0, Math.PI * 2); ctx.fill(); // tip
+    for (let i = 0; i <= n; i++) { ctx.beginPath(); ctx.arc(rt(i), 0, 3, 0, Math.PI * 2); ctx.fill(); } // rib ends
+    // the J handle: the rod drops into his palm and the hook's curve sits in his grip, curling toward his body
+    W(); const r = 10, b = at(-13), c = [b[0] + nx * r, b[1] + ny * r], a0 = Math.atan2(-ny, -nx);
+    const J = () => { ctx.beginPath(); ctx.moveTo(hx + ux * 14, hy + uy * 14); ctx.lineTo(b[0], b[1]); ctx.arc(c[0], c[1], r, a0, a0 + Math.PI * side, side < 0); ctx.lineTo(c[0] + nx * r + ux * 5, c[1] + ny * r + uy * 5); };
+    J(); ctx.strokeStyle = ROD; ctx.lineWidth = 11; ctx.stroke(); J(); ctx.strokeStyle = 'rgb(28,29,32)'; ctx.lineWidth = 7; ctx.stroke();
+    // his hand again, over the hook, then the fingers curled round it (short knuckle strokes across the handle, in the limb colours)
+    const hk = 'hand_' + o.k, im = IMG[hk]; if (im) { const mh = mul(B2, pcm(o.m, hk)); ctx.setTransform(mh[0], mh[3], mh[1], mh[4], mh[2], mh[5]); ctx.drawImage(im, 0, 0); W(); }
+    for (const k of [8, 2, -4]) { const p0 = at(k, -9), p1 = at(k - 2, 7); ctx.beginPath(); ctx.moveTo(p0[0], p0[1]); ctx.quadraticCurveTo(...at(k + 3, 0), p1[0], p1[1]);
+      ctx.strokeStyle = OL; ctx.lineWidth = 9; ctx.stroke(); ctx.strokeStyle = 'rgb(54,58,61)'; ctx.lineWidth = 5.5; ctx.stroke(); } }
   // the turn (clips.py seg_turn) layered over whatever he does: anticipate, hop, the house narrows, swaps plates (chimney stays right), widens
   function turn(p, u, d) { const f0 = -d; let lean;
     if (u < 0.25) lean = -d * 4 * ease(u / 0.25); else if (u < 0.6) lean = lerp(-d * 4, d * 15, ease((u - 0.25) / 0.35)); else lean = lerp(d * 15, d * 7, ease((u - 0.6) / 0.4));
