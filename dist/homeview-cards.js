@@ -3897,8 +3897,8 @@ const hvEcl = { host: null, sr: null, lay: null, ctl: new WeakMap(), timer: null
     HV_TAP.cfg = sig; HV_TAP.i = i; HV_TAP.t = Date.now();
     const path = at && hvCardPath(lv.config, o => o === at.node, root._curView); if (path && hvOpenCardEditor(root, path)) return; hvToast('Tap the tile itself to edit it'); } };
 /* 1.32.0: Home Screen arrange. Long-press the Home Screen (admins, UI-mode dashboards): the apps, the Photos tile and the extra tiles get the same
-   glass controls as room pages: tap = options (⋯), hold = pick up and drag (apps among apps, tiles among tiles), corner handle = resize
-   (the Home Screen row has two sizes: one tile or two wide). Everything updates in place; one quiet save on Done (no rebuild), Cancel undoes. */
+   glass controls as room pages: tap = options (⋯), press and move = pick up and drag (apps and tiles mixed, in one grid), corner handle = resize.
+   Everything updates in place; one quiet save when an empty spot is tapped (no rebuild). See hvHubArr. */
 const hvInDialog = el => { for (let n = el, d = 0; n && d < 40; d++) { if (n.tagName && /DIALOG|HUI-CARD-PREVIEW/.test(n.tagName)) return true; n = n.parentNode || (n.host !== undefined ? n.host : null); } return false; };
 // extra(fresh, node): optional further changes to the same saved config (Add App: the page behind a Home / Security icon)
 async function hvHubMutate(h, sig0, raw, extra) { const root = hvFindRoot(h), lv = root && root.lovelace;
@@ -3916,26 +3916,203 @@ async function hvHubMutate(h, sig0, raw, extra) { const root = hvFindRoot(h), lv
 const hvOrder = (p, list) => { if (!p) return; const want = new Set(list); let ref = p.firstElementChild;
   for (const el of list) { while (ref && !want.has(ref)) ref = ref.nextElementSibling; if (ref === el) { ref = ref.nextElementSibling; continue; } hvPreMove(el); p.insertBefore(el, ref); } };
 const HUB_CAL_SIZES = [['full', 'mdi:view-agenda-outline', 'Full · 2 rows'], ['row', 'mdi:view-day-outline', 'Full · 1 row'], ['wide', 'mdi:rectangle-outline', 'Tile · two wide'], ['wide2', 'mdi:square-outline', 'Tile · two wide, 2 rows'], ['tile', 'mdi:square-rounded-outline', 'Tile · Up next']];
-const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: null, rs: null, dirty: false, busy: false,
+/* Home Screen cards (iOS-style widgets) and the one Home Screen grid. With home_layout set, the apps, Photos, the extra tiles (Homey too), the built-in
+   Calendar and the cards from Add Card (home_cards) share one grid (an app icon = one cell) in that order, and arrange mode can mix them freely.
+   Without home_layout the Home Screen keeps its classic layout; the first arrange session writes one (nothing changes if you leave without a change).
+   Cards are read-only: weather.* state + forecasts, calendar.* events, sun.sun. Tap: the Weather popup / the Calendar app. */
+const HW_SIZES = {
+  weather: [['small', 'Small', 2, 2], ['sunset', 'Small · Sunset', 2, 2], ['medium', 'Medium', 4, 2], ['large', 'Large', 4, 4]],
+  calendar: [['small', 'Small · Up next', 2, 2], ['date', 'Small · Date', 2, 2], ['medium', 'Medium', 4, 2], ['large', 'Large', 4, 4], ['xl', 'Extra large · Week', 8, 4]] };
+const HW_SZ_ICON = { square: 'mdi:square-rounded-outline', wide: 'mdi:rectangle-outline', big: 'mdi:square-outline', small: 'mdi:square-rounded-outline', sunset: 'mdi:weather-sunset', date: 'mdi:calendar-today', medium: 'mdi:rectangle-outline', large: 'mdi:square-outline', xl: 'mdi:view-week-outline' };
+const hwSize = (type, k) => { const L = HW_SIZES[type] || HW_SIZES.weather; return L.find(s => s[0] === k) || L[0]; };
+// the built-in Calendar in the grid: calendar_size (older sizes map to the nearest card size; the classic full-width calendar = the week card)
+const hwCalSize = s => ({ tile: 'small', wide: 'medium', wide2: 'large', row: 'xl', full: 'xl' })[s] || (HW_SIZES.calendar.some(x => x[0] === s) ? s : 'xl');
+// the extra tiles' count (side_cards, plus Homie's tile while show_homie has not been arranged into them), as _makeSide builds them
+const hvSideN = c => { const l = Array.isArray(c.side_cards) ? c.side_cards.filter(x => x && x.type) : []; return l.length + (c.show_homie === true && !l.some(x => x.type === HV_HOMIE_T) ? 1 : 0); };
+// the Home Screen order: tokens a:<app>, p (Photos), s:<extra tile>, cal (built-in Calendar), w:<card>; unknown ones dropped, missing ones appended
+function hvHomeOrder(c, nSide) { const nA = (Array.isArray(c.apps) && c.apps.length ? c.apps : HUB_APPS).length, nW = Array.isArray(c.home_cards) ? c.home_cards.length : 0, cal = c.show_calendar !== false;
+  const ok = t => { const m = /^([a-z]+)(?::(\d+))?$/.exec(String(t)); if (!m) return false; const i = Number(m[2]);
+    return m[1] === 'a' ? m[2] != null && i < nA : m[1] === 's' ? m[2] != null && i < nSide : m[1] === 'w' ? m[2] != null && i < nW : m[1] === 'p' ? m[2] == null : m[1] === 'cal' ? cal && m[2] == null : false; };
+  const out = [], seen = new Set(), put = t => { if (ok(t) && !seen.has(t)) { seen.add(t); out.push(t); } };
+  if (Array.isArray(c.home_layout)) c.home_layout.forEach(put);
+  else { const ac = nA > 4 ? Math.min(4, Math.ceil(nA / 2)) : 2; // like the classic look: two columns of apps, then Photos and the tiles beside them, the calendar below
+    for (let i = 0; i < Math.min(ac, nA); i++) put('a:' + i); put('p'); for (let i = 0; i < nSide; i++) put('s:' + i); for (let i = ac; i < nA; i++) put('a:' + i); put('cal'); }
+  for (let i = 0; i < nA; i++) put('a:' + i); put('p'); for (let i = 0; i < nSide; i++) put('s:' + i); put('cal'); for (let i = 0; i < nW; i++) put('w:' + i);
+  return out; }
+// where a token's thing sits in the grid: cells wide x tall
+function hvHomeCells(c, t, nSideSizes) { const m = /^([a-z]+)(?::(\d+))?$/.exec(t) || [], k = m[1], i = Number(m[2] || 0);
+  if (k === 'a') return [1, 1]; if (k === 'p') return c.photo_size === 'square' ? [2, 2] : c.photo_size === 'big' ? [4, 4] : [4, 2];
+  if (k === 's') { const u = (nSideSizes || [])[i] || 1; return u === 3 ? [4, 4] : u === 2 ? [4, 2] : [2, 2]; }
+  if (k === 'cal') { const z = hwSize('calendar', hwCalSize(c.calendar_size)); return [z[2], z[3]]; }
+  if (k === 'w') { const x = (c.home_cards || [])[i] || {}, z = hwSize(x.type, x.size); return [z[2], z[3]]; } return [1, 1]; }
+// rows a dense grid of N columns needs for these blocks (in order)
+function hvGridRows(blocks, N) { const occ = []; let rows = 0; const free = (r, c0, w, h) => { for (let y = r; y < r + h; y++) for (let x = c0; x < c0 + w; x++) if (occ[y] && occ[y][x]) return false; return true; };
+  for (const [w0, h] of blocks) { const w = Math.min(w0, N); let done = false;
+    for (let r = 0; !done && r < 400; r++) for (let x = 0; x + w <= N; x++) if (free(r, x, w, h)) { for (let y = r; y < r + h; y++) { occ[y] = occ[y] || []; for (let z = x; z < x + w; z++) occ[y][z] = 1; } rows = Math.max(rows, r + h); done = true; break; } }
+  return rows; }
+// ---- data (per Home Screen, shared by its cards)
+const hwWxId = hub => { const c = hub._config || {}, S = (hub._hass && hub._hass.states) || {}; return (c.weather_entity && S[c.weather_entity] ? c.weather_entity : '') || (S['weather.forecast_home'] ? 'weather.forecast_home' : Object.keys(S).find(k => k.startsWith('weather.')) || ''); };
+const hwCalIds = hub => { const c = hub._config || {}, S = (hub._hass && hub._hass.states) || {};
+  const raw = Array.isArray(c.calendar_entities) && c.calendar_entities.length ? c.calendar_entities : c.calendar_entity ? [c.calendar_entity] : Object.keys(S).filter(k => k.startsWith('calendar.'));
+  return raw.map(x => typeof x === 'string' ? x : x && x.entity).filter(i => i && S[i]); }; // only calendars that exist
+function hwOff(hub) { const D = hub._hw; if (!D) return; if (D.wx) for (const u of D.wx.subs) Promise.resolve(u).then(f => typeof f === 'function' && f()).catch(() => {}); D.wx = null; }
+function hwWx(hub) { const id = hwWxId(hub), D = hub._hw || (hub._hw = {}); if (!id) return null; let w = D.wx;
+  if (!w || w.id !== id) { hwOff(hub); w = D.wx = { id, h: null, d: null, subs: [] }; const conn = hub._hass && hub._hass.connection;
+    if (conn && conn.subscribeMessage) for (const t of ['hourly', 'daily']) try { const u = conn.subscribeMessage(m => { w[t === 'hourly' ? 'h' : 'd'] = (m && m.forecast) || []; hub._hwPaint(true); }, { type: 'weather/subscribe_forecast', forecast_type: t, entity_id: id });
+      w.subs.push(u); if (u && u.catch) u.catch(() => {}); } catch (e) {} }
+  return w; }
+const hwDay = d => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
+function hwEv(hub) { const ids = hwCalIds(hub), D = hub._hw || (hub._hw = {}), S = hub._hass.states, now = Date.now(), key = ids.join(',') + '#' + hwDay(now).getTime();
+  const sig = ids.map(i => { const s = S[i]; return s ? s.state + '|' + (s.attributes.message || '') + '|' + (s.attributes.start_time || '') : ''; }).join(';'); let e = D.ev;
+  if (!e || e.key !== key || (e.sig !== sig && now - e.at > 30000) || now - e.at > 6e5) { if (e && e.busy && now - e.at < 20000) return e;
+    const n = D.ev = { key, sig, at: now, list: e && e.key === key ? e.list : null, busy: true }, from = hwDay(now), to = new Date(from.getTime() + 8 * 864e5), q = `?start=${encodeURIComponent(from.toISOString())}&end=${encodeURIComponent(to.toISOString())}`;
+    const pd = v => { if (!v) return null; if (v.dateTime) return new Date(v.dateTime); if (v.date) { const [y, m, d] = String(v.date).split('-').map(Number); return new Date(y, m - 1, d); } return new Date(v); };
+    Promise.all(ids.map((id, k) => hub._hass.callApi('GET', `calendars/${id}${q}`).then(r => (r || []).map(x => ({ s: x.summary || '(No title)', st: pd(x.start), en: pd(x.end), ad: !!(x.start && x.start.date && !x.start.dateTime), col: HV_CAL_COLS[k % HV_CAL_COLS.length] }))).catch(() => [])))
+      .then(rs => { n.list = rs.flat().filter(x => x.st && !isNaN(x.st)).sort((a, b) => a.st - b.st); n.busy = false; hub._hwPaint(true); }); }
+  return D.ev; }
+// ---- the cards' markup (painted only when it changes)
+function hwHtml(hub, cfg, cells) { try { return cfg.type === 'weather' ? hwWxHtml(hub, cfg, cells) : hwCalHtml(hub, cfg, cells); } catch (e) { return `<div class="hwe">${esc(String(e && e.message || e))}</div>`; } }
+const hwLang = hub => (hub._hass.locale && hub._hass.locale.language) || navigator.language;
+const hwTime = (hub, d, short) => { const o = { hour: 'numeric' }; if (!short) o.minute = '2-digit'; const t = hub._hass.locale && hub._hass.locale.time_format; if (t === '24') o.hour12 = false; else if (t === '12') o.hour12 = true;
+  return d.toLocaleTimeString(hwLang(hub), o).replace(/\s+/g, short ? '' : ' '); };
+const hwWxIco = (cnd, night) => { const i = (night && cnd === 'partlycloudy') ? 'mdi:weather-night-partly-cloudy' : (night && cnd === 'sunny') ? 'mdi:weather-night' : (WX_ICON[cnd] || 'mdi:weather-partly-cloudy');
+  return `<ha-icon icon="${i}" style="color:${HUB_WX_COLOR_DAY[cnd] || '#8e8e93'}"></ha-icon>`; };
+function hwWxHtml(hub, cfg, cells) { const H = hub._hass, id = hwWxId(hub), s = id && H.states[id]; if (!s) return '<div class="hwe"><ha-icon icon="mdi:weather-cloudy-alert"></ha-icon>No weather in Home Assistant</div>';
+  const a = s.attributes, w = hwWx(hub) || {}, sun = H.states['sun.sun'], night = sun ? sun.state === 'below_horizon' : false, today = (w.d || [])[0], sz = cfg.size || 'small';
+  const loc = esc(hub._config.location_name || (H.config && H.config.location_name) || a.friendly_name || 'Home'), t = a.temperature != null ? Math.round(a.temperature) + '°' : '—';
+  const hl = today ? `H:${Math.round(today.temperature)}° L:${Math.round(today.templow != null ? today.templow : today.temperature)}°` : '', cn = esc(fmtState(H, s));
+  if (sz === 'sunset') { const ns = sun && sun.attributes.next_setting ? new Date(sun.attributes.next_setting) : null, nr = sun && sun.attributes.next_rising ? new Date(sun.attributes.next_rising) : null;
+    const up = sun && sun.state === 'above_horizon', rise0 = nr ? new Date(nr.getTime() - 864e5) : null, f = up && ns && rise0 ? Math.max(0, Math.min(1, (Date.now() - rise0) / (ns - rise0))) : null;
+    const px = 6 + 88 * (f == null ? 0.5 : f), py = f == null ? 60 : 50 - 2 * (1 - f) * f * 2 * 46 + 0;
+    return `<div class="w-sun"><div class="lbl"><ha-icon icon="mdi:weather-sunset"></ha-icon>${up ? 'Sunset' : 'Sunrise'}</div><div class="big2">${up ? (ns ? esc(hwTime(hub, ns)) : '—') : (nr ? esc(hwTime(hub, nr)) : '—')}</div>
+<svg class="arc" viewBox="0 0 100 56" preserveAspectRatio="none" aria-hidden="true"><path d="M6 50Q50 -42 94 50" class="p"/><path d="M0 50H100" class="hz"/>${f != null ? `<circle cx="${px.toFixed(1)}" cy="${Math.max(4, py).toFixed(1)}" r="4.4" class="sn"/>` : ''}</svg>
+<div class="sub">${up ? (nr ? 'Sunrise: ' + esc(hwTime(hub, nr)) : '') : (ns ? 'Sunset: ' + esc(hwTime(hub, ns)) : '')}</div></div>`; }
+  const small = `<div class="loc">${loc}<ha-icon icon="mdi:navigation-variant"></ha-icon></div><div class="big">${t}</div>`;
+  if (sz === 'small') return `<div class="w-s">${small}<div class="sp"></div>${hwWxIco(s.state, night)}<div class="cn">${cn}</div><div class="hl">${hl}</div></div>`;
+  // hourly: the next hours, with the sunset (or sunrise) slotted in where it falls
+  const n = 6, hrs = (w.h || []).filter(f => new Date(f.datetime) > Date.now() - 36e5).slice(0, n), items = hrs.map((f, i) => { const d = new Date(f.datetime), hh = d.getHours(), nt = hh < 6 || hh >= 19;
+    return { at: d.getTime(), h: `<div class="h"><span class="t">${i ? esc(hwTime(hub, d, true)) : 'Now'}</span>${hwWxIco(f.condition, nt)}<span class="v">${Math.round(f.temperature)}°</span></div>` }; });
+  if (sun && items.length > 1) { for (const [k, lb, ic] of [['next_setting', 'Sunset', 'mdi:weather-sunset-down'], ['next_rising', 'Sunrise', 'mdi:weather-sunset-up']]) { const x = sun.attributes[k] ? new Date(sun.attributes[k]).getTime() : 0;
+    if (x > items[0].at && x < items[items.length - 1].at) { items.push({ at: x, h: `<div class="h ss"><span class="t">${esc(hwTime(hub, new Date(x)))}</span><ha-icon icon="${ic}" style="color:#f08c00"></ha-icon><span class="v">${lb}</span></div>` }); } }
+    items.sort((p, q) => p.at - q.at); items.splice(n); }
+  const hourly = `<div class="hrs">${items.length ? items.map(x => x.h).join('') : '<div class="h ld">Loading…</div>'}</div>`;
+  const top = `<div class="top"><div class="l">${small}</div><div class="r">${hwWxIco(s.state, night)}<div class="cn">${cn}</div><div class="hl">${hl}</div></div></div>`;
+  if (sz === 'medium') return `<div class="w-m">${top}${hourly}</div>`;
+  const days = (w.d || []).slice(0, 6), lo = Math.min(...days.map(f => f.templow != null ? f.templow : f.temperature)), hi = Math.max(...days.map(f => f.temperature)), spn = Math.max(1, hi - lo);
+  const dl = days.map((f, i) => { const d = new Date(f.datetime), l = f.templow != null ? f.templow : f.temperature;
+    return `<div class="d"><span class="dn">${i ? esc(d.toLocaleDateString(hwLang(hub), { weekday: 'short' })) : 'Today'}</span>${hwWxIco(f.condition)}<span class="lo">${Math.round(l)}°</span><span class="rng"><i style="left:${((l - lo) / spn * 100).toFixed(1)}%;right:${((hi - f.temperature) / spn * 100).toFixed(1)}%"></i></span><span class="hi">${Math.round(f.temperature)}°</span></div>`; }).join('');
+  return `<div class="w-l">${top}${hourly}<div class="dys">${dl || '<div class="d ld">Loading…</div>'}</div></div>`; }
+function hwCalHtml(hub, cfg, cells) { const ids = hwCalIds(hub); if (!ids.length) return '<div class="hwe"><ha-icon icon="mdi:calendar-remove-outline"></ha-icon>No calendars in Home Assistant</div>';
+  const E = hwEv(hub), L = hwLang(hub), now = new Date(), t0 = hwDay(now), t1 = new Date(t0.getTime() + 864e5), t2 = new Date(t0.getTime() + 2 * 864e5);
+  let sz = cfg.size || 'small'; if (sz === 'xl' && cells && cells[0] < 8) sz = 'large'; // a phone has 4 columns: the week card shows as the large one
+  const list = E && E.list, on = (d0, d1) => (list || []).filter(e => e.st < d1 && (e.en || e.st) > d0 && !(e.en && e.en <= d0));
+  const wd = d => esc(d.toLocaleDateString(L, { weekday: 'long' }).toUpperCase()), day = now.getDate();
+  const evRow = e => `<div class="ev" style="--c:${e.col}"><b>${esc(e.s)}</b><span>${e.ad ? 'All day' : esc(hwTime(hub, e.st))}</span></div>`;
+  const none = t => `<div class="no">${list ? t : 'Loading…'}</div>`;
+  if (sz === 'date') return `<div class="c-d"><div class="md">${esc(now.toLocaleDateString(L, { weekday: 'short' }).toUpperCase())} ${esc(now.toLocaleDateString(L, { month: 'short' }).toUpperCase())}</div><div class="dn2">${day}</div></div>`;
+  const up = on(now, t1).filter(e => e.ad || (e.en || e.st) > now), tm = on(t1, t2);
+  if (sz === 'small') { const nx = up.length ? up : tm; return `<div class="c-s"><div class="wd">${wd(now)}</div><div class="dn">${day}</div><div class="evs">${nx.slice(0, 2).map(evRow).join('') || none('No more events today')}</div></div>`; }
+  const tmCol = (n0) => `<div class="col tm"><div class="th">TOMORROW</div>${tm.slice(0, n0).map(evRow).join('') || none('No events')}</div>`;
+  if (sz === 'medium') return `<div class="c-m"><div class="col"><div class="wd">${wd(now)}</div><div class="dn">${day}</div>${up.slice(0, 3).map(evRow).join('') || none('No more events today')}</div>${tmCol(4)}</div>`;
+  // timed views: hours down the left, events as coloured blocks
+  const h0 = Math.max(0, Math.min(now.getHours() - 1, 23 - (sz === 'xl' ? 9 : 6))), nh = sz === 'xl' ? 10 : 7, hours = Array.from({ length: nh + 1 }, (_, k) => h0 + k);
+  const grid = (d0, withLabels) => { const a = new Date(d0.getTime() + h0 * 36e5), b = new Date(d0.getTime() + (h0 + nh) * 36e5), sp = b - a;
+    const evs = on(a, b).filter(e => !e.ad).map(e => { const s = Math.max(0, (e.st - a) / sp), en = Math.min(1, ((e.en || new Date(e.st.getTime() + 36e5)) - a) / sp);
+      return `<div class="eb" style="--c:${e.col};top:${(s * 100).toFixed(2)}%;height:${Math.max(7, (en - s) * 100).toFixed(2)}%"><b>${esc(e.s)}</b><span>${esc(hwTime(hub, e.st))}</span></div>`; }).join('');
+    const ad = on(d0, new Date(d0.getTime() + 864e5)).filter(e => e.ad).slice(0, 2).map(e => `<div class="ad" style="--c:${e.col}">${esc(e.s)}</div>`).join('');
+    const nowLine = d0.getTime() === t0.getTime() && now >= a && now <= b ? `<div class="nl" style="top:${((now - a) / sp * 100).toFixed(2)}%"></div>` : '';
+    return `<div class="dg">${ad ? `<div class="ads">${ad}</div>` : ''}<div class="tl">${withLabels ? hours.map((hh, k) => `<div class="hr" style="top:${(k / nh * 100).toFixed(2)}%"><span>${esc(hwTime(hub, new Date(d0.getTime() + hh * 36e5), true))}</span></div>`).join('') : hours.map((hh, k) => `<div class="hr" style="top:${(k / nh * 100).toFixed(2)}%"></div>`).join('')}${evs}${nowLine}</div></div>`; };
+  if (sz === 'large') return `<div class="c-l"><div class="hd"><span class="wd">${wd(now)}</span><span class="dt">${esc(now.toLocaleDateString(L, { month: 'long', day: 'numeric' }))}</span></div><div class="bd"><div class="lc">${grid(t0, true)}</div>${tmCol(6)}</div></div>`;
+  const nd = 4, days = Array.from({ length: nd }, (_, k) => new Date(t0.getTime() + k * 864e5));
+  return `<div class="c-x"><div class="wk" style="--n:${nd}"><div class="sp0"></div>${days.map((d, k) => `<div class="dh${k ? '' : ' td'}"><span>${esc(d.toLocaleDateString(L, { weekday: 'short' }))}</span><b>${d.getDate()}</b></div>`).join('')}</div>
+<div class="wb" style="--n:${nd}"><div class="hc">${hours.map((hh, k) => `<span style="top:${(k / nh * 100).toFixed(2)}%">${esc(hwTime(hub, new Date(t0.getTime() + hh * 36e5), true))}</span>`).join('')}</div>${days.map(d => grid(d, false)).join('')}</div></div>`; }
+const HW_CSS = `
+.hw{cursor:pointer}.hw .hwi{box-sizing:border-box;border-radius:calc(var(--I,110px) * .26);overflow:hidden;--f:calc(var(--hu,112px) / 100);padding:calc(var(--f) * 13);display:flex;flex-direction:column;font-family:${FONT};-webkit-font-smoothing:antialiased;
+ box-shadow:0 10px 30px rgba(0,0,0,.18);transition:transform .15s;line-height:1.15;text-align:left;-webkit-user-select:none;user-select:none}
+.hw:active .hwi{transform:scale(.97)}
+.hw[data-ty="weather"] .hwi{background:linear-gradient(180deg,#f7fafd 0%,#e2ecf6 100%);color:#1c1c1e}.hw[data-ty="calendar"] .hwi{background:#1c1c1e;color:#fff}
+.hw ha-icon{display:inline-flex}.hwe{margin:auto;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;font-size:calc(var(--f) * 12);opacity:.7}.hwe ha-icon{--mdc-icon-size:calc(var(--f) * 26)}
+.hw .loc{display:flex;align-items:center;gap:calc(var(--f) * 3);font-size:calc(var(--f) * 14);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.hw .loc ha-icon{--mdc-icon-size:calc(var(--f) * 11)}
+.hw .big{font-size:calc(var(--f) * 44);font-weight:300;letter-spacing:-.02em;line-height:1}
+.hw .cn,.hw .hl{font-size:calc(var(--f) * 12.5);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.hw .hl{font-weight:500;color:#3c3c43}
+.w-s,.w-m,.w-l,.w-sun,.c-s,.c-d,.c-m,.c-l,.c-x{display:flex;flex-direction:column;min-height:0;flex:1}
+.w-s .sp{flex:1}.w-s > ha-icon{--mdc-icon-size:calc(var(--f) * 22);margin-bottom:calc(var(--f) * 2)}
+.w-m .top,.w-l .top{display:flex;justify-content:space-between;gap:8px}.w-m .r,.w-l .r{display:flex;flex-direction:column;align-items:flex-end;text-align:right}.w-m .r ha-icon,.w-l .r ha-icon{--mdc-icon-size:calc(var(--f) * 20);margin-bottom:2px}
+.hrs{display:flex;justify-content:space-between;margin-top:auto;padding-top:calc(var(--f) * 6)}.hrs .h{display:flex;flex-direction:column;align-items:center;gap:calc(var(--f) * 4);flex:1;min-width:0}
+.hrs .t{font-size:calc(var(--f) * 11.5);font-weight:600;color:#3c3c43;white-space:nowrap}.hrs .v{font-size:calc(var(--f) * 13);font-weight:600;white-space:nowrap}.hrs ha-icon{--mdc-icon-size:calc(var(--f) * 20)}.hrs .ss .v{font-size:calc(var(--f) * 10.5)}
+.hrs .ld,.dys .ld{opacity:.6;font-size:calc(var(--f) * 12)}
+.w-l .hrs{margin-top:calc(var(--f) * 10);padding-bottom:calc(var(--f) * 8);border-bottom:1px solid rgba(60,60,67,.18)}
+.dys{display:flex;flex-direction:column;justify-content:space-around;flex:1;padding-top:calc(var(--f) * 4)}.dys .d{display:grid;grid-template-columns:22% 12% 12% 1fr 12%;align-items:center;gap:calc(var(--f) * 6);font-size:calc(var(--f) * 13.5);font-weight:600}
+.dys .d ha-icon{--mdc-icon-size:calc(var(--f) * 18)}.dys .lo{color:#8e8e93;text-align:right}.dys .hi{text-align:right}
+.dys .rng{position:relative;height:calc(var(--f) * 4.5);border-radius:9px;background:rgba(60,60,67,.14)}.dys .rng i{position:absolute;top:0;bottom:0;border-radius:9px;background:linear-gradient(90deg,#5ac8fa,#ffd60a,#ff9500)}
+.hw[data-sz="sunset"] .hwi{background:linear-gradient(180deg,#2d3e63 0%,#c9725a 100%);color:#fff}.w-sun .lbl{display:flex;align-items:center;gap:4px;font-size:calc(var(--f) * 12);font-weight:700;text-transform:uppercase;letter-spacing:.04em;opacity:.85}
+.w-sun .lbl ha-icon{--mdc-icon-size:calc(var(--f) * 15)}.w-sun .big2{font-size:calc(var(--f) * 26);font-weight:500;margin-top:2px;white-space:nowrap}
+.w-sun .arc{flex:1;width:100%;min-height:0;overflow:visible}.w-sun .p{fill:none;stroke:rgba(255,255,255,.55);stroke-width:1.6;vector-effect:non-scaling-stroke;stroke-dasharray:3 3}.w-sun .hz{stroke:rgba(255,255,255,.4);stroke-width:1;vector-effect:non-scaling-stroke}
+.w-sun .sn{fill:#ffd60a;filter:drop-shadow(0 0 4px #ffd60a)}.w-sun .sub{font-size:calc(var(--f) * 11.5);font-weight:600;opacity:.9}
+.c-s .wd,.c-m .wd,.c-l .wd{color:#ff453a;font-size:calc(var(--f) * 12.5);font-weight:700;letter-spacing:.02em}.c-s .dn,.c-m .dn{font-size:calc(var(--f) * 36);font-weight:300;line-height:1;margin:calc(var(--f) * 1) 0 calc(var(--f) * 6)}
+.evs{display:flex;flex-direction:column;gap:calc(var(--f) * 4);min-height:0}
+.hw .ev{position:relative;padding-left:calc(var(--f) * 8);display:flex;flex-direction:column;min-width:0}.hw .ev::before{content:'';position:absolute;left:0;top:1px;bottom:1px;width:calc(var(--f) * 3);border-radius:3px;background:var(--c)}
+.hw .ev b{font-size:calc(var(--f) * 12.5);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.hw .ev span{font-size:calc(var(--f) * 11.5);color:rgba(235,235,245,.6);white-space:nowrap}
+.hw .no{font-size:calc(var(--f) * 12);color:rgba(235,235,245,.6)}
+.c-d{align-items:flex-start}.c-d .md{color:#ff453a;font-size:calc(var(--f) * 15);font-weight:700;letter-spacing:.02em}.c-d .dn2{font-size:calc(var(--f) * 92);font-weight:300;line-height:1;letter-spacing:-.04em;margin-top:auto}
+.c-m{flex-direction:row;gap:calc(var(--f) * 14)}.c-m .col{flex:1;min-width:0;display:flex;flex-direction:column;gap:calc(var(--f) * 5)}.c-m .col.tm{border-left:1px solid rgba(84,84,88,.5);padding-left:calc(var(--f) * 12)}
+.hw .th{font-size:calc(var(--f) * 11.5);font-weight:700;color:rgba(235,235,245,.6);letter-spacing:.04em;margin-bottom:calc(var(--f) * 2)}
+.c-l .hd{display:flex;align-items:baseline;gap:8px;margin-bottom:calc(var(--f) * 6)}.c-l .dt{font-size:calc(var(--f) * 15);font-weight:600}
+.c-l .bd{display:flex;gap:calc(var(--f) * 12);flex:1;min-height:0}.c-l .lc{flex:1.6;min-width:0;display:flex}.c-l .col.tm{flex:1;min-width:0;border-left:1px solid rgba(84,84,88,.5);padding-left:calc(var(--f) * 12);display:flex;flex-direction:column;gap:calc(var(--f) * 6)}
+.dg{position:relative;flex:1;display:flex;flex-direction:column;min-height:0}.ads{display:flex;flex-direction:column;gap:2px;margin-bottom:4px}
+.hw .ad{font-size:calc(var(--f) * 11);font-weight:600;padding:2px 6px;border-radius:5px;background:color-mix(in srgb,var(--c) 34%,transparent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tl{position:relative;flex:1;min-height:0}.tl .hr{position:absolute;left:0;right:0;border-top:1px solid rgba(84,84,88,.45)}.tl .hr span{position:absolute;left:0;top:-.6em;font-size:calc(var(--f) * 10.5);color:rgba(235,235,245,.55);background:#1c1c1e;padding-right:4px}
+.c-l .tl .eb{left:calc(var(--f) * 38)}
+.hw .eb{position:absolute;left:2px;right:2px;border-radius:5px;padding:1px 5px;box-sizing:border-box;overflow:hidden;background:color-mix(in srgb,var(--c) 38%,#1c1c1e);border-left:3px solid var(--c);display:flex;flex-direction:column}
+.hw .eb b{font-size:calc(var(--f) * 11);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.hw .eb span{font-size:calc(var(--f) * 9.5);opacity:.75;white-space:nowrap}
+.tl .nl{position:absolute;left:0;right:0;border-top:2px solid #ff453a;z-index:2}.tl .nl::before{content:'';position:absolute;left:-3px;top:-5px;width:8px;height:8px;border-radius:50%;background:#ff453a}
+.c-x .wk,.c-x .wb{display:grid;grid-template-columns:calc(var(--f) * 38) repeat(var(--n,4),1fr);gap:calc(var(--f) * 6)}.c-x .wb{flex:1;min-height:0;margin-top:calc(var(--f) * 6)}
+.c-x .dh{display:flex;align-items:baseline;gap:5px;font-size:calc(var(--f) * 12);font-weight:600;color:rgba(235,235,245,.7)}.c-x .dh b{font-size:calc(var(--f) * 16);color:#fff}
+.c-x .dh.td span{color:#ff453a}.c-x .dh.td b{color:#fff;background:#ff453a;border-radius:99px;padding:0 .35em}
+.c-x .hc{position:relative}.c-x .hc span{position:absolute;left:0;font-size:calc(var(--f) * 10.5);color:rgba(235,235,245,.55);transform:translateY(-.6em)}.c-x .dg{border-left:1px solid rgba(84,84,88,.35)}
+.apps.hg{position:relative;grid-template-columns:repeat(var(--gn,8),var(--gc,100px));grid-auto-rows:var(--gr,120px);column-gap:var(--gx,24px);row-gap:var(--gy,20px);grid-auto-flow:row dense;width:max-content;max-width:100%}
+.apps.hg > .app{justify-self:center;align-self:start}.apps.hg > .tile,.apps.hg > .phw{width:100%;height:100%;min-width:0;min-height:0}
+.apps.hg > .phw{gap:var(--lg,9px)}.apps.hg > .phw .pw{width:100%}
+.apps.hg > .hgp{border-radius:calc(var(--I,110px) * .26);background:rgba(255,255,255,.06);box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.14)}.apps.hg > .hgp.hga{background:none;box-shadow:none}
+.apps.hg > .lift{position:absolute !important;z-index:40;pointer-events:none;transition:none;filter:drop-shadow(0 18px 28px rgba(0,0,0,.35))}
+:host([hgrid]) .mid{display:block}:host([hgrid]) .row,:host([hgrid]) .below,:host([hgrid]) .calw{display:none !important}`;
+/* Home Screen arrange: one grid (home_layout) for the apps, Photos, the extra tiles, the Calendar and the cards. Press and move (or hold) lifts an item
+   and the others make room as it moves; drop to place it. Tap = its menu, the corner handle = its sizes. Add App / Add Card in the bar.
+   Tapping an empty spot of the Home Screen saves and leaves (no Done / Cancel); HA's edit mode saves too. An older Home Screen is shown in the grid
+   while arranging and keeps its classic layout unless something is changed. */
+const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: null, rs: null, dirty: false, busy: false, conv: false,
   ok(h) { return !!(h && h._w && h.isConnected && !h._sheetO && h._config && h._config.arrange !== false && !hvInDialog(h) && hvEclOK(h)); },
   raw() { return JSON.parse(JSON.stringify(this.hub._hvRaw || {})); },
-  enter(h) { if (this.hub || !this.ok(h)) return; this.hub = h; this.orig = JSON.stringify(h._hvRaw || {}); this.dirty = false; this.pend = []; hvEcl.ensure(); h.toggleAttribute('hv-arr', true);
-    if (navigator.vibrate) try { navigator.vibrate(15); } catch (x) {} this.timer = setInterval(() => this.tick(), 150); this._k = () => this.tick(); addEventListener('scroll', this._k, { capture: true, passive: true }); addEventListener('resize', this._k); this.tick(); },
-  exit(save) { const h = this.hub; if (!h) return Promise.resolve(true); hvEcl.closeMenu(); this.endDrag(false); this.endResize();
+  enter(h) { if (this.hub || !this.ok(h)) return; this.hub = h; this.orig = JSON.stringify(h._hvRaw || {}); this.dirty = false; this.pend = []; this.t0 = Date.now(); hvEcl.ensure(); h.toggleAttribute('hv-arr', true);
+    this.conv = !Array.isArray((h._hvRaw || {}).home_layout); if (this.conv) { const raw = this.raw(); raw.home_layout = hvHomeOrder(h._config, hvSideN(h._config)); h._arrSet(raw); }
+    this.blank(h, true); if (navigator.vibrate) try { navigator.vibrate(15); } catch (x) {} this.timer = setInterval(() => this.tick(), 150);
+    this._k = () => this.tick(); addEventListener('scroll', this._k, { capture: true, passive: true }); addEventListener('resize', this._k); this.tick(); },
+  // save = false only when the Home Screen went away and saving failed: back to how it was
+  exit(save) { const h = this.hub; if (!h) return Promise.resolve(true); hvEcl.closeMenu(); this.endDrag(); this.endResize();
     const fin = () => { clearInterval(this.timer); this.timer = null; removeEventListener('scroll', this._k, true); removeEventListener('resize', this._k); for (const c of this.ctl.values()) c.remove(); this.ctl.clear(); this.bar(false);
-      h.toggleAttribute('hv-arr', false); this.hub = null; this.dirty = false; this.pend = []; if (this.drag) this.endDrag(false); hvEcl.kick(); };
-    if (!save || !this.dirty) { if (this.dirty) h._arrSet(JSON.parse(this.orig)); fin(); return Promise.resolve(true); }
+      this.blank(h, false); h.toggleAttribute('hv-arr', false); this.hub = null; this.dirty = false; this.conv = false; this.pend = []; hvEcl.kick(); };
+    if (!this.dirty || !save) { if (this.dirty || this.conv) h._arrSet(JSON.parse(this.orig)); fin(); return Promise.resolve(true); }
     if (this.busy) return Promise.resolve(false); this.busy = true; const raw = this.raw(), now = (Array.isArray(raw.apps) && raw.apps.length ? raw.apps : HUB_APPS).map(hvHubAppKey);
     const pend = (this.pend || []).filter(p => now.includes(p.key)); // Add App: the Home / Security pages behind added icons (not ones deleted again)
     return (async () => { const pg = pend.length ? await hvHubPagesPrep(h, pend) : null; await hvHubMutate(h, this.orig, raw, pg && pg.apply); if (pg) pg.after(); return pg; })()
       .then(pg => { this.busy = false; fin(); if (pg) h._loadCfg(true); hvToast(pg ? pg.msg() : 'Saved', 'hv-arrange'); return true; },
         e => { this.busy = false; hvToast('Could not save: ' + (e && e.message || e), 'hv-arrange'); return false; }); },
-  change(fn) { const raw = this.raw(); fn(raw); this.dirty = true; this.hub._arrSet(raw); [40, 200, 450].forEach(t => setTimeout(() => this.tick(), t)); },
+  // a short tap on the Home Screen itself (items, the bar and menus are in the layer above it) = save and leave
+  blank(h, on) { const b0 = this._b; if (b0) { h.removeEventListener('pointerdown', b0.d, true); removeEventListener('pointerup', b0.u, true); removeEventListener('pointercancel', b0.c, true);
+      setTimeout(() => h.removeEventListener('click', b0.k, true), 600); this._b = null; } if (!on) return;
+    const b = this._b = { p: null, eat: 0 };
+    b.d = e => { b.p = null; if (!e.isPrimary || (e.button != null && e.button > 0) || Date.now() - this.t0 < 600 || this.drag || this.rs || hvEcl.menu) return; b.p = { id: e.pointerId, x: e.clientX, y: e.clientY, t: Date.now() }; };
+    b.u = e => { const p = b.p; b.p = null; if (!p || e.pointerId !== p.id || this.hub !== h || this.drag || this.rs || hvEcl.menu || this.busy) return;
+      if (Math.hypot(e.clientX - p.x, e.clientY - p.y) > 10 || Date.now() - p.t > 700) return; b.eat = Date.now(); this.exit(true); };
+    b.c = () => { b.p = null; }; b.k = e => { if (b.eat && Date.now() - b.eat < 500) { b.eat = 0; e.stopPropagation(); e.preventDefault(); } }; // the click of that same tap only
+    h.addEventListener('pointerdown', b.d, true); addEventListener('pointerup', b.u, true); addEventListener('pointercancel', b.c, true); h.addEventListener('click', b.k, true); },
+  // every change animates: the items slide to their new places
+  change(fn) { const raw = this.raw(); fn(raw); this.dirty = true; const ap = this.grid(), m = ap && this.snap(ap); this.hub._arrSet(raw); if (m) this.flip(m); [40, 200, 450].forEach(t => setTimeout(() => this.tick(), t)); },
+  grid() { const w = this.hub && this.hub._w; return w && w.querySelector('.apps.hg'); },
   bar(on) { const lay = hvEcl.lay; let b = lay && lay.querySelector('.abar.hb'); if (!on) { if (b) b.remove(); return; } if (b || !lay) return;
-    b = document.createElement('div'); b.className = 'abar hb'; b.innerHTML = '<span>Hold to move · drag a corner to resize</span><button class="add" aria-haspopup="menu"><ha-icon icon="mdi:plus"></ha-icon>Add App</button><button class="no">Cancel</button><button class="ok">Done</button>'; lay.appendChild(b);
-    b.querySelector('.add').onclick = e => { e.stopPropagation(); this.picker(b.querySelector('.add')); };
-    b.querySelector('.no').onclick = e => { e.stopPropagation(); this.exit(false); }; b.querySelector('.ok').onclick = e => { e.stopPropagation(); this.exit(true); }; },
-  // ---- Add App: put back a built-in app that is not on this Home Screen, with its own icon and popup / sheet; kept until Done like a delete
+    b = document.createElement('div'); b.className = 'abar hb'; b.innerHTML = '<span>Hold to move · drag a corner to resize</span><button class="add" data-k="app" aria-haspopup="menu"><ha-icon icon="mdi:plus"></ha-icon>Add App</button><button class="add" data-k="card" aria-haspopup="menu"><ha-icon icon="mdi:plus"></ha-icon>Add Card</button>'; lay.appendChild(b);
+    const [ba, bc] = b.querySelectorAll('.add'); ba.onclick = e => { e.stopPropagation(); this.picker(ba); }; bc.onclick = e => { e.stopPropagation(); this.cardPicker(bc); }; },
+  // ---- Add App: put back a built-in app that is not on this Home Screen, with its own icon and popup / sheet; saved with the rest when you leave arrange mode
   async ctx() { const h = this.hub, cfg = await h._loadCfg(), views = new Map(((cfg && cfg.views) || []).map(v => [String(v.path || ''), v])), c = h._config;
     const S = (h._hass && h._hass.states) || {}, ids = d => Object.keys(S).filter(k => k.startsWith(d + '.') && S[k].state !== 'unavailable').sort();
     const apps = c.apps || [], dash = h._dash(), mh = v => !!v && JSON.stringify(v).includes('"custom:homeview-myhome-card"');
@@ -3963,7 +4140,7 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
       if (!xs.length && !homie) { const d = document.createElement('div'); d.className = 'em'; d.textContent = 'All apps are on the Home Screen'; m.appendChild(d); }
       for (const x of xs) row(this.icoHtml(x), x.name, '', () => { if (x.key === 'home' || x.key === 'security') choose(x); else { close(); this.add(x, k); } });
       if (homie) row(`<span class="ai" style="background:linear-gradient(180deg,#5ccdff 0%,#2ba6e0 100%);color:#fff">${HV_HOMIE_ICO}</span>`, 'Homey', 'Animated tile with the house mascot', () => { close();
-        this.change(raw => { raw.show_homie = true; this.edit(raw, 'side', () => {}); }); hvToast('Homey added · saved when you tap Done', 'hv-arrange'); });
+        this.change(raw => { raw.show_homie = true; this.edit(raw, 'side', () => {}); }); hvToast('Homey added · tap an empty spot to save', 'hv-arrange'); });
       hvEcl.place(m, anchor); const f = m.querySelector('button'); if (f) f.focus({ preventScroll: true }); };
     // Home and Security: the icon always comes back; the choice is what the page behind it shows
     const choose = x => { m.innerHTML = ''; head(x.key === 'home' ? 'Home page' : 'Security page'); const home = x.key === 'home';
@@ -3975,114 +4152,147 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
     hvEcl.lay.appendChild(wrap); list(); },
   add(x, k, mode) { const a = this.entry(x, k); this.change(raw => this.edit(raw, 'app', l => l.push(a)));
     if (mode) this.pend = (this.pend || []).filter(p => p.key !== x.key).concat({ key: x.key, mode, path: x.key === 'home' ? k.homePath : 'security' });
-    hvToast(`${a.name} added · saved when you tap Done`, 'hv-arrange'); },
-  items() { const h = this.hub, w = h && h._w, out = []; if (!w) return out;
-    w.querySelectorAll('.apps .app').forEach((el, i) => out.push({ kind: 'app', i, el }));
-    const ph = w.querySelector('.phw .pw'); if (ph) out.push({ kind: 'photo', i: 0, el: ph });
-    (h._sideEls || []).forEach((el, i) => { if (el.isConnected && !(el.parentNode && el.parentNode.hidden)) out.push({ kind: 'side', i, el }); });
-    if (h._config.show_calendar !== false && h._cal) { const t = h._calTiled(), el = t ? h._calTile : w.querySelector('.calw'); if (el && el.isConnected && !el.hidden && !(el.parentNode && el.parentNode.hidden)) out.push({ kind: 'cal', i: 0, el }); }
+    hvToast(`${a.name} added · tap an empty spot to save`, 'hv-arrange'); },
+  // ---- Add Card: a Weather or Calendar card (iOS-style widget) in one of its sizes; shown at once, saved with the rest
+  cardPicker(anchor) { if (!this.hub || this.busy) return; hvEcl.closeMenu(); hvEcl.ensure(); const h = this.hub, S = (h._hass && h._hass.states) || {}, wx = hwWxId(h), cal = hwCalIds(h).length, N = (h._hgM || {}).N || 8;
+    const wrap = hvEcl.menu = document.createElement('div'); wrap.innerHTML = '<div class="scrim"></div><div class="menu apk" role="menu" aria-label="Add Card"></div>';
+    const m = wrap.querySelector('.menu'), close = () => hvEcl.closeMenu();
+    const head = t => { const d = document.createElement('div'); d.className = 't'; d.textContent = t; m.appendChild(d); };
+    const row = (ico, txt, sub, fn, dis) => { const b = document.createElement('button'); b.setAttribute('role', 'menuitem'); b.innerHTML = `${ico}<span class="tx"><span></span><small></small></span>`; if (dis) b.disabled = true;
+      b.querySelector('.tx > span').textContent = txt; b.querySelector('small').textContent = sub; b.addEventListener('click', e => { e.stopPropagation(); fn(); }); m.appendChild(b); return b; };
+    const ico = (ty, k) => `<span class="ai" style="background:${ty === 'calendar' ? '#1c1c1e' : k === 'sunset' ? 'linear-gradient(180deg,#2d3e63 0%,#c9725a 100%)' : 'linear-gradient(180deg,#f7fafd 0%,#cfe0f1 100%)'};color:${ty === 'calendar' ? '#ff453a' : k === 'sunset' ? '#ffd60a' : '#ff9f0a'}"><ha-icon icon="${ty === 'calendar' ? (k === 'xl' ? 'mdi:view-week-outline' : 'mdi:calendar-today') : k === 'sunset' ? 'mdi:weather-sunset' : 'mdi:weather-partly-cloudy'}"></ha-icon></span>`;
+    head('Add Card · Weather');
+    for (const [k, t, w, hh] of HW_SIZES.weather) { const why = !wx ? 'No weather entity in Home Assistant' : k === 'sunset' && !S['sun.sun'] ? 'Needs the sun.sun entity (Sun integration)' : '';
+      row(ico('weather', k), t, why || `${w} × ${hh}`, () => { close(); this.addCard('weather', k); }, !!why); }
+    const s = document.createElement('div'); s.className = 'sep'; m.appendChild(s); head('Add Card · Calendar');
+    for (const [k, t, w, hh] of HW_SIZES.calendar) { const why = !cal ? 'No calendar in Home Assistant' : '';
+      row(ico('calendar', k), t, why || (k === 'xl' && N < 8 ? `${w} × ${hh} · shows as Large on this screen` : `${w} × ${hh}`), () => { close(); this.addCard('calendar', k); }, !!why); }
+    wrap.querySelector('.scrim').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); close(); });
+    hvEcl.lay.appendChild(wrap); hvEcl.place(m, anchor); const f = m.querySelector('button:not([disabled])'); if (f) f.focus({ preventScroll: true }); },
+  addCard(type, size) { let n = 0; this.change(raw => this.edit(raw, 'card', a => { a.push({ type, size }); n = a.length - 1; }));
+    hvToast(`${type === 'weather' ? 'Weather' : 'Calendar'} card added · tap an empty spot to save`, 'hv-arrange');
+    setTimeout(() => { const el = this.hub && this.hub._hgMap && this.hub._hgMap.get('w:' + n); if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }, 80); },
+  // ---- the items (grid children by token)
+  items() { const h = this.hub, out = []; if (!h || !h._hgMap) return out;
+    for (const [tok, g] of h._hgMap) { if (!g.isConnected) continue; const m = /^([a-z]+)(?::(\d+))?$/.exec(tok), k = m[1], i = Number(m[2] || 0);
+      const kind = k === 'a' ? 'app' : k === 'p' ? 'photo' : k === 's' ? 'side' : k === 'cal' ? 'cal' : 'card';
+      out.push({ tok, kind, i, g, el: kind === 'app' ? (g.querySelector('.ico') || g) : kind === 'photo' ? (g.querySelector('.pw') || g) : (g.querySelector(':scope > .hwi') || g) }); }
     return out; },
-  find(el) { return this.items().find(x => x.el === el); },
-  box(it) { return (it.kind === 'app' ? (it.el.querySelector('.ico') || it.el) : it.el).getBoundingClientRect(); },
+  find(g) { return this.items().find(x => x.g === g); },
+  box(it) { return it.el.getBoundingClientRect(); },
   label(it) { const c = this.hub._config; if (it.kind === 'app') return (c.apps[it.i] && c.apps[it.i].name) || 'App'; if (it.kind === 'photo') return c.photo_label || 'Photos'; if (it.kind === 'cal') return c.calendar_title || 'Calendar';
+    if (it.kind === 'card') { const x = (c.home_cards || [])[it.i] || {}, ty = x.type === 'calendar' ? 'calendar' : 'weather'; return `${ty === 'calendar' ? 'Calendar' : 'Weather'} · ${hwSize(ty, x.size)[1]}`; }
     const s = (c.side_cards || []).filter(x => x && x.type)[it.i] || ((this.hub._sideEls || [])[it.i] || {})._cfg || {}, st = s.entity && this.hub._hass && this.hub._hass.states[s.entity];
     return s.name || s.title || (st && st.attributes.friendly_name) || hvTileTypeName(s.type); },
-  units(it) { const c = this.hub._config; if (it.kind === 'cal') return c.calendar_size === 'wide2' ? 3 : c.calendar_size === 'wide' ? 2 : 1; return it.kind === 'photo' ? (c.photo_size === 'big' ? 3 : c.photo_size === 'square' ? 1 : 2) : it.kind === 'side' ? (hubTileSizes(c)[it.i] || 1) : 1; },
-  tick() { const h = this.hub; if (!h) return; if (!h.isConnected || h._sheetO) { this.exit(false); return; }
+  tick() { const h = this.hub; if (!h) return; if (!h.isConnected || h._sheetO) { if (!this.dirty) this.exit(false); else if (!this._lost) { this._lost = true; this.exit(true).then(ok => { this._lost = false; if (!ok && this.hub === h) this.exit(false); }); } return; }
     hvEcl.ensure(); this.bar(true); const lay = hvEcl.lay, day = h.hasAttribute('hv-day'); if (hvEcl.host.hasAttribute('day') !== day) hvEcl.host.toggleAttribute('day', day);
     const live = new Set(), vh = innerHeight;
-    for (const it of this.items()) { let c = this.ctl.get(it.el);
-      if (!c) { c = document.createElement('div'); c.className = 'c arr hc'; const el = it.el;
+    for (const it of this.items()) { let c = this.ctl.get(it.g);
+      if (!c) { c = document.createElement('div'); c.className = 'c arr hc'; const g = it.g;
         c.innerHTML = `<div class="cv"></div><button class="b m" aria-label="Options" aria-haspopup="menu" title="Options"><i><ha-icon icon="mdi:dots-horizontal"></ha-icon></i></button>${it.kind !== 'app' ? '<div class="rz" role="button" aria-label="Resize (drag the corner)" title="Drag to resize"><i></i></div>' : ''}`;
-        c.querySelector('.cv').addEventListener('pointerdown', e => { const x = this.find(el); if (x) this.press(x, e); });
-        const rz = c.querySelector('.rz'); if (rz) rz.addEventListener('pointerdown', e => { const x = this.find(el); if (x) this.resize(x, e); });
-        c.querySelector('.m').addEventListener('click', e => { e.stopPropagation(); const x = this.find(el); if (x) this.menu(x, c.querySelector('.m')); });
-        lay.appendChild(c); this.ctl.set(el, c); }
+        c.querySelector('.cv').addEventListener('pointerdown', e => { const x = this.find(g); if (x) this.press(x, e); });
+        const rz = c.querySelector('.rz'); if (rz) rz.addEventListener('pointerdown', e => { const x = this.find(g); if (x) this.resize(x, e); });
+        c.querySelector('.m').addEventListener('click', e => { e.stopPropagation(); const x = this.find(g); if (x) this.menu(x, c.querySelector('.m')); });
+        lay.appendChild(c); this.ctl.set(g, c); }
       live.add(c); const r = this.box(it), vis = r.width > 0 && r.bottom > 0 && r.top < vh; c.style.display = vis ? '' : 'none'; if (!vis) continue;
-      const app = it.kind === 'app', bs = app ? 30 : Math.max(30, Math.min(42, Math.round(Math.min(r.width, r.height) * 0.36))), bi = app ? 24 : Math.max(24, bs - 10); c.classList.toggle('app', app); let rr = getComputedStyle(it.kind === 'app' ? (it.el.querySelector('.ico') || it.el) : it.el).borderTopLeftRadius;
-      if (!rr || rr === '0px') rr = it.kind === 'app' ? Math.round(r.width * 0.23) + 'px' : '22px';
+      const app = it.kind === 'app', bs = app ? 30 : Math.max(30, Math.min(42, Math.round(Math.min(r.width, r.height) * 0.36))), bi = app ? 24 : Math.max(24, bs - 10); c.classList.toggle('app', app); let rr = getComputedStyle(it.el).borderTopLeftRadius;
+      if (!rr || rr === '0px') rr = app ? Math.round(r.width * 0.23) + 'px' : '22px';
       c.style.setProperty('--bs', bs + 'px'); c.style.setProperty('--bi', bi + 'px'); c.style.setProperty('--rr', rr); c.style.width = r.width + 'px'; c.style.height = r.height + 'px';
-      c.style.transform = `translate(${Math.round(r.left)}px,${Math.round(r.top)}px)`; c.classList.toggle('off', !!(this.rs && this.rs.el === it.el) || !!(this.drag && this.drag.el === it.el));
-      if (it.kind !== 'app') { const z = c.querySelector('.rz'), ab = hvEcl.sr && hvEcl.sr.querySelector('.abar'), br = ab && ab.getBoundingClientRect(); // keep the calendar's corner clear of the Done bar (phones)
+      c.style.transform = `translate(${Math.round(r.left)}px,${Math.round(r.top)}px)`; c.classList.toggle('off', !!(this.rs && this.rs.g === it.g) || !!(this.drag && this.drag.g === it.g));
+      if (!app) { const z = c.querySelector('.rz'), ab = hvEcl.sr && hvEcl.sr.querySelector('.abar'), br = ab && ab.getBoundingClientRect(); // keep the corner handle clear of the bar (phones)
         const lift = br && br.width && br.top < r.bottom && br.bottom > r.bottom - bs && br.left < r.right && br.right > r.right - bs ? Math.round(r.bottom - br.top + 6) : 0; if (z) z.style.bottom = lift + 'px'; } }
     for (const [el, c] of [...this.ctl]) if (!live.has(c)) { c.remove(); this.ctl.delete(el); } },
-  // tap = menu; hold = drag (the Photos tile: its menu); slide = scroll the page
+  // ---- drag: tap = menu; press and move, or hold, = lift it; the others make room while it moves (the page doesn't scroll); drop = it stays there
   press(it, e) { if ((e.button != null && e.button > 0) || this.drag || this.rs) return; e.preventDefault(); e.stopPropagation(); hvEcl.closeMenu();
-    const cv = e.currentTarget, el = it.el, p = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, mode: '', sy: window.scrollY || 0 };
+    const cv = e.currentTarget, g = it.g, p = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, mode: '' };
     try { cv.setPointerCapture(p.id); } catch (x) {}
     const off = () => { clearTimeout(p.t); cv.removeEventListener('pointermove', mv); cv.removeEventListener('pointerup', up); cv.removeEventListener('pointercancel', up); };
-    const mv = ev => { if (ev.pointerId !== p.id) return; p.x = ev.clientX; p.y = ev.clientY; if (!p.mode && Math.hypot(p.x - p.x0, p.y - p.y0) > 8) { clearTimeout(p.t); p.mode = 'scroll'; }
-      if (p.mode === 'scroll') window.scrollTo(window.scrollX || 0, p.sy - (p.y - p.y0)); };
+    const go = () => { if (p.mode) return; p.mode = 'drag'; off(); const x = this.find(g); if (x) this.startDrag(x, cv, p); };
+    const mv = ev => { if (ev.pointerId !== p.id) return; if (ev.cancelable) ev.preventDefault(); p.x = ev.clientX; p.y = ev.clientY; if (Math.hypot(p.x - p.x0, p.y - p.y0) > 8) go(); };
     const up = ev => { if (ev.pointerId !== p.id) return; off(); try { cv.releasePointerCapture(p.id); } catch (x) {}
-      if (!p.mode && ev.type === 'pointerup') { const x = this.find(el), c = this.ctl.get(el); if (x && c) this.menu(x, c.querySelector('.m')); } };
-    cv.addEventListener('pointermove', mv); cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
-    p.t = setTimeout(() => { if (p.mode) return; p.mode = 'drag'; off(); const x = this.find(el); if (!x) return;
-      if (x.kind === 'photo' || this.items().filter(y => y.kind === x.kind).length < 2) { try { cv.releasePointerCapture(p.id); } catch (z) {} const c = this.ctl.get(el); if (c) this.menu(x, c.querySelector('.m')); return; }
-      this.startDrag(x, cv, p); }, 260); },
-  startDrag(it, cv, p) { const r = this.box(it), lay = hvEcl.lay, rr = this.ctl.get(it.el) && this.ctl.get(it.el).style.getPropertyValue('--rr');
-    const d = this.drag = { it, el: it.el, kind: it.kind, i: it.i, id: p.id, x0: p.x0, y0: p.y0, x: p.x, y: p.y, cv, over: -1 };
-    const mk = cls => { const n = document.createElement('div'); n.className = cls; if (rr) n.style.setProperty('--rr', rr); lay.appendChild(n); return n; };
-    d.dim = mk('dim'); hvEcl.pos(d.dim, r); d.drop = mk('drop'); d.drop.style.display = 'none'; d.gh = mk('ghost'); d.gh.innerHTML = '<ha-icon></ha-icon><span></span>';
-    const a = it.kind === 'app' && this.hub._config.apps[it.i]; d.gh.querySelector('ha-icon').setAttribute('icon', a ? (a.icon === 'hv:home' ? 'mdi:home' : a.icon === 'hv:calendar' ? 'mdi:calendar' : a.icon || 'mdi:apps') : 'mdi:card-outline');
-    d.gh.querySelector('span').textContent = this.label(it); hvEcl.pos(d.gh, r); d.gh.style.transform = 'scale(1.06)'; d.r = r;
-    d.mv = ev => { if (ev.pointerId !== d.id) return; ev.preventDefault(); d.x = ev.clientX; d.y = ev.clientY; this.moveDrag(); };
-    d.up = ev => { if (ev.pointerId !== d.id) return; this.endDrag(ev.type === 'pointerup'); };
+      if (!p.mode && ev.type === 'pointerup') { const x = this.find(g), c = this.ctl.get(g); if (x && c) this.menu(x, c.querySelector('.m')); } };
+    cv.addEventListener('pointermove', mv); cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up); p.t = setTimeout(go, 260); },
+  order(ap) { return [...ap.children].map(n => n._hvTok).filter(Boolean); },
+  snap(ap) { return new Map([...ap.children].filter(n => !n.classList.contains('lift')).map(n => [n, n.getBoundingClientRect()])); },
+  // FLIP: from where each one was drawn to its new place (centres, so a lifted item also lands smoothly)
+  flip(m) { for (const [n, r0] of m) { if (!n.isConnected) continue; n.style.transition = 'none'; n.style.transform = ''; const r = n.getBoundingClientRect();
+      const dx = r0.left + r0.width / 2 - r.left - r.width / 2, dy = r0.top + r0.height / 2 - r.top - r.height / 2; if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) { n.style.transition = ''; continue; }
+      n.style.transform = `translate(${dx}px,${dy}px)`; void n.offsetWidth; n.style.transition = 'transform .26s cubic-bezier(.2,.8,.2,1)'; n.style.transform = '';
+      clearTimeout(n._hvFt); n._hvFt = setTimeout(() => { n.style.transition = ''; }, 300); } },
+  startDrag(it, cv, p) { const ap = this.grid(), g = it.g; if (!ap || g.parentNode !== ap) return; const ar = ap.getBoundingClientRect(), r = g.getBoundingClientRect();
+    const ph = document.createElement('div'); ph.className = 'hgp' + (it.kind === 'app' ? ' hga' : ''); ph.style.gridColumn = g.style.gridColumn; ph.style.gridRow = g.style.gridRow;
+    const d = this.drag = { it, g, ph, ap, tok: it.tok, o0: this.order(ap), id: p.id, x0: p.x0, y0: p.y0, x: p.x, y: p.y, sy0: scrollY, cv, tgt: null, at: 0, done: null };
+    ap.insertBefore(ph, g); g.classList.add('lift'); Object.assign(g.style, { left: (r.left - ar.left) + 'px', top: (r.top - ar.top) + 'px', width: r.width + 'px', height: r.height + 'px', margin: '0' });
+    d.mv = ev => { if (ev.pointerId !== d.id) return; if (ev.cancelable) ev.preventDefault(); d.x = ev.clientX; d.y = ev.clientY; this.moveDrag(); };
+    d.up = ev => { if (ev.pointerId !== d.id) return; this.endDrag(); };
     try { cv.setPointerCapture(p.id); } catch (x) {} cv.addEventListener('pointermove', d.mv); cv.addEventListener('pointerup', d.up); cv.addEventListener('pointercancel', d.up);
-    if (navigator.vibrate) try { navigator.vibrate(12); } catch (x) {} this.moveDrag(); this.tick(); },
-  moveDrag() { const d = this.drag; if (!d) return; d.gh.style.transform = `translate(${d.x - d.x0}px,${d.y - d.y0}px) scale(1.06)`; let over = -1, orect = null;
-    for (const it of this.items()) { if (it.kind !== d.kind || it.el === d.el) continue; const b = this.box(it); if (d.x >= b.left && d.x <= b.right && d.y >= b.top && d.y <= b.bottom) { over = it.i; orect = b; break; } }
-    d.over = over; if (orect) { hvEcl.pos(d.drop, orect); d.drop.style.display = ''; } else d.drop.style.display = 'none'; },
-  endDrag(ok) { const d = this.drag; if (!d) return; this.drag = null; try { d.cv.releasePointerCapture(d.id); } catch (x) {}
-    d.cv.removeEventListener('pointermove', d.mv); d.cv.removeEventListener('pointerup', d.up); d.cv.removeEventListener('pointercancel', d.up); [d.dim, d.drop].forEach(n => n.remove());
-    d.gh.style.transition = 'all .16s ease-out'; d.gh.style.opacity = '0'; d.gh.style.transform = 'scale(1)'; setTimeout(() => d.gh.remove(), 200);
-    if (ok && d.over >= 0 && d.over !== d.i) this.move(d.kind, d.i, d.over); this.tick(); },
-  sideRows(raw) { const cards = (raw.side_cards || []).filter(x => x && x.type), sz = String(raw.side_sizes || '').trim() ? hubSizes(raw.side_sizes) : null;
-    return cards.map((card, i) => ({ card, tile: Array.isArray(raw.side_tiles) ? raw.side_tiles[i] || null : null, sz: sz ? sz[i] || 1 : null })); },
-  sideWrite(raw, rows) { const had = Array.isArray(raw.side_tiles); raw.side_cards = rows.map(r => r.card);
-    if (had || rows.some(r => r.tile)) raw.side_tiles = rows.map(r => r.tile || {}); if (String(raw.side_sizes || '').trim()) raw.side_sizes = rows.map(r => (r.sz === 3 ? 'B' : r.sz === 2 ? 'W' : 'S')).join(', '); },
-  edit(raw, kind, fn) { if (kind === 'app') { if (!Array.isArray(raw.apps) || !raw.apps.length) raw.apps = HUB_APPS.map(a => Object.assign({}, a)); fn(raw.apps); }
-    else { const rows = this.sideRows(raw); if (raw.show_homie === true && !rows.some(r => r.card.type === HV_HOMIE_T)) rows.push({ card: { type: HV_HOMIE_T }, tile: null, sz: String(raw.side_sizes || '').trim() ? 1 : null });
-      fn(rows); if (!rows.some(r => r.card.type === HV_HOMIE_T)) delete raw.show_homie; this.sideWrite(raw, rows); } },
-  move(kind, i, j) { this.change(raw => this.edit(raw, kind, a => { const t = a.splice(i, 1)[0]; a.splice(j, 0, t); })); },
-  setUnits(it, u) { if (this.units(it) === u) return; this.change(raw => { if (it.kind === 'photo') { raw.photo_size = u === 3 ? 'big' : u === 2 ? 'wide' : 'square'; return; }
-    this.edit(raw, 'side', rows => { const r = rows[it.i]; if (!r) return; r.tile = Object.assign({}, r.tile || {}, { size: u === 3 ? 'big' : u === 2 ? 'wide' : 'square' }); if (r.sz != null) r.sz = u; }); }); },
-  // corner handle: one tile / two wide (the Home Screen row's two sizes)
-  setCal(k) { this.change(raw => { if (k === 'full') delete raw.calendar_size; else raw.calendar_size = k; }); },
-  // calendar corner: drag between the four sizes (Full 2 rows / Full 1 row below; Up next / Two wide in the tile row)
-  resizeCal(it, e) { e.preventDefault(); e.stopPropagation(); hvEcl.closeMenu(); const h = this.hub, h0 = e.currentTarget, lay = hvEcl.lay, G = h._calGeo(); if (!G) return;
-    const d = this.rs = { it, el: it.el, k: h._calMode(), id: e.pointerId, x: e.clientX, y: e.clientY, zones: [] };
+    d.iv = setInterval(() => this.dragTick(), 40); if (navigator.vibrate) try { navigator.vibrate(12); } catch (x) {} this.moveDrag(); this.tick(); },
+  moveDrag() { const d = this.drag; if (!d) return; d.g.style.transform = `translate(${d.x - d.x0}px,${d.y - d.y0 + (scrollY - d.sy0)}px) scale(1.06)`; },
+  dragTick() { const d = this.drag; if (!d) return; const ap = d.ap, vh = innerHeight, ez = 56;
+    if (d.y < ez && scrollY > 0) { scrollBy(0, -14); this.moveDrag(); } else if (d.y > vh - ez && scrollY + vh < document.documentElement.scrollHeight) { scrollBy(0, 14); this.moveDrag(); } // near the edges: the page follows
+    const ar = ap.getBoundingClientRect(), kids = [...ap.children].filter(n => n !== d.g); let tgt = null;
+    for (const n of kids) { if (n === d.ph) continue; const L = ar.left + n.offsetLeft, T = ar.top + n.offsetTop; if (d.x >= L && d.x <= L + n.offsetWidth && d.y >= T && d.y <= T + n.offsetHeight) { tgt = n; break; } }
+    if (!tgt) { const last = kids[kids.length - 1]; if (last && last !== d.ph) { const T = ar.top + last.offsetTop; if (d.y > T + last.offsetHeight || (d.y >= T && d.x > ar.left + last.offsetLeft + last.offsetWidth)) tgt = 'end'; } } // past the last item
+    if (tgt !== d.tgt) { d.tgt = tgt; d.at = Date.now(); d.done = null; return; }
+    if (!tgt || d.done === tgt || Date.now() - d.at < 110) return; d.done = tgt;
+    const m = this.snap(ap); if (tgt === 'end') ap.appendChild(d.ph); else { const L = [...ap.children]; if (L.indexOf(tgt) > L.indexOf(d.ph)) tgt.after(d.ph); else tgt.before(d.ph); }
+    this.flip(m); if (navigator.vibrate) try { navigator.vibrate(6); } catch (x) {} this.tick(); },
+  endDrag() { const d = this.drag; if (!d) return; this.drag = null; clearInterval(d.iv); try { d.cv.releasePointerCapture(d.id); } catch (x) {}
+    d.cv.removeEventListener('pointermove', d.mv); d.cv.removeEventListener('pointerup', d.up); d.cv.removeEventListener('pointercancel', d.up);
+    const g = d.g, r0 = g.getBoundingClientRect(); g.classList.remove('lift'); for (const k of ['left', 'top', 'width', 'height', 'margin', 'transform']) g.style[k] = '';
+    if (d.ph.parentNode) d.ph.replaceWith(g); this.flip(new Map([[g, r0]]));
+    const now = this.order(d.ap); if (JSON.stringify(now) !== JSON.stringify(d.o0)) this.change(raw => { raw.home_layout = this.merge(now); }); else this.tick(); },
+  // the grid's order with the items shown here in their new order (items not drawn yet keep their places)
+  merge(dom) { const c = this.hub._config, cur = hvHomeOrder(c, hvSideN(c)), on = new Set(dom); let k = 0; return cur.map(t => on.has(t) ? dom[k++] : t); },
+  shift(tok, dir) { this.change(raw => { const c = this.hub._config, L = hvHomeOrder(c, hvSideN(c)), i = L.indexOf(tok), j = i + dir; if (i < 0 || j < 0 || j >= L.length) return; [L[i], L[j]] = [L[j], L[i]]; raw.home_layout = L; }); },
+  // ---- sizes (cells: an app icon = 1 x 1)
+  sizes(it) { const c = this.hub._config; if (it.kind === 'card') { const x = (c.home_cards || [])[it.i] || {}; return HW_SIZES[x.type === 'calendar' ? 'calendar' : 'weather']; }
+    if (it.kind === 'cal') return HW_SIZES.calendar; if (it.kind === 'photo' || it.kind === 'side') return [['square', 'Small', 2, 2], ['wide', 'Medium', 4, 2], ['big', 'Large', 4, 4]]; return []; },
+  sizeOf(it) { const c = this.hub._config; if (it.kind === 'card') { const x = (c.home_cards || [])[it.i] || {}; return hwSize(x.type === 'calendar' ? 'calendar' : 'weather', x.size)[0]; }
+    if (it.kind === 'cal') return hwCalSize(c.calendar_size); const u = it.kind === 'photo' ? (c.photo_size === 'big' ? 3 : c.photo_size === 'square' ? 1 : 2) : (hubTileSizes(c)[it.i] || 1); return u === 3 ? 'big' : u === 2 ? 'wide' : 'square'; },
+  setSize(it, k) { if (this.sizeOf(it) === k) return; this.change(raw => {
+    if (it.kind === 'card') { raw.home_cards = (raw.home_cards || []).map((x, j) => j === it.i ? Object.assign({}, x, { size: k }) : x); return; }
+    if (it.kind === 'cal') { raw.calendar_size = k; return; } if (it.kind === 'photo') { raw.photo_size = k; return; }
+    const u = k === 'big' ? 3 : k === 'wide' ? 2 : 1; this.edit(raw, 'side', rows => { const r = rows[it.i]; if (!r) return; r.tile = Object.assign({}, r.tile || {}, { size: k }); if (r.sz != null) r.sz = u; }); }); },
+  // corner handle: drag to the size whose corner is nearest (live, with the sizes outlined)
+  resize(it, e) { if ((e.button != null && e.button > 0) || this.drag || this.rs) return; const M = this.hub._hgM, ks = this.sizes(it); if (!M || !ks.length) return; e.preventDefault(); e.stopPropagation(); hvEcl.closeMenu();
+    const h0 = e.currentTarget, lay = hvEcl.lay, rr = this.ctl.get(it.g) && this.ctl.get(it.g).style.getPropertyValue('--rr'), g0 = it.g.getBoundingClientRect(), cand = [];
+    for (const [k, t, w0, hh] of ks) { const w = Math.min(w0, M.N); if (!cand.some(q => q.w === w && q.h === hh)) cand.push({ k, t, w, h: hh }); }
+    const cellsOf = k => { const s = ks.find(x => x[0] === k) || ks[0]; return [Math.min(s[2], M.N), s[3]]; };
+    const d = this.rs = { it, g: it.g, tok: it.tok, k: this.sizeOf(it), id: e.pointerId, x: e.clientX, y: e.clientY, zones: [], L: g0.left, T: g0.top, sy0: scrollY };
     try { h0.setPointerCapture(e.pointerId); } catch (x) {}
-    const mk = cls => { const n = document.createElement('div'); n.className = cls; lay.appendChild(n); return n; };
-    const Z = { full: [G.rl, G.rt, G.rw, G.rh], row: [G.rl, G.rt, G.rw, G.rowH], wide: [G.sl, G.st, 2 * G.U + G.tg, G.U], wide2: [G.sl, G.st, 2 * G.U + G.tg, Math.max(G.U + G.tg, Math.min(2 * G.U + G.tg, G.rt + G.rh - G.st))], tile: [G.sl, G.st, G.U, G.U] };
-    for (const [k, , t] of HUB_CAL_SIZES) { const z = mk('tgt'); z.dataset.k = k; z.textContent = t; d.zones.push(z); } d.live = mk('live'); d.lbl = mk('szl');
-    const paint = () => { for (const z of d.zones) { const q = Z[z.dataset.k]; hvEcl.pos(z, { left: q[0], top: q[1], width: q[2], height: q[3] }); z.classList.toggle('on', z.dataset.k === d.k); }
-      const x = this.items().find(y => y.kind === 'cal'); if (x) { d.el = x.el; const r = this.box(x); if (r.width) hvEcl.pos(d.live, r); }
-      d.lbl.textContent = (HUB_CAL_SIZES.find(y => y[0] === d.k) || [])[2] || '';
+    const mk = cls => { const n = document.createElement('div'); n.className = cls; if (rr) n.style.setProperty('--rr', rr); lay.appendChild(n); return n; };
+    for (const q of cand) { const z = mk('tgt'); z.textContent = q.t.split(' · ')[0]; z._q = q; d.zones.push(z); } d.live = mk('live'); d.lbl = mk('szl');
+    const paint = () => { const T = d.T - (scrollY - d.sy0), [cw, ch] = cellsOf(d.k);
+      for (const z of d.zones) { const q = z._q; hvEcl.pos(z, { left: d.L, top: T, width: q.w * M.C + (q.w - 1) * M.gx, height: q.h * M.R + (q.h - 1) * M.gy }); z.classList.toggle('on', q.w === cw && q.h === ch); }
+      const x = this.items().find(y => y.tok === d.tok); if (x) { d.g = x.g; const r = this.box(x); if (r.width) hvEcl.pos(d.live, r); }
+      d.lbl.textContent = `${(ks.find(s => s[0] === d.k) || ks[0])[1]} · ${cw} × ${ch}`;
       const lw = d.lbl.offsetWidth || 140, vw = document.documentElement.clientWidth || innerWidth; d.lbl.style.left = Math.max(8, Math.min(vw - lw - 8, d.x - lw / 2)) + 'px'; d.lbl.style.top = Math.max(8, d.y - 64) + 'px'; };
-    const inn = q => d.x >= q[0] && d.x <= q[0] + q[2] && d.y >= q[1] && d.y <= q[1] + q[3];
-    const pick = () => inn(Z.tile) ? 'tile' : inn(Z.wide) ? 'wide' : inn(Z.wide2) ? 'wide2' : d.y < Math.min(G.rt, G.st) - G.gap / 2 ? (d.x - G.sl > G.U * 1.5 + G.tg ? 'wide' : 'tile') : (d.y - G.rt > Math.max(G.rowH + 24, G.rh * 0.62) ? 'full' : 'row');
+    const pick = () => { const T = d.T - (scrollY - d.sy0), dw = (d.x - d.L + M.gx) / (M.C + M.gx), dh = (d.y - T + M.gy) / (M.R + M.gy); let best = cand[0], bd = 1e9;
+      for (const q of cand) { const dd = Math.hypot(q.w - dw, q.h - dh); if (dd < bd) { bd = dd; best = q; } } const [cw, ch] = cellsOf(d.k); return best.w === cw && best.h === ch ? d.k : best.k; }; // same cells: keep the variant (Sunset, Date)
     d.iv = setInterval(paint, 60); paint(); if (navigator.vibrate) try { navigator.vibrate(10); } catch (x) {}
     d.mv = ev => { if (ev.pointerId !== d.id) return; ev.preventDefault(); d.x = ev.clientX; d.y = ev.clientY; const k = pick();
-      if (k !== d.k) { d.k = k; this.setCal(k); d.live.classList.remove('pulse'); void d.live.offsetWidth; d.live.classList.add('pulse'); if (navigator.vibrate) try { navigator.vibrate(8); } catch (z) {} } paint(); };
-    d.up = ev => { if (ev.pointerId !== d.id) return; this.endResize(); }; d.h0 = h0;
-    addEventListener('pointermove', d.mv, true); addEventListener('pointerup', d.up, true); addEventListener('pointercancel', d.up, true); this.tick(); },
-  resize(it, e) { if ((e.button != null && e.button > 0) || this.drag || this.rs) return; if (it.kind === 'cal') return this.resizeCal(it, e); e.preventDefault(); e.stopPropagation(); hvEcl.closeMenu();
-    const r0 = this.box(it), tg = parseFloat(this.hub._w.style.getPropertyValue('--cg2')) || 16, u0 = this.units(it), U = u0 === 1 ? r0.width : (r0.width - tg) / 2, h0 = e.currentTarget, lay = hvEcl.lay, rr = this.ctl.get(it.el) && this.ctl.get(it.el).style.getPropertyValue('--rr');
-    const d = this.rs = { it, el: it.el, u: this.units(it), first: this.units(it), id: e.pointerId, o0: r0, U, tg, x: e.clientX, y: e.clientY, zones: [] };
-    try { h0.setPointerCapture(e.pointerId); } catch (x) {}
-    const mk = cls => { const n = document.createElement('div'); n.className = cls; if (rr) n.style.setProperty('--rr', rr); lay.appendChild(n); return n; };
-    for (const u of [1, 2, 3]) { const z = mk('tgt'); z.dataset.u = u; z.textContent = u === 3 ? '4 × 6' : u === 2 ? '2 × 6' : '2 × 3'; d.zones.push(z); } d.live = mk('live'); d.lbl = mk('szl');
-    const paint = () => { const x = this.find(d.el); if (!x) return; const r = this.box(x); if (!r.width) return;
-      for (const z of d.zones) { const u = Number(z.dataset.u); hvEcl.pos(z, { left: d.o0.left, top: d.o0.top, width: u >= 2 ? 2 * U + tg : U, height: u === 3 ? 2 * U + tg : U }); z.classList.toggle('on', u === d.u); }
-      hvEcl.pos(d.live, r); d.lbl.textContent = d.u === 3 ? '4 × 6 · Two wide, 2 rows' : d.u === 2 ? '2 × 6 · Two wide' : '2 × 3 · One tile';
-      const lw = d.lbl.offsetWidth || 120, vw = document.documentElement.clientWidth || innerWidth; d.lbl.style.left = Math.max(8, Math.min(vw - lw - 8, d.x - lw / 2)) + 'px'; d.lbl.style.top = Math.max(8, d.y - 64) + 'px'; };
-    d.iv = setInterval(paint, 60); paint(); if (navigator.vibrate) try { navigator.vibrate(10); } catch (x) {}
-    d.mv = ev => { if (ev.pointerId !== d.id) return; ev.preventDefault(); d.x = ev.clientX; d.y = ev.clientY; const u = d.y - d.o0.top > U * 1.5 + tg / 2 ? 3 : d.x - d.o0.left > U * 1.5 + tg ? 2 : 1;
-      if (u !== d.u) { d.u = u; const x = this.find(d.el); if (x) this.setUnits(x, u); d.live.classList.remove('pulse'); void d.live.offsetWidth; d.live.classList.add('pulse'); if (navigator.vibrate) try { navigator.vibrate(8); } catch (z) {} } paint(); };
+      if (k !== d.k) { d.k = k; const x = this.items().find(y => y.tok === d.tok); if (x) this.setSize(x, k); d.live.classList.remove('pulse'); void d.live.offsetWidth; d.live.classList.add('pulse'); if (navigator.vibrate) try { navigator.vibrate(8); } catch (z) {} } paint(); };
     d.up = ev => { if (ev.pointerId !== d.id) return; this.endResize(); }; d.h0 = h0;
     addEventListener('pointermove', d.mv, true); addEventListener('pointerup', d.up, true); addEventListener('pointercancel', d.up, true); this.tick(); },
   endResize() { const d = this.rs; if (!d) return; this.rs = null; clearInterval(d.iv); removeEventListener('pointermove', d.mv, true); removeEventListener('pointerup', d.up, true); removeEventListener('pointercancel', d.up, true);
     try { d.h0.releasePointerCapture(d.id); } catch (x) {} [...d.zones, d.live, d.lbl].forEach(n => n && n.remove()); this.tick(); },
+  // ---- config edits that keep the grid's order pointing at the right things (tokens are indexes)
+  sideRows(raw) { const cards = (raw.side_cards || []).filter(x => x && x.type), sz = String(raw.side_sizes || '').trim() ? hubSizes(raw.side_sizes) : null;
+    return cards.map((card, i) => ({ card, tile: Array.isArray(raw.side_tiles) ? raw.side_tiles[i] || null : null, sz: sz ? sz[i] || 1 : null })); },
+  sideWrite(raw, rows) { const had = Array.isArray(raw.side_tiles); raw.side_cards = rows.map(r => r.card);
+    if (had || rows.some(r => r.tile)) raw.side_tiles = rows.map(r => r.tile || {}); if (String(raw.side_sizes || '').trim()) raw.side_sizes = rows.map(r => (r.sz === 3 ? 'B' : r.sz === 2 ? 'W' : 'S')).join(', '); },
+  remap(L, pre, before, after) { const out = [];
+    for (const t of L) { const m = /^([a-z]+):(\d+)$/.exec(t); if (!m || m[1] !== pre) { out.push(t); continue; } const k = after.indexOf(before[Number(m[2])]); if (k >= 0) out.push(pre + ':' + k); }
+    after.forEach((x, k) => { if (!before.includes(x)) out.push(pre + ':' + k); }); return out; }, // new ones go last
+  edit(raw, kind, fn) { let before, after, pre;
+    if (kind === 'app') { if (!Array.isArray(raw.apps) || !raw.apps.length) raw.apps = HUB_APPS.map(a => Object.assign({}, a)); before = raw.apps.slice(); fn(raw.apps); after = raw.apps; pre = 'a'; }
+    else if (kind === 'card') { raw.home_cards = Array.isArray(raw.home_cards) ? raw.home_cards.slice() : []; before = raw.home_cards.slice(); fn(raw.home_cards); after = raw.home_cards; pre = 'w'; if (!after.length) delete raw.home_cards; }
+    else { const rows = this.sideRows(raw); if (raw.show_homie === true && !rows.some(r => r.card.type === HV_HOMIE_T)) rows.push({ card: { type: HV_HOMIE_T }, tile: null, sz: String(raw.side_sizes || '').trim() ? 1 : null });
+      before = rows.slice(); fn(rows); after = rows; pre = 's'; if (!rows.some(r => r.card.type === HV_HOMIE_T)) delete raw.show_homie; this.sideWrite(raw, rows); }
+    if (Array.isArray(raw.home_layout)) raw.home_layout = this.remap(raw.home_layout, pre, before, after); },
+  dup(it) { const pre = it.kind === 'side' ? 's' : 'w'; this.change(raw => { let n = -1; this.edit(raw, it.kind, a => { if (a[it.i]) { a.push(JSON.parse(JSON.stringify(a[it.i]))); n = a.length - 1; } });
+    const L = raw.home_layout; if (n < 0 || !Array.isArray(L)) return; const t = pre + ':' + n, j = L.indexOf(t); if (j >= 0) L.splice(j, 1); const at = L.indexOf(it.tok); L.splice(at < 0 ? L.length : at + 1, 0, t); }); }, // right after the original
   async openEditor() { const h = this.hub; if (!(await this.exit(true))) return; const root = hvFindRoot(h), lv = root && root.lovelace; if (!lv) return;
     // Same path as the popup pencil: open this Home Screen card's editor when we can find it; otherwise enter dashboard edit mode.
     const sig = JSON.stringify(h._hvRaw || {});
@@ -4091,30 +4301,26 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
     if (path) { const vw = lv.config.views[path[0]] || {}; hvPenPage((lv.urlPath || ssDash()), vw.path != null && vw.path !== '' ? vw.path : path[0]); return; }
     hvPopEdit(h, { card: h }); },
   menu(it, anchor) { hvEcl.closeMenu(); hvEcl.ensure(); const wrap = hvEcl.menu = document.createElement('div'); wrap.innerHTML = '<div class="scrim"></div><div class="menu" role="menu"></div>';
-    const m = wrap.querySelector('.menu'), close = () => hvEcl.closeMenu(), t0 = Date.now(), n = this.items().filter(x => x.kind === it.kind).length;
+    const c = this.hub._config, m = wrap.querySelector('.menu'), close = () => hvEcl.closeMenu(), t0 = Date.now(), N = (this.hub._hgM || {}).N || 8, L = hvHomeOrder(c, hvSideN(c)), at = L.indexOf(it.tok);
     const item = (ic, txt, fn, cls, dis) => { const b = document.createElement('button'); b.setAttribute('role', 'menuitem'); if (cls) b.className = cls; if (dis) b.disabled = true;
       b.innerHTML = '<ha-icon></ha-icon><span></span>'; b.querySelector('ha-icon').setAttribute('icon', ic); b.querySelector('span').textContent = txt; b.addEventListener('click', e => { e.stopPropagation(); if (Date.now() - t0 < 400) return; fn(); }); m.appendChild(b); return b; };
     const sep = () => { const s = document.createElement('div'); s.className = 'sep'; m.appendChild(s); };
     const head = document.createElement('div'); head.className = 't'; head.textContent = this.label(it); m.appendChild(head);
-    const fin = () => { wrap.querySelector('.scrim').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); close(); });
-      hvEcl.lay.appendChild(wrap); hvEcl.place(m, anchor); const f = m.querySelector('button:not([disabled])'); if (f) f.focus({ preventScroll: true }); };
-    if (it.kind === 'cal') { const cm = this.hub._calMode(); item('mdi:pencil', 'Edit calendar', () => { close(); this.openEditor(); }); sep();
-      for (const [k, ic, t] of HUB_CAL_SIZES) item(cm === k ? 'mdi:check' : ic, t, () => { close(); this.setCal(k); });
-      sep(); item('mdi:eye-off-outline', 'Hide', () => { close(); this.change(raw => { raw.show_calendar = false; }); hvToast('Calendar hidden. Turn it back on in the Home Screen settings (Calendar).', 'hv-arrange'); }); fin(); return; }
-    item('mdi:pencil', 'Edit', () => { close(); this.openEditor(); });
-    if (it.kind !== 'photo') { item('mdi:arrow-left', 'Move earlier', () => { close(); this.move(it.kind, it.i, it.i - 1); }, '', it.i <= 0);
-      item('mdi:arrow-right', 'Move later', () => { close(); this.move(it.kind, it.i, it.i + 1); }, '', it.i >= n - 1); }
-    if (it.kind !== 'app') { const u = this.units(it); item(u === 1 ? 'mdi:check' : 'mdi:square-rounded-outline', '2 × 3 · One tile', () => { close(); this.setUnits(it, 1); });
-      item(u === 2 ? 'mdi:check' : 'mdi:rectangle-outline', '2 × 6 · Two wide', () => { close(); this.setUnits(it, 2); });
-      item(u === 3 ? 'mdi:check' : 'mdi:square-outline', '4 × 6 · Two wide, 2 rows', () => { close(); this.setUnits(it, 3); }); }
-    if (it.kind === 'side') item('mdi:content-copy', 'Duplicate', () => { close(); this.change(raw => this.edit(raw, 'side', a => a.splice(it.i + 1, 0, JSON.parse(JSON.stringify(a[it.i]))))); });
-    if (it.kind !== 'photo') { sep(); item('mdi:delete-outline', 'Delete', () => { m.innerHTML = ''; const q = document.createElement('div'); q.className = 'q'; q.textContent = `Delete “${this.label(it)}”?`; m.appendChild(q);
-      const row = document.createElement('div'); row.className = 'row'; m.appendChild(row);
-      const mk = (t, cls, fn) => { const b = document.createElement('button'); b.textContent = t; if (cls) b.className = cls; b.addEventListener('click', e => { e.stopPropagation(); fn(); }); row.appendChild(b); };
-      mk('Cancel', '', close); mk('Delete', 'del', () => { close(); this.change(raw => this.edit(raw, it.kind, a => a.splice(it.i, 1))); }); hvEcl.place(m, anchor); }, 'del', it.kind === 'app' && n <= 1); }
+    if (it.kind !== 'card') item('mdi:pencil', it.kind === 'cal' ? 'Edit calendar' : 'Edit', () => { close(); this.openEditor(); });
+    item('mdi:arrow-left', 'Move earlier', () => { close(); this.shift(it.tok, -1); }, '', at <= 0);
+    item('mdi:arrow-right', 'Move later', () => { close(); this.shift(it.tok, 1); }, '', at < 0 || at >= L.length - 1);
+    const ks = this.sizes(it); if (ks.length) { sep(); const cur = this.sizeOf(it);
+      for (const [k, t, w, hh] of ks) item(cur === k ? 'mdi:check' : (HW_SZ_ICON[k] || 'mdi:square-outline'), `${t} · ${w} × ${hh}${w > N ? ' (wide screens)' : ''}`, () => { close(); this.setSize(it, k); }).setAttribute('aria-checked', String(cur === k)); }
+    if (it.kind === 'side' || it.kind === 'card') item('mdi:content-copy', 'Duplicate', () => { close(); this.dup(it); });
+    if (it.kind === 'cal') { sep(); item('mdi:eye-off-outline', 'Hide', () => { close(); this.change(raw => { raw.show_calendar = false; }); hvToast('Calendar hidden. Turn it back on in the Home Screen settings (Calendar).', 'hv-arrange'); }); }
+    else if (it.kind !== 'photo') { const n = it.kind === 'app' ? (c.apps || []).length : 2; sep();
+      item('mdi:delete-outline', 'Delete', () => { m.innerHTML = ''; const q = document.createElement('div'); q.className = 'q'; q.textContent = `Delete “${this.label(it)}”?`; m.appendChild(q);
+        const row = document.createElement('div'); row.className = 'row'; m.appendChild(row);
+        const mk = (t, cls, fn) => { const b = document.createElement('button'); b.textContent = t; if (cls) b.className = cls; b.addEventListener('click', e => { e.stopPropagation(); fn(); }); row.appendChild(b); };
+        mk('Cancel', '', close); mk('Delete', 'del', () => { close(); this.change(raw => this.edit(raw, it.kind, a => a.splice(it.i, 1))); }); hvEcl.place(m, anchor); }, 'del', it.kind === 'app' && n <= 1); }
     wrap.querySelector('.scrim').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); close(); });
     hvEcl.lay.appendChild(wrap); hvEcl.place(m, anchor); const f = m.querySelector('button:not([disabled])'); if (f) f.focus({ preventScroll: true }); } };
-/* Add App (Home Screen arrange): the page behind an added Home or Security icon, written in the same save as the Home Screen on Done.
+/* Add App (Home Screen arrange): the page behind an added Home or Security icon, written in the same save as the Home Screen when arrange mode is left.
    Home = the My Home page (custom:homeview-myhome-card), Security = the security page's Page Grid. 'scratch' empties the page (My Home:
    every tile hidden; Security: no grid tiles) and keeps its chrome; 'all' shows / appends every discovered accessory and keeps what is
    there. A missing page is created like the dashboard's other device pages (theme, background, style helper, a way back). Config only. */
@@ -6141,7 +6347,7 @@ const hvSetNorm = (k, v) => { // the value written for an option: undefined = re
   return v; };
 const hvSetApply = (node, k, v) => { const was = hvBgLevel(node), n = hvSetNorm(k, v); if (n === undefined) delete node[k]; else node[k] = n; // Night theme = the default: the key goes
   if (k === 'bg_blur_level') { delete node.bg_transparency; if (Number(v) !== was) delete node.blur; } // a level replaces the older transparency (same look); a new level drops an older px blur
-  if (k === 'show_homie' && n !== true && (node.side_cards || []).some(x => x && x.type === HV_HOMIE_T)) hvHubArr.sideWrite(node, hvHubArr.sideRows(node).filter(r => r.card.type !== HV_HOMIE_T)); // off: the Homie tile goes
+  if (k === 'show_homie' && n !== true && (node.side_cards || []).some(x => x && x.type === HV_HOMIE_T)) { const rows = hvHubArr.sideRows(node), keep = rows.filter(r => r.card.type !== HV_HOMIE_T); hvHubArr.sideWrite(node, keep); if (Array.isArray(node.home_layout)) node.home_layout = hvHubArr.remap(node.home_layout, 's', rows, keep); } // off: the Homie tile goes
   return node; };
 // the home-screen editor's fields by name (selectors from HUB_SCHEMA: the pipelines and the album link field as the card editor shows them)
 const hvSetFields = sch => { const m = {}; const w = l => l.forEach(x => { if (x.schema) w(x.schema); else if (x.name) m[x.name] = x; }); w(sch); return m; };
@@ -6872,7 +7078,7 @@ class HVHubCard extends HTMLElement {
     this._sig = null; if (old && (old.photo_source !== c.photo_source || old.photo_order !== c.photo_order || old.photo_source_mode !== c.photo_source_mode || old.photo_album_url !== c.photo_album_url)) { this._ids = null; this._idsExp = 0; this._loadPhotos(); }
     this._calSig = null; this._render(); this._restartTimer(); if (this.isConnected) this._gBind(); }
   set hass(h) { const first = !this._hass; this._hass = h; this._render(); if (this._cal) this._cal.hass = h; (this._sideEls || []).forEach(e => { e._card.hass = this._simHass(h);
-      if (e._fit) { const o = hubTileOpt(this._config, this._sideEls.indexOf(e)); if (o.sky === true && hvSky(h, o.sky_entity, window.__hvSimScene).sig !== e._skySig) requestAnimationFrame(() => this._fitTile(e)); } }); if (first) { this._loadPhotos(); this._loadCfg(); setTimeout(hvWwSync, 0); } if (this._sheetO) this._sheetO.hass = h; }
+      if (e._fit) { const o = hubTileOpt(this._config, this._sideEls.indexOf(e)); if (o.sky === true && hvSky(h, o.sky_entity, window.__hvSimScene).sig !== e._skySig) requestAnimationFrame(() => this._fitTile(e)); } }); if (first) { this._loadPhotos(); this._loadCfg(); setTimeout(hvWwSync, 0); } if (this._sheetO) this._sheetO.hass = h; this._hwPaint(); }
   get hass() { return this._hass; }
   set editMode(v) { const was = !!this._edit; this._edit = v; this._layout(); this._ssPaint(); if (v) hvEditChromeSoon(this);
     if (v && !was && hvHubArr.hub === this) hvHubArr.exit(true); // HA's edit mode takes over: finish the Home Screen arrange (saves like Done)
@@ -6889,7 +7095,7 @@ class HVHubCard extends HTMLElement {
     if (window.ResizeObserver && !this._ro) { this._ro = new ResizeObserver(() => this._layout()); this._ro.observe(this); }
     this._gBind(); setTimeout(() => this._gBind(), 0); if (this._hass) this._loadCfg(true);
     if (!this._tpf) this._tpf = () => this._tpillPaint(); hvTimerPills.add(this._tpf); this._tpillPaint();
-    clearInterval(this._tick); this._tick = setInterval(() => { this._render(); if (++this._tn % 4 === 0) this._loadCfg(true); else this._ssPaint(); }, 30000); this._tn = 0;
+    clearInterval(this._tick); this._tick = setInterval(() => { this._render(); this._hwPaint(true); if (++this._tn % 4 === 0) this._loadCfg(true); else this._ssPaint(); }, 30000); this._tn = 0;
     if (!this._vis) { this._vis = () => { if (!document.hidden) this._restartTimer(); else this._paintBg(true, true); }; } document.addEventListener('visibilitychange', this._vis);
     requestAnimationFrame(() => this._layout()); setTimeout(() => this._layout(), 700); setTimeout(() => this._layout(), 1800);
     for (const t of [2500, 6000]) setTimeout(() => { this._vk = null; this._layout(); }, t); // re-measure the space below once the page has settled
@@ -6902,7 +7108,7 @@ class HVHubCard extends HTMLElement {
   disconnectedCallback() { HV_HUBS.delete(this); setTimeout(hvWwSync, 0); hvTimerPills.delete(this._tpf); if (this._assistO) this._assistO.close(); clearInterval(this._ssHoldIv); this._ssHoldIv = null; this._edgeBind(false); hvPTR.set(this, false); this._ssBind(false); this._homeSwBind(false); if (this._galO) this._galO.close(); if (this._sheetO) { const so = this._sheetO, d0 = ssDash(); this._sheetO = null; if (so !== hvOpenSettings.cur) so.close(); // Settings (on document.body) survives a view rebuild: hand it to the new card, close it only if the card is really gone
     else setTimeout(() => { if (hvOpenSettings.cur !== so) return; const n = ssDash() === d0 && [...HV_HUBS].find(x => x.isConnected && !hvInDialog(x)); if (n) { if (!n._sheetO) n._sheetO = so; } else so.close(); }, 1200); } this._ssPause(false); clearInterval(this._tick); clearTimeout(this._timer); this._timer = null;
     removeEventListener('resize', this._bound); removeEventListener('orientationchange', this._bound); removeEventListener('hv-layout', this._bound); if (window.visualViewport) visualViewport.removeEventListener('resize', this._bound);
-    document.removeEventListener('visibilitychange', this._vis); }
+    document.removeEventListener('visibilitychange', this._vis); hwOff(this); clearTimeout(this._hwT); this._hwT = null; }
   // --- dashboard config (Wallpanel settings, views for the sheets), cached
   async _loadCfg(force) { if (!this._hass) return this._lcfg; if (this._lcfgP && !force) return this._lcfgP;
     this._lcfgP = (async () => { try { const m = { type: 'lovelace/config' }; const d = ssDash(); if (d) m.url_path = d; this._lcfg = await this._hass.callWS(m); } catch (e) {} this._ssPaint(); return this._lcfg; })();
@@ -7110,7 +7316,7 @@ class HVHubCard extends HTMLElement {
     return c.apps.map((a, i) => `<button class="app" data-app="${i}" aria-label="${esc(a.name || '')}"><span class="ico" style="background:linear-gradient(180deg,${esc(a.color_from || '#8e8e93')} 0%,${esc(a.color_to || a.color_from || '#636366')} 100%);color:${esc(a.glyph_color || '#fff')}">${glyph(a)}</span><span class="lb">${esc(a.name || '')}</span></button>`).join(''); }
   // 1.32.0 Home Screen arrange: a new config applied in place (apps redrawn, side tiles reordered / resized with their elements kept, no rebuild)
   _arrSet(raw) { const old = this._config; this._hvRaw = raw; const nc = Object.assign({}, HVHubCard.defaults, raw); if (!Array.isArray(nc.apps) || !nc.apps.length) nc.apps = HUB_APPS; this._config = nc;
-    if (!this._w) return this._render(); if (JSON.stringify(old && old.apps) !== JSON.stringify(nc.apps)) { const a = this._w.querySelector('.apps'); if (a) a.innerHTML = this._appsHtml(nc); }
+    if (!this._w) return this._render(); if (JSON.stringify(old && old.apps) !== JSON.stringify(nc.apps)) { const a = this._w.querySelector('.apps'); if (a) this._putApps(a, this._appsHtml(nc)); }
     if (old && (old.show_calendar !== false) !== (nc.show_calendar !== false)) { this._sig = null; return this._render(); } // calendar shown / hidden: rebuild once
     if (this._cal && old && old.calendar_size !== nc.calendar_size) this._makeCal(this._cal);
     this._sig = this._rSig(); this._makeSide(); this._layout(); }
@@ -7123,7 +7329,7 @@ class HVHubCard extends HTMLElement {
     const sig = this._rSig();
     if (sig === this._sig && this._w) return; this._sig = sig;
     if (!this._w) {
-      this.shadowRoot.innerHTML = `<style>${HUB_CSS}</style><div class="bg"><div class="bgi"></div><div class="bgi"></div><div class="tint"></div><div class="dim"></div></div><div class="w"></div><div class="ssp" hidden title="Swipe down for the screensaver"></div>`;
+      this.shadowRoot.innerHTML = `<style>${HUB_CSS}${HW_CSS}</style><div class="bg"><div class="bgi"></div><div class="bgi"></div><div class="tint"></div><div class="dim"></div></div><div class="w"></div><div class="ssp" hidden title="Swipe down for the screensaver"></div>`;
       this._ssp = this.shadowRoot.querySelector('.ssp'); this._ssPaint();
       this._w = this.shadowRoot.querySelector('.w'); this._bgs = [...this.shadowRoot.querySelectorAll('.bgi')];
       this._w.addEventListener('click', e => { const t = e.composedPath().find(n => n.dataset && (n.dataset.app != null || n.dataset.k)); if (!t) return;
@@ -7137,7 +7343,7 @@ class HVHubCard extends HTMLElement {
       <button class="av" data-k="person" aria-label="${esc(first)}"${c.ring_color ? ` style="--ring:${esc(c.ring_color)}"` : ''}><div class="pic"${pic ? ` style="background-image:url('${esc(pic)}')"` : ''}>${pic ? '' : esc(first.charAt(0))}</div></button></div></div>`;
     if (this._rowEl && this._rowEl.parentNode && this._w.contains(this._rowEl)) { // 1.32.0: redraw in place: greeting / avatar / apps / labels / calendar slot; the tile row (camera streams) stays
       const t0 = this._w.querySelector('.top'); if (t0) { t0.insertAdjacentHTML('beforebegin', topH); t0.remove(); }
-      const ap = this._w.querySelector('.apps'); if (ap) ap.innerHTML = apps;
+      const ap = this._w.querySelector('.apps'); if (ap) this._putApps(ap, apps);
       const ph = this._w.querySelector('.phw'); if (ph) { let lb = ph.querySelector('.lb'); if (c.photo_label) { if (!lb) { lb = document.createElement('span'); lb.className = 'lb'; ph.appendChild(lb); } lb.textContent = c.photo_label; } else if (lb) lb.remove();
         const pb0 = ph.querySelector('.pw'); if (pb0) pb0.setAttribute('aria-label', c.photo_label || 'Photos'); }
       let cw = this._w.querySelector('.calw'); if (c.show_calendar !== false && !cw) { cw = document.createElement('div'); cw.className = 'calw'; this._w.appendChild(cw); } else if (c.show_calendar === false && cw) { cw.remove(); cw = null; }
@@ -7218,6 +7424,52 @@ class HVHubCard extends HTMLElement {
     this._calSig = sig; const el = keep || document.createElement('homeview-calendar-card');
     try { el.setConfig(cfg); } catch (e) { el.textContent = String(e); } el.hass = this._hass; this._cal = el;
   }
+  // Home Screen grid (home_layout set): apps, Photos, the extra tiles, the Calendar and the cards in one grid, in that order (see hvHomeOrder)
+  _gridOn() { return !!this._config && Array.isArray(this._config.home_layout); }
+  _putApps(ap, html) { for (const n of [...ap.children]) if (n.classList.contains('app')) n.remove(); ap.insertAdjacentHTML('afterbegin', html); } // the app icons only: tiles / cards in the grid stay
+  _hwMk(key) { const M = this._hwM || (this._hwM = new Map()); let el = M.get(key); if (el) return el;
+    el = document.createElement('div'); el.className = 'tile hw'; el.setAttribute('role', 'button'); el.tabIndex = 0; el.innerHTML = '<div class="hwi"></div>';
+    const open = ev => { ev.stopPropagation(); if (this._edit || hvHubArr.hub === this || this._sheetO) return; const cfg = el._cfg || {};
+      if (cfg.type === 'weather') this._openWeather(hwWxId(this) || undefined); else hvOpenCalApp(this, (this._config.apps || []).find(a => a.kind === 'calendar')); };
+    el.addEventListener('click', open); el.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); open(ev); } });
+    M.set(key, el); return el; }
+  _layoutGrid(o) { const c = this._config, ap = this._w.querySelector('.apps'); if (!ap) return; const { px, pt, pb, H, Wc, gap, set } = o;
+    this.toggleAttribute('hgrid', true); ap.classList.add('hg');
+    // columns: 8 on a landscape tablet, 6 on a portrait one, 4 on a phone; an app icon fills most of a column
+    const N = Wc >= 1000 ? 8 : Wc >= 680 ? 6 : 4, gx = Math.round(Math.max(12, Math.min(30, Wc * 0.024))), hs = hubTileSizes(c), toks = hvHomeOrder(c, hvSideN(c));
+    const cells = t => { const z = hvHomeCells(c, t, hs); return [Math.min(z[0], N), z[1]]; }, rows = hvGridRows(toks.map(cells), N);
+    const met = I => { const lfs = Math.round(Math.max(12, Math.min(17, I * 0.15))), lh = Math.round(lfs * 1.3), lg = Math.round(I * 0.08); return { I, lfs, lh, lg, R: I + lg + lh, gy: Math.round(Math.max(12, I * 0.2)) }; };
+    let C = (Wc - (N - 1) * gx) / N, I = Math.max(52, Math.min(Math.floor(C * 0.8), Number(c.max_icon) || 140));
+    const greetH = Math.max(15, Math.min(26, Wc * 0.03)) * 2.5, room = H - pt - pb - greetH - gap, need = i => { const m = met(i); return rows * m.R + Math.max(0, rows - 1) * m.gy; };
+    { const lo0 = Math.max(52, Math.round(I * 0.72)); if (rows && need(I) > room && need(lo0) <= room) { let lo = lo0, hi = I; while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (need(mid) > room) hi = mid; else lo = mid; } I = lo; } } // a little smaller to fit the screen; more than that scrolls (columns keep the width)
+    const M = met(I); C = Math.floor(C); this._hgM = { N, C, R: M.R, gx, gy: M.gy, I };
+    const apps = [...ap.querySelectorAll(':scope > .app:not(.hgp)')], phw = this._w.querySelector('.phw'), els = [], live = new Set(), map = this._hgMap = new Map();
+    for (const t of toks) { const m = /^([a-z]+)(?::(\d+))?$/.exec(t), k = m[1], i = Number(m[2] || 0); let el = null;
+      if (k === 'a') el = apps[i]; else if (k === 'p') el = phw; else if (k === 's') el = (this._sideEls || [])[i];
+      else if (k === 'cal') { el = this._hwMk('cal'); el._cfg = { type: 'calendar', size: hwCalSize(c.calendar_size) }; }
+      else if (k === 'w') { const x = (c.home_cards || [])[i]; if (x) { el = this._hwMk('w:' + i); el._cfg = { type: x.type === 'calendar' ? 'calendar' : 'weather', size: hwSize(x.type === 'calendar' ? 'calendar' : 'weather', x.size)[0] }; } }
+      if (!el) continue; const [w, h] = cells(t); el._hvTok = t; el._hvCells = [w, h]; map.set(t, el); els.push(el);
+      el.style.gridColumn = `span ${w}`; el.style.gridRow = `span ${h}`;
+      if (el._cfg && el.classList.contains('hw')) { el.dataset.ty = el._cfg.type; el.dataset.sz = el._cfg.size; el.setAttribute('aria-label', el._cfg.type === 'weather' ? 'Weather' : 'Calendar'); live.add(el); } }
+    if (this._hwM) for (const [k, el] of [...this._hwM]) if (!live.has(el)) { el.remove(); this._hwM.delete(k); }
+    if (!(hvHubArr.drag && hvHubArr.hub === this)) hvOrder(ap, els); // a drag in progress owns the order until it drops
+    const ppw = phw && phw.querySelector('.pw'), ph = map.get('p'); if (ppw && ph) { const h = ph._hvCells[1]; ppw.style.setProperty('--ph', Math.max(40, h * M.R + (h - 1) * M.gy - (phw.querySelector('.lb') ? M.lh + M.lg : 0)) + 'px'); }
+    set('--px', px + 'px'); set('--pt', Math.max(0, pt) + 'px'); set('--pb', pb + 'px'); set('--gap', gap + 'px'); set('--h', Math.floor(H) + 'px');
+    set('--I', I + 'px'); set('--lfs', M.lfs + 'px'); set('--lh', M.lh + 'px'); set('--lg', M.lg + 'px'); set('--cg2', gx + 'px');
+    set('--gn', String(N)); set('--gc', C + 'px'); set('--gr', M.R + 'px'); set('--gx', gx + 'px'); set('--gy', M.gy + 'px'); set('--hu', ((2 * C + gx) / 1.55).toFixed(1) + 'px');
+    const i0 = Math.min(Wc / 5.2, Number(c.max_icon) || 140); set('--gfs', Math.round(Math.max(15, Math.min(26, i0 * 0.2))) + 'px'); set('--av', Math.round(Math.max(44, Math.min(72, i0 * 0.56))) + 'px');
+    (this._sideEls || []).forEach(w => { w.classList.toggle('fit', !!w._fit); if (w._fit) requestAnimationFrame(() => this._fitTile(w)); });
+    this._hwPaint(true); }
+  // back to the classic layout (home_layout removed, e.g. leaving arrange without a change): the tiles go back to their row
+  _gridOff() { if (!this.hasAttribute('hgrid')) return; this.toggleAttribute('hgrid', false); const ap = this._w.querySelector('.apps'); this._hgMap = null; this._hgM = null;
+    if (ap) { ap.classList.remove('hg'); for (const n of ap.children) { n.style.gridColumn = ''; n.style.gridRow = ''; } }
+    if (this._hwM) { for (const el of this._hwM.values()) el.remove(); this._hwM.clear(); }
+    const phw = this._w.querySelector('.phw'), ppw = phw && phw.querySelector('.pw'); if (ppw) ppw.style.removeProperty('--ph'); if (phw) { phw.style.gridColumn = phw.style.gridRow = ''; if (this._rowEl && phw.parentNode === ap) this._rowEl.prepend(phw); }
+    if (this._rowEl) for (const w of this._sideEls || []) if (w.parentNode === ap) this._rowEl.appendChild(w); }
+  // the cards' contents: repainted when they change (live data), at most every 1.5 s on state changes
+  _hwPaint(force) { if (!this._hwM || !this._hwM.size || !this._hass) return; const now = Date.now();
+    if (!force && now - (this._hwAt || 0) < 1500) { if (!this._hwT) this._hwT = setTimeout(() => { this._hwT = null; this._hwPaint(true); }, 1500); return; }
+    this._hwAt = now; for (const el of this._hwM.values()) { if (!el._cfg || !el.isConnected) continue; const h = hwHtml(this, el._cfg, el._hvCells); if (h !== el._hwH) { el._hwH = h; el.firstElementChild.innerHTML = h; } } }
   _px(css) { let p = this._probe; if (!p || !p.isConnected) { p = this._probe = document.createElement('div'); p.style.cssText = 'position:absolute;visibility:hidden;width:0;pointer-events:none'; this.shadowRoot.appendChild(p); }
     p.style.height = css; return p.getBoundingClientRect().height; }
   _layout() {
@@ -7236,6 +7488,7 @@ class HVHubCard extends HTMLElement {
     const below = full ? this._below || 0 : 0;
     const H = full ? vh - top - below : Math.max(520, r.width * 0.7);
     const Wc = W - 2 * Math.max(0, px), gap = Math.round(Math.max(16, Math.min(36, vh * 0.032)));
+    if (this._gridOn()) { this._layoutGrid({ px, pt, pb, H, Wc, gap, set }); this._layoutTail(); return; } this._gridOff();
     this._placeCal(); const cm = c.show_calendar !== false && this._cal ? this._calMode() : '', calT = (cm === 'wide' || cm === 'wide2' || cm === 'tile') ? this._calTile : null, calU = cm === 'wide2' ? 3 : cm === 'wide' ? 2 : 1;
     const calRow = this._calRowH = Math.round(Math.max(160, Math.min(230, vh * 0.27, Wc * 0.5)));
     if (cm === 'row') { const cc = Wc >= 1100 ? 5 : Wc >= 700 ? 4 : 3, cp = Wc < 600; if (cc !== this._calCols || cp !== this._calCompact) { this._calCols = cc; this._calCompact = cp; this._makeCal(this._cal); } }
@@ -7288,7 +7541,9 @@ class HVHubCard extends HTMLElement {
         for (const el of bigs) sh(el, V);
         const ls = this._belowEl.lastElementChild; if (V > b0 && ls && ls.getBoundingClientRect().bottom > lim + 1) for (const el of bigs) sh(el, b0); // tiles after them would leave the screen (phones): all one row tall
         for (const el of bigs) if (el._fit) this._fitTile(el); } }
-    this.style.setProperty('--blur', (Number(c.blur) || 0) + 'px'); this.style.setProperty('--dim', String(Math.max(0, Math.min(0.9, Number(c.dim) || 0))));
+    this._layoutTail();
+  }
+  _layoutTail() { const c = this._config; this.style.setProperty('--blur', (Number(c.blur) || 0) + 'px'); this.style.setProperty('--dim', String(Math.max(0, Math.min(0.9, Number(c.dim) || 0))));
     this._bgMode();
     // keep the avatar clear of the floating edit / screensaver buttons
     const av = this._w.querySelector('.av'); if (av) { av.style.marginRight = ''; const ar = av.getBoundingClientRect(); let m = 0;
@@ -7690,7 +7945,7 @@ const HUB_SCHEMA = [
     { type: 'grid', name: '', schema: [{ name: 'show_calendar', selector: { boolean: {} } }, { name: 'calendar_show_weather', selector: { boolean: {} } }] },
     { name: 'calendar_entities', selector: { entity: { domain: 'calendar', multiple: true } } },
     { type: 'grid', name: '', schema: [{ name: 'calendar_layout', selector: { select: { mode: 'dropdown', options: [{ value: 'wide', label: 'Wide: days side by side' }, { value: 'list', label: 'List' }] } } }, n_('calendar_columns', 1, 7), n_('calendar_days', 1, 30)] },
-    { name: 'calendar_size', selector: { select: { mode: 'dropdown', options: HUB_CAL_SIZES.map(([value, , label]) => ({ value, label: value === 'full' ? label + ' (default)' : label })) } } },
+    { name: 'calendar_size', selector: { select: { mode: 'dropdown', options: HUB_CAL_SIZES.map(([value, , label]) => ({ value, label: value === 'full' ? label + ' (default)' : label })).concat(HW_SIZES.calendar.map(([value, label]) => ({ value, label: 'Card · ' + label + ' (arranged Home Screen)' }))) } } },
     { name: 'calendar_rows', selector: { select: { mode: 'dropdown', options: [{ value: 'auto', label: 'Auto (2 when tall)' }, { value: '1', label: '1 row' }, { value: '2', label: '2 rows' }] } } },
     { type: 'grid', name: '', schema: [{ name: 'calendar_title', selector: { text: {} } }, n_('calendar_min_height', 120, 800, 10, 'px')] }] },
   { type: 'expandable', name: '', flatten: true, title: 'Assistant & timer', icon: 'mdi:microphone-message', schema: [
