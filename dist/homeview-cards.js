@@ -8650,7 +8650,7 @@ const HVG_CSS = `
 @container (max-aspect-ratio: 4/5){.gr{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(4,minmax(0,1fr));grid-template-areas:"th ck" "th sc" "ic lk" "li .";
  width:min(100%,calc((100cqh - 3.2cqmin) * .5));height:min(100%,calc((100cqw - 3.2cqmin) * 2))}}
 .t{--r:calc(min((100cqw - var(--g) * 2) / 3, (100cqh - var(--g) * 2) / 3) * .135);all:unset;box-sizing:border-box;position:relative;display:block;border-radius:var(--r);overflow:hidden;cursor:pointer;container-type:size;isolation:isolate;
- background:linear-gradient(150deg,rgba(255,255,255,.08),rgba(255,255,255,.02) 55%,rgba(255,255,255,.05));-webkit-backdrop-filter:blur(2.5px) saturate(1.15);backdrop-filter:blur(2.5px) saturate(1.15);
+ background:linear-gradient(150deg,rgba(255,255,255,.18),rgba(255,255,255,.10) 55%,rgba(255,255,255,.14));-webkit-backdrop-filter:blur(22px) saturate(1.6);backdrop-filter:blur(22px) saturate(1.6);
  box-shadow:0 1.2cqmin 3.4cqmin rgba(16,8,80,.22),inset 0 1px 1.5px rgba(255,255,255,.35),inset 0 -.5cqmin 1.2cqmin rgba(24,12,110,.18);
  transform:translateZ(0) scale(1);transition:transform .5s cubic-bezier(.34,1.7,.5,1),color .3s;touch-action:manipulation;color:#fff}
 .t:focus-visible{outline:3px solid rgba(255,255,255,.9);outline-offset:3px}
@@ -8695,14 +8695,14 @@ const HVG_CSS = `
 .th .in{justify-content:flex-end;padding:0 6% 7%}
 .num{position:absolute;left:0;right:0;top:20%;height:52%;display:flex;align-items:center;justify-content:center;font-size:49cqmin;font-weight:500;letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums;transition:transform .35s cubic-bezier(.34,1.56,.64,1)}
 .num small{font-size:.42em;font-weight:500;letter-spacing:0;margin:0 0 .55em .04em;align-self:flex-end}
-.num.bump{transform:scale(1.04)}
-.th .tt{font-size:5cqmin}.th .sb{font-size:5cqmin}@container (max-aspect-ratio: 4/5){.gr > .t{--r:calc((100cqw - var(--g)) / 2 * .135)}.th .tt{font-size:8.6cqmin}.th .sb{font-size:8cqmin}.th .num{font-size:52cqmin}.th .lab{width:66%}.th .cv{width:20cqmin;height:20cqmin}}.th .lab{width:62%;display:flex;flex-direction:column;align-items:center}
+.num.bump{transform:scale(1.04)}.num .na{font-size:.42em;letter-spacing:0;font-weight:600;opacity:.75}
+.th .tt{font-size:5cqmin}.th .sb{font-size:5cqmin}@container (max-aspect-ratio: 4/5){.gr > .t{--r:calc((100cqw - var(--g)) / 2 * .135)}.th .tt{font-size:6.4cqmin}.th .sb{font-size:5.8cqmin}.th .num{font-size:42cqmin}.th .lab{width:42%}.th .cv{width:13cqmin;height:13cqmin}.cv.d{left:6%}.cv.u{right:6%}}.th .lab{width:62%;display:flex;flex-direction:column;align-items:center}
 .cv{all:unset;position:absolute;bottom:7%;width:12.5cqmin;height:12.5cqmin;display:flex;align-items:center;justify-content:center;border-radius:50%;cursor:pointer;z-index:4;transition:transform .4s cubic-bezier(.34,1.7,.5,1),background .2s}
 .cv svg{width:78%;height:78%}.cv.d{left:9%}.cv.u{right:9%}.cv:active,.cv.dn{transform:scale(.86);background:rgba(255,255,255,.18)}.t.on .cv:active{background:rgba(30,28,69,.08)}
 .cv:focus-visible{outline:3px solid currentColor}.cv:disabled{opacity:.3;cursor:default}
 /* clock */
 .ck{display:flex;align-items:center;justify-content:center;container-type:size;min-width:0;min-height:0}
-.disc{position:relative;width:100cqmin;height:100cqmin;border-radius:50%;background:linear-gradient(150deg,rgba(255,255,255,.08),rgba(255,255,255,.02) 55%,rgba(255,255,255,.05));-webkit-backdrop-filter:blur(2.5px) saturate(1.15);backdrop-filter:blur(2.5px) saturate(1.15);
+.disc{position:relative;width:100cqmin;height:100cqmin;border-radius:50%;background:linear-gradient(150deg,rgba(255,255,255,.18),rgba(255,255,255,.10) 55%,rgba(255,255,255,.14));-webkit-backdrop-filter:blur(22px) saturate(1.6);backdrop-filter:blur(22px) saturate(1.6);
  box-shadow:0 1.2cqmin 3.4cqmin rgba(16,8,80,.22),inset 0 1px 1.5px rgba(255,255,255,.35),inset 0 -.6cqmin 1.4cqmin rgba(24,12,110,.18)}
 .disc::before{content:'';position:absolute;inset:0;border-radius:50%;padding:1px;background:linear-gradient(135deg,rgba(255,255,255,.75),rgba(255,255,255,.12) 50%,rgba(255,255,255,.06));
  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}
@@ -8759,10 +8759,11 @@ class HVGlassPage extends HTMLElement {
     el.querySelector('.tt').textContent = this._name(s); el.querySelector('.sb .a').textContent = un ? (s === 'intercom' ? 'Set action' : 'Set entity') : gone ? 'Not found' : this._sub(s);
     el.classList.toggle('un', !!(un || gone)); const state = st ? st.state : '';
     let on = false, txt = '';
-    if (st) { if (d === 'lock') { on = state !== 'locked'; txt = { locked: 'Locked', unlocked: 'Unlocked', locking: 'Locking…', unlocking: 'Unlocking…', jammed: 'Jammed', open: 'Open', opening: 'Opening…' }[state] || state; el.classList.toggle('open', state !== 'locked' && state !== 'locking'); }
+    if (st) { if (d === 'lock') { on = state !== 'locked'; txt = { locked: 'Locked', unlocked: 'Unlocked', locking: 'Locking…', unlocking: 'Unlocking…', jammed: 'Jammed', open: 'Open', opening: 'Opening…' }[state] || state; }
       else if (d === 'scene' || d === 'script' || d === 'button' || d === 'input_button') { on = d === 'script' && state === 'on'; txt = 'Activated'; }
       else if (d === 'light') { on = state === 'on'; txt = on ? (this._dim(st) ? this._pct(st) + '%' : 'On') : 'Off'; }
       else { on = ['on', 'open', 'playing', 'home', 'active'].includes(state); txt = on ? 'On' : state === 'off' ? 'Off' : state; } }
+    el.classList.toggle('open', !!(st && d === 'lock' && state !== 'locked' && state !== 'locking'));
     if (s === 'intercom') on = on || el.classList.contains('talk');
     if (el._hold && s === 'scene') on = true;
     el.classList.toggle('on', !!on && !el.classList.contains('un'));
@@ -8777,7 +8778,7 @@ class HVGlassPage extends HTMLElement {
   _flash(el, txt, ms) { const b = el.querySelector('.sb .b'); b.textContent = txt; el.classList.add('flash'); const s = el.dataset.s; clearTimeout(this._t['f' + s]);
     this._t['f' + s] = setTimeout(() => el.classList.remove('flash'), ms || 1700); }
   _tgt(st) { const a = st.attributes; return a.temperature != null ? Number(a.temperature) : a.target_temp_low != null ? Number(a.target_temp_low) : null; }
-  _fmt(v) { if (v == null || !isFinite(v)) return '--'; const r = Math.round(v * 10) / 10; return Number.isInteger(r) ? String(r) : `${Math.trunc(r)}<small>.${Math.round(Math.abs(r % 1) * 10)}</small>`; }
+  _fmt(v) { if (v == null || !isFinite(v)) return '<span class="na">—</span>'; const r = Math.round(v * 10) / 10; return Number.isInteger(r) ? String(r) : `${Math.trunc(r)}<small>.${Math.round(Math.abs(r % 1) * 10)}</small>`; }
   _paintTh() { const el = this.shadowRoot.querySelector('.th'), st = this._st('thermostat'), id = this._ent('thermostat'); el.querySelector('.tt').textContent = this._name('thermostat');
     let sub = this._sub('thermostat'); if (st && this._c('show_current_temp') && st.attributes.current_temperature != null) sub += ' · ' + Math.round(st.attributes.current_temperature) + '°';
     el.querySelector('.sb .a').textContent = !id ? 'Set entity' : !st ? 'Not found' : sub; el.classList.toggle('un', !st);
