@@ -9128,8 +9128,35 @@ const HV_HOMEY = (() => {
       const im = IMG[o.k]; if (!im) continue; const m = mul(B2, pcm(o.m, o.k)); ctx.setTransform(m[0], m[3], m[1], m[4], m[2], m[5]); ctx.drawImage(im, 0, 0);
       if (o.blink) { const mb = mul(B2, o.m); ctx.setTransform(mb[0], mb[3], mb[1], mb[4], mb[2], mb[5]); blinkLids(ctx); }
     }
+    if (p.umb) umbrella(ctx, ops, B2);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
   }
+  // the rain umbrella (the original rain art, drawn): blue canopy over his roof, shaft up from the raised wall-arm hand, a dark J handle in his grip
+  function umbrella(ctx, ops, B2) { const o = ops.find(q => /^(hand_)?arm[WR]$/.test(q.k || '')), body = ops.find(q => q.k === 'body' || q.k === 'bodyR'); if (!o || !body) return;
+    const [hx, hy] = ap(o.m, /armW$/.test(o.k) ? [34, 89] : [375, 89]), [px, py] = ap(body.m, [208, 8]);
+    const R = 124, Hd = 52, cx = px + (hx - px) * 0.1, cy = py - 42, a = clamp(Math.atan2(cx - hx, hy - cy), -0.26, 0.26), OL = 'rgb(43,45,48)', side = hx < px ? 1 : -1;
+    ctx.setTransform(B2[0], B2[3], B2[1], B2[4], B2[2], B2[5]); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    const ux = Math.sin(a), uy = -Math.cos(a), tx = cx + ux * Hd, ty = cy + uy * Hd; // canopy axis (up) and its top
+    // shaft: from just below the grip to the top of the canopy (straight through the hub)
+    ctx.beginPath(); ctx.moveTo(hx - ux * 6, hy - uy * 6); ctx.lineTo(tx + ux * 9, ty + uy * 9); ctx.strokeStyle = 'rgb(98,103,110)'; ctx.lineWidth = 5; ctx.stroke(); // a dark steel shaft that still reads on the dark screensaver
+    // canopy, in its own tilted frame: rim on y 0 (x -R..R), dome up to y -Hd, an 8-panel scalloped underside
+    const m = mul(B2, T(cx, cy), Rot(a * 180 / Math.PI)); ctx.setTransform(m[0], m[3], m[1], m[4], m[2], m[5]);
+    const n = 8, tip = i => -R + 2 * R * i / n, dome = () => { ctx.beginPath(); ctx.moveTo(-R, 0); ctx.bezierCurveTo(-R, -Hd * 1.25, R, -Hd * 1.25, R, 0);
+      for (let i = n; i > 0; i--) ctx.quadraticCurveTo((tip(i) + tip(i - 1)) / 2, -14, tip(i - 1), 0); ctx.closePath(); };
+    dome(); ctx.fillStyle = 'rgb(112,191,247)'; ctx.fill();
+    ctx.save(); dome(); ctx.clip(); ctx.fillStyle = 'rgba(74,150,214,.45)'; // every other panel a shade darker
+    for (let i = 1; i < n; i += 2) { ctx.beginPath(); ctx.moveTo(0, -Hd * 0.94); ctx.quadraticCurveTo(tip(i) * 0.98, -Hd * 0.7, tip(i), 0); ctx.lineTo(tip(i + 1), 0); ctx.quadraticCurveTo(tip(i + 1) * 0.98, -Hd * 0.7, 0, -Hd * 0.94); ctx.fill(); }
+    ctx.beginPath(); ctx.ellipse(-R * 0.35, -Hd * 0.62, R * 0.32, Hd * 0.16, -0.18, 0, Math.PI * 2); ctx.fillStyle = 'rgba(255,255,255,.22)'; ctx.fill(); ctx.restore(); // a soft shine
+    ctx.strokeStyle = 'rgb(74,150,214)'; ctx.lineWidth = 3;
+    for (let i = 1; i < n; i++) { ctx.beginPath(); ctx.moveTo(0, -Hd * 0.94); ctx.quadraticCurveTo(tip(i) * 0.98, -Hd * 0.7, tip(i), 0); ctx.stroke(); }
+    dome(); ctx.strokeStyle = OL; ctx.lineWidth = 5; ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, -Hd * 0.94 - 9, 4.5, 0, Math.PI * 2); ctx.fillStyle = OL; ctx.fill(); // finial
+    for (let i = 0; i <= n; i++) { ctx.beginPath(); ctx.arc(tip(i), 0, 3, 0, Math.PI * 2); ctx.fill(); } // rib tips
+    // the J handle: down past his hand along the shaft, the hook curling back toward his body (over the hand)
+    ctx.setTransform(B2[0], B2[3], B2[1], B2[4], B2[2], B2[5]);
+    const bx = hx - ux * 30, by = hy - uy * 30, r = 14, nx = -uy * side, ny = ux * side; // nx,ny: across the shaft, toward his body
+    const J = () => { ctx.beginPath(); ctx.moveTo(hx + ux * 12, hy + uy * 12); ctx.lineTo(bx, by); ctx.arc(bx + nx * r, by + ny * r, r, Math.atan2(-ny, -nx), Math.atan2(-ny, -nx) + Math.PI * side, side < 0); };
+    J(); ctx.strokeStyle = 'rgb(98,103,110)'; ctx.lineWidth = 12; ctx.stroke(); J(); ctx.strokeStyle = 'rgb(28,29,32)'; ctx.lineWidth = 8; ctx.stroke(); }
   // the turn (clips.py seg_turn) layered over whatever he does: anticipate, hop, the house narrows, swaps plates (chimney stays right), widens
   function turn(p, u, d) { const f0 = -d; let lean;
     if (u < 0.25) lean = -d * 4 * ease(u / 0.25); else if (u < 0.6) lean = lerp(-d * 4, d * 15, ease((u - 0.25) / 0.35)); else lean = lerp(d * 15, d * 7, ease((u - 0.6) / 0.4));
@@ -9220,6 +9247,7 @@ class HVHomie {
     this.lastP = Object.assign({}, p);
     const tu = (this.clock - this.turnT0) / 0.7; if (tu >= 0 && tu < 1) p = H.turn(p, tu, this.turnD);
     if (this.clock > this.blinkAt) { if (this.clock > this.blinkAt + 0.12) this.blinkAt = this.clock + 2.4 + Math.random() * 3.2; else p.blink = 1; }
+    if (this.hm.classList.contains('umb') && !(p.legsit > 0.3)) { p.umb = 1; p.armW = -22; } // raining: the wall arm holds the umbrella up beside his head (walking too); not while sitting
     const ctx = cv.getContext('2d'); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, W, Hh); ctx.imageSmoothingQuality = 'high';
     H.draw(ctx, p, [W / H.VW, 0, 0, 0, Hh / H.VH, 0]); }
   // frozen: detached, the page hidden, the parked wallpaper (its CSS pauses every animation) or the host says so (the card under a sheet / the screensaver)
@@ -9286,7 +9314,7 @@ class HVHomie {
         { walk: nb.l + 6 }, { dir: -1, p: 'peek', m: 'so', d: 2000 }, { walk: this.side(false) }, { depth: false }, idle(600)];
       if (k === 'wind') return card ? [{ dir: 1, p: 'lean', d: 3600 }, idle(500)] : [{ depth: false, walk: Math.max(10, nb.l - 10) }, { dir: 1, p: 'lean', d: 3800 }, idle(500)]; // holds on to the number
       if (k === 'fog') return [{ p: 'peer', d: 3200 }, idle(500)];
-      if (k === 'rain' || k === 'hail') return [{ p: 'idle', m: 'sm', d: 2600 }, { p: 'wave', m: 'wd', d: 1800 }, idle(800)];
+      if (k === 'rain' || k === 'hail') return [{ p: 'idle', m: 'sm', d: 3200 }, idle(800)];
       return [{ p: 'wave', m: 'wd', d: 2000 }, idle(500)]; }
     return [idle(1500)]; }
   // the lamp's pull cord ends at his raised wall-arm hand (the puppet's reach pose: 0.399 x --hs ahead of his centre, 0.673 x --hs above the box bottom)
