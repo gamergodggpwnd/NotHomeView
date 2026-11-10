@@ -1781,14 +1781,22 @@ const hvExtWatch = () => new Promise(res => { let gone = false, done = false; co
   const tick = () => { if (gone || document.hidden) return end('left'); const el = Date.now() - t0, foc = !document.hasFocus || document.hasFocus();
     if (el >= 2500 || (el >= 1500 && foc)) return end('stayed'); setTimeout(tick, 100); };
   setTimeout(tick, 100); });
-const hvExtMiss = (t, u) => { const w = hvExtUrlOk(t.web_url), web = w && /^https:/i.test(w) && w !== u ? w : '', ha = document.querySelector('home-assistant');
-  const detail = { message: `Couldn't open ${t.name || 'the app'}. Is it installed?`, duration: 7000 };
-  if (web) detail.action = { text: 'Open in browser', action: () => window.open(web, '_blank', 'noopener') };
+const hvExtMiss = (t, u, o) => { o = o || {}; const w = hvExtUrlOk(t.web_url), web = w && /^https:/i.test(w) && w !== u ? w : '', ha = document.querySelector('home-assistant');
+  const store = hvExtUrlOk(o.store) || web, isStore = hvExtStorePage(store);
+  const detail = o.noLink
+    ? { message: `Add a link (URL scheme) for ${t.name || 'this app'} to open it directly.`, duration: 7000 }
+    : { message: `Couldn't open ${t.name || 'the app'}. Is it installed?`, duration: 7000 };
+  if (o.noLink && isStore) detail.action = { text: /play\.google\.com/i.test(store) ? 'Open Play Store page' : 'Open App Store page', action: () => window.open(store, '_blank', 'noopener') };
+  else if (!o.noLink && web) detail.action = { text: 'Open in browser', action: () => window.open(web, '_blank', 'noopener') };
   if (ha) ha.dispatchEvent(new CustomEvent('hass-notification', { bubbles: true, composed: true, detail })); };
 // -> Promise<'left' | 'stayed' | 'none'>. With o.confirm the sheet comes first and the app opens inside its Open click (a user gesture).
 // Without it the launch happens before the first await, so a tap that calls this still counts as the gesture.
-function hvOpenExternalApp(target, o) { o = o || {}; const t = target || {}, u = hvExtPick(t, hvExtPlatform());
-  if (!u) { if (o.toast !== false) hvToast(`${t.name || 'This app'} has no link to open on this device`); return Promise.resolve('none'); }
+// Known apps (Tesla, Spotify, …) get a URL scheme from HV_EXT_KNOWN when none was saved; an App Store page is not opened on iPhone or Android unless he taps it on the toast.
+function hvOpenExternalApp(target, o) { o = o || {}; const t = hvExtKnownFill(target || {}), p = hvExtPlatform();
+  let u = hvExtPick(t, p); if (u && hvExtStorePage(u) && p !== 'desktop') u = '';
+  if (!u) { if (o.toast !== false) { const store = [t.web_url, t.store && t.store.play_id && hvExtPlay(t.store.play_id)].map(hvExtUrlOk).find(hvExtStorePage) || '';
+      if (store) hvExtMiss(t, '', { noLink: true, store }); else hvToast(`${t.name || 'This app'} has no link to open on this device`); }
+    return Promise.resolve('none'); }
   const run = () => { hvExtLaunch(u); return hvExtWatch().then(r => { if (r === 'stayed' && o.toast !== false) hvExtMiss(t, u); return r; }); };
   return o.confirm ? hvExtConfirm(t, o, run) : run(); }
 // --- the icon of a custom app: its picture, else a white mdi glyph on a gradient of its colour
@@ -1814,6 +1822,118 @@ const hvExtMs = (root, hub) => { if (!root || !hub || typeof hub._url !== 'funct
 // Play Store id (opened as an intent, falling back to the Play Store page); iOS: the app's own URL scheme where it has one, else https.
 const hvExtPlay = pkg => 'https://play.google.com/store/apps/details?id=' + pkg;
 const hvExtIntent = (pkg, fb) => `intent://#Intent;package=${pkg};S.browser_fallback_url=${encodeURIComponent(fb || hvExtPlay(pkg))};end`;
+// Well-known iOS URL schemes (and Android packages where known): taken from the app's own CFBundleURLSchemes
+// (IPA audits), the maker's docs, or the same scheme in more than one independent source. No guessed schemes.
+// Keyed by App Store id, bundle id, Play package and a normalised name (hvCaNorm); used when a search result is
+// chosen and again at open so an already-saved app (e.g. Tesla with only its App Store page) still launches.
+const HV_EXT_KNOWN = [
+  { name: 'Tesla', itunes: 582007913, bundle: 'com.teslamotors.TeslaApp', url: 'tesla://', pkg: 'com.teslamotors.tesla' },
+  { name: 'Ring', itunes: 926252661, bundle: 'com.ring', url: 'ring://', pkg: 'com.ringapp', aka: ['Ring - Always Home'] },
+  { name: 'Google Home', itunes: 680819774, bundle: 'com.google.Chromecast', url: 'googlehome://', pkg: 'com.google.android.apps.chromecast.app' },
+  { name: 'Spotify', itunes: 324684580, bundle: 'com.spotify.client', url: 'spotify:', pkg: 'com.spotify.music', aka: ['Spotify New Music and podcasts'] },
+  { name: 'YouTube', itunes: 544007664, bundle: 'com.google.ios.youtube', url: 'youtube://', pkg: 'com.google.android.youtube' },
+  { name: 'YouTube Music', itunes: 1017492454, bundle: 'com.google.ios.youtubemusic', url: 'youtubemusic://', pkg: 'com.google.android.apps.youtube.music' },
+  { name: 'Netflix', itunes: 363590051, bundle: 'com.netflix.Netflix', url: 'nflx://', pkg: 'com.netflix.mediaclient' },
+  { name: 'Philips Hue', itunes: 1055281310, bundle: 'com.philips.lighting.hue2', url: 'hue2://', pkg: 'com.philips.lighting.hue2', aka: ['Hue'] },
+  { name: 'Amazon Alexa', itunes: 944011620, bundle: 'com.amazon.echo', url: 'alexa://', pkg: 'com.amazon.dee.app', aka: ['Alexa'] },
+  { name: 'Sonos', itunes: 1488977981, bundle: 'com.sonos.SonosController2', url: 'sonos://', pkg: 'com.sonos.acr2' },
+  { name: 'Sonos S1 Controller', itunes: 293523031, bundle: 'com.sonos.SonosController', url: 'sonos://', pkg: 'com.sonos.acr' },
+  { name: 'Apple Music', itunes: 1108187390, bundle: 'com.apple.Music', url: 'music://', pkg: 'com.apple.android.music' },
+  { name: 'Plex', itunes: 383457673, bundle: 'com.plexapp.plex', url: 'plex://', pkg: 'com.plexapp.android', aka: ['Plex: Discover Movies & Shows'] },
+  { name: 'WhatsApp', itunes: 310633997, bundle: 'net.whatsapp.WhatsApp', url: 'whatsapp://', pkg: 'com.whatsapp', aka: ['WhatsApp Messenger'] },
+  { name: 'Instagram', itunes: 389801252, bundle: 'com.burbn.instagram', url: 'instagram://', pkg: 'com.instagram.android' },
+  { name: 'Facebook', itunes: 284882215, bundle: 'com.facebook.Facebook', url: 'fb://', pkg: 'com.facebook.katana' },
+  { name: 'Messenger', itunes: 454638411, bundle: 'com.facebook.Messenger', url: 'fb-messenger://', pkg: 'com.facebook.orca' },
+  { name: 'Gmail', itunes: 422689480, bundle: 'com.google.Gmail', url: 'googlegmail://', pkg: 'com.google.android.gm', aka: ['Gmail - Email by Google'] },
+  { name: 'Google Maps', itunes: 585027354, bundle: 'com.google.Maps', url: 'comgooglemaps://', pkg: 'com.google.android.apps.maps' },
+  { name: 'Waze', itunes: 323229106, bundle: 'com.waze.iphone', url: 'waze://', pkg: 'com.waze', aka: ['Waze Navigation & Live Traffic'] },
+  { name: 'Uber', itunes: 368677368, bundle: 'com.ubercab.UberClient', url: 'uber://', pkg: 'com.ubercab' },
+  { name: 'Lyft', itunes: 529379082, bundle: 'com.zimride.instant', url: 'lyft://', pkg: 'me.lyft.android' },
+  { name: 'Amazon', itunes: 297606951, bundle: 'com.amazon.Amazon', url: 'com.amazon.mobile.shopping.web://www.amazon.com/', pkg: 'com.amazon.mShop.android.shopping' },
+  { name: 'Disney+', itunes: 1446075923, bundle: 'com.disney.disneyplus', url: 'disneyplus://', pkg: 'com.disney.disneyplus', aka: ['Disney Plus'] },
+  { name: 'Hulu', itunes: 376510438, bundle: 'com.hulu.plus', url: 'hulu://', pkg: 'com.hulu.plus' },
+  { name: 'Amazon Prime Video', itunes: 545519333, bundle: 'com.amazon.aiv.AIVApp', url: 'aiv://', pkg: 'com.amazon.avod.thirdpartyclient', aka: ['Prime Video'] },
+  { name: 'Max', itunes: 1666653815, bundle: 'com.wbd.stream', url: 'wbdstreaming://', pkg: 'com.wbd.stream', aka: ['HBO Max', 'HBO Max: Stream Movies & TV'] },
+  { name: 'Telegram', itunes: 686449807, bundle: 'ph.telegra.Telegraph', url: 'tg://', pkg: 'org.telegram.messenger', aka: ['Telegram Messenger'] },
+  { name: 'Signal', itunes: 874139669, bundle: 'org.whispersystems.signal', url: 'sgnl://', pkg: 'org.thoughtcrime.securesms', aka: ['Signal - Private Messenger'] },
+  { name: 'Slack', itunes: 618783545, bundle: 'com.tinyspeck.chatlyio', url: 'slack://', pkg: 'com.Slack' },
+  { name: 'Zoom', itunes: 546505307, bundle: 'us.zoom.videomeetings', url: 'zoomus://', pkg: 'us.zoom.videomeetings', aka: ['Zoom Workplace'] },
+  { name: 'Microsoft Teams', itunes: 1113153706, bundle: 'com.microsoft.skype.teams', url: 'msteams://', pkg: 'com.microsoft.teams', aka: ['Teams'] },
+  { name: 'Microsoft Outlook', itunes: 951937596, bundle: 'com.microsoft.Office.Outlook', url: 'ms-outlook://', pkg: 'com.microsoft.office.outlook', aka: ['Outlook'] },
+  { name: 'Google Chrome', itunes: 535886823, bundle: 'com.google.chrome.ios', url: 'googlechrome://', pkg: 'com.android.chrome', aka: ['Chrome'] },
+  { name: 'Firefox', itunes: 989804926, bundle: 'org.mozilla.ios.Firefox', url: 'firefox://', pkg: 'org.mozilla.firefox' },
+  { name: 'myQ', itunes: 456282559, bundle: 'com.myliftmaster.myq', url: 'myliftmaster://', aka: ['MyQ', 'Chamberlain', 'LiftMaster', 'myQ Garage & Access Control'] },
+  { name: 'ecobee', itunes: 916985674, bundle: 'com.ecobee.athenamobile', url: 'ecobee://', aka: ['Ecobee', 'ecobee by Generac'] },
+  { name: 'Nest', itunes: 464988855, bundle: 'com.nestlabs.jasper.release', url: 'nestmobile://' },
+  { name: 'SmartThings', itunes: 1222822904, bundle: 'com.samsung.oneconnect4ios', url: 'smartthings://', pkg: 'com.samsung.android.oneconnect' },
+  { name: 'Eufy Security', itunes: 1424956516, bundle: 'com.security.BatteryCam', url: 'eufysecurity://', aka: ['eufy', 'Anker eufy', 'Eufy'] },
+  { name: 'Wyze', itunes: 1288415553, bundle: 'com.hualai.WyzeCam', url: 'wyze://', aka: ['The Official Wyze App'] },
+  { name: 'Uber Eats', itunes: 1058959277, bundle: 'com.ubercab.UberEats', url: 'ubereats://', pkg: 'com.ubercab.eats' },
+  { name: 'DoorDash', itunes: 719972451, bundle: 'doordash.DoorDashConsumer', url: 'doordash://', pkg: 'com.dd.doordash', aka: ['DoorDash - Food Delivery'] },
+  { name: 'PayPal', itunes: 283646709, bundle: 'com.yourcompany.PPClient', url: 'paypal://', pkg: 'com.paypal.android.p2pmobile' },
+  { name: 'Venmo', itunes: 351727428, bundle: 'net.kortina.labs.Venmo', url: 'venmo://', pkg: 'com.venmo' },
+  { name: 'Home Assistant', itunes: 1099568401, bundle: 'io.robbie.HomeAssistant', url: 'homeassistant://navigate/lovelace', pkg: 'io.homeassistant.companion.android' },
+  { name: 'Shortcuts', itunes: 1462947752, bundle: 'com.apple.shortcuts', ios_url: 'shortcuts://' },
+  { name: 'Roku', itunes: 482066631, bundle: 'com.roku.ios.roku', url: 'roku://', aka: ['Roku Remote (Official)'] },
+  { name: 'Rachio', itunes: 864325098, bundle: 'com.rachio.Iro', url: 'rachio://' },
+  { name: 'DoorBird', itunes: 898756315, bundle: 'de.thousandeyes.doorbird', url: 'doorbird://' },
+  { name: 'Pandora', itunes: 284035177, bundle: 'com.pandora', url: 'pandora://', pkg: 'com.pandora.android', aka: ['Pandora: Personalized Music'] },
+  { name: 'TIDAL', itunes: 913943275, bundle: 'com.aspiro.TIDAL', url: 'tidal://', aka: ['Tidal', 'TIDAL Music: HiFi Sound'] },
+  { name: 'Deezer', itunes: 292738169, bundle: 'com.deezer.Deezer', url: 'deezer://', pkg: 'deezer.android.app', aka: ['Deezer: Music & Podcast Player'] },
+  { name: 'Amazon Music', itunes: 510855668, bundle: 'com.amazon.mp3.AmazonCloudPlayer', url: 'amznmp3://', pkg: 'com.amazon.mp3', aka: ['Amazon Music: Songs & Podcasts'] },
+  { name: 'SoundCloud', itunes: 336353151, bundle: 'com.soundcloud.TouchApp', url: 'soundcloud://', pkg: 'com.soundcloud.android', aka: ['SoundCloud: Stream New Music'] },
+  { name: 'Twitch', itunes: 460177396, bundle: 'tv.twitch', url: 'twitch://', pkg: 'tv.twitch.android.app', aka: ['Twitch: Live Streaming'] },
+  { name: 'Overcast', itunes: 888422857, bundle: 'fm.overcast.overcast', url: 'overcast://', aka: ['Overcast Podcast App'] },
+  { name: 'Snapchat', itunes: 447188370, bundle: 'com.toyopagroup.picaboo', url: 'snapchat://', pkg: 'com.snapchat.android' },
+  { name: 'LinkedIn', itunes: 288429040, bundle: 'com.linkedin.LinkedIn', url: 'linkedin://', pkg: 'com.linkedin.android', aka: ['LinkedIn: Professional Network'] },
+  { name: 'Pinterest', itunes: 429047995, bundle: 'pinterest', url: 'pinterest://', pkg: 'com.pinterest' },
+  { name: 'Reddit', itunes: 1064216828, bundle: 'com.reddit.Reddit', url: 'reddit://', pkg: 'com.reddit.frontpage' },
+  { name: 'Discord', itunes: 985746746, bundle: 'com.hammerandchisel.discord', url: 'discord://', pkg: 'com.discord', aka: ['Discord - Talk, Play, Hang Out'] },
+  { name: 'X', itunes: 333903271, bundle: 'com.atebits.Tweetie2', url: 'twitter://', pkg: 'com.twitter.android', aka: ['Twitter'] },
+  { name: 'IMDb', itunes: 342792525, bundle: 'com.imdb.imdb', url: 'imdb://', pkg: 'com.imdb.mobile' },
+  { name: 'IFTTT', itunes: 660944635, bundle: 'com.ifttt.ifttt', url: 'ifttt://' },
+  { name: 'Google Drive', itunes: 507874739, bundle: 'com.google.Drive', url: 'googledrive://', pkg: 'com.google.android.apps.docs' },
+  { name: 'Google Photos', itunes: 962194608, bundle: 'com.google.photos', url: 'googlephotos://', pkg: 'com.google.android.apps.photos', aka: ['Google Photos: Backup & Edit'] },
+  { name: 'Google Calendar', itunes: 909319292, bundle: 'com.google.calendar', url: 'googlecalendar://', pkg: 'com.google.android.calendar' },
+  { name: 'Google', itunes: 284815942, bundle: 'com.google.GoogleMobile', url: 'google://', pkg: 'com.google.android.googlequicksearchbox' },
+  { name: 'Microsoft Word', itunes: 586447913, bundle: 'com.microsoft.Office.Word', url: 'ms-word:', pkg: 'com.microsoft.office.word', aka: ['Word'] },
+  { name: 'Microsoft Excel', itunes: 586683407, bundle: 'com.microsoft.Office.Excel', url: 'ms-excel:', pkg: 'com.microsoft.office.excel', aka: ['Excel'] },
+  { name: 'Microsoft PowerPoint', itunes: 586449534, bundle: 'com.microsoft.Office.Powerpoint', url: 'ms-powerpoint:', pkg: 'com.microsoft.office.powerpoint', aka: ['PowerPoint'] },
+  { name: 'Microsoft OneNote', itunes: 410395246, bundle: 'com.microsoft.onenote', url: 'onenote://', pkg: 'com.microsoft.office.onenote', aka: ['OneNote'] },
+  { name: 'Microsoft OneDrive', itunes: 477537958, bundle: 'com.microsoft.skydrive', url: 'ms-onedrive:', pkg: 'com.microsoft.skydrive', aka: ['OneDrive'] },
+  { name: 'Evernote', itunes: 281796108, bundle: 'com.evernote.iPhone.Evernote', url: 'evernote://', pkg: 'com.evernote' },
+  { name: 'LastPass', itunes: 324613447, bundle: 'com.lastpass.ilastpass', url: 'lastpass://', aka: ['LastPass Password Manager'] },
+  { name: '1Password', itunes: 1511601750, bundle: 'com.1password.1password', url: 'onepassword://', pkg: 'com.onepassword.android', aka: ['1Password: Password Manager'] },
+  { name: 'Airbnb', itunes: 401626263, bundle: 'com.airbnb.app', url: 'airbnb://', pkg: 'com.airbnb.android' },
+  { name: 'Starbucks', itunes: 331177714, bundle: 'com.starbucks.mystarbucks', url: 'starbucks://', pkg: 'com.starbucks.mobilecard' },
+  { name: 'Maps', itunes: 915056765, bundle: 'com.apple.Maps', url: 'maps://', aka: ['Apple Maps'] },
+  { name: 'Apple TV', itunes: 1174078549, bundle: 'com.apple.tv', url: 'videos://' },
+  { name: 'Apple News', itunes: 1066498020, bundle: 'com.apple.news', url: 'applenews://' },
+  { name: 'Apple Podcasts', itunes: 525463029, bundle: 'com.apple.podcasts', url: 'podcasts://', aka: ['Podcasts'] },
+  { name: 'Calendar', itunes: 1108185179, bundle: 'com.apple.mobilecal', url: 'calshow://' },
+  { name: 'Photos', itunes: 1584215428, bundle: 'com.apple.mobileslideshow', url: 'photos-redirect://' },
+  { name: 'Reminders', itunes: 1108187841, bundle: 'com.apple.reminders', url: 'x-apple-reminder://' },
+  { name: 'FaceTime', itunes: 1110145091, bundle: 'com.apple.facetime', url: 'facetime://' },
+  { name: 'Mail', itunes: 1108187098, bundle: 'com.apple.mobilemail', url: 'message://' },
+  { name: 'Notes', itunes: 1110145109, bundle: 'com.apple.mobilenotes', url: 'mobilenotes://' },
+  { name: 'Audible', itunes: 379693831, bundle: 'com.audible.iphone', url: 'audible://', pkg: 'com.audible.application', aka: ['Audible: Audiobooks & Podcasts'] }
+];
+// name keys: the full name and the part before ":" or " - " (so "Uber: Rides, eats, and more" matches Uber, not Uber Eats)
+const hvExtNameKeys = s => { const out = [], add = v => { v = hvCaNorm(v); if (v && out.indexOf(v) < 0) out.push(v); };
+  s = String(s || '').trim(); if (!s) return out; add(s);
+  const a = s.split(':')[0].trim(); if (a !== s) add(a); const b = s.split(' - ')[0].trim(); if (b !== s) add(b); return out; };
+const hvExtStorePage = u => /^https:\/\/((apps|itunes)\.apple\.com|play\.google\.com\/store\/apps)\b/i.test(String(u || ''));
+const hvExtKnownOf = t => { if (!t) return null; const s = t.store || {}, itunes = Number(s.itunes_id || t.itunes_id || t.trackId) || 0;
+  const bundle = String(s.bundle_id || t.bundle_id || t.bundleId || ''), play = String(s.play_id || t.play_id || '');
+  const names = hvExtNameKeys(t.name).concat(hvExtNameKeys(t.trackName));
+  return HV_EXT_KNOWN.find(k => (k.itunes && itunes === k.itunes) || (k.bundle && bundle && k.bundle === bundle) || (k.pkg && play && k.pkg === play)
+    || names.some(n => hvExtNameKeys(k.name).concat((k.aka || []).flatMap(hvExtNameKeys)).indexOf(n) >= 0)) || null; };
+const hvExtKnownLinks = k => { const o = {}; if (k.url) o.url = k.url; if (k.ios_url) o.ios_url = k.ios_url;
+  else if (k.url && !/^https?:/i.test(k.url)) o.ios_url = k.url; if (k.pkg) o.android_url = hvExtIntent(k.pkg, k.web);
+  if (k.web) o.web_url = k.web; return o; };
+const hvExtKnownFill = t => { const k = hvExtKnownOf(t); if (!k) return t || {}; const o = Object.assign({}, t), L = hvExtKnownLinks(k);
+  if (!hvExtUrlOk(o.url) && L.url) o.url = L.url; if (!hvExtUrlOk(o.ios_url) && L.ios_url) o.ios_url = L.ios_url;
+  if (!hvExtUrlOk(o.android_url) && L.android_url) o.android_url = L.android_url; if (!hvExtUrlOk(o.web_url) && L.web_url) o.web_url = L.web_url; return o; };
 const HV_EXT_PRESETS = [
   { key: 'google_home', name: 'Google Home', icon: 'mdi:google-home', color: '#4285f4', url: 'googlehome://', pkg: 'com.google.android.apps.chromecast.app', itunes: 680819774, web: 'https://home.google.com/' },
   { key: 'spotify', name: 'Spotify', icon: 'mdi:spotify', color: '#1db954', url: 'spotify:', pkg: 'com.spotify.music', itunes: 324684580, web: 'https://open.spotify.com/' },
@@ -10681,9 +10801,10 @@ ha-icon-picker{display:block;flex:1;min-width:0}`;
 const HV_CA_COLS = ['#8e8e93', '#ff3b30', '#ff9500', '#ffcc00', '#34c759', '#00c7be', '#32ade6', '#007aff', '#5856d6', '#af52de', '#ff2d55', '#1c1c1e'];
 const HV_CA_ICONS = ['mdi:application', 'mdi:music', 'mdi:television-play', 'mdi:play-circle', 'mdi:shopping', 'mdi:cart', 'mdi:email', 'mdi:message', 'mdi:map', 'mdi:car', 'mdi:camera', 'mdi:home', 'mdi:lightbulb', 'mdi:thermostat', 'mdi:shield-home', 'mdi:calendar', 'mdi:web', 'mdi:podcast'];
 // the subtitle under a custom app: what it opens and whether it asks first
-const hvCaSub = e => { const p = hvExtPresetOf(e), u = hvExtUrlOk(e.url) || hvExtUrlOk(e.ios_url) || hvExtUrlOk(e.android_url) || hvExtUrlOk(e.web_url); let t;
-  if (p) t = 'Opens ' + p.name; else if (!u) t = 'No link yet';
-  else if (/^https?:/i.test(u)) { let h = u; try { h = new URL(u).hostname.replace(/^www\./, ''); } catch (x) {} t = /(^|\.)apps\.apple\.com$/.test(h) ? 'Opens its App Store page' : 'Opens ' + h; }
+const hvCaSub = e => { const p = hvExtPresetOf(e), f = hvExtKnownFill(e), raw = hvExtUrlOk(f.url) || hvExtUrlOk(f.ios_url) || hvExtUrlOk(f.android_url) || hvExtUrlOk(f.web_url);
+  const u = raw && !hvExtStorePage(raw) ? raw : ''; let t;
+  if (p) t = 'Opens ' + p.name; else if (!u) t = 'No app link yet';
+  else if (/^https?:/i.test(u)) { let h = u; try { h = new URL(u).hostname.replace(/^www\./, ''); } catch (x) {} t = 'Opens ' + h; }
   else t = 'Opens ' + (/^intent:/i.test(u) ? 'an Android app' : u.split(':')[0] + ':');
   return t + (e.confirm === false ? ' · opens straight away' : ' · asks first'); };
 // a picture -> a small square data URL (180–256 px; JPEG 0.85 when the PNG would be over ~40 KB). '' when it can't be drawn.
@@ -10802,7 +10923,10 @@ ${cur && !ro ? '<div class="dl"></div>' : ''}`;
     const pick = async (x, fromPreset) => { if (!fromPreset) { d.name = String(x.trackName || '').slice(0, 40); }
       d.store = Object.assign({}, d.store, { itunes_id: Number(x.trackId) || undefined, bundle_id: x.bundleId || undefined, seller: x.sellerName || undefined });
       if (!fromPreset) { const p = hvExtPresetFor(x); if (p) { usePreset(p, true); d.name = String(x.trackName || p.name).slice(0, 40); }
-        else { if (/^https:\/\//.test(x.trackViewUrl || '')) d.web_url = x.trackViewUrl; hint = d.url || d.ios_url ? '' : 'Add the app\'s link (URL scheme) to open it directly; without one it opens its App Store page.'; if (!d.url) mode = 'custom'; } }
+        else { if (/^https:\/\//.test(x.trackViewUrl || '')) d.web_url = x.trackViewUrl;
+          const k = hvExtKnownOf(x); if (k) { const L = hvExtKnownLinks(k); if (L.url) d.url = L.url; if (L.ios_url) d.ios_url = L.ios_url;
+            if (L.android_url && !d.android_url) d.android_url = L.android_url; if (k.pkg) d.store.play_id = d.store.play_id || k.pkg; hint = ''; }
+          else hint = 'Add the app\'s link (URL scheme) to open it directly.'; mode = 'custom'; } }
       nm.value = d.name; opPaint(); artBusy = true; pvPaint(); const a = await hvCaArt(x.artworkUrl512 || x.artworkUrl100); artBusy = false; if (a) d.icon_image = a; pvPaint(); icoPaint(); };
     q.addEventListener('input', () => { clearTimeout(tmr); const v = q.value; tmr = setTimeout(() => search(v), 350); });
     q.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); clearTimeout(tmr); search(q.value); } });
