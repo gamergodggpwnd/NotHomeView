@@ -7323,7 +7323,7 @@ class HVHubCard extends HTMLElement {
     this._gBind(); setTimeout(() => this._gBind(), 0); if (this._hass) this._loadCfg(true);
     if (!this._tpf) this._tpf = () => this._tpillPaint(); hvTimerPills.add(this._tpf); this._tpillPaint();
     clearInterval(this._tick); this._tick = setInterval(() => { this._render(); this._hwPaint(true); if (++this._tn % 4 === 0) this._loadCfg(true); else this._ssPaint(); }, 30000); this._tn = 0;
-    if (!this._vis) { this._vis = () => { if (!document.hidden) this._restartTimer(); else this._paintBg(true, true); }; } document.addEventListener('visibilitychange', this._vis);
+    if (!this._vis) { this._vis = () => { if (!document.hidden) { if (!this._cur && this._ids && this._ids.length && !this._loading) this._next(); else this._restartTimer(); } else this._paintBg(true, true); }; } document.addEventListener('visibilitychange', this._vis);
     requestAnimationFrame(() => this._layout()); setTimeout(() => this._layout(), 700); setTimeout(() => this._layout(), 1800);
     for (const t of [2500, 6000]) setTimeout(() => { this._vk = null; this._layout(); }, t); // re-measure the space below once the page has settled
     if (this._hass) this._loadPhotos(); this._restartTimer(); this._paintBg(true, true); try { this._ssWallPaint(); } catch (e) {} // back on the Home Screen: catch up wallpaper / parked style
@@ -7845,7 +7845,7 @@ class HVHubCard extends HTMLElement {
     if (this._idsExp && Date.now() > this._idsExp && !this._loading && !this._pv && !this._galO) { this._idsExp = 0; this._ids = null; this._loadPhotos(); return; }
     for (let tries = 0; tries < 4; tries++) { this._pos = (this._pos + 1) % this._ids.length;
       try { const u = await this._url(this._ids[this._pos]); await HVL.load(u, 0); // no id: the 25 s rotation makes no thumbnail
-        if (this._ssHeld()) { this._pos = (this._pos + this._ids.length - 1) % this._ids.length; break; } this._curId = this._ids[this._pos]; this._cur = u; this._layer = 1 - this._layer; this._paintPhoto(); if (this._pv) this._prefetch(this._pos, 1); break; } catch (e) { /* try the next photo */ } }
+        if (this._cur && this._ssHeld()) { this._pos = (this._pos + this._ids.length - 1) % this._ids.length; break; } this._curId = this._ids[this._pos]; this._cur = u; this._layer = 1 - this._layer; this._paintPhoto(); if (this._pv) this._prefetch(this._pos, 1); break; } catch (e) { /* try the next photo */ } }
     this._restartTimer(true); }
   _restartTimer(force) { if (!this.isConnected || !this._ids || !this._ids.length || this._pv) return; if (this._timer && !force) return; clearTimeout(this._timer);
     this._timer = setTimeout(() => { this._timer = null; if (document.hidden) return; if (this._ssHeld()) { this._bgAway(); this._restartTimer(true); return; } this._next(); }, Math.max(5, Number(this._config.photo_interval) || 25) * 1000); }
