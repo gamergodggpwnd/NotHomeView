@@ -3685,8 +3685,7 @@ const HV_ECL_CSS = `:host{all:initial;--gtx:#fff;--gbg:rgba(28,30,42,.34);--gbi:
 .gl,.b i,.rz i,.menu,.abar,.szl,.hint,.ghost{background-color:var(--gbg);background-image:var(--gbi);border:1px solid var(--gbd);box-shadow:var(--gsh);color:var(--gtx);backdrop-filter:var(--gbl);-webkit-backdrop-filter:var(--gbl);box-sizing:border-box}
 .c{position:fixed;left:0;top:0;pointer-events:none;display:block}
 .b{position:absolute;top:0;width:var(--bs,40px);height:var(--bs,40px);display:flex;align-items:center;justify-content:center;pointer-events:auto;cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;box-sizing:border-box;border:0;padding:0;background:none;color:inherit}
-.cv{position:absolute;inset:0;border-radius:var(--rr,22px);pointer-events:auto;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;cursor:pointer;outline:1.5px dashed rgba(255,255,255,.5);outline-offset:-1px;background:rgba(255,255,255,.035)}
-:host([day]) .cv{outline-color:rgba(60,60,67,.35)}
+.cv{position:absolute;inset:0;border-radius:var(--rr,22px);pointer-events:auto;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;cursor:pointer;outline:0;background:rgba(255,255,255,.035)}
 .c.arr .cv{cursor:grab;animation:jig .5s ease-in-out infinite alternate} @keyframes jig{from{transform:rotate(-.6deg)}to{transform:rotate(.6deg)}}
 .c.off .cv{animation:none;opacity:0} .c.off .b,.c.off .rz{visibility:hidden}
 .lay.hdrag .c.arr:not(.off){opacity:0;pointer-events:none;transition:opacity .12s} .lay.hdrag .c.arr:not(.off) *{pointer-events:none} .c.hc.app .cv{outline:0;background:none;animation:none} .c.hc.app .b.m{top:calc(var(--mt,0px) - 12px);right:calc(var(--mi,0px) - 12px)}
