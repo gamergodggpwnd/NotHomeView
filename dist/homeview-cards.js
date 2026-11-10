@@ -8490,7 +8490,7 @@ const HUB_SCHEMA = [
     { type: 'grid', name: '', schema: [{ name: 'edge_sidebar', selector: { boolean: {} } }, { name: 'block_pull_refresh', selector: { boolean: {} } }] },
     { name: 'full_height_popups', selector: { boolean: {} } },
     { name: 'popup_edit', selector: { boolean: {} } },
-    { name: 'screensaver_style', selector: { select: { mode: 'dropdown', options: [{ value: 'photo', label: 'Photo clock (default)' }, { value: 'info', label: 'Info dashboard' }, { value: 'fluid', label: 'Abstract fluid' }, { value: 'typo', label: 'Modern typographic' }, { value: 'whimsy', label: 'Whimsical minimalist' }, { value: 'homie', label: 'Homey' }] } } },
+    { name: 'screensaver_style', selector: { select: { mode: 'dropdown', options: [{ value: 'photo', label: 'Photo clock (default)' }, { value: 'info', label: 'Info dashboard' }, { value: 'fluid', label: 'Abstract fluid' }, { value: 'typo', label: 'Modern typographic' }, { value: 'whimsy', label: 'Whimsical minimalist' }, { value: 'homie', label: 'Homey' }, { value: 'glass', label: 'Glass' }] } } },
     { name: 'screensaver_colors', selector: { object: {} } },
     { name: 'swipe_screensaver', selector: { select: { mode: 'dropdown', options: [{ value: 'auto', label: 'Auto (when the screensaver is on here)' }, { value: 'on', label: 'On' }, { value: 'off', label: 'Off' }] } } }, { name: 'ss_hold', selector: { boolean: {} } }, { name: 'swipe_open_home', selector: { boolean: {} } }, { name: 'swipe_page', selector: { navigation: {} } }] }];
 Object.assign(LABELS, { photo_source_mode: 'Photo source', photo_album_url: 'Album link', apps: 'Apps (drag to reorder, pencil to edit)', person: 'Person (empty = the logged-in user)', fallback_person: 'Fallback person (no match)', ring_color: 'Avatar ring colour / gradient',
@@ -8710,7 +8710,33 @@ const HVG_CSS = `
  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}
 .disc::after{content:none}
 .disc svg{position:absolute;inset:0;width:100%;height:100%}
-@media (prefers-reduced-motion:reduce){.t,.t.dn,.pc,.in,.num,.cv,.sh,.gl{transition-duration:.01s!important}.bl{display:none}.t.tw *,.t.talk .w,.t.pd .ic{animation:none!important}}`;
+/* hold-to-edit popup */
+.ed{position:absolute;inset:0;z-index:20;display:flex;align-items:flex-end;justify-content:center;padding:0 3.5% 3.5%;background:rgba(10,8,30,.38);-webkit-backdrop-filter:blur(10px) saturate(1.2);backdrop-filter:blur(10px) saturate(1.2)}
+.ed .box{position:relative;width:min(440px,100%);max-height:78%;display:flex;flex-direction:column;border-radius:24px;overflow:hidden;color:#fff;font-family:inherit;
+ background:linear-gradient(150deg,rgba(255,255,255,.14),rgba(255,255,255,.07) 50%,rgba(255,255,255,.10));-webkit-backdrop-filter:blur(18px) saturate(1.4);backdrop-filter:blur(18px) saturate(1.4);
+ box-shadow:0 18px 48px rgba(8,6,40,.4),inset 0 0 14px rgba(255,255,255,.14),inset 0 -8px 12px rgba(20,12,80,.12)}
+.ed .box::before{content:'';position:absolute;inset:0;border-radius:inherit;padding:1px;pointer-events:none;z-index:3;
+ background:linear-gradient(135deg,rgba(255,255,255,.55),rgba(255,255,255,.28) 32%,rgba(255,255,255,.14) 72%,rgba(255,255,255,.16));
+ -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}
+.ed .hd{padding:18px 18px 10px;flex:none}.ed .ttl{font-size:20px;font-weight:700;letter-spacing:-.02em}
+.ed .sub{font-size:13px;opacity:.62;margin-top:3px}
+.ed .q{margin:0 18px 10px;flex:none;width:auto;border:0;border-radius:12px;padding:10px 12px;font:inherit;font-size:15px;color:#fff;background:rgba(255,255,255,.12);outline:none}
+.ed .q::placeholder{color:rgba(255,255,255,.45)}
+.ed .lst{flex:1;overflow:auto;padding:0 10px;min-height:80px;-webkit-overflow-scrolling:touch}
+.ed .it{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:10px;width:100%;padding:10px 10px;border-radius:12px;cursor:pointer;color:#fff}
+.ed .it:hover,.ed .it:focus-visible{background:rgba(255,255,255,.1)}
+.ed .it[aria-current="true"]{background:rgba(255,255,255,.18)}
+.ed .it .nm{font-weight:650;font-size:15px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ed .it .id{font-size:11px;opacity:.55;flex:none}
+.ed .it.clr .nm{opacity:.8;font-weight:600}
+.ed .flds{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:10px 18px 0;flex:none}
+.ed .flds label{display:flex;flex-direction:column;gap:4px;font-size:11px;font-weight:600;opacity:.7;letter-spacing:.02em;text-transform:uppercase}
+.ed .flds input{border:0;border-radius:10px;padding:8px 10px;font:inherit;font-size:14px;font-weight:500;text-transform:none;letter-spacing:0;color:#fff;background:rgba(255,255,255,.12);outline:none}
+.ed .act{display:flex;gap:8px;padding:14px 18px 16px;flex:none}
+.ed .act button{all:unset;box-sizing:border-box;cursor:pointer;flex:1;text-align:center;padding:11px 8px;border-radius:14px;font-weight:700;font-size:15px;background:rgba(255,255,255,.12)}
+.ed .act button.pri{background:#fff;color:#1e1c45}
+.ed .act button:focus-visible{outline:2px solid #fff;outline-offset:2px}
+@media (prefers-reduced-motion:reduce){.t,.t.dn,.pc,.in,.num,.cv,.sh,.gl,.ed .box{transition-duration:.01s!important}.bl{display:none}.t.tw *,.t.talk .w,.t.pd .ic{animation:none!important}}`;
 const HVG_CLOCK = `<svg viewBox="0 0 100 100" aria-hidden="true"><defs>${''}</defs>`
   + Array.from({ length: 12 }, (_, i) => `<rect x="48.5" y="6" width="3" height="10.5" rx="1.5" fill="#fff" transform="rotate(${i * 30} 50 50)"/>`).join('')
   + '<g class="hd hh"><rect x="47.4" y="24" width="5.2" height="29" rx="2.6" fill="#fff"/></g><g class="hd hm"><rect x="47.9" y="10" width="4.2" height="43" rx="2.1" fill="#fff"/></g>'
@@ -8726,10 +8752,12 @@ class HVGlassPage extends HTMLElement {
     const o = { thermostat_entity: f(/^climate\./), scene_entity: f(/^(scene|script)\./, /night|sleep|bed/i), lock_entity: f(/^lock\./, /front/i), light_entity: f(/^light\./, /entry|hall|porch/i) };
     for (const k of Object.keys(o)) if (!o[k]) delete o[k]; return o; }
   static getConfigElement() { const e = document.createElement('homeview-card-editor'); e.cardClass = this; return e; }
-  connectedCallback() { if (!this.shadowRoot) this.attachShadow({ mode: 'open' }); if (!this._built) this._build(); this._tick(); this._render(); }
-  disconnectedCallback() { clearTimeout(this._ct); this._ct = 0; for (const k of Object.keys(this._t || {})) clearTimeout(this._t[k]); }
+  connectedCallback() { if (!this.shadowRoot) this.attachShadow({ mode: 'open' }); if (!this._built) this._build(); this._onCfg = () => { this._sig = null; this._render(); };
+    addEventListener('hv-glass-cfg', this._onCfg); this._tick(); this._render(); }
+  disconnectedCallback() { clearTimeout(this._ct); this._ct = 0; for (const k of Object.keys(this._t || {})) clearTimeout(this._t[k]); if (this._onCfg) removeEventListener('hv-glass-cfg', this._onCfg); }
   // --- config helpers
-  _c(k) { const c = this._config || {}; return c[k]; }
+  _c(k) { try { if (typeof hvGlassCfg !== 'undefined') { const loc = hvGlassCfg.raw(); if (loc && Object.prototype.hasOwnProperty.call(loc, k)) return loc[k]; } } catch (e) {}
+    const c = this._config || {}; return c[k]; }
   _ent(s) { const id = this._c(s + '_entity'); return typeof id === 'string' && /^[a-z_]+\.[\w-]+$/i.test(id) ? id : ''; }
   _st(s) { const id = this._ent(s); return id && this._hass ? this._hass.states[id] : undefined; }
   _name(s) { const v = this._c(s + '_name'); return v != null && v !== '' ? String(v) : HVG_DEF[s][0]; }
@@ -8816,18 +8844,54 @@ class HVGlassPage extends HTMLElement {
     clearTimeout(this._t.th); this._t.th = setTimeout(() => { const t = this._tmp, id = this._ent('thermostat'), s2 = this._st('thermostat'); if (t == null || !s2) return;
       const data = { entity_id: id }; if (s2.attributes.temperature == null && s2.attributes.target_temp_low != null) { const w = Number(s2.attributes.target_temp_high) - Number(s2.attributes.target_temp_low); data.target_temp_low = t; data.target_temp_high = Math.round((t + (isFinite(w) ? w : 2)) * 10) / 10; } else data.temperature = t;
       this._call('climate', 'set_temperature', data).then(() => { clearTimeout(this._t.th2); this._t.th2 = setTimeout(() => { this._tmp = null; this._sig = null; this._render(); }, 2500); }); }, 700); }
+  _domains(s) { return { thermostat: ['climate'], scene: ['scene', 'script'], lock: ['lock'], light: ['light'], intercom: ['script', 'button', 'input_button'] }[s] || []; }
+  _closeEdit() { const ed = this.shadowRoot && this.shadowRoot.querySelector('.ed'); if (ed) ed.remove(); }
+  _edit(s) { if (!this.shadowRoot) return; this._closeEdit(); const domains = this._domains(s), title = this._name(s);
+    const cur = this._ent(s), S = (this._hass && this._hass.states) || {};
+    const rows = Object.keys(S).filter(id => domains.includes(id.split('.')[0])).map(id => ({ id, name: (S[id].attributes && S[id].attributes.friendly_name) || id }))
+      .sort((a, b) => (a.id === cur ? -1 : b.id === cur ? 1 : a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })));
+    const ed = document.createElement('div'); ed.className = 'ed'; ed.setAttribute('role', 'dialog'); ed.setAttribute('aria-label', 'Edit ' + title);
+    ed.innerHTML = `<div class="box"><div class="hd"><div class="ttl">${title.replace(/[<>&]/g, '')}</div><div class="sub">Hold a tile to switch its entity</div></div>
+      <input class="q" type="search" placeholder="Search entities" autocomplete="off" spellcheck="false"/>
+      <div class="lst" role="listbox"></div>
+      <div class="flds"><label>Name<input class="fn" maxlength="40" placeholder="${(HVG_DEF[s] || ['', ''])[0]}"/></label>
+        <label>Subtitle<input class="fs" maxlength="40" placeholder="${(HVG_DEF[s] || ['', ''])[1]}"/></label></div>
+      <div class="act"><button type="button" data-act="more">More info</button><button type="button" data-act="cancel">Cancel</button><button type="button" class="pri" data-act="done">Done</button></div></div>`;
+    const lst = ed.querySelector('.lst'), q = ed.querySelector('.q'), nm = ed.querySelector('.fn'), sb = ed.querySelector('.fs');
+    let pick = cur || '';
+    const nameVal = this._c(s + '_name'); nm.value = nameVal != null && nameVal !== '' ? String(nameVal) : '';
+    const subVal = this._c(s + '_subtitle'); sb.value = subVal != null && subVal !== '' ? String(subVal) : '';
+    const paint = () => { const term = q.value.trim().toLowerCase(); lst.innerHTML = '';
+      const add = (id, name, cls) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'it' + (cls ? ' ' + cls : ''); b.setAttribute('role', 'option');
+        if (id === pick) b.setAttribute('aria-current', 'true'); b.innerHTML = `<span class="nm"></span><span class="id"></span>`;
+        b.querySelector('.nm').textContent = name; b.querySelector('.id').textContent = id ? id : '';
+        b.addEventListener('click', () => { pick = id; paint(); }); lst.appendChild(b); };
+      add('', 'Clear — show “Set entity”', 'clr');
+      for (const r of rows) { if (term && !r.name.toLowerCase().includes(term) && !r.id.toLowerCase().includes(term)) continue; add(r.id, r.name); }
+      if (lst.children.length === 1 && term) { const e = document.createElement('div'); e.className = 'it'; e.style.cursor = 'default'; e.innerHTML = '<span class="nm">No matches</span>'; lst.appendChild(e); } };
+    paint(); q.addEventListener('input', paint);
+    const finish = act => {
+      if (act === 'cancel') { this._closeEdit(); return; }
+      if (act === 'more') { if (pick) this._more(pick); return; }
+      if (act === 'done') { const patch = {}; patch[s + '_entity'] = pick;
+        const n = nm.value.trim(), u = sb.value.trim(); patch[s + '_name'] = n || null; patch[s + '_subtitle'] = u || null;
+        if (typeof hvGlassCfg !== 'undefined') hvGlassCfg.set(patch); this._closeEdit(); } };
+    ed.querySelector('.act').addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (b) finish(b.dataset.act); });
+    ed.addEventListener('click', e => { if (e.target === ed) this._closeEdit(); });
+    ed.addEventListener('keydown', e => { if (e.key === 'Escape') { e.stopPropagation(); this._closeEdit(); } });
+    this.shadowRoot.appendChild(ed); setTimeout(() => q.focus(), 30); }
   _bloom(el, x, y) { if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return; const r = el.getBoundingClientRect(), b = document.createElement('span'); b.className = 'bl';
     const d = Math.hypot(r.width, r.height) * 1.4; b.style.cssText = `--d:${d}px;--x:${x - r.left}px;--y:${y - r.top}px`; el.appendChild(b); b.addEventListener('animationend', () => b.remove()); setTimeout(() => b.remove(), 900); }
   // --- pointer handling: tap / hold / drag (light brightness)
   _wire(el) { const s = el.dataset.s;
     if (s === 'thermostat') { el.addEventListener('click', e => { const b = e.target.closest('.cv'); if (b) { e.stopPropagation(); if (!b.disabled) this._step(Number(b.dataset.dir)); return; } });
-      let ht = 0; el.addEventListener('pointerdown', e => { if (e.target.closest('.cv')) return; clearTimeout(ht); ht = setTimeout(() => this._more(this._ent('thermostat')), 550); });
+      let ht = 0; el.addEventListener('pointerdown', e => { if (e.target.closest('.cv')) return; clearTimeout(ht); ht = setTimeout(() => this._edit('thermostat'), 500); });
       ['pointerup', 'pointercancel', 'pointerleave'].forEach(t => el.addEventListener(t, () => clearTimeout(ht))); return; }
     let p = null; const end = () => { el.classList.remove('dn'); };
     el.addEventListener('pointerdown', e => { if (e.button > 0) return; const st = this._st(s), dim = s === 'light' && this._dim(st) && st.state !== 'unavailable';
       p = { id: e.pointerId, x: e.clientX, y: e.clientY, t: Date.now(), dim, moved: false, drag: false, held: false, h: el.getBoundingClientRect().height, start: st && st.state === 'on' ? this._pct(st) : 0 };
       el.classList.add('dn'); if (dim) try { el.setPointerCapture(e.pointerId); } catch (x) {}
-      clearTimeout(this._t.h); this._t.h = setTimeout(() => { if (!p || p.moved) return; p.held = true; if (p.dim) this._dragStart(el, p); else { end(); this._more(this._ent(s)); } }, 550); });
+      clearTimeout(this._t.h); this._t.h = setTimeout(() => { if (!p || p.moved) return; p.held = true; end(); this._edit(s); }, 500); });
     el.addEventListener('pointermove', e => { if (!p || e.pointerId !== p.id) return; const dx = e.clientX - p.x, dy = e.clientY - p.y;
       if (!p.moved && Math.hypot(dx, dy) > 8) { p.moved = true; if (p.dim && Math.abs(dy) >= Math.abs(dx) * 0.7) this._dragStart(el, p); else if (!p.drag) { clearTimeout(this._t.h); end(); } }
       if (p.drag) { e.preventDefault(); this._dragMove(el, p, Math.max(1, Math.min(100, Math.round(p.start - dy / p.h * 100)))); } });
@@ -9855,6 +9919,30 @@ window.NotHomeView = Object.assign(window.NotHomeView || {}, { doorbell: {
 
 
 
+/* ---------------- Glass page entity overrides (per dashboard, this browser) ----------------
+   Hold a tile on the Glass page or the Glass screensaver to pick its entity / name / subtitle. Stored in
+   localStorage like the screensaver style (no Home Assistant edit rights). Merged over the Glass view's card config. */
+const HVG_OVERRIDE_KEYS = ['thermostat_entity', 'thermostat_name', 'thermostat_subtitle', 'scene_entity', 'scene_name', 'scene_subtitle',
+  'intercom_entity', 'intercom_action', 'intercom_name', 'intercom_subtitle', 'lock_entity', 'lock_name', 'lock_subtitle', 'light_entity', 'light_name', 'light_subtitle'];
+const hvGlassCfg = {
+  key() { return `hvGlassCfg:${ssDash() || 'lovelace'}`; },
+  raw() { const o = mhLs.get(this.key()); return o && typeof o === 'object' ? o : {}; },
+  viewCfg() { try {
+    const lv = hvSsLv(), views = (lv && lv.config && lv.config.views) || [];
+    const isCard = c => c && (c.type === 'custom:homeview-glass-page' || c.type === 'homeview-glass-page');
+    const walk = (x, acc) => { if (!x) return acc; if (Array.isArray(x)) { for (const i of x) walk(i, acc); return acc; }
+      if (typeof x === 'object') { if (isCard(x)) acc.push(x); for (const k of ['cards', 'sections', 'views']) if (x[k]) walk(x[k], acc); } return acc; };
+    const found = walk(views.find(v => v && v.path === 'glass') || views, []);
+    if (!found.length) return {};
+    const c = Object.assign({}, found[0]); delete c.type; delete c.grid_options; return c;
+  } catch (e) { return {}; } },
+  get() { return Object.assign({}, this.viewCfg(), this.raw()); },
+  set(patch) { const cur = Object.assign({}, this.raw());
+    for (const k of Object.keys(patch || {})) { if (!HVG_OVERRIDE_KEYS.includes(k)) continue; const v = patch[k]; if (v == null) delete cur[k]; else cur[k] = v; }
+    mhLs.set(this.key(), Object.keys(cur).length ? cur : null);
+    try { fire(window, 'hv-glass-cfg', { cfg: this.get() }); } catch (e) {} }
+};
+
 /* ---------------- 1.6.0: screensaver styles ----------------
    Photo clock (Wallpanel's photos + clock, the default) or one of four full-screen live clocks: Info dashboard, Abstract fluid, Modern typographic,
    Whimsical minimalist. Picked in the screensaver settings popup (thumbnail radio list, applies at once). Stored like the My Home settings: per dashboard
@@ -9869,7 +9957,8 @@ const HV_SSS = [
   { v: 'fluid', l: 'Abstract fluid', s: 'Glassy shapes on a soft gradient' },
   { v: 'typo', l: 'Modern typographic', s: 'Oversized numerals, white hands' },
   { v: 'whimsy', l: 'Whimsical minimalist', s: 'Embossed numerals, dusty rose' },
-  { v: 'homie', l: 'Homey', s: 'Homey waves, dances, and reacts to the weather' }];
+  { v: 'homie', l: 'Homey', s: 'Homey waves, dances, and reacts to the weather' },
+  { v: 'glass', l: 'Glass', s: 'Live glass tiles you can use; swipe up for Home' }];
 const HV_SSS_V = HV_SSS.map(x => x.v);
 // Meaningful colours per style (defaults match the reference designs). Only non-defaults are persisted.
 const HV_SS_COLS = {
@@ -10449,6 +10538,13 @@ const HV_SS_FACE_CSS = `
 .homie .hwd{position:absolute;left:0;right:0;top:5.5cqh;text-align:center;color:var(--hv-ss-text,#e6e6e6);font:700 7.6cqh/1 "Comic Neue","Chalkboard SE",ui-rounded,"SF Pro Rounded","Nunito","Varela Round",${FONT};letter-spacing:.06em;text-transform:uppercase}
 .homie .htm{position:absolute;left:0;right:0;top:15.5cqh;text-align:center;color:color-mix(in srgb,var(--hv-ss-text,#e6e6e6) 55%,transparent);font:600 3.6cqh/1 ui-rounded,"SF Pro Rounded",${FONT};letter-spacing:.08em;font-variant-numeric:tabular-nums}
 .homie .hdn{position:absolute;left:50%;top:59%;transform:translate(-50%,-50%);z-index:2;white-space:nowrap;color:color-mix(in srgb,var(--hv-ss-text,#e6e6e6) 80%,var(--hv-ss-bg,#1a1a1a));font:700 64cqh/.8 ui-rounded,"SF Pro Rounded",${FONT};letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+/* glass: thumbnail + the parked Home Screen face (not the live screensaver; that mounts homeview-glass-page) */
+.f.glass{background:linear-gradient(160deg,#3a38c0 0%,#2c2ab0 45%,#24218c 100%)}
+.glass .stg{display:grid;gap:1.6cqh;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(3,minmax(0,1fr));grid-template-areas:"th th ck" "th th sc" "ic lk li";padding:2.4cqh;box-sizing:border-box}
+.glass .gt{border-radius:1.8cqh;background:linear-gradient(150deg,rgba(255,255,255,.16),rgba(255,255,255,.06));box-shadow:inset 0 0 0 1px rgba(255,255,255,.35),0 .4cqh 1.2cqh rgba(10,8,50,.2);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:700;font-size:3.4cqh;letter-spacing:-.01em;text-align:center;padding:.4cqh}
+.glass .gth{grid-area:th;font-size:14cqh;font-weight:500}.glass .gth small{display:block;font-size:3.2cqh;font-weight:700;margin-top:1cqh;opacity:.85}
+.glass .gck{grid-area:ck;border-radius:50%;background:linear-gradient(150deg,rgba(255,255,255,.16),rgba(255,255,255,.06));box-shadow:inset 0 0 0 1px rgba(255,255,255,.35)}
+.glass .gsc{grid-area:sc}.glass .gic{grid-area:ic}.glass .glk{grid-area:lk}.glass .gli{grid-area:li}
 ` + HV_HOMIE_CSS;
 const hvSsSvgNS = 'http://www.w3.org/2000/svg';
 // glassy digit shapes (box 100 x 140): [x, y, w, h, radius, rotate]
@@ -10537,6 +10633,8 @@ class HVSsFace {
       n.style.opacity = String(m <= 75 ? 1 : m <= 110 ? 0.45 : 0.08); }); }
   // ---- Homie: weekday, a small time, the huge day number and Homie (HVHomie) living around it
   _b_homie() { const f = this.el; f.innerHTML = '<div class="stg"><div class="hwd"></div><div class="htm"></div><div class="hdn"></div></div>'; this._hmo = new HVHomie(f.querySelector('.stg'), this.thumb ? 'thumb' : 'ss'); }
+  _b_glass() { this.el.innerHTML = '<div class="stg"><div class="gt gth">20<small>Thermostat</small></div><div class="gck"></div><div class="gt gsc">Good Night</div><div class="gt gic">Intercom</div><div class="gt glk">Lock</div><div class="gt gli">Lights</div></div>'; }
+  _u_glass() {}
   _u_homie(d, hass) { const f = this.el, L = (hass && hass.locale && hass.locale.language) || undefined, q = c => f.querySelector(c), set = (c, t) => { const e = q(c); if (e.textContent !== t) e.textContent = t; };
     set('.hwd', d.toLocaleDateString(L, { weekday: 'long' })); set('.htm', d.toLocaleTimeString(L, { hour: 'numeric', minute: '2-digit' })); set('.hdn', String(d.getDate()));
     this._hmo.update(hass); }
@@ -10561,7 +10659,7 @@ const hvSsOv = {
   _sweep(root, d) { if (!root || d > 14 || !root.querySelectorAll) return;
     root.querySelectorAll('#hv-ss-style').forEach(n => { try { n.remove(); } catch (e) {} });
     for (const el of root.querySelectorAll('*')) if (el.shadowRoot) this._sweep(el.shadowRoot, d + 1); },
-  hide() { const h = this.host; this.host = null; this.face = null; this.style = null; this.colKey = null; this._up = false;
+  hide() { try { hvSsKeep.off('glass'); } catch (e) {} const h = this.host; this.host = null; this.face = null; this.card = null; this._g = null; this.style = null; this.colKey = null; this._up = false;
     if (h) { try { h.remove(); } catch (e) {} } try { this._sweep(document, 0); } catch (e) {} },
   // Wallpanel can still report "running" after it has faded out (opacity 0 / visibility hidden / pointer-events none).
   // The style layer must not stay up then: it covers the screensaver settings dialog.
@@ -10593,21 +10691,63 @@ const hvSsOv = {
       // After a styled overlay drops: park that style in the Home Screen .bg (not the Photos wallpaper).
       if (was) { try { for (const h of HV_HUBS) if (h.isConnected && h._bgMode) h._bgMode(); } catch (e) {} }
       return; }
+    if (this._g) { if (this.card) try { this.card.hass = this.hass(); } catch (e) {} return; }
     const st = hvSs.get(), cols = hvSsColors.get(st), colKey = st + ':' + JSON.stringify(hvSsStrip(st, cols) || {});
     if (st === 'photo') { this.hide(); hvSsPhotoTint.apply(cols.text); return; }
     hvSsPhotoTint.clear();
+    let z = parseInt(cs && cs.zIndex, 10); if (!(z > 0)) z = 1000;
+    const overlayOp = run ? 1 : (isFinite(op) ? op : 1);
+    if (st === 'glass') { this._mountGlass(w, z, overlayOp, run, force); return; }
     const born = !this.host || this.style !== st || this.colKey !== colKey || !this.host.isConnected || this.host.parentNode !== w.parentNode;
     if (born) { this.hide();
       const h = document.createElement('div'); h.id = 'hv-ss-style'; h.setAttribute('aria-hidden', 'true'); h.inert = true; const sr = h.attachShadow({ mode: 'open' }); sr.innerHTML = `<style>${HV_SS_FACE_CSS}</style>`;
       this.face = new HVSsFace(st); this.face.applyColors(cols); sr.appendChild(this.face.el); this.style = st; this.colKey = colKey; this.host = h; this._up = true; w.parentNode.appendChild(h); }
     else if (this.face) this.face.applyColors(cols);
     // Just above Wallpanel (page hints sit under it). A 2147482000 z-index painted over the settings dialog, so the button looked dead.
-    let z = parseInt(cs && cs.zIndex, 10); if (!(z > 0)) z = 1000;
     // While Wallpanel is running/starting: stay fully opaque so its photo-clock never shows through a
     // translucent overlay during fade-in. Only match Wallpanel opacity while it is fading OUT after dismiss.
-    const overlayOp = run ? 1 : (isFinite(op) ? op : 1);
     this.host.style.cssText = `position:fixed;inset:0;z-index:${z + 1};pointer-events:none;opacity:${overlayOp};transition:${born || run ? 'none' : 'opacity .4s linear'}`;
     this.face.update(this.hass(), new Date()); },
+  _mountGlass(w, z, overlayOp, run, force) {
+    const born = !this.host || this.style !== 'glass' || !this.host.isConnected || this.host.parentNode !== w.parentNode;
+    if (born) { this.hide();
+      const h = document.createElement('div'); h.id = 'hv-ss-style'; const sr = h.attachShadow({ mode: 'open' });
+      sr.innerHTML = `<style>:host{display:block}.stage{position:absolute;inset:0;padding-bottom:calc(28px + env(safe-area-inset-bottom,0px));box-sizing:border-box}homeview-glass-page{display:block;width:100%;height:100%}
+.grab{position:absolute;left:50%;bottom:calc(10px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);width:42px;height:5px;border-radius:3px;background:rgba(255,255,255,.5);
+ z-index:6;pointer-events:none;box-shadow:0 0 10px rgba(0,0,0,.25)}</style><div class="stage"></div><div class="grab" aria-hidden="true"></div>`;
+      const card = document.createElement('homeview-glass-page');
+      try { card.setConfig((typeof hvGlassCfg !== 'undefined' && hvGlassCfg.get) ? hvGlassCfg.get() : {}); } catch (e) { try { card.setConfig({}); } catch (x) {} }
+      try { card.hass = this.hass(); } catch (e) {}
+      sr.querySelector('.stage').appendChild(card);
+      this.card = card; this.face = null; this.style = 'glass'; this.colKey = 'glass'; this.host = h; this._up = true;
+      w.parentNode.appendChild(h); this._wireGlass(); try { hvSsKeep.on('glass'); } catch (e) {} }
+    else if (this.card) { try { this.card.hass = this.hass(); } catch (e) {} }
+    this.host.style.cssText = `position:fixed;inset:0;z-index:${z + 1};pointer-events:auto;opacity:${overlayOp};transition:${born || run ? 'none' : 'opacity .4s linear'};transform:none`; },
+  _wireGlass() { const h = this.host; if (!h || h.__hvGlassWired) return; h.__hvGlassWired = true;
+    const onTile = ev => { const path = ev.composedPath ? ev.composedPath() : []; return path.some(n => n && n.classList && (n.classList.contains('t') || n.classList.contains('ed') || n.classList.contains('cv'))); };
+    h.addEventListener('pointerdown', ev => { if (ev.button > 0 || this._g) return; const H = innerHeight || 800; if (ev.clientY < H * 0.88) return; if (onTile(ev)) return;
+      ev.preventDefault(); ev.stopPropagation(); this._g = { y: ev.clientY, t: Date.now(), id: ev.pointerId, dy: 0 }; try { h.setPointerCapture(ev.pointerId); } catch (e) {} }, true);
+    h.addEventListener('pointermove', ev => { const g = this._g; if (!g || g.leaving || ev.pointerId !== g.id) return;
+      const dy = Math.max(0, g.y - ev.clientY); g.dy = dy; if (dy < 2) return; ev.preventDefault();
+      const p = Math.min(1, dy / (innerHeight || 800)); h.style.transition = 'none'; h.style.transform = `translate3d(0,${-dy}px,0)`; h.style.opacity = String((1 - p * 0.45).toFixed(3)); }, true);
+    const end = ev => { const g = this._g; if (!g || g.leaving) return; if (ev.pointerId != null && ev.pointerId !== g.id) return;
+      const dy = g.dy || 0, dt = Math.max(1, Date.now() - g.t), v = dy / dt, H = innerHeight || 800;
+      if (dy > H * 0.25 || (v > 0.7 && dy > 40)) this._glassGo(dy); else this._glassSpring(); };
+    h.addEventListener('pointerup', end, true); h.addEventListener('pointercancel', end, true); },
+  _glassSpring() { const h = this.host; this._g = { leaving: true };
+    if (h) { h.style.transition = 'transform 380ms cubic-bezier(.32,.72,0,1), opacity 380ms cubic-bezier(.32,.72,0,1)'; h.style.transform = 'translate3d(0,0,0)'; h.style.opacity = '1'; }
+    setTimeout(() => { this._g = null; }, 400); },
+  _glassGo() { const h = this.host, H = innerHeight || 800; this._g = { leaving: true };
+    if (h) { h.style.transition = 'transform 380ms cubic-bezier(.32,.72,0,1), opacity 320ms linear'; h.style.transform = `translate3d(0,${-H}px,0)`; h.style.opacity = '0'; }
+    setTimeout(() => this._openHomeFromGlass(), 380); },
+  _openHomeFromGlass() { try { hvSsKeep.off('glass'); } catch (e) {} const w = ssWallpanel(); try { if (w && typeof w.stopScreensaver === 'function') w.stopScreensaver(); } catch (e) {}
+    this.hide();
+    try { const lv = hvSsLv(), views = (lv && lv.config && lv.config.views) || [];
+      const hasHub = v => { try { return JSON.stringify(v).includes('homeview-hub-card'); } catch (e) { return false; } };
+      const home = views.find(v => v.path === 'main' && hasHub(v)) || views.find(v => v.path === 'home') || views.find(hasHub) || views.find(v => v.path === 'main');
+      const cur = (location.pathname.split('/')[2] || '').split('?')[0];
+      if (home && home.path && home.path !== cur) hvNavigate(`/${(lv && lv.urlPath) || ssDash() || 'lovelace'}/${home.path}`);
+    } catch (e) {} },
   start() { if (this.iv) return; this._hookStart(); this.iv = setInterval(() => { try { this._hookStart(); this.tick(); } catch (e) { /* next tick */ } try { hvSsHome.tick(); } catch (e) {} }, 250); } };
 /* swipe_open_home on the screensaver: a lock-screen-style Home button (bottom left) and a left-to-right swipe each open the
    Home app as a sheet over the running screensaver (it stays up until you close Home). Its own layer just above Wallpanel's and the style faces, only while the setting is on and a screensaver
