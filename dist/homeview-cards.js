@@ -8650,23 +8650,24 @@ const HVG_CSS = `
 @container (max-aspect-ratio: 4/5){.gr{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(4,minmax(0,1fr));grid-template-areas:"th ck" "th sc" "ic lk" "li .";
  width:min(100%,calc((100cqh - 3.2cqmin) * .5));height:min(100%,calc((100cqw - 3.2cqmin) * 2))}}
 .t{--r:calc(min((100cqw - var(--g) * 2) / 3, (100cqh - var(--g) * 2) / 3) * .135);all:unset;box-sizing:border-box;position:relative;display:block;border-radius:var(--r);overflow:hidden;cursor:pointer;container-type:size;isolation:isolate;
- background:linear-gradient(150deg,rgba(255,255,255,.18),rgba(255,255,255,.10) 55%,rgba(255,255,255,.14));-webkit-backdrop-filter:blur(22px) saturate(1.6);backdrop-filter:blur(22px) saturate(1.6);
- box-shadow:0 1.2cqmin 3.4cqmin rgba(16,8,80,.22),inset 0 1px 1.5px rgba(255,255,255,.35),inset 0 -.5cqmin 1.2cqmin rgba(24,12,110,.18);
+ background:linear-gradient(150deg,rgba(255,255,255,.10),rgba(255,255,255,.06) 48%,rgba(255,255,255,.08));
+ -webkit-backdrop-filter:blur(6px) saturate(1.35) brightness(1.04);backdrop-filter:blur(6px) saturate(1.35) brightness(1.04);
+ box-shadow:0 1cqmin 2.8cqmin rgba(10,8,50,.24),inset 0 0 14px rgba(255,255,255,.15),inset 0 -8px 12px rgba(20,12,80,.14);
  transform:translateZ(0) scale(1);transition:transform .5s cubic-bezier(.34,1.7,.5,1),color .3s;touch-action:manipulation;color:#fff}
 .t:focus-visible{outline:3px solid rgba(255,255,255,.9);outline-offset:3px}
 .gr > .th{grid-area:th}.gr > .ck{grid-area:ck}.gr > [data-s=scene]{grid-area:sc}.gr > [data-s=intercom]{grid-area:ic}.gr > [data-s=lock]{grid-area:lk}.gr > [data-s=light]{grid-area:li}
 .t::before{content:'';position:absolute;inset:0;border-radius:inherit;padding:1px;z-index:3;pointer-events:none;
- background:linear-gradient(135deg,rgba(255,255,255,.9),rgba(255,255,255,.28) 35%,rgba(255,255,255,.08) 70%,rgba(255,255,255,.22));
+ background:linear-gradient(135deg,rgba(255,255,255,.55),rgba(255,255,255,.32) 32%,rgba(255,255,255,.15) 72%,rgba(255,255,255,.16));
  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}
-.t::after{content:'';position:absolute;left:0;right:0;top:0;height:34%;z-index:0;pointer-events:none;background:linear-gradient(rgba(255,255,255,.08),rgba(255,255,255,0))}
-.fl{position:absolute;inset:0;z-index:0;background:linear-gradient(180deg,rgba(255,255,255,.95),rgba(246,246,255,.86));opacity:0;transition:opacity .3s ease}
+.t::after{content:none}
+.fl{position:absolute;inset:0;z-index:0;background:linear-gradient(160deg,rgba(255,255,255,.56),rgba(255,255,255,.40));opacity:0;transition:opacity .3s ease}
 .t.on .fl{opacity:1}.t.on{color:#1e1c45}
 .t.dn{transform:translateZ(0) scale(.96);transition:transform .14s ease-out,color .3s}
 .bl{position:absolute;z-index:1;width:var(--d);height:var(--d);left:var(--x);top:var(--y);margin:calc(var(--d) / -2) 0 0 calc(var(--d) / -2);border-radius:50%;pointer-events:none;
  background:radial-gradient(circle,rgba(255,255,255,.55) 0%,rgba(255,255,255,.18) 40%,rgba(255,255,255,0) 70%);animation:hvgbl .7s ease-out forwards}
 @keyframes hvgbl{from{transform:scale(.05);opacity:1}to{transform:scale(1);opacity:0}}
 /* the light's brightness: a brighter glass that fills from the bottom while dragging */
-.lv{position:absolute;inset:0;z-index:1;pointer-events:none;background:linear-gradient(180deg,rgba(255,255,255,.98),rgba(250,248,255,.9));transform-origin:50% 100%;transform:scaleY(var(--p,0));opacity:0;transition:opacity .25s,transform .08s linear}
+.lv{position:absolute;inset:0;z-index:1;pointer-events:none;background:linear-gradient(180deg,rgba(255,255,255,.62),rgba(250,248,255,.48));transform-origin:50% 100%;transform:scaleY(var(--p,0));opacity:0;transition:opacity .25s,transform .08s linear}
 .t.drag .lv{opacity:1}.t.drag .fl{opacity:0}
 .pc{position:absolute;inset:0;z-index:4;display:flex;align-items:center;justify-content:center;font-size:24cqmin;font-weight:700;letter-spacing:-.02em;opacity:0;transform:scale(.85);
  transition:opacity .25s,transform .35s cubic-bezier(.34,1.56,.64,1);pointer-events:none;color:#fff;text-shadow:0 1px 6px rgba(20,10,90,.35);font-variant-numeric:tabular-nums}
@@ -8702,11 +8703,12 @@ const HVG_CSS = `
 .cv:focus-visible{outline:3px solid currentColor}.cv:disabled{opacity:.3;cursor:default}
 /* clock */
 .ck{display:flex;align-items:center;justify-content:center;container-type:size;min-width:0;min-height:0}
-.disc{position:relative;width:100cqmin;height:100cqmin;border-radius:50%;background:linear-gradient(150deg,rgba(255,255,255,.18),rgba(255,255,255,.10) 55%,rgba(255,255,255,.14));-webkit-backdrop-filter:blur(22px) saturate(1.6);backdrop-filter:blur(22px) saturate(1.6);
- box-shadow:0 1.2cqmin 3.4cqmin rgba(16,8,80,.22),inset 0 1px 1.5px rgba(255,255,255,.35),inset 0 -.6cqmin 1.4cqmin rgba(24,12,110,.18)}
-.disc::before{content:'';position:absolute;inset:0;border-radius:50%;padding:1px;background:linear-gradient(135deg,rgba(255,255,255,.75),rgba(255,255,255,.12) 50%,rgba(255,255,255,.06));
+.disc{position:relative;width:100cqmin;height:100cqmin;border-radius:50%;background:linear-gradient(150deg,rgba(255,255,255,.10),rgba(255,255,255,.06) 48%,rgba(255,255,255,.08));
+ -webkit-backdrop-filter:blur(6px) saturate(1.35) brightness(1.04);backdrop-filter:blur(6px) saturate(1.35) brightness(1.04);
+ box-shadow:0 1cqmin 2.8cqmin rgba(10,8,50,.24),inset 0 0 14px rgba(255,255,255,.15),inset 0 -8px 12px rgba(20,12,80,.14)}
+.disc::before{content:'';position:absolute;inset:0;border-radius:50%;padding:1px;background:linear-gradient(135deg,rgba(255,255,255,.55),rgba(255,255,255,.32) 32%,rgba(255,255,255,.15) 72%,rgba(255,255,255,.16));
  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}
-.disc::after{content:'';position:absolute;inset:0;border-radius:50%;background:linear-gradient(rgba(255,255,255,.16),rgba(255,255,255,0) 40%)}
+.disc::after{content:none}
 .disc svg{position:absolute;inset:0;width:100%;height:100%}
 @media (prefers-reduced-motion:reduce){.t,.t.dn,.pc,.in,.num,.cv,.sh,.gl{transition-duration:.01s!important}.bl{display:none}.t.tw *,.t.talk .w,.t.pd .ic{animation:none!important}}`;
 const HVG_CLOCK = `<svg viewBox="0 0 100 100" aria-hidden="true"><defs>${''}</defs>`
