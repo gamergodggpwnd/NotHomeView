@@ -4294,7 +4294,7 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
   startDrag(it, cv, p) { const ap = this.grid(), g = it.g; if (!ap || g.parentNode !== ap) return; const ar = ap.getBoundingClientRect(), r = g.getBoundingClientRect();
     const ph = document.createElement('div'); ph.className = 'hgp' + (it.kind === 'app' ? ' hga' : ''); ph.style.gridColumn = g.style.gridColumn; ph.style.gridRow = g.style.gridRow;
     const M = this.hub._hgM || { C: r.width, R: r.height, gx: 0, gy: 0, N: 8 }, cw = g._hvCells || [1, 1], ow = cw[0] * M.C + (cw[0] - 1) * M.gx, cl = r.left + r.width / 2 - ow / 2;
-    const d = this.drag = { it, g, ph, ap, tok: it.tok, o0: this.order(ap), id: p.id, x0: p.x0, y0: p.y0, x: p.x, y: p.y, sy0: scrollY, cv, ox: p.x0 - cl, oy: p.y0 - r.top, best: -1, at: 0 };
+    const d = this.drag = { it, g, ph, ap, tok: it.tok, o0: this.order(ap), k0: [...ap.children].filter(n => n !== g && n._hvTok), id: p.id, x0: p.x0, y0: p.y0, x: p.x, y: p.y, sy0: scrollY, cv, ox: p.x0 - cl, oy: p.y0 - r.top, best: -1, at: 0 };
     ap.insertBefore(ph, g); g.classList.add('lift'); Object.assign(g.style, { left: (r.left - ar.left) + 'px', top: (r.top - ar.top) + 'px', width: r.width + 'px', height: r.height + 'px', margin: '0' });
     d.mv = ev => { if (ev.pointerId !== d.id) return; if (ev.cancelable) ev.preventDefault(); d.x = ev.clientX; d.y = ev.clientY; this.moveDrag(); };
     d.up = ev => { if (ev.pointerId !== d.id) return; this.endDrag(); };
@@ -4303,17 +4303,17 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
   moveDrag() { const d = this.drag; if (!d) return; d.g.style.transform = `translate(${d.x - d.x0}px,${d.y - d.y0 + (scrollY - d.sy0)}px) scale(1.06)`; },
   // where the hole goes: the slot (DOM position) whose packing puts the dragged item nearest the cell under the finger. Uses the grid model
   // (cells, spans, row dense packing), not the items' on-screen boxes, so items still sliding (FLIP) are never targets and nothing overlaps.
-  slots() { const d = this.drag, M = this.hub._hgM, kids = [...d.ap.children].filter(n => n !== d.g && n !== d.ph), me = d.g._hvCells || [1, 1], out = [];
+  slots() { const d = this.drag, M = this.hub._hgM, kids = d.k0.filter(n => n.parentNode === d.ap), me = d.g._hvCells || [1, 1], out = []; // the others in their order when the drag started (they never reorder among themselves)
     for (let k = 0; k <= kids.length; k++) { const bl = kids.map(n => n._hvCells || [1, 1]); bl.splice(k, 0, me); out.push(hvGridPack(bl, M.N)[k]); }
     return { kids, out }; },
   dragTick() { const d = this.drag; if (!d) return; const ap = d.ap, vh = innerHeight, ez = 56, M = this.hub._hgM; if (!M) return;
     if (d.y < ez && scrollY > 0) { scrollBy(0, -14); this.moveDrag(); } else if (d.y > vh - ez && scrollY + vh < document.documentElement.scrollHeight) { scrollBy(0, 14); this.moveDrag(); } // near the edges: the page follows
     const ar = ap.getBoundingClientRect(), me = d.g._hvCells || [1, 1], pw = M.C + M.gx, phh = M.R + M.gy;
     const cx = Math.max(0, Math.min(M.N - Math.min(me[0], M.N), (d.x - d.ox - ar.left) / pw)), cy = Math.max(0, (d.y - d.oy - ar.top) / phh); // the cell the item's top-left is over
-    const { kids, out } = this.slots(), all = [...ap.children].filter(n => n !== d.g), cur = Math.min(kids.length, all.indexOf(d.ph)), dist = k => Math.hypot(out[k][0] - cx, (out[k][1] - cy) * 1.15);
+    const { kids, out } = this.slots(), cur = Math.min(kids.length, kids.filter(n => n.compareDocumentPosition(d.ph) & Node.DOCUMENT_POSITION_FOLLOWING).length), dist = k => Math.hypot(out[k][0] - cx, (out[k][1] - cy) * 1.15);
     let best = cur; for (let k = 0; k < out.length; k++) if (dist(k) < dist(best) - 1e-6) best = k;
     if (best === cur || dist(cur) - dist(best) < 0.35) { d.best = -1; return; } // stay put unless clearly better (no flicker between two slots)
-    if (best !== d.best) { d.best = best; d.at = Date.now(); return; } if (Date.now() - d.at < 80) return; d.best = -1;
+    if (best !== d.best) { d.best = best; d.at = Date.now(); return; } if (Date.now() - d.at < 120) return; d.best = -1; // the same better slot for 120 ms before anything moves
     const m = this.snap(ap); if (best >= kids.length) ap.appendChild(d.ph); else ap.insertBefore(d.ph, kids[best]);
     this.flip(m); if (navigator.vibrate) try { navigator.vibrate(6); } catch (x) {} this.tick(); },
   endDrag() { const d = this.drag; if (!d) return; this.drag = null; clearInterval(d.iv); try { d.cv.releasePointerCapture(d.id); } catch (x) {}
@@ -7644,8 +7644,9 @@ class HVHubCard extends HTMLElement {
     { const lo0 = Math.max(52, Math.round(I * 0.72)); if (rows && need(I) > room && need(lo0) <= room) { let lo = lo0, hi = I; while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (need(mid) > room) hi = mid; else lo = mid; } I = lo; } } // a little smaller to fit the screen; more than that scrolls (columns keep the width)
     const M = met(I); C = Math.floor(C); this._hgM = { N, C, R: M.R, gx, gy: M.gy, I };
     const apps = [...ap.querySelectorAll(':scope > .app:not(.hgp)')], phw = this._w.querySelector('.phw'), els = [], live = new Set(), map = this._hgMap = new Map();
+    const appAt = new Map(apps.map((n, j) => [n.dataset.app != null && n.dataset.app !== '' ? Number(n.dataset.app) : j, n])); // a:<i> = the icon of app i (data-app), never its DOM position: the DOM is already in Home Screen order, so by position every re-layout swapped reordered icons
     for (const t of toks) { const m = /^([a-z]+)(?::(\d+))?$/.exec(t), k = m[1], i = Number(m[2] || 0); let el = null;
-      if (k === 'a') el = apps[i]; else if (k === 'p') el = phw; else if (k === 's') el = (this._sideEls || [])[i];
+      if (k === 'a') el = appAt.get(i) || null; else if (k === 'p') el = phw; else if (k === 's') el = (this._sideEls || [])[i];
       else if (k === 'cal') { el = this._hwMk('cal'); el._cfg = { type: 'calendar', size: hwCalSize(c.calendar_size) }; }
       else if (k === 'w') { const x = (c.home_cards || [])[i]; if (x) { el = this._hwMk('w:' + i); el._cfg = { type: x.type === 'calendar' ? 'calendar' : 'weather', size: hwSize(x.type === 'calendar' ? 'calendar' : 'weather', x.size)[0] }; } }
       if (!el) continue; const [w, h] = cells(t); el._hvTok = t; el._hvCells = [w, h]; map.set(t, el); els.push(el);
