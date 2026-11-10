@@ -9155,13 +9155,14 @@ const HV_HOMEY = (() => {
     ctx.fillStyle = OL; ctx.beginPath(); ctx.arc(0, -HB, 4, 0, Math.PI * 2); ctx.fill(); // hub
     ctx.beginPath(); ctx.arc(0, -HB - 10, 4.5, 0, Math.PI * 2); ctx.fill(); // tip
     for (let i = 0; i <= n; i++) { ctx.beginPath(); ctx.arc(rt(i), 0, 3, 0, Math.PI * 2); ctx.fill(); } // rib ends
-    // the J handle: the rod drops into his palm and the hook's curve sits in his grip, curling toward his body
-    W(); const r = 10, b = at(-13), c = [b[0] + nx * r, b[1] + ny * r], a0 = Math.atan2(-ny, -nx);
-    const J = () => { ctx.beginPath(); ctx.moveTo(hx + ux * 14, hy + uy * 14); ctx.lineTo(b[0], b[1]); ctx.arc(c[0], c[1], r, a0, a0 + Math.PI * side, side < 0); ctx.lineTo(c[0] + nx * r + ux * 5, c[1] + ny * r + uy * 5); };
-    J(); ctx.strokeStyle = ROD; ctx.lineWidth = 11; ctx.stroke(); J(); ctx.strokeStyle = 'rgb(28,29,32)'; ctx.lineWidth = 7; ctx.stroke();
-    // his hand again, over the hook, then the fingers curled round it (short knuckle strokes across the handle, in the limb colours)
-    const hk = 'hand_' + o.k, im = IMG[hk]; if (im) { const mh = mul(B2, pcm(o.m, hk)); ctx.setTransform(mh[0], mh[3], mh[1], mh[4], mh[2], mh[5]); ctx.drawImage(im, 0, 0); W(); }
-    for (const k of [8, 2, -4]) { const p0 = at(k, -9), p1 = at(k - 2, 7); ctx.beginPath(); ctx.moveTo(p0[0], p0[1]); ctx.quadraticCurveTo(...at(k + 3, 0), p1[0], p1[1]);
+    // the handle: a short dark grip piece where the rod enters his hand; the J's hook is tucked away inside the fist
+    W(); ctx.beginPath(); ctx.moveTo(...at(30)); ctx.lineTo(hx, hy); ctx.strokeStyle = ROD; ctx.lineWidth = 11; ctx.stroke(); ctx.strokeStyle = 'rgb(28,29,32)'; ctx.lineWidth = 7; ctx.stroke();
+    // a smooth cartoon fist over the arm piece's open hand (in the arm's own frame, big enough to hide its splayed fingers), the wrist joined back onto the forearm
+    const L = o.k === 'armW', fc = L ? [34, 87] : [375, 87], wr = L ? [[36, 100], [44, 124]] : [[373, 100], [365, 124]], mf = mul(B2, o.m); ctx.setTransform(mf[0], mf[3], mf[1], mf[4], mf[2], mf[5]);
+    ctx.beginPath(); ctx.ellipse(fc[0], fc[1], 35, 32, 0, 0, Math.PI * 2); ctx.fillStyle = 'rgb(54,58,61)'; ctx.fill(); ctx.strokeStyle = OL; ctx.lineWidth = 6; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(...wr[0]); ctx.lineTo(...wr[1]); ctx.strokeStyle = 'rgb(54,58,61)'; ctx.lineWidth = 15; ctx.stroke();
+    // his fingers curled round the handle: short knuckle strokes across it, in the limb colours
+    W(); for (const k of [10, 3, -4]) { const p0 = at(k, -12), p1 = at(k - 2, 10); ctx.beginPath(); ctx.moveTo(p0[0], p0[1]); ctx.quadraticCurveTo(...at(k + 4, 0), p1[0], p1[1]);
       ctx.strokeStyle = OL; ctx.lineWidth = 9; ctx.stroke(); ctx.strokeStyle = 'rgb(54,58,61)'; ctx.lineWidth = 5.5; ctx.stroke(); } }
   // the turn (clips.py seg_turn) layered over whatever he does: anticipate, hop, the house narrows, swaps plates (chimney stays right), widens
   function turn(p, u, d) { const f0 = -d; let lean;
