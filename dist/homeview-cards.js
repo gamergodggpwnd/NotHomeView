@@ -5049,12 +5049,14 @@ const HUB_CSS = `:host{display:block;position:relative;font-family:${FONT};color
 .bgi{position:absolute;inset:calc(-2 * var(--blur,32px));background-size:cover;background-position:center;filter:blur(var(--blur,32px)) saturate(var(--sat,1.35));transform:scale(1.08);opacity:0;transition:opacity 2.2s ease}
 .bgi.on{opacity:1}
 :host(:not([bgphoto])) .bgi{display:none}
+.bgx{position:absolute;inset:calc(-2 * var(--blur,32px));background-size:cover;background-position:center;background-repeat:no-repeat;filter:blur(var(--blur,32px)) saturate(var(--sat,1.35));transform:scale(1.08);display:none}
+:host([bgx]) .bgx{display:block}:host([bgx]) .bgi,:host([bgx]) .ssface{display:none}
 .tint{position:absolute;inset:0;background:radial-gradient(120% 90% at 20% 10%,#4b3a66 0%,#1c1a33 55%,#0d0f1a 100%);opacity:var(--tint,.24);transition:opacity .2s ease}
 :host(:not([bgphoto]):not([sswall])) .tint{display:none}
 .ssface{position:absolute;inset:calc(-2 * var(--blur,32px));pointer-events:none;z-index:0;filter:blur(var(--blur,32px)) saturate(var(--sat,1.35));transform:scale(1.08)}
 :host([sswall]) .bgi{display:none}
 .dim{position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,calc(var(--dim,.35) + .08)) 0%,rgba(0,0,0,var(--dim,.35)) 40%,rgba(0,0,0,calc(var(--dim,.35) + .12)) 100%)}
-:host([bgphoto]) .dim,:host([sswall]) .dim{--dk:calc(var(--dim,.32) * var(--dsc,.55));--m:var(--dmix,0);background:linear-gradient(180deg,rgba(0,0,0,calc(var(--m) * (var(--dim,.32) + .08) + (1 - var(--m)) * var(--dk) * .95)) 0%,rgba(0,0,0,calc(var(--m) * (var(--dim,.32) + .01) + (1 - var(--m)) * var(--dk) * .38)) 35%,rgba(0,0,0,calc(var(--m) * (var(--dim,.32) + .04) + (1 - var(--m)) * var(--dk) * .32)) 60%,rgba(0,0,0,calc(var(--m) * (var(--dim,.32) + .12) + (1 - var(--m)) * var(--dk) * .88)) 100%),rgba(255,255,255,calc(var(--bgt,.6) * .09))}
+:host([bgphoto]) .dim,:host([sswall]) .dim,:host([bgx]) .dim{--dk:calc(var(--dim,.32) * var(--dsc,.55));--m:var(--dmix,0);background:linear-gradient(180deg,rgba(0,0,0,calc(var(--m) * (var(--dim,.32) + .08) + (1 - var(--m)) * var(--dk) * .95)) 0%,rgba(0,0,0,calc(var(--m) * (var(--dim,.32) + .01) + (1 - var(--m)) * var(--dk) * .38)) 35%,rgba(0,0,0,calc(var(--m) * (var(--dim,.32) + .04) + (1 - var(--m)) * var(--dk) * .32)) 60%,rgba(0,0,0,calc(var(--m) * (var(--dim,.32) + .12) + (1 - var(--m)) * var(--dk) * .88)) 100%),rgba(255,255,255,calc(var(--bgt,.6) * .09))}
 .w{position:relative;z-index:1;box-sizing:border-box;display:flex;flex-direction:column;padding:var(--pt,24px) var(--px,32px) var(--pb,20px);gap:var(--gap,24px);min-height:var(--h,auto)}
 .top{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex:none}
 .gr{text-transform:uppercase;font-size:var(--gfs,22px);line-height:1.22;letter-spacing:.01em;text-shadow:0 1px 8px rgba(0,0,0,.25);min-width:0}
@@ -5596,7 +5598,7 @@ ${HV_ORB_CSS}
 .src{display:inline-flex;align-items:center;gap:6px;margin-top:18px;padding:8px 14px 8px 11px;border-radius:999px;background:var(--inp);color:var(--fg);font-size:14px;font-weight:600;text-decoration:none} .src ha-icon{--mdc-icon-size:17px;display:flex;color:var(--fg2)}
 .ax img{display:block;max-width:min(100%,560px);max-height:42vh;margin-top:18px;border-radius:22px;object-fit:cover}
 .hb{all:unset;cursor:pointer;flex:none;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--inp);color:var(--fg2)} .hb[hidden]{display:none} .hb ha-icon{--mdc-icon-size:20px;display:flex}
-:host([read]) .col{max-width:960px} :host([read]) .hd{position:relative;min-height:72px}:host([read]) .hd .grab,:host([read]) .hd .ti{visibility:hidden}:host([read]) .hd .orb{position:absolute;left:50%;top:14px;width:48px;height:48px;transform:translateX(-50%) scale(var(--lv,1));z-index:1;cursor:pointer;pointer-events:auto}:host([read]) .wrap,:host([read]) .cd{box-shadow:none;filter:none;outline:none}
+:host([read]) .col{max-width:960px} :host([read]) .hd{position:relative;min-height:72px}:host([read]) .hd .grab,:host([read]) .hd .ti{visibility:hidden}:host([read]) .hd .orb{position:absolute;left:50%;top:14px;width:48px;height:48px;transform:translateX(-50%) scale(var(--lv,1));z-index:1;cursor:pointer;pointer-events:auto}@media (max-width:640px){:host([read]) .hd .orb{left:max(16px,env(safe-area-inset-left,0px));transform:scale(var(--lv,1));transform-origin:0 50%}} /* phones: the orb / Homey sits where the (hidden) title is, clear of the Quiet pill and the buttons on the right */:host([read]) .wrap,:host([read]) .cd{box-shadow:none;filter:none;outline:none}
 :host([read]) .log > :not(.cur),:host([read]) .jump{display:none !important}
 :host([read]) .bd{padding:14px 10px 26px}
 :host([read]) .m.a.cur{width:100%;max-width:none;animation:hvmi .32s ease both}
@@ -5865,7 +5867,7 @@ const HV_HEAD_CSS = `
 .hh{display:none;position:absolute;overflow:visible}:host([face=homie]) .hh{display:block}
 :host([face=homie]) .bo{--os:128px;border-radius:0}:host([face=homie][cap]) .bo{--os:104px}:host([face=homie]) .bo > span{display:none}
 :host([face=homie]) .bo .hh{inset:-6%;width:112%;height:112%;filter:drop-shadow(0 10px 18px rgba(0,0,0,.35))}
-:host([face=homie]) .hd .orb::before,:host([face=homie]) .hd .orb::after{display:none}:host([face=homie]) .hd .orb .hh{inset:-12%;width:124%;height:124%}
+:host([face=homie]) .hd .orb::before,:host([face=homie]) .hd .orb::after{display:none}:host([face=homie]) .hd .orb .hh{inset:-4%;width:108%;height:108%}
 .hh g{transform-box:fill-box}.hh .hhd{transform-origin:50% 92%;animation:hhbob 2.6s ease-in-out infinite}
 .hh .x-talk,.hh .x-think,.hh .x-conf,.hh .hq,.hh .hdots{opacity:0}.hh .x-lids{opacity:0;animation:hhblink 4.2s infinite}
 .hh .q1{font:800 92px/1 ${FONT};fill:#fff;stroke:#2b2d30;stroke-width:6px;paint-order:stroke}.hh .hdots circle{fill:#fff;stroke:#2b2d30;stroke-width:5}
@@ -6396,11 +6398,10 @@ const HV_SET_PAGES = [
   { id: 'general', t: 'General', i: 'mdi:cog', c: '#8e8e93', g: 1, d: 'The look of the device pages, popups on this dashboard, and the way into edit mode.',
     sec: [{ f: ['@about', '@update'] }, { f: ['theme'] }, { h: 'Popups', f: ['full_height_popups', 'popup_edit'] }, { f: ['@edit'] }, { f: ['@setup'] }] },
   { id: 'photos', t: 'Photos & Background', i: 'mdi:image-multiple', c: '#32ade6', g: 1, d: 'The pictures on the Home Screen, the blurred background behind it and the Photos tile.',
-    sec: [{ h: 'Photos', f: ['photo_source_mode', 'photo_source', 'photo_interval', 'photo_order'] }, { h: 'Background', f: ['photo_backdrop', 'bg_freeze', 'wallpaper'] },
-      { h: 'Background blur', lvl: true, f: ['bg_blur_level'] }, { h: 'Advanced', f: ['dim'] },
+    sec: [{ h: 'Photos', f: ['photo_source_mode', 'photo_source', 'photo_interval', 'photo_order'] }, { f: ['@wpnote'] },
       { h: 'Photos tile', f: ['photo_tap', 'photo_label', 'photo_viewer_nav', 'photo_viewer_swipe', 'photo_viewer_add', 'photo_gallery_upload', 'photo_viewer_pause'] }] },
-  { id: 'screensaver', t: 'Screensaver', i: 'mdi:monitor-shimmer', c: '#5856d6', g: 1, d: 'The screensaver face and how it starts from the Home Screen.',
-    sec: [{ bare: true, f: ['@sspick'] }, { f: ['swipe_screensaver', 'ss_hold'] }, { f: ['@wallpanel'] }] }, // the style carousel + its colours (screensaver_style / screensaver_colors)
+  { id: 'screensaver', t: 'Wallpaper', i: 'mdi:wallpaper', c: '#5856d6', g: 1, d: 'The screensaver (Outer) and the Home Screen background behind the apps (Inner), and how the screensaver starts.', // id kept for links
+    sec: [{ bare: true, f: ['@wallpair'] }, { f: ['swipe_screensaver', 'ss_hold'] }, { f: ['@wallpanel'] }, { h: 'Home Screen background', f: ['photo_backdrop', 'bg_freeze', 'wallpaper', 'dim'] }] }, // the style carousel + its colours (screensaver_style / screensaver_colors)
   { id: 'gestures', t: 'Gestures', i: 'mdi:gesture-swipe', c: '#34c759', g: 1, d: 'Swipes on the Home Screen.',
     sec: [{ f: ['swipe_open_home', 'swipe_page'] }, { f: ['edge_sidebar', 'block_pull_refresh'] }] },
   { id: 'apps', t: 'Apps', i: 'mdi:apps', c: '#007aff', g: 2, d: 'The app icons on the Home Screen and what each one opens.',
@@ -6425,6 +6426,8 @@ const HV_SET_ACTS = {
   '@about': { l: 'About', h: 'This device, Home Assistant and NotHomeView versions, Wi-Fi network, battery.', i: 'mdi:information-outline', nav: true },
   '@update': { l: 'Software Update', h: 'Home Assistant updates: Core, OS, Supervisor, add-ons, HACS, NotHomeView release. Check now, install.', i: 'mdi:cellphone-arrow-down', nav: true },
   '@sspick': { l: 'Screensaver style', h: 'Photo clock, Info dashboard, Abstract fluid, Modern typographic or Whimsical minimalist: swipe or tap to choose. Screensaver colors for the chosen style (colour pickers, swatches, reset to default colors) are underneath.', pick: true },
+  '@wallpair': { l: 'Wallpaper', h: 'Screensaver (Outer) and Home Screen background (Inner): Customize each. Screensaver style and colours; Photos, a device or Home Assistant photo, gradients and colours behind the apps, background blur, Match Outer wallpaper.', wp: true },
+  '@wpnote': { l: '', h: 'The Home Screen background behind the apps is set in Wallpaper › Inner (Customize), with its blur.', note: true },
   '@assistface': { l: 'Assistant', h: 'Orb or Homey: what the compact popup shows when the mic opens (Mic opens a floating orb). Swipe or tap to choose; applies at once.', face: true },
   '@wwjarvis': { l: 'Hey Jarvis', h: 'Say “Hey Jarvis” to open the assistant. Listens on this device only, while the dashboard is open; no audio leaves the browser. Sensitivity is in the assistant\'s own settings (Quiet).', ww: 'jarvis' },
   '@wwhomey': { l: 'Hey Homey', h: 'Say “Hey Homey” (also “Hey Homie” or just “Homie”) to open the assistant. On this device only, like Hey Jarvis; both can be on.', ww: 'homey' },
@@ -6622,7 +6625,7 @@ function hvOpenSettings(hub, app, from) {
       if (a.ww) { const ok = hvWwSupport(), miss = a.ww === 'homey' && HVWW.hmOk === false, on = ok && hvWwPh(a.ww);
         if (ok && a.ww === 'homey' && HVWW.hmOk == null) hvWwHmCheck().then(() => { if (root && root.isConnected) paintPane(); });
         const why = !ok ? 'Not available on this device (iPhone / iPad). Use the mic button instead.' : miss ? 'Needs its wake word model (wakeword/hey_homey.onnx, next to homeview-cards.js): see the wake word README.' : a.h;
-        return `<div class="r" data-wwr="${k}"><span class="l">${esc(a.l)}</span><button class="sw" role="switch" data-ww="${a.ww}" aria-checked="${on}" aria-label="${esc(a.l)} wake word on this device"${!ok || miss ? ' disabled' : ''}></button><small>${esc(why)}</small></div>`; } if (a.face) return `<div class="r stk" data-k="assistant_face" aria-label="${esc(a.l)}"><div data-fpick></div></div>`; if (a.pick) return `<div class="r stk" data-k="${k}" aria-label="${esc(a.l)}"><div data-sspick></div></div>`;
+        return `<div class="r" data-wwr="${k}"><span class="l">${esc(a.l)}</span><button class="sw" role="switch" data-ww="${a.ww}" aria-checked="${on}" aria-label="${esc(a.l)} wake word on this device"${!ok || miss ? ' disabled' : ''}></button><small>${esc(why)}</small></div>`; } if (a.wp) return `<div class="r stk" data-k="@wallpair" aria-label="${esc(a.l)}"><div data-wpair></div></div>`; if (a.face) return `<div class="r stk" data-k="assistant_face" aria-label="${esc(a.l)}"><div data-fpick></div></div>`; if (a.pick) return `<div class="r stk" data-k="${k}" aria-label="${esc(a.l)}"><div data-sspick></div></div>`;
       if (a.nav) { const n = k === '@update' ? hvUpdCount(H()) : 0; return `<button class="r act nav" data-act="${k.slice(1)}" aria-label="${esc(a.l)}${n ? ', ' + n + ' available' : ''}"><span class="sq" style="--c:#8e8e93"><ha-icon icon="${a.i}"></ha-icon></span><span class="tx"><span class="l">${esc(a.l)}</span></span>${n ? `<span class="bdg">${n}</span>` : ''}<ha-icon class="ch" icon="mdi:chevron-right"></ha-icon></button>`; }
       const off = k === '@wallpanel' && !customElements.get('wallpanel-view') ? ' disabled' : (k === '@sidecards' || k === '@setup') && (dis || st.nohub) ? ' disabled' : '';
       return `<button class="r act" data-act="${k.slice(1)}"${off}><span class="sq" style="--c:var(--blue)"><ha-icon icon="${a.i}"></ha-icon></span>${tx}<ha-icon class="ch" icon="mdi:chevron-right"></ha-icon></button>`; }
@@ -6702,6 +6705,12 @@ function hvOpenSettings(hub, app, from) {
   const ssMount = () => { const box = pane && pane.querySelector('[data-sspick]'); if (!box) return; const inner = ssPick && ssPick.shadowRoot.firstElementChild;
     if (!ssPick || !inner || inner._dead) { ssPick = document.createElement('div'); ssPick.className = 'ssh'; ssPick.attachShadow({ mode: 'open' }).appendChild(hvSsPicker(ssShim, { mode: 'carousel', onPick: ssRefresh })); }
     box.appendChild(ssPick); const pk = ssPick.shadowRoot.firstElementChild; if (pk && pk._recenter) pk._recenter(); };
+  // Wallpaper: the CURRENT pair and the Outer / Inner pages (hvWallpaperUI), each in its own shadow root
+  const wpCtx = { H: () => H(), cfg: () => data(), save: (k, v) => save(k, v), hub: () => live(), go: v => subGo(v), flash: (m, e) => flash(m, e), wallpanel: () => act('wallpanel'),
+    refresh: () => paintPane(), ssRefresh: () => ssRefresh(), get admin() { return !!(H().user && H().user.is_admin); }, get ro() { return ro(); } };
+  const wpMount = () => { if (!pane) return; const a = pane.querySelector('[data-wpair]'), b = pane.querySelector('[data-wpsub]'); if (!a && !b) return; const ui = hvWallpaperUI(wpCtx);
+    const put = (box, el) => { const h0 = document.createElement('div'); h0.className = 'wph'; const r = h0.attachShadow({ mode: 'open' }); r.innerHTML = `<style>${HV_WP_CSS}${HV_SS_PICK_CSS}</style>`; r.appendChild(el); box.appendChild(h0); };
+    if (a) put(a, ui.pair()); if (b) { const v = b.dataset.wpsub; put(b, v === 'wp-outer' ? ui.outerGallery() : v === 'wp-inner' ? ui.innerPage() : ui.styleSettings(v.slice(9))); } };
   // Assistant & timer: Orb / Homey carousel (assistant_face), its own shadow root like the screensaver picker
   let fPick = null; const fMount = () => { const box = pane && pane.querySelector('[data-fpick]'); if (!box) return;
     if (!fPick) { fPick = document.createElement('div'); fPick.className = 'ssh'; fPick.attachShadow({ mode: 'open' }).appendChild(hvFacePicker({ get: () => data().assistant_face, set: v => save('assistant_face', v) })); }
@@ -6750,7 +6759,9 @@ function hvOpenSettings(hub, app, from) {
     if (a.release_url) h += `<div class="grp"><button class="r act" data-act="updurl" data-url="${esc(a.release_url)}"><span class="sq" style="--c:var(--blue)"><ha-icon icon="mdi:text-box-outline"></ha-icon></span><span class="tx"><span class="l">Release notes</span></span><ha-icon class="ch" icon="mdi:open-in-new"></ha-icon></button></div>`;
     if ((f & 16) && !(id in st.unotes)) { st.unotes[id] = ''; h0.callWS({ type: 'update/release_notes', entity_id: id }).then(t => { st.unotes[id] = typeof t === 'string' ? t : ''; if (st.sub === 'upd:' + id) paintPane(); }).catch(() => {}); }
     return h; };
-  const subHtml = () => st.sub === 'about' ? aboutHtml() : st.sub === 'update' ? updHtml() : st.sub.startsWith('upd:') ? updDetail(st.sub.slice(4)) : '';
+  const wpT = v => v === 'wp-outer' ? 'Outer Wallpaper' : v === 'wp-inner' ? 'Inner Wallpaper' : ((HV_SSS.find(x => 'wp-style:' + x.v === v) || {}).l || 'Wallpaper');
+  const wpSub = () => { const t = wpT(st.sub); return `<div class="ph"><button class="bk" data-act="wpback" aria-label="Back to Wallpaper"><ha-icon icon="mdi:chevron-left"></ha-icon>Wallpaper</button><span class="nt">${esc(t)}</span></div><h1 class="sbt">${esc(t)}</h1><div data-wpsub="${esc(st.sub)}"></div>`; };
+  const subHtml = () => st.sub.startsWith('wp-') ? wpSub() : st.sub === 'about' ? aboutHtml() : st.sub === 'update' ? updHtml() : st.sub.startsWith('upd:') ? updDetail(st.sub.slice(4)) : '';
   const subGo = v => { st.sub = v; st.ucf = null; paintPane(); st.usig = subSig(); if (pane) pane.scrollTop = 0; const bd = root && root.parentNode; if (bd && !st.wide) bd.scrollTop = 0; };
   const uCheck = async () => { if (!admin || st.uchk) return; const ids = Object.keys(H().states || {}).filter(k => k.startsWith('update.')); st.uchk = true; if (st.sub === 'update') paintPane();
     try { if (ids.length) await H().callService('homeassistant', 'update_entity', { entity_id: ids }); } catch (e) { flash('Couldn\'t check: ' + ((e && (e.message || e.code)) || e), true); }
@@ -6759,6 +6770,7 @@ function hvOpenSettings(hub, app, from) {
     st.ucf = null; st.uins = id; paintPane(); flash('Installing ' + hvUpdName(x) + '…');
     try { await H().callService('update', 'install', data); } catch (e) { flash('Not installed: ' + ((e && (e.message || e.code)) || e), true); } finally { st.uins = null; if (root && root.isConnected) paintPane(); } };
   const subAct = (a, t) => { if (a === 'about') { subGo('about'); aboutLive(); return true; } if (a === 'update') { subGo('update'); hvGhRel.load(false).then(() => { if (st.sub === 'update') paintPane(); paintSide(); }); if (admin && !st.uchk0) { st.uchk0 = true; uCheck(); } return true; }
+    if (a === 'wpback') { subGo(null); return true; }
     if (a === 'subback') { subGo(null); return true; } if (a === 'subupd') { subGo('update'); return true; }
     if (a === 'updopen') { subGo('upd:' + t.dataset.id); return true; } if (a === 'updcheck') { uCheck(); return true; }
     if (a === 'updbackup') { st.ubk = !st.ubk; t.setAttribute('aria-checked', String(st.ubk)); return true; }
@@ -6772,7 +6784,7 @@ function hvOpenSettings(hub, app, from) {
   const subSig = () => { const S = H().states || {}; let o = ''; for (const k in S) if (k.startsWith('update.')) { const x = S[k], a = x.attributes || {}; o += k + x.state + a.latest_version + a.in_progress + a.update_percentage + ';'; }
     if (st.sub === 'about') { const c = st.cfg || {}, W = hvAboutPick(H(), 'wifi', c), B = hvAboutPick(H(), 'batt', c); o += '|' + sv(S, W.id) + sv(S, B.id) + (B.id ? sv(S, B.id.replace(/_battery_level$/, '_battery_state')) : '') + W.cands.length + B.cands.length + (H().config || {}).version; } return o; };
   const paintSide = () => { if (list) list.innerHTML = sideHtml(); };
-  const paintPane = () => { if (!pane) return; const sy = pane.scrollTop; for (const f of forms.values()) f.remove(); if (ssPick) ssPick.remove(); if (fPick) fPick.remove(); pane.innerHTML = paneHtml(); ssMount(); fMount(); pane.scrollTop = sy; formsMount(); pvPaint(hvBgLevel(st.cfg || {})); albCheck(); };
+  const paintPane = () => { if (!pane) return; const sy = pane.scrollTop; for (const f of forms.values()) f.remove(); if (ssPick) ssPick.remove(); if (fPick) fPick.remove(); pane.innerHTML = paneHtml(); ssMount(); fMount(); wpMount(); pane.scrollTop = sy; formsMount(); pvPaint(hvBgLevel(st.cfg || {})); albCheck(); };
   const paint = () => { if (!root) return;
     if (!st.ready) { root.classList.remove('pg'); list.innerHTML = '<div class="grp"><div class="empty">Loading…</div></div>'; pane.innerHTML = ''; return; }
     if (st.nohub) { root.classList.add('nohub', 'pg'); root.classList.remove('wide'); side.style.display = 'none';
@@ -7217,6 +7229,25 @@ try { window.HVCal = { blockDesc: hvCalBlockDesc, eventPayload: hvCalEventPayloa
 /* Home Screen Background blur: five looks for the photo behind the page (bg_blur_level, default 3). blur px, tint = the gradient over the
    photo, dsc / mix = how the edge darkening (dim) is scaled / mixed with the classic page darkening, bgt = the faint white wash, sat = colour boost.
    3 Medium is the approved default (the old transparency 60, blur 32); 5 Clear shows the photo sharp, with only a light scrim for the text. */
+// ---- Inner wallpaper: the Home Screen background (Settings › Wallpaper › Inner). inner_wallpaper { type, value, match }:
+// type 'photos' (the Photos tile's photo), 'device' / 'ha' (one picture, a media-source id), 'gradient' ({ a, b, ang }) or 'color' ('#rrggbb');
+// match = use the Outer wallpaper (the screensaver) instead: Photo clock = the photo, Homey = his scene's colours (never the puppet), the
+// other styles = their face, parked and paused. Always blurred with the Background blur level (bg_blur_level). Not set = today's look
+// (Match on), so nothing changes until someone picks something; the older keys (photo_backdrop, wallpaper, bg_blur_level) keep working.
+const HV_WP_GRADS = [['Deep purple', '#5b2fa6', '#140a2e'], ['Indigo', '#4b57e6', '#151a52'], ['Blue', '#2f86f6', '#0a2a5c'], ['Teal', '#1fb8a8', '#05333a'], ['Green', '#3cc864', '#0a3a1e'],
+  ['Sunset', '#ff9b45', '#c2195b'], ['Rose', '#f6a3c6', '#8a2c57'], ['Coral', '#ff7063', '#5a1a3d'], ['Gold', '#f7cb50', '#7a4a08'], ['Graphite', '#62666e', '#141619'], ['Silver', '#dfe3e8', '#7c838d'], ['Midnight', '#22304d', '#04060c']];
+const HV_WP_COLS = ['#1c1c1e', '#3a3a3c', '#8e8e93', '#e5e5ea', '#5e5ce6', '#0a84ff', '#30b0c7', '#30d158', '#ffd60a', '#ff9f0a', '#ff453a', '#bf5af2'];
+const HV_WP_TYPES = ['photos', 'device', 'ha', 'gradient', 'color'];
+const hvInner = c => { const x = c && c.inner_wallpaper; if (!x || typeof x !== 'object' || !HV_WP_TYPES.includes(x.type)) return { type: 'photos', value: null, match: true, legacy: true };
+  return { type: x.type, value: x.value == null ? null : x.value, match: x.match === true }; };
+const hvGradCss = v => { const a = hvSsHex(v && v.a) || '#5b2fa6', b = hvSsHex(v && v.b) || '#140a2e', g = Number(v && v.ang); return `linear-gradient(${Number.isFinite(g) ? g : 160}deg, ${a} 0%, ${b} 100%)`; };
+const hvHomieBg = cols => { const bg = hvSsHex(cols && cols.bg) || '#1a1a1a', rf = hvSsHex(cols && cols.roof) || '#6ebcf4';
+  return `radial-gradient(70% 55% at 50% 80%, color-mix(in srgb, ${rf} 28%, ${bg}) 0%, transparent 72%), linear-gradient(180deg, color-mix(in srgb, ${bg} 80%, #ffffff) 0%, ${bg} 72%)`; };
+// what the Home Screen shows behind its apps: m 'photos' (the blurred Photos tile photo), 'face' (the parked screensaver face) or 'x' (css or a media picture)
+function hvInnerMode(c, style) { const I = hvInner(c), st = style || 'photo';
+  if (I.match) { if (st === 'photo') return { m: 'photos' }; if (st === 'homie') return { m: 'x', css: hvHomieBg(hvSsColors.get('homie')) }; return { m: 'face', style: st }; }
+  if (I.type === 'photos') return { m: 'photos' }; if (I.type === 'gradient') return { m: 'x', css: hvGradCss(I.value) }; if (I.type === 'color') return { m: 'x', css: hvSsHex(I.value) || '#1c1c1e' };
+  return { m: 'x', media: typeof I.value === 'string' ? I.value : '', css: '' }; }
 const HV_BG_LEVELS = [null,
   { name: 'Solid', blur: 32, tint: 1, dsc: 1, mix: 1, bgt: 0, sat: 1.35 }, // no photo: the plain wallpaper (the photo backdrop is turned off)
   { name: 'Heavy', blur: 48, tint: 0.45, dsc: 0.75, mix: 0.4, bgt: 0.35, sat: 1.35 },
@@ -7240,7 +7271,7 @@ class HVHubCard extends HTMLElement {
     this._blurX = c.blur !== undefined && c.blur !== null && c.blur !== '' && Number(c.blur) !== HVHubCard.defaults.blur; // an older explicit blur (px, set in YAML before the levels) stays as set; otherwise the level's
     this._lvl = hvBgLevel(c); // Background blur level 1-5 (an older bg_transparency maps to the nearest)
     if (!Array.isArray(nc.apps) || !nc.apps.length) nc.apps = HUB_APPS;
-    const BG = ['bg_blur_level', 'bg_transparency', 'blur', 'dim', 'photo_backdrop', 'bg_freeze'], rest = o => JSON.stringify(Object.keys(o).filter(k => !BG.includes(k)).sort().map(k => [k, o[k]]));
+    const BG = ['bg_blur_level', 'bg_transparency', 'blur', 'dim', 'photo_backdrop', 'bg_freeze', 'inner_wallpaper'], rest = o => JSON.stringify(Object.keys(o).filter(k => !BG.includes(k)).sort().map(k => [k, o[k]]));
     if (old && this._w && rest(old) === rest(nc)) { // only the background options changed (slider drag): update in place, no rebuild
       this._config = nc; this.style.setProperty('--blur', (Number(nc.blur) || 0) + 'px'); this.style.setProperty('--dim', String(Math.max(0, Math.min(0.9, Number(nc.dim) || 0)))); this._bgMode(); if (nc.bg_freeze === false) this._paintBg(true, true); return; }
     this._config = nc;
@@ -7498,7 +7529,7 @@ class HVHubCard extends HTMLElement {
     const sig = this._rSig();
     if (sig === this._sig && this._w) return; this._sig = sig;
     if (!this._w) {
-      this.shadowRoot.innerHTML = `<style>${HUB_CSS}${HW_CSS}</style><div class="bg"><div class="bgi"></div><div class="bgi"></div><div class="tint"></div><div class="dim"></div></div><div class="w"></div><div class="ssp" hidden title="Swipe down for the screensaver"></div>`;
+      this.shadowRoot.innerHTML = `<style>${HUB_CSS}${HW_CSS}</style><div class="bg"><div class="bgi"></div><div class="bgi"></div><div class="bgx"></div><div class="tint"></div><div class="dim"></div></div><div class="w"></div><div class="ssp" hidden title="Swipe down for the screensaver"></div>`;
       this._ssp = this.shadowRoot.querySelector('.ssp'); this._ssPaint();
       this._w = this.shadowRoot.querySelector('.w'); this._bgs = [...this.shadowRoot.querySelectorAll('.bgi')];
       this._w.addEventListener('click', e => { const t = e.composedPath().find(n => n.dataset && (n.dataset.app != null || n.dataset.k)); if (!t) return;
@@ -7795,7 +7826,7 @@ class HVHubCard extends HTMLElement {
   _ssWallPaint() { const bg = this.shadowRoot && this.shadowRoot.querySelector('.bg'); if (!bg) return;
     const st = (typeof hvSs !== 'undefined' && hvSs.get) ? hvSs.get() : 'photo'; let host = bg.querySelector(':scope > .ssface');
     // Solid = plain wallpaper only (same as photo backdrop off); no parked style face.
-    if (st === 'photo' || this._lvl === 1 || HV_BG_LEVELS[this._lvl || 3] === HV_BG_LEVELS[1]) {
+    if (this._innerMode().m !== 'face' || this._lvl === 1 || HV_BG_LEVELS[this._lvl || 3] === HV_BG_LEVELS[1]) {
       if (host) { try { host.remove(); } catch (e) {} } this._ssWall = null; this.removeAttribute('sswall'); return; }
     this.setAttribute('sswall', '');
     if (!host) { host = document.createElement('div'); host.className = 'ssface'; host.setAttribute('aria-hidden', 'true');
@@ -7814,10 +7845,19 @@ class HVHubCard extends HTMLElement {
   _bgMode() { const c = this._config || {}, L = HV_BG_LEVELS[this._lvl || 3] || HV_BG_LEVELS[3], st = this.style.setProperty.bind(this.style);
     const bl = this._blurX ? Math.max(0, Number(c.blur) || 0) : L.blur; st('--blur', (Math.round(bl * 2) / 2) + 'px');
     st('--bgt', String(L.bgt)); st('--tint', L.tint.toFixed(4)); st('--dsc', L.dsc.toFixed(4)); st('--dmix', L.mix.toFixed(4)); st('--sat', String(L.sat));
-    // Styled screensaver: never use the Photos-tile photo as the page wallpaper (Photos tile still cycles).
-    const ss = (typeof hvSs !== 'undefined' && hvSs.get) ? hvSs.get() : 'photo', photoBg = ss === 'photo';
-    this.toggleAttribute('bgphoto', photoBg && c.photo_backdrop !== false && !!this._cur && L !== HV_BG_LEVELS[1]);
-    this.toggleAttribute('sswall', !photoBg && L !== HV_BG_LEVELS[1]); try { this._ssWallPaint(); } catch (e) {} }
+    // the Inner wallpaper (hvInnerMode): the Photos tile photo, the parked screensaver face, or a picture / gradient / colour
+    const md = this._innerMode(), was = this._im; this._im = md.m;
+    this.toggleAttribute('bgphoto', md.m === 'photos' && c.photo_backdrop !== false && !!this._cur && L !== HV_BG_LEVELS[1]);
+    this.toggleAttribute('sswall', md.m === 'face' && L !== HV_BG_LEVELS[1]); this.toggleAttribute('bgx', md.m === 'x');
+    try { this._paintInner(md); } catch (e) {} try { this._ssWallPaint(); } catch (e) {}
+    if (md.m === 'photos' && was && was !== 'photos' && this._cur) this._paintBg(true, true); }
+  _innerMode() { return hvInnerMode(this._config, (typeof hvSs !== 'undefined' && hvSs.get) ? hvSs.get() : 'photo'); }
+  _paintInner(md) { const x = this.shadowRoot && this.shadowRoot.querySelector('.bgx'); if (!x) return;
+    if (md.m !== 'x') { x.style.backgroundImage = ''; x.style.backgroundColor = ''; return; }
+    if (md.media != null) { const id = md.media; if (!id) { x.style.backgroundImage = ''; return; }
+      if (id === this._ixId && this._ixU) { x.style.backgroundColor = '#111'; x.style.backgroundImage = `url("${String(this._ixU).replace(/"/g, '%22')}")`; return; }
+      this._ixId = id; this._ixU = null; Promise.resolve(this._url(id)).then(u => { if (this._ixId !== id || !u) return; this._ixU = u; this._paintInner(this._innerMode()); }).catch(() => {}); return; }
+    const css = md.css || ''; if (/gradient\(/.test(css)) { x.style.backgroundColor = ''; x.style.backgroundImage = css; } else { x.style.backgroundImage = 'none'; x.style.backgroundColor = css; } }
   _paintPhoto(instant, dir) { if (!this._cur) return; this._bgMode(); const L = this._layer, bg = `url("${this._cur.replace(/"/g, '%22')}")`;
     const set = this._pis || []; if (set.length > 1) { const on = set[L], off = set[1 - L];
       if (instant) { on.style.transition = 'none'; off.style.transition = 'none'; }
@@ -7830,7 +7870,7 @@ class HVHubCard extends HTMLElement {
   // 1.30.4: the blurred backdrop. Frozen (bg_freeze, default on): once it shows a photo it is left completely alone while the Home Screen is showing (no swap, no fade,
   // no style writes), whatever the Photos card does. force = the page is out of sight (screensaver fully up, another view, app hidden) or freeze was turned off:
   // catch up with the current photo once, instantly. Off: follows the Photos card (cross-fade). A re-render never repaints layers already showing this photo.
-  _paintBg(instant, force) { const ss = (typeof hvSs !== 'undefined' && hvSs.get) ? hvSs.get() : 'photo'; if (ss !== 'photo') return;
+  _paintBg(instant, force) { if (this._innerMode().m !== 'photos') return; // the Photos tile photo is the backdrop only in Photos mode (also Match + Photo clock)
     const B = this._bgs; if (!B || B.length < 2 || !this._cur) return;
     const live = this._bgEl === B[0] && !!this._bgUrl; if (live && this._bgUrl === this._cur) return;
     if (live && !force && (this._config || {}).bg_freeze !== false) return;
@@ -10202,6 +10242,215 @@ function hvFacePicker(o) { const p = document.createElement('div'); p.className 
   if (window.ResizeObserver) new ResizeObserver(fit).observe(ls); requestAnimationFrame(fit);
   p._recenter = () => { user = false; w0 = ls.clientWidth; paint(cur()); center(cur(), false); }; // after being moved in the DOM, or the saved face changed elsewhere
   paint(cur()); return p; }
+// ---- Settings › Wallpaper (iOS Settings › Wallpaper): the CURRENT pair (Outer = the screensaver, Inner = the Home Screen background), each with
+// Customize; the Outer gallery (one row per screensaver style, then that style's settings) and the Inner selector (Photos, Device Gallery, Home
+// Assistant Gallery, gradients, colours; blur; Match Outer). Everything is mounted in its own shadow roots; previews use the real renderers
+// (HVSsFace, the Home Screen's blur levels). ctx: { H() hass, cfg() the card config with defaults, save(k, v) -> Promise, hub() live Home Screen,
+// go(sub) Settings sub-page (null = Wallpaper), flash(msg, err), wallpanel() the Wallpanel settings, admin }.
+const HV_WP_CSS = `
+:host{display:block;font-family:${FONT};color:var(--fg,#fff);-webkit-tap-highlight-color:transparent}
+*{box-sizing:border-box}ha-icon{display:inline-flex}
+:host(.pz) *,.off *{animation-play-state:paused !important}
+.wp-panel{background:var(--card,#1c1c1e);border-radius:22px;padding:14px 16px 18px;margin:0 0 10px}
+.wp-h{font-size:13px;font-weight:400;letter-spacing:.02em;text-transform:uppercase;color:var(--fg2,rgba(235,235,245,.6));margin:2px 4px 12px}
+.wp-pair{display:flex;justify-content:center;align-items:flex-end;gap:clamp(12px,4vw,28px)}
+.wp-slot{position:relative;flex:0 1 var(--sw,180px);min-width:0;display:flex;flex-direction:column;align-items:center;gap:8px}
+.wp-cap{font-size:12px;color:var(--fg2,rgba(235,235,245,.6))}
+.dev{position:relative;width:100%;aspect-ratio:var(--ar,9/19.5);border-radius:var(--dr,22px);overflow:hidden;container-type:size;background:#000;
+ box-shadow:0 0 0 .5px rgba(255,255,255,.22),0 10px 26px rgba(0,0,0,.35);isolation:isolate}
+.dev > .lay{position:absolute;inset:0}
+.cz{all:unset;cursor:pointer;position:absolute;left:50%;bottom:7%;transform:translateX(-50%);z-index:5;padding:7px 16px;border-radius:99px;font:600 14px ${FONT};color:#fff;white-space:nowrap;
+ background:rgba(255,255,255,.2);-webkit-backdrop-filter:blur(14px) saturate(1.4);backdrop-filter:blur(14px) saturate(1.4);box-shadow:inset 0 0 0 .5px rgba(255,255,255,.35)}
+.cz:active{transform:translateX(-50%) scale(.96)}.cz:focus-visible,.pill:focus-visible,.sq:focus-visible{outline:2px solid var(--blue,#0a84ff);outline-offset:2px}
+.mt{position:absolute;right:6%;top:3.2%;z-index:5;padding:3px 9px;border-radius:99px;font:600 11px ${FONT};color:#fff;background:rgba(0,0,0,.35);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);white-space:nowrap}
+.wp-row{display:flex;align-items:center;gap:12px;padding:12px 4px 0;margin-top:14px;border-top:.5px solid var(--sep,rgba(84,84,88,.65))}.wp-row .l{flex:1;font-size:17px}
+.wp-row small{display:block;font-size:13px;color:var(--fg2,rgba(235,235,245,.6));margin-top:2px}
+.tg{all:unset;cursor:pointer;flex:none;position:relative;width:51px;height:31px;border-radius:99px;background:var(--off,rgba(120,120,128,.32));transition:background .2s}
+.tg::after{content:'';position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:0 3px 8px rgba(0,0,0,.15);transition:transform .2s}
+.tg[aria-checked="true"]{background:var(--on,#30d158)}.tg[aria-checked="true"]::after{transform:translateX(20px)}.tg:disabled{opacity:.4;cursor:default}
+/* the outer face / the inner background, drawn into a .dev */
+.pf{position:absolute;inset:0;background:linear-gradient(180deg,#5d7088,#26303c) center/cover no-repeat}.pclk{position:absolute;left:0;right:0;top:12%;text-align:center;font:200 22cqmin/1 ${FONT};color:var(--hv-ss-text,#fff);text-shadow:0 2px 12px rgba(0,0,0,.35);letter-spacing:-.02em}
+.pdt{position:absolute;left:0;right:0;top:8%;text-align:center;font:600 4.6cqmin/1 ${FONT};color:var(--hv-ss-text,#fff);opacity:.9}
+.ib{position:absolute;background-size:cover;background-position:center;background-repeat:no-repeat}.ib .f{position:absolute;inset:0}
+.id{position:absolute;inset:0;pointer-events:none}
+.mk{position:absolute;inset:0;padding:9cqh 7cqw 6cqh;display:flex;flex-direction:column;gap:3.4cqh;pointer-events:none}
+.mk .g1{height:2.2cqh;width:34%;border-radius:2px;background:rgba(255,255,255,.75)}.mk .g2{height:3.2cqh;width:46%;border-radius:3px;background:#fff;margin-top:-2cqh}
+.mk .gr{display:grid;grid-template-columns:repeat(var(--mc,4),minmax(0,1fr));gap:var(--mg,3.4cqw);align-content:start;grid-auto-flow:row dense}
+.mk .a{aspect-ratio:1;border-radius:24%;background:rgba(255,255,255,.82);box-shadow:0 1px 3px rgba(0,0,0,.2)}.mk .a:nth-child(3n){background:rgba(255,214,10,.9)}.mk .a:nth-child(4n+2){background:rgba(10,132,255,.9)}.mk .a:nth-child(5n){background:rgba(255,69,58,.9)}
+.mk .c{border-radius:12%;background:rgba(255,255,255,.22);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);box-shadow:inset 0 0 0 .5px rgba(255,255,255,.3)}
+.mk .c.w{grid-column:span 2;aspect-ratio:2.1}.mk .c.s{grid-column:span 2;grid-row:span 2}
+/* sub pages */
+.wp-pv{display:flex;justify-content:center;margin:4px 0 14px}.wp-pv .wp-slot{flex-basis:var(--sw,220px)}
+.wp-gal{display:flex;flex-direction:column;gap:12px}
+.gi{display:flex;align-items:center;gap:clamp(16px,4vw,30px);padding:18px clamp(14px,3vw,24px);background:var(--card,#1c1c1e);border-radius:22px;cursor:pointer}
+.stk{position:relative;flex:none;width:var(--gw,104px);aspect-ratio:var(--ar,9/19.5);margin:0 calc(var(--gw,104px) * .2)}
+.stk .dev{position:absolute;inset:0;border-radius:var(--dr2,14px);transform-origin:50% 100%;transition:transform .3s}
+.stk .dev.b2{transform:translateX(-18%) rotate(-8deg) scale(.88);filter:brightness(.7)}.stk .dev.b1{transform:translateX(18%) rotate(8deg) scale(.88);filter:brightness(.8)}
+.gi:hover .stk .dev.b2{transform:translateX(-21%) rotate(-10deg) scale(.88)}.gi:hover .stk .dev.b1{transform:translateX(21%) rotate(10deg) scale(.88)}
+.gt{flex:1;min-width:0}.gt b{display:block;font-size:clamp(22px,4.4vw,30px);font-weight:700;letter-spacing:-.01em;line-height:1.1}.gt span{display:block;margin-top:5px;font-size:15px;color:var(--fg2,rgba(235,235,245,.6))}
+.pill{all:unset;cursor:pointer;margin-top:12px;display:inline-flex;align-items:center;gap:5px;padding:7px 18px;border-radius:99px;font:600 15px ${FONT};background:var(--fld,rgba(118,118,128,.24));color:var(--blue,#0a84ff)}
+.pill.cur{color:#30d158;background:rgba(48,209,88,.16)}.pill ha-icon{--mdc-icon-size:16px}.pill:disabled{opacity:.45;cursor:default}
+.gh{font-size:13px;letter-spacing:.02em;text-transform:uppercase;color:var(--fg2,rgba(235,235,245,.6));margin:22px 16px 8px}
+.wp-card{background:var(--card,#1c1c1e);border-radius:14px;padding:14px 16px;margin:0 0 10px}
+.wp-note{font-size:13px;color:var(--fg2,rgba(235,235,245,.6));margin:8px 16px 0;line-height:1.35}
+.wp-done{all:unset;cursor:pointer;display:block;margin:18px auto 6px;padding:11px 34px;border-radius:99px;background:var(--blue,#0a84ff);color:#fff;font:600 17px ${FONT}}
+.lvl{display:flex;flex-direction:column;gap:8px}.lvl input{width:100%;accent-color:var(--blue,#0a84ff)}.lvl .lt{display:flex;justify-content:space-between;font-size:12px;color:var(--fg2,rgba(235,235,245,.6))}.lvl .lt b{color:var(--fg,#fff);font-weight:600}
+.src{display:flex;align-items:center;gap:14px;padding:12px 0;border-top:.5px solid var(--sep,rgba(84,84,88,.65))}.src:first-child{border-top:0}.src .sth{flex:none;width:46px;height:46px;border-radius:11px;overflow:hidden;background:#333 center/cover;display:flex;align-items:center;justify-content:center;color:#fff}
+.src .sth ha-icon{--mdc-icon-size:24px}.src .stx{flex:1;min-width:0}.src .stx b{display:block;font-size:17px;font-weight:500}.src .stx small{display:block;font-size:13px;color:var(--fg2,rgba(235,235,245,.6));margin-top:2px}.src .pill{margin:0;flex:none}
+.sw{display:grid;grid-template-columns:repeat(auto-fill,minmax(58px,1fr));gap:12px}
+.sq{all:unset;cursor:pointer;position:relative;aspect-ratio:1;border-radius:14px;box-shadow:inset 0 0 0 .5px rgba(255,255,255,.2)}.sq[aria-checked="true"]{box-shadow:0 0 0 3px var(--blue,#0a84ff)}
+.sq[aria-checked="true"]::after{content:'';position:absolute;right:6px;bottom:6px;width:16px;height:16px;border-radius:50%;background:var(--blue,#0a84ff) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='white' stroke-width='3.4' stroke-linecap='round' stroke-linejoin='round' d='M6 12.5l4 4L18 8'/%3E%3C/svg%3E") center/12px no-repeat}
+.cu{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:14px;font-size:15px}.cu input[type=color]{width:44px;height:32px;padding:0;border:.5px solid var(--sep,rgba(255,255,255,.25));border-radius:8px;background:none;cursor:pointer}
+.cu input[type=range]{flex:1;min-width:120px;accent-color:var(--blue,#0a84ff)}
+.msg{font-size:13px;margin-top:8px;color:var(--fg2,rgba(235,235,245,.6))}.msg.err{color:#ff453a}
+.br{display:flex;flex-direction:column;gap:8px}.br .bh{display:flex;align-items:center;gap:8px;font-size:15px}.br .bh button{all:unset;cursor:pointer;color:var(--blue,#0a84ff);font-size:15px}
+.br .bl{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px;max-height:360px;overflow-y:auto;overscroll-behavior:contain}
+.br .bi{all:unset;cursor:pointer;position:relative;aspect-ratio:1;border-radius:10px;overflow:hidden;background:var(--fld,rgba(118,118,128,.24)) center/cover;display:flex;align-items:flex-end}
+.br .bi span{display:block;width:100%;padding:4px 6px;font-size:11px;color:#fff;background:linear-gradient(transparent,rgba(0,0,0,.6));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.br .bi.fo{align-items:center;justify-content:center;flex-direction:column;gap:4px;color:var(--fg,#fff)}.br .bi.fo span{background:none;color:var(--fg,#fff);text-align:center}.br .bi.fo ha-icon{--mdc-icon-size:30px;color:#0a84ff}
+.br .bi[aria-checked="true"]{box-shadow:0 0 0 3px var(--blue,#0a84ff)}
+@media (max-width:560px){.gi{padding:16px 14px}.stk{--gw:84px}}`;
+// the Settings device's own shape for the previews: tall on phones / portrait tablets, wide on landscape tablets
+const hvWpAspect = () => { const w = innerWidth || 390, h = innerHeight || 844, r = w / h; return r >= 1 ? Math.max(1.25, Math.min(1.78, r)) : Math.max(0.44, Math.min(0.78, r)); };
+// three colour variants of a style (the current one first) for the gallery's fanned cards
+const hvWpVariants = st => { const cur = hvSsColors.get(st), d = (HV_SS_COLS[st] || []).find(x => x.k === 'bg'); if (!d) return [cur, cur, cur];
+  const alt = HV_SS_SWATCH.filter(c => c !== d.d && c !== cur.bg && !['#ffffff', '#0b0b0c'].includes(c)); return [cur, Object.assign({}, cur, { bg: alt[st.length % alt.length] }), Object.assign({}, cur, { bg: alt[(st.length + 5) % alt.length] })]; };
+function hvWallpaperUI(ctx) {
+  const faces = new Set(), live = (el, f) => { f._el = el; faces.add(f); return f; };
+  let iv = 0; const tick = () => { for (const f of [...faces]) { if (!f._el.isConnected) { faces.delete(f); continue; } if (f.thumbOnly) continue; try { f.update(ctx.H(), new Date()); } catch (e) {} } if (!faces.size) { clearInterval(iv); iv = 0; } };
+  const run = () => { if (!iv) iv = setInterval(() => { if (!document.hidden) tick(); }, 1000); };
+  const ar = hvWpAspect(), wide = ar >= 1, lvl = () => hvBgLevel(ctx.cfg()), style = () => hvSs.get();
+  const dev = (cls) => { const d = document.createElement('div'); d.className = 'dev' + (cls ? ' ' + cls : ''); d.style.setProperty('--ar', String(ar)); return d; };
+  const clock = () => { const d = new Date(); return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }).replace(/\s?[AP]M$/i, ''); };
+  const photoUrl = () => { const h = ctx.hub(); return h && h._cur ? h._cur : ''; };
+  // the Outer face as it looks now (a style, optional colours; animated unless still)
+  const outer = (d, st, cols, still) => { const lay = document.createElement('div'); lay.className = 'lay'; d.appendChild(lay);
+    if (st === 'photo') { const u = photoUrl(); lay.innerHTML = `<div class="pf"${u ? ` style="background-image:url('${String(u).replace(/'/g, '%27')}')"` : ''}></div><div class="pdt"></div><div class="pclk"></div>`;
+      const c = cols || hvSsColors.get('photo'); if (c.text) lay.style.setProperty('--hv-ss-text', c.text);
+      lay.querySelector('.pclk').textContent = clock(); lay.querySelector('.pdt').textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }); return; }
+    const f = new HVSsFace(st, true); f.applyColors(cols || hvSsColors.get(st)); lay.appendChild(f.el); if (still) { f.el.style.animationPlayState = 'paused'; lay.classList.add('off'); f.thumbOnly = true; }
+    live(lay, f); try { f.update(ctx.H(), new Date()); } catch (e) {} if (!still) run(); };
+  // the Inner background (mode, level) with the Home Screen's mock apps and cards over it; scale = preview width / screen width (the blur shrinks with it)
+  const inner = (d, md, n, wpx) => { const L = HV_BG_LEVELS[n] || HV_BG_LEVELS[3], k = Math.max(0.08, (wpx || 180) / Math.max(320, innerWidth || 1280)), bl = Math.round(L.blur * k * 10) / 10, c = ctx.cfg();
+    const lay = document.createElement('div'); lay.className = 'lay'; d.appendChild(lay); const ib = document.createElement('div'); ib.className = 'ib'; ib.style.inset = -(2 * bl) + 'px';
+    ib.style.filter = `blur(${bl}px) saturate(${L.sat})`; ib.style.transform = 'scale(1.08)'; lay.appendChild(ib); const def = c.wallpaper && typeof c.wallpaper === 'string' ? c.wallpaper : 'radial-gradient(120% 90% at 20% 10%,#4b3a66 0%,#1c1a33 55%,#0d0f1a 100%)';
+    const solid = L === HV_BG_LEVELS[1];
+    if (md.m === 'photos') { const u = photoUrl(); if (u && !solid && c.photo_backdrop !== false) ib.style.background = `center/cover no-repeat url('${String(u).replace(/'/g, '%27')}')`; else { ib.style.background = def; ib.style.filter = 'none'; } }
+    else if (md.m === 'face') { if (solid) { ib.style.background = def; ib.style.filter = 'none'; } else { const f = new HVSsFace(md.style, true); f.applyColors(hvSsColors.get(md.style)); f.el.style.animationPlayState = 'paused'; f.thumbOnly = true; ib.classList.add('off'); ib.appendChild(f.el); live(ib, f); try { f.update(ctx.H(), new Date()); } catch (e) {} } }
+    else if (md.media != null) { ib.style.background = '#222'; const h = ctx.hub(); if (md.media && h && h._url) Promise.resolve(h._url(md.media)).then(u => { if (u) ib.style.background = `#222 center/cover no-repeat url('${String(u).replace(/'/g, '%27')}')`; }).catch(() => {}); }
+    else ib.style.background = md.css;
+    const dm = Math.max(0, Math.min(0.9, Number(c.dim) || 0.32)), a = (md.m === 'photos' && solid) ? 0.08 : dm * (L.mix ? 1 : L.dsc);
+    const id = document.createElement('div'); id.className = 'id'; id.style.background = `linear-gradient(180deg,rgba(0,0,0,${(a + 0.05).toFixed(3)}),rgba(0,0,0,${a.toFixed(3)}) 40%,rgba(0,0,0,${(a + 0.08).toFixed(3)}))`; lay.appendChild(id);
+    const mk = document.createElement('div'); mk.className = 'mk'; mk.style.setProperty('--mc', wide ? 8 : 4); mk.style.setProperty('--mg', wide ? '2.2cqw' : '4cqw');
+    mk.innerHTML = `<div class="g1"></div><div class="g2"></div><div class="gr">${wide ? '<i class="a"></i><i class="a"></i><i class="c w"></i><i class="a"></i><i class="a"></i><i class="c s"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="c w"></i>'
+      : '<i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="c w"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="c s"></i><i class="a"></i><i class="a"></i>'}</div>`;
+    lay.appendChild(mk); };
+  const slotW = (panelFrac) => wide ? `min(46%, ${Math.round(380 * panelFrac)}px)` : `min(42%, ${Math.round(210 * panelFrac)}px)`;
+  const setMatch = on => { const I = hvInner(ctx.cfg()), v = { type: I.type, match: !!on }; if (I.value != null) v.value = I.value; return ctx.save('inner_wallpaper', v); };
+  const toggleRow = (wrap, after) => { const I = hvInner(ctx.cfg()), r = document.createElement('div'); r.className = 'wp-row';
+    r.innerHTML = `<div class="l">Match Outer wallpaper<small>The Home Screen uses the screensaver's picture or colours, blurred.</small></div><button class="tg" role="switch" aria-checked="${I.match}" aria-label="Match Outer wallpaper"${ctx.ro ? ' disabled' : ''}></button>`;
+    r.querySelector('.tg').addEventListener('click', e => { e.stopPropagation(); const t = e.currentTarget, on = t.getAttribute('aria-checked') !== 'true'; t.setAttribute('aria-checked', String(on)); Promise.resolve(setMatch(on)).then(after); });
+    wrap.appendChild(r); };
+  // --- the CURRENT pair (the Wallpaper page's top)
+  const pair = () => { const w = document.createElement('div'), I = hvInner(ctx.cfg()), st = style(), x = HV_SSS.find(z => z.v === st) || HV_SSS[0];
+    w.innerHTML = `<div class="wp-panel"><div class="wp-h">Current</div><div class="wp-pair"><div class="wp-slot" data-s="outer"></div><div class="wp-slot" data-s="inner"></div></div></div>`;
+    const P = w.querySelector('.wp-pair'), mk = (key, label, sub, draw) => { const sl = P.querySelector(`[data-s="${key}"]`); sl.style.setProperty('--sw', slotW(1)); const d = dev(); sl.appendChild(d); draw(d);
+      const b = document.createElement('button'); b.className = 'cz'; b.textContent = 'Customize'; b.setAttribute('aria-label', `Customize the ${label} wallpaper (${sub})`); b.addEventListener('click', e => { e.stopPropagation(); ctx.go(key === 'outer' ? 'wp-outer' : 'wp-inner'); }); d.appendChild(b);
+      const cp = document.createElement('div'); cp.className = 'wp-cap'; cp.textContent = `${label} · ${sub}`; sl.appendChild(cp); return d; };
+    mk('outer', 'Outer', x.l, d => outer(d, st));
+    const di = mk('inner', 'Inner', I.match ? 'Matches Outer' : ({ photos: 'Photos', device: 'Device photo', ha: 'Home Assistant photo', gradient: 'Gradient', color: 'Colour' })[I.type], d => inner(d, hvInnerMode(ctx.cfg(), st), lvl(), wide ? 380 : 190));
+    if (I.match) di.insertAdjacentHTML('beforeend', '<span class="mt">Matches</span>');
+    toggleRow(w.querySelector('.wp-panel'), () => ctx.refresh()); return w; };
+  // --- Outer: the gallery of screensaver styles
+  const outerGallery = () => { const w = document.createElement('div'), st = style(); w.className = 'wp-gal';
+    for (const x of HV_SSS) { const row = document.createElement('div'); row.className = 'gi'; row.dataset.v = x.v; row.setAttribute('role', 'button'); row.tabIndex = 0; const cur = x.v === st;
+      row.innerHTML = `<div class="stk"></div><div class="gt"><b></b><span></span><button class="pill${cur ? ' cur' : ''}" aria-label="${cur ? 'Current: ' : 'Use '}${esc(x.l)}">${cur ? '<ha-icon icon="mdi:check"></ha-icon>Current' : 'Use'}</button></div>`;
+      row.querySelector('b').textContent = x.l; row.querySelector('.gt span').textContent = x.s; const stk = row.querySelector('.stk'); stk.style.setProperty('--ar', String(ar)); if (wide) stk.style.setProperty('--gw', '150px');
+      const V = hvWpVariants(x.v); [['b2', V[2]], ['b1', V[1]], ['', V[0]]].forEach(([c, col]) => { const d = dev(c); d.style.setProperty('--dr2', wide ? '12px' : '14px'); stk.appendChild(d); outer(d, x.v, col, c !== ''); });
+      const pick = async () => { if (ctx.ro) { ctx.flash('Only an administrator can change this dashboard', true); } if (x.v !== style()) { try { const saved = await hvSs.set(x.v, ctx.H()); ctx.flash(saved ? 'Saved' : 'Saved in this browser'); if (ctx.ssRefresh) ctx.ssRefresh(); } catch (e) { ctx.flash('Not saved: ' + (e && e.message || e), true); } } ctx.go('wp-style:' + x.v); };
+      row.addEventListener('click', pick); row.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); } }); w.appendChild(row); }
+    // only the rows on screen animate
+    if (window.IntersectionObserver) { const io = new IntersectionObserver(es => { for (const e of es) e.target.classList.toggle('off', !e.isIntersecting); }); requestAnimationFrame(() => w.querySelectorAll('.gi').forEach(r => io.observe(r))); }
+    return w; };
+  // --- Outer: one style's settings (its preview, colours, and the Photo clock's photos)
+  const styleSettings = v => { const w = document.createElement('div'), x = HV_SSS.find(z => z.v === v) || HV_SSS[0];
+    w.innerHTML = `<div class="wp-pv"><div class="wp-slot"></div></div><div class="sp"><div class="host"></div></div>`; const sl = w.querySelector('.wp-slot'); sl.style.setProperty('--sw', wide ? 'min(78%,520px)' : 'min(56%,240px)');
+    let d = dev(); sl.appendChild(d); outer(d, v);
+    const repaint = (s0, cols) => { const nd = dev(); outer(nd, v, cols || hvSsColors.get(v)); d.replaceWith(nd); d = nd; };
+    const shim = { get _hass() { return ctx.H(); }, _status: (m, k) => { if (k === 'err') ctx.flash(m, true); else if (k === 'ok') ctx.flash('Saved'); } };
+    w.querySelector('.host').appendChild(hvSsColorPanel(shim, () => v, repaint));
+    if (v === 'photo') { const c = document.createElement('div'); c.className = 'wp-card'; c.innerHTML = '<div class="src"><span class="sth" style="background:linear-gradient(180deg,#5d7088,#26303c)"><ha-icon icon="mdi:image-multiple"></ha-icon></span><span class="stx"><b>Photos and clock</b><small>Which photos the Photo clock shows, how often they change, and the clock</small></span><button class="pill">Open</button></div>';
+      c.querySelector('.pill').addEventListener('click', e => { e.stopPropagation(); ctx.wallpanel(); }); w.appendChild(c); }
+    const n = document.createElement('div'); n.className = 'wp-note'; n.textContent = (ctx.admin ? 'Applies at once, for this dashboard (also kept on its Home Screen card).' : 'Applies at once, for this dashboard in this browser.') + (hvInner(ctx.cfg()).match ? ' The Home Screen matches it.' : ''); w.appendChild(n);
+    const done = document.createElement('button'); done.className = 'wp-done'; done.textContent = 'Done'; done.addEventListener('click', () => ctx.go(null)); w.appendChild(done); return w; };
+  // --- Inner: the Home Screen background
+  const innerPage = () => { const w = document.createElement('div'), I = hvInner(ctx.cfg()), st = style();
+    w.innerHTML = `<div class="wp-pv"><div class="wp-slot"></div></div><div class="wp-card lvl"><div class="lt"><span>Background blur</span><b></b></div><input type="range" min="1" max="5" step="1" aria-label="Background blur"><div class="lt"><span>Solid</span><span>Heavy</span><span>Medium</span><span>Light</span><span>Clear</span></div></div><div class="wp-card mtc"></div>`;
+    const sl = w.querySelector('.wp-slot'); sl.style.setProperty('--sw', wide ? 'min(78%,520px)' : 'min(56%,240px)'); let d = dev(), n = lvl(); sl.appendChild(d);
+    const draw = (nn, md) => { const nd = dev(); inner(nd, md || hvInnerMode(ctx.cfg(), st), nn, wide ? 520 : 240); if (hvInner(ctx.cfg()).match) nd.insertAdjacentHTML('beforeend', '<span class="mt">Matches</span>'); d.replaceWith(nd); d = nd; };
+    draw(n); const rg = w.querySelector('input[type=range]'), lb = w.querySelector('.lvl .lt b'); rg.value = String(n); lb.textContent = HV_BG_LEVELS[n].name; rg.disabled = !!ctx.ro;
+    rg.addEventListener('input', () => { const v = Number(rg.value); lb.textContent = HV_BG_LEVELS[v].name; draw(v); }); // live preview
+    rg.addEventListener('change', () => { ctx.save('bg_blur_level', Number(rg.value)); });
+    toggleRow(w.querySelector('.mtc'), () => ctx.refresh()); w.querySelector('.mtc .wp-row').style.cssText = 'margin:0;padding:0;border:0';
+    const use = (type, value) => { const v = { type, match: false }; if (value != null) v.value = value; return Promise.resolve(ctx.save('inner_wallpaper', v)).then(() => ctx.refresh()); };
+    const curT = I.match ? null : I.type, gh = t => { const h = document.createElement('div'); h.className = 'gh'; h.textContent = t; w.appendChild(h); };
+    gh('Pictures'); const pc = document.createElement('div'); pc.className = 'wp-card'; w.appendChild(pc);
+    const src = (ico, bg, t, sub, pillT, on, fn) => { const r = document.createElement('div'); r.className = 'src'; r.innerHTML = `<span class="sth"${bg ? ` style="background:${bg}"` : ''}>${ico}</span><span class="stx"><b></b><small></small></span><button class="pill${on ? ' cur' : ''}"></button>`;
+      r.querySelector('b').textContent = t; r.querySelector('small').textContent = sub; const b = r.querySelector('.pill'); b.innerHTML = on ? '<ha-icon icon="mdi:check"></ha-icon>Current' : esc(pillT); b.disabled = !!ctx.ro; b.addEventListener('click', e => { e.stopPropagation(); fn(r); }); pc.appendChild(r); return r; };
+    const pu = photoUrl(); src('<ha-icon icon="mdi:image-multiple"></ha-icon>', pu ? `center/cover url('${String(pu).replace(/'/g, '%27')}')` : 'linear-gradient(180deg,#5d7088,#26303c)', 'Photos', 'Same as the Photos tile (the default)', 'Use', curT === 'photos', () => use('photos'));
+    // Device Gallery: this device's photo picker; downscaled here, uploaded to Media › nothomeview_wallpapers
+    const dvr = src('<ha-icon icon="mdi:cellphone-arrow-down"></ha-icon>', '#0a84ff', 'Device Gallery', curT === 'device' ? 'A photo from a device (uploaded to Home Assistant)' : 'Choose a photo on this device', 'Choose…', curT === 'device', r => { if (!ctx.admin) { msg(r, 'Only an administrator can upload pictures to Home Assistant.', true); return; } fi.click(); });
+    const fi = document.createElement('input'); fi.type = 'file'; fi.accept = 'image/*'; fi.hidden = true; dvr.appendChild(fi);
+    fi.addEventListener('change', async () => { const f = fi.files && fi.files[0]; fi.value = ''; if (!f) return; msg(dvr, 'Preparing the photo…');
+      try { const id = await hvWpUpload(ctx.H(), f, t => msg(dvr, t)); msg(dvr, 'Uploaded ✓'); await use('device', id); }
+      catch (e) { msg(dvr, (e && e.message) || String(e), true); } });
+    const har = src('<ha-icon icon="mdi:folder-image"></ha-icon>', '#30b0c7', 'Home Assistant Gallery', 'A photo in Media (My media)', 'Browse…', curT === 'ha', r => { browse(r, 'media-source://media_source/local/'); });
+    if (curT === 'device' || curT === 'ha') { const h = ctx.hub(), th = (curT === 'device' ? dvr : har).querySelector('.sth'); if (h && h._url && I.value) Promise.resolve(h._url(I.value)).then(u => { if (u) th.style.background = `center/cover url('${String(u).replace(/'/g, '%27')}')`; }).catch(() => {}); }
+    const msg = (r, t, er) => { let m = r.querySelector('.msg'); if (!m) { m = document.createElement('div'); m.className = 'msg'; r.querySelector('.stx').appendChild(m); } m.textContent = t; m.classList.toggle('err', !!er); };
+    const browse = async (r, id0) => { let box = pc.querySelector('.br'); if (!box) { box = document.createElement('div'); box.className = 'br'; r.after(box); } const stack = [id0];
+      const show = async id => { box.innerHTML = '<div class="bh">Loading…</div>'; let res; try { res = await ctx.H().callWS({ type: 'media_source/browse_media', media_content_id: id }); } catch (e) { box.innerHTML = `<div class="msg err">Couldn't open Media: ${esc((e && e.message) || e)}</div>`; return; }
+        const kids = (res && res.children) || [], dirs = kids.filter(k => k.can_expand), pics = kids.filter(k => !k.can_expand && (k.media_content_type || '').startsWith('image')).slice(0, 60);
+        box.innerHTML = `<div class="bh">${stack.length > 1 ? '<button class="up">‹ Back</button>' : ''}<b>${esc(res.title || 'Media')}</b></div><div class="bl" data-no-sheet-drag></div>`; const bl = box.querySelector('.bl');
+        if (stack.length > 1) box.querySelector('.up').addEventListener('click', () => { stack.pop(); show(stack[stack.length - 1]); });
+        for (const k of dirs) { const b = document.createElement('button'); b.className = 'bi fo'; b.innerHTML = '<ha-icon icon="mdi:folder"></ha-icon><span></span>'; b.querySelector('span').textContent = k.title; b.addEventListener('click', () => { stack.push(k.media_content_id); show(k.media_content_id); }); bl.appendChild(b); }
+        for (const k of pics) { const b = document.createElement('button'); b.className = 'bi'; b.setAttribute('aria-checked', String(curT === 'ha' && I.value === k.media_content_id)); b.innerHTML = '<span></span>'; b.querySelector('span').textContent = k.title; b.setAttribute('aria-label', k.title);
+          b.addEventListener('click', () => use('ha', k.media_content_id)); bl.appendChild(b); const h = ctx.hub(); if (h && h._url) Promise.resolve(h._url(k.media_content_id)).then(u => { if (u) b.style.backgroundImage = `url('${String(u).replace(/'/g, '%27')}')`; }).catch(() => {}); }
+        if (!dirs.length && !pics.length) bl.innerHTML = '<div class="msg">No pictures here.</div>'; };
+      show(id0); };
+    // gradients
+    gh('Gradient'); const gc = document.createElement('div'); gc.className = 'wp-card'; w.appendChild(gc); const gw = document.createElement('div'); gw.className = 'sw'; gc.appendChild(gw);
+    const gv = I.type === 'gradient' && I.value ? I.value : null, preset = gv && HV_WP_GRADS.find(g => g[1] === gv.a && g[2] === gv.b);
+    for (const [nm, a, b] of HV_WP_GRADS) { const q = document.createElement('button'); q.className = 'sq'; q.style.background = hvGradCss({ a, b, ang: 160 }); q.setAttribute('role', 'radio'); q.setAttribute('aria-label', nm); q.title = nm;
+      q.setAttribute('aria-checked', String(curT === 'gradient' && !!preset && preset[0] === nm)); q.disabled = !!ctx.ro; q.addEventListener('click', () => use('gradient', { a, b, ang: 160 })); gw.appendChild(q); }
+    const cg = document.createElement('div'); cg.className = 'cu'; const ca = (gv && gv.a) || '#5b2fa6', cb = (gv && gv.b) || '#140a2e', ang = gv && Number.isFinite(Number(gv.ang)) ? Number(gv.ang) : 160;
+    cg.innerHTML = `<span>Custom</span><input type="color" class="ga" value="${ca}" aria-label="Gradient top colour"><input type="color" class="gb" value="${cb}" aria-label="Gradient bottom colour"><input type="range" class="gg" min="0" max="360" step="5" value="${ang}" aria-label="Gradient angle"><button class="pill${curT === 'gradient' && !preset ? ' cur' : ''}">${curT === 'gradient' && !preset ? 'Current' : 'Use'}</button>`; gc.appendChild(cg);
+    const cgv = () => ({ a: cg.querySelector('.ga').value, b: cg.querySelector('.gb').value, ang: Number(cg.querySelector('.gg').value) });
+    cg.querySelectorAll('input').forEach(i => i.addEventListener('input', () => draw(n = lvl(), { m: 'x', css: hvGradCss(cgv()) })));
+    cg.querySelector('.pill').addEventListener('click', () => use('gradient', cgv())); cg.querySelector('.pill').disabled = !!ctx.ro;
+    // colours
+    gh('Colour'); const cc = document.createElement('div'); cc.className = 'wp-card'; w.appendChild(cc); const cw = document.createElement('div'); cw.className = 'sw'; cc.appendChild(cw); const cv = I.type === 'color' ? hvSsHex(I.value) : null;
+    for (const col of HV_WP_COLS) { const q = document.createElement('button'); q.className = 'sq'; q.style.background = col; q.setAttribute('role', 'radio'); q.setAttribute('aria-label', col); q.title = col; q.setAttribute('aria-checked', String(curT === 'color' && cv === col)); q.disabled = !!ctx.ro; q.addEventListener('click', () => use('color', col)); cw.appendChild(q); }
+    const ck = document.createElement('div'); ck.className = 'cu'; const own = curT === 'color' && cv && !HV_WP_COLS.includes(cv); ck.innerHTML = `<span>Custom</span><input type="color" class="cc" value="${cv || '#2c2c2e'}" aria-label="Custom colour"><button class="pill${own ? ' cur' : ''}">${own ? 'Current' : 'Use'}</button>`; cc.appendChild(ck);
+    ck.querySelector('input').addEventListener('input', e => draw(n = lvl(), { m: 'x', css: e.target.value })); ck.querySelector('.pill').addEventListener('click', () => use('color', ck.querySelector('input').value)); ck.querySelector('.pill').disabled = !!ctx.ro;
+    const nt = document.createElement('div'); nt.className = 'wp-note'; nt.textContent = 'The Home Screen background is always blurred with the blur level above, with the same darkening so apps and cards stay readable.' + (ctx.ro ? ' Only an administrator can change it.' : ''); w.appendChild(nt);
+    const done = document.createElement('button'); done.className = 'wp-done'; done.textContent = 'Done'; done.addEventListener('click', () => ctx.go(null)); w.appendChild(done); return w; };
+  return { pair, outerGallery, styleSettings, innerPage }; }
+// Device Gallery: downscale (longest side 2560 px, JPEG 0.85), then upload into Media › nothomeview_wallpapers (or My media when that folder
+// can't be used). Admin only (Home Assistant's media upload). Returns the media-source id; throws an Error with a message people can read.
+async function hvWpUpload(hass, file, prog) { if (!hass || !hass.user || !hass.user.is_admin) throw new Error('Only an administrator can upload pictures to Home Assistant.');
+  if (!/^image\//.test(file.type || '') && !/\.(jpe?g|png|webp|gif|heic|heif|avif|bmp)$/i.test(file.name || '')) throw new Error('That is not a picture.');
+  let blob = file, name = `wallpaper_${new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14)}.jpg`;
+  try { const bm = await createImageBitmap(file), M = 2560, k = Math.min(1, M / Math.max(bm.width, bm.height)), cv = document.createElement('canvas');
+    cv.width = Math.max(1, Math.round(bm.width * k)); cv.height = Math.max(1, Math.round(bm.height * k)); cv.getContext('2d').drawImage(bm, 0, 0, cv.width, cv.height); if (bm.close) bm.close();
+    blob = await new Promise((res, rej) => cv.toBlob(b => b ? res(b) : rej(new Error('encode')), 'image/jpeg', 0.85)); }
+  catch (e) { blob = file; const ext = ((file.name || '').match(/\.[A-Za-z0-9]+$/) || ['.jpg'])[0].toLowerCase(); name = name.replace(/\.jpg$/, ext); } // this browser can't decode it: send it as it is
+  if (blob.size > 20 * 1024 * 1024) throw new Error('That photo is over 20 MB.');
+  const up = async (folder, nm) => { const fd = new FormData(); fd.append('media_content_id', folder); fd.append('file', new File([blob], nm, { type: blob.type || 'image/jpeg' }));
+    const url = '/api/media_source/local_source/upload'; return hass.fetchWithAuth ? hass.fetchWithAuth(url, { method: 'POST', body: fd }) : fetch(hass.hassUrl ? hass.hassUrl(url) : url, { method: 'POST', body: fd }); };
+  prog && prog('Uploading…'); const dir = 'media-source://media_source/local/nothomeview_wallpapers'; let r = await up(dir, name), id = `${dir}/${name}`;
+  if (!r.ok && (r.status === 400 || r.status === 404)) { const nm = 'nothomeview_' + name; r = await up('media-source://media_source/local', nm); id = `media-source://media_source/local/${nm}`; } // the folder isn't there (Home Assistant can't make folders): My media
+  if (!r.ok) throw new Error(r.status === 401 || r.status === 403 ? 'Only an administrator can upload pictures to Home Assistant.' : r.status === 413 ? 'That photo is too large for Home Assistant.' : `Home Assistant refused the upload (${r.status}).`);
+  return id; }
 function hvSsPicker(card, o) { o = o || {}; const car = o.mode === 'carousel';
   const p = document.createElement('div'); p.className = car ? 'sp spc' : 'sp'; p.setAttribute('role', 'radiogroup'); p.setAttribute('aria-label', 'Screensaver style');
   p.innerHTML = car ? `<style>${HV_SS_PICK_CSS}${HV_SS_CAR_CSS}</style><div class="ls cr" data-no-sheet-drag></div><div class="cinf" aria-live="polite"><div class="nm"><span class="cn"></span><span class="cur">Current</span></div><div class="sb"></div></div><div class="dots"></div><div class="colors-host"></div><div class="note"></div>`
