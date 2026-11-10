@@ -1751,6 +1751,119 @@ ha-card.many .ctl{gap:clamp(8px,3.2cqw,34px)} ha-card.many .ctl .c{min-width:56p
  background:rgba(255,255,255,.5);box-shadow:0 1px 4px rgba(0,0,0,.3);display:none;pointer-events:none}
 :host([swipe]) .grab{display:block}
 `;
+// Custom apps (Settings › Custom Apps): buttons that open another app on this device. hvOpenExternalApp is shared with the camera's Talk button.
+// 'ios' | 'android' | 'desktop': the Companion app's own signals first (its user agent, Android's externalApp bridge, iOS's getExternalAuth handler), then the user agent
+const hvExtPlatform = () => { const ua = navigator.userAgent || '', w = window, mh = w.webkit && w.webkit.messageHandlers && w.webkit.messageHandlers.getExternalAuth;
+  const touchMac = /Macintosh/.test(ua) && (navigator.maxTouchPoints || 0) > 1, ios = /iPad|iPhone|iPod/.test(ua) || touchMac;
+  if (/Home Assistant\//.test(ua) || w.externalApp || mh) { if (w.externalApp || /Android/i.test(ua)) return 'android'; if (ios || (mh && !/Macintosh/.test(ua))) return 'ios'; return 'desktop'; } // the Mac app: desktop
+  if (/Android/i.test(ua)) return 'android'; return ios ? 'ios' : 'desktop'; };
+const hvExtCompanion = () => /Home Assistant\//.test(navigator.userAgent || '') || !!window.externalApp || !!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.getExternalAuth);
+// a link we may open: trimmed, has a scheme, not one that runs code or reads files, at most 2000 characters ('' = not usable)
+const hvExtUrlOk = u => { u = String(u == null ? '' : u).trim(); if (!u || u.length > 2000 || /[\u0000-\u001f\s]/.test(u)) return ''; const m = /^([a-z][a-z0-9+.-]*):/i.exec(u); if (!m) return '';
+  return /^(javascript|data|file|vbscript|blob|about|filesystem)$/i.test(m[1]) ? '' : u; };
+const hvExtUrlWhy = u => { u = String(u == null ? '' : u).trim(); if (!u || hvExtUrlOk(u)) return ''; if (u.length > 2000) return 'That link is too long.';
+  if (/\s/.test(u)) return 'A link can\'t have spaces in it.'; if (!/^[a-z][a-z0-9+.-]*:/i.test(u)) return 'Add the start of the link, like https:// or spotify:';
+  return 'That kind of link can\'t be used here. Use an app link (like spotify:) or an https:// address.'; };
+// the link for this device: iOS ios_url, Android android_url, else url; a computer uses web_url when url is an app's own scheme
+const hvExtPick = (t, p) => { const u = hvExtUrlOk(t.url), w = hvExtUrlOk(t.web_url);
+  if (p === 'ios') return hvExtUrlOk(t.ios_url) || u || w; if (p === 'android') return hvExtUrlOk(t.android_url) || u || w;
+  return u && /^https?:/i.test(u) ? u : (w || u); };
+// open it. intent: links go through location.href (the Companion app and Chrome both catch them there); in the Android Companion app a plain
+// "open this app" intent becomes app://<package>, which the app opens with the package's own launcher entry (or its Play Store page)
+const hvExtLaunch = u => { if (/^intent:/i.test(u)) { const m = /^intent:\/\/#Intent;(?:.*;)?package=([A-Za-z0-9_.]+);/i.exec(u);
+    if (m && hvExtCompanion() && !/;(action|component|scheme)=/i.test(u)) { location.href = 'app://' + m[1]; return; } location.href = u; return; }
+  if (/^app:\/\//i.test(u)) { location.href = u; return; }
+  if (/^https?:/i.test(u)) { window.open(u, '_blank', 'noopener'); return; } window.open(u); };
+// did we leave? the page hides, unloads or loses focus within ~1.5 s (up to 2.5 s while the page has no focus, e.g. iOS's own "Open in …?" prompt)
+const hvExtWatch = () => new Promise(res => { let gone = false, done = false; const t0 = Date.now(), on = () => { gone = true; }, vis = () => { if (document.hidden) gone = true; };
+  document.addEventListener('visibilitychange', vis); addEventListener('pagehide', on); addEventListener('blur', on);
+  const end = v => { if (done) return; done = true; document.removeEventListener('visibilitychange', vis); removeEventListener('pagehide', on); removeEventListener('blur', on); res(v); };
+  const tick = () => { if (gone || document.hidden) return end('left'); const el = Date.now() - t0, foc = !document.hasFocus || document.hasFocus();
+    if (el >= 2500 || (el >= 1500 && foc)) return end('stayed'); setTimeout(tick, 100); };
+  setTimeout(tick, 100); });
+const hvExtMiss = (t, u) => { const w = hvExtUrlOk(t.web_url), web = w && /^https:/i.test(w) && w !== u ? w : '', ha = document.querySelector('home-assistant');
+  const detail = { message: `Couldn't open ${t.name || 'the app'}. Is it installed?`, duration: 7000 };
+  if (web) detail.action = { text: 'Open in browser', action: () => window.open(web, '_blank', 'noopener') };
+  if (ha) ha.dispatchEvent(new CustomEvent('hass-notification', { bubbles: true, composed: true, detail })); };
+// -> Promise<'left' | 'stayed' | 'none'>. With o.confirm the sheet comes first and the app opens inside its Open click (a user gesture).
+// Without it the launch happens before the first await, so a tap that calls this still counts as the gesture.
+function hvOpenExternalApp(target, o) { o = o || {}; const t = target || {}, u = hvExtPick(t, hvExtPlatform());
+  if (!u) { if (o.toast !== false) hvToast(`${t.name || 'This app'} has no link to open on this device`); return Promise.resolve('none'); }
+  const run = () => { hvExtLaunch(u); return hvExtWatch().then(r => { if (r === 'stayed' && o.toast !== false) hvExtMiss(t, u); return r; }); };
+  return o.confirm ? hvExtConfirm(t, o, run) : run(); }
+// --- the icon of a custom app: its picture, else a white mdi glyph on a gradient of its colour
+const hvExtCol = c => /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(String(c || '')) ? String(c) : '#8e8e93';
+const hvExtShade = (c, k) => { let h = hvExtCol(c).slice(1); if (h.length === 3) h = h.replace(/./g, x => x + x); const n = parseInt(h, 16);
+  return '#' + [(n >> 16) & 255, (n >> 8) & 255, n & 255].map(v => Math.max(0, Math.round(v * (1 - k))).toString(16).padStart(2, '0')).join(''); };
+const hvExtBg = e => `linear-gradient(180deg,${hvExtCol(e && e.color)} 0%,${hvExtShade(e && e.color, 0.3)} 100%)`;
+const hvExtImgOk = s => /^(data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=]+$|https:\/\/[^\s"'<>]+$|\/local\/[^\s"'<>]+$|media-source:\/\/[^\s"'<>]+$)/i.test(String(s || ''));
+const HV_EXT_IMG = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block';
+// noMs: show the glyph for a Home Assistant media picture (menus); otherwise an <img data-ms> the caller resolves
+const hvExtGlyph = (e, noMs) => { const im = e && e.icon_image, ic = `<ha-icon icon="${esc((e && e.icon) || 'mdi:application')}"></ha-icon>`;
+  if (!hvExtImgOk(im)) return ic; if (/^media-source:/i.test(im)) return noMs ? ic : `<img alt="" data-ms="${esc(im)}" style="${HV_EXT_IMG};opacity:0">`;
+  return `<img alt="" src="${esc(im)}" referrerpolicy="no-referrer" style="${HV_EXT_IMG}">`; };
+const hvCaList = c => (c && Array.isArray(c.custom_apps) ? c.custom_apps : []).filter(x => x && typeof x === 'object' && x.id);
+const hvCaOf = (c, id) => (id && hvCaList(c).find(x => x.id === id)) || null;
+const hvCaNorm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+const hvCaId = () => { let s = ''; try { s = Array.from(crypto.getRandomValues(new Uint8Array(10)), b => (b % 36).toString(36)).join(''); } catch (e) {}
+  while (s.length < 10) s += Math.random().toString(36).slice(2); return 'ca_' + s.slice(0, 10); };
+// media-source pictures inside root: resolved through a hub's _url
+const hvExtMs = (root, hub) => { if (!root || !hub || typeof hub._url !== 'function') return; root.querySelectorAll('img[data-ms]:not([src])').forEach(img => {
+  Promise.resolve(hub._url(img.dataset.ms)).then(u => { if (u && /^(https?:|\/)/i.test(u)) { img.onload = () => { img.style.opacity = ''; }; img.src = u; } }).catch(() => {}); }); };
+// --- presets: only links checked against the app makers' or Apple's / Google's own pages (see the 1.7 Custom Apps notes). Android: the package's
+// Play Store id (opened as an intent, falling back to the Play Store page); iOS: the app's own URL scheme where it has one, else https.
+const hvExtPlay = pkg => 'https://play.google.com/store/apps/details?id=' + pkg;
+const hvExtIntent = (pkg, fb) => `intent://#Intent;package=${pkg};S.browser_fallback_url=${encodeURIComponent(fb || hvExtPlay(pkg))};end`;
+const HV_EXT_PRESETS = [
+  { key: 'google_home', name: 'Google Home', icon: 'mdi:google-home', color: '#4285f4', url: 'googlehome://', pkg: 'com.google.android.apps.chromecast.app', itunes: 680819774, web: 'https://home.google.com/' },
+  { key: 'spotify', name: 'Spotify', icon: 'mdi:spotify', color: '#1db954', url: 'spotify:', pkg: 'com.spotify.music', itunes: 324684580, web: 'https://open.spotify.com/' },
+  { key: 'youtube', name: 'YouTube', icon: 'mdi:youtube', color: '#ff0033', url: 'https://www.youtube.com/', pkg: 'com.google.android.youtube', itunes: 544007664 },
+  { key: 'netflix', name: 'Netflix', icon: 'mdi:netflix', color: '#e50914', url: 'https://www.netflix.com/', pkg: 'com.netflix.mediaclient', itunes: 363590051 },
+  { key: 'ring', name: 'Ring', icon: 'mdi:doorbell-video', color: '#1998d5', url: 'ring://', pkg: 'com.ringapp', web: 'https://account.ring.com/' },
+  { key: 'hue', name: 'Philips Hue', icon: 'mdi:lightbulb-group', color: '#0b5ed7', url: 'https://www.philips-hue.com/', pkg: 'com.philips.lighting.hue2', itunes: 1055281310 },
+  { key: 'alexa', name: 'Amazon Alexa', icon: 'mdi:amazon-alexa', color: '#00a8e1', url: 'https://alexa.amazon.com/', pkg: 'com.amazon.dee.app' },
+  { key: 'sonos', name: 'Sonos', icon: 'mdi:speaker', color: '#1c1c1e', url: 'https://www.sonos.com/', pkg: 'com.sonos.acr2' },
+  { key: 'shortcuts', name: 'Shortcuts', icon: 'mdi:layers-triple', color: '#5e5ce6', ios_url: 'shortcuts://' }, // iPhone / iPad only
+  { key: 'home_assistant', name: 'Home Assistant', icon: 'mdi:home-assistant', color: '#18bcf2', url: 'homeassistant://navigate/lovelace', pkg: 'io.homeassistant.companion.android', itunes: 1099568401 }];
+const hvExtPresetLinks = p => { const o = {}; if (p.url) o.url = p.url; if (p.ios_url) o.ios_url = p.ios_url; if (p.pkg) o.android_url = hvExtIntent(p.pkg, p.web);
+  const w = p.web || (/^https:/.test(p.url || '') ? '' : p.pkg ? hvExtPlay(p.pkg) : ''); if (w) o.web_url = w; return o; };
+const hvExtPresetOf = e => { if (!e) return null; const s = e.store || {}, au = String(e.android_url || '');
+  return HV_EXT_PRESETS.find(p => (p.itunes && Number(s.itunes_id) === p.itunes) || (p.pkg && (s.play_id === p.pkg || au.includes('package=' + p.pkg + ';'))) || (p.url && e.url === p.url) || (p.ios_url && e.ios_url === p.ios_url)) || null; };
+const hvExtPresetFor = x => HV_EXT_PRESETS.find(p => (p.itunes && Number(x.trackId) === p.itunes) || hvCaNorm(p.name) === hvCaNorm(x.trackName)) || null;
+// --- the confirm sheet (iOS-style alert): Cancel / Open, Esc or a tap outside = Cancel, Enter = Open; focus goes back to o.anchor after Cancel
+const HV_EXT_CF_CSS = `:host{all:initial;position:fixed;inset:0;z-index:2147483600;font-family:${FONT};-webkit-tap-highlight-color:transparent;
+ --al:rgba(44,44,46,.82);--fg:#fff;--fg2:rgba(235,235,245,.62);--sep:rgba(84,84,88,.6);--blue:#0a84ff;--prs:rgba(255,255,255,.08)}
+:host([day]){--al:rgba(242,242,247,.86);--fg:#000;--fg2:rgba(60,60,67,.66);--sep:rgba(60,60,67,.3);--blue:#007aff;--prs:rgba(0,0,0,.06)}
+*{box-sizing:border-box}.scrim{position:absolute;inset:0;background:rgba(0,0,0,.32);animation:hvxf .2s ease-out}
+.al{position:absolute;left:50%;top:50%;width:min(290px,calc(100vw - 48px));transform:translate(-50%,-50%);border-radius:16px;overflow:hidden;color:var(--fg);text-align:center;
+ background:var(--al);-webkit-backdrop-filter:blur(30px) saturate(1.8);backdrop-filter:blur(30px) saturate(1.8);box-shadow:0 18px 50px rgba(0,0,0,.3);animation:hvxp .24s cubic-bezier(.2,.9,.3,1.2)}
+.ic{position:relative;width:60px;height:60px;margin:20px auto 10px;border-radius:22.5%;overflow:hidden;display:flex;align-items:center;justify-content:center;color:#fff;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.12)}
+.ic ha-icon{--mdc-icon-size:34px;display:flex}
+b{display:block;padding:0 16px;font-size:17px;font-weight:600;line-height:1.3;overflow-wrap:anywhere}p{margin:4px 0 0;padding:0 16px 18px;font-size:13px;line-height:1.38;color:var(--fg);opacity:.85}
+.bt{display:flex;border-top:.5px solid var(--sep)}.bt button{all:unset;cursor:pointer;flex:1;height:44px;font-size:17px;color:var(--blue);text-align:center}
+.bt button + button{border-left:.5px solid var(--sep)}.bt .ok{font-weight:600}.bt button:active{background:var(--prs)}.bt button:focus-visible{background:var(--prs);outline:none}
+@keyframes hvxf{from{opacity:0}}@keyframes hvxp{from{opacity:0;transform:translate(-50%,-50%) scale(1.12)}}
+@media (prefers-reduced-motion:reduce){.scrim,.al{animation:none}}`;
+function hvExtConfirm(t, o, run) { return new Promise(res => {
+  const prev = document.querySelector('.hv-ext-cf'); if (prev) prev.remove();
+  const host = document.createElement('div'); host.className = 'hv-ext-cf'; const r = host.attachShadow({ mode: 'open' }), nm = String(t.name || 'this app');
+  const ha = document.querySelector('home-assistant'), th = ha && ha.hass && ha.hass.themes;
+  const day = typeof o.day === 'boolean' ? o.day : th && typeof th.darkMode === 'boolean' ? !th.darkMode : !!(window.matchMedia && matchMedia('(prefers-color-scheme: light)').matches);
+  if (day) host.setAttribute('day', '');
+  r.innerHTML = `<style>${HV_EXT_CF_CSS}</style><div class="scrim"></div><div class="al" role="alertdialog" aria-modal="true" aria-labelledby="t" aria-describedby="d">`
+    + `<div class="ic" style="background:${hvExtBg(t)}">${hvExtGlyph(t)}</div><b id="t">Open “${esc(nm)}”?</b><p id="d">This will leave Home Assistant and open ${esc(nm)} on this device.</p>`
+    + `<div class="bt"><button class="no">Cancel</button><button class="ok">Open</button></div></div>`;
+  const ok = r.querySelector('.ok'), no = r.querySelector('.no'); let done = false;
+  const fin = v => { if (done) return; done = true; removeEventListener('keydown', key, true); host.remove(); if (v === 'none' && o.anchor && o.anchor.focus) { try { o.anchor.focus({ preventScroll: true }); } catch (e) {} } };
+  const cancel = () => { fin('none'); res('none'); };
+  const open = () => { if (done) return; fin('open'); res(run()); }; // still inside the click / key handler
+  const key = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancel(); }
+    else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); open(); }
+    else if (e.key === 'Tab') { e.preventDefault(); (r.activeElement === ok ? no : ok).focus(); } };
+  ok.addEventListener('click', e => { e.stopPropagation(); open(); }); no.addEventListener('click', e => { e.stopPropagation(); cancel(); });
+  r.querySelector('.scrim').addEventListener('click', e => { e.stopPropagation(); cancel(); });
+  host.addEventListener('pointerdown', e => e.stopPropagation()); addEventListener('keydown', key, true);
+  document.body.appendChild(host); if (o.hub) hvExtMs(r, o.hub); ok.focus({ preventScroll: true }); }); }
 // 1.32.0: "Talk" opens the camera maker's app (Home Assistant has no two-way talk for Nest / Ring). Custom URL schemes: the iOS / Android
 // companion apps hand window.open() of these to the system (as HA's own "url" tap action does).
 const CAM_TALK = { google_home: { url: 'googlehome://', label: 'Google Home' }, ring: { url: 'ring://', label: 'Ring' } };
@@ -1914,7 +2027,7 @@ class HVCameraCard extends HTMLElement {
     if (c.show_sound !== false && this._hasAudio) o.push({ k: 'snd', icon: this._unmuted ? 'mdi:volume-high' : 'mdi:volume-off', label: this._unmuted ? 'Sound on' : 'Sound', on: !!this._unmuted });
     return o; }
   _ctl(k) { const c = this._config;
-    if (k === 'talk') { const t = this._talk(); if (t && t.url) window.open(t.url); return; }
+    if (k === 'talk') { const t = this._talk(); if (t && t.url) hvOpenExternalApp({ name: t.label, url: t.url }, { confirm: false, toast: false }); return; }
     if (k === 'hist') { const ids = [c.entity].concat(this._evs().map(e => e.entity)).join(','), st = new Date(Date.now() - 24 * 3600e3).toISOString();
       const path = `/history?entity_id=${encodeURIComponent(ids)}&start_date=${encodeURIComponent(st)}`; this._close();
       setTimeout(() => { history.pushState(null, '', path); fire(window, 'location-changed', { replace: false }); }, 380); return; }
@@ -4158,22 +4271,26 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
       homePath: views.has('my-home') ? 'my-home' : mh(views.get('home')) ? 'home' : 'my-home',
       weather: (c.weather_entity && S[c.weather_entity] ? c.weather_entity : '') || (S['weather.forecast_home'] ? 'weather.forecast_home' : ids('weather')[0] || '') }; },
   // only apps that open something here: pages that exist (Home / Security make theirs), a media player for Music, a weather entity, a calendar
-  avail(x, k) { if (x.views) return x.views.some(p => k.views.has(p)); if (x.key === 'music') return !!k.players.length; if (x.key === 'weather') return !!k.weather; if (x.key === 'calendar') return !!k.cal; if (x.key === 'reminders') return !!k.todo; return true; },
+  avail(x, k) { if (x && x.kind === 'external') return true; if (x.views) return x.views.some(p => k.views.has(p)); if (x.key === 'music') return !!k.players.length; if (x.key === 'weather') return !!k.weather; if (x.key === 'calendar') return !!k.cal; if (x.key === 'reminders') return !!k.todo; return true; },
   entry(x, k) { const a = hubAppBase(x.key), fmt = p => (k.abs ? `/${k.dash}/${p}` : p);
     if (a.kind === 'navigate') a.navigation_path = fmt(x.key === 'home' ? k.homePath : (x.views || []).find(p => k.views.has(p)) || x.navigation_path);
     if (x.key === 'music') { const p = k.music[0] || k.players[0], o = k.players.filter(i => i !== p).slice(0, 5); a.entity = p; if (o.length) a.entities = o; } // same idea as first-run setup
     if (x.key === 'weather') a.weather_entity = k.weather;
     return a; },
-  icoHtml(a) { return `<span class="ai" style="background:linear-gradient(180deg,${esc(a.color_from || '#8e8e93')} 0%,${esc(a.color_to || a.color_from || '#636366')} 100%);color:${esc(a.glyph_color || '#fff')}">${a.icon === 'hv:home' ? HUB_HOME_SVG : hvHubCalGlyph(a, this.hub && this.hub._hass)}</span>`; },
+  icoHtml(a) { if (a && a.kind === 'external') { const e = hvCaOf(this.hub && this.hub._config, a.custom_app); return e ? `<span class="ai" style="background:${hvExtBg(e)};color:#fff;position:relative">${hvExtGlyph(e, true)}</span>` : '<span class="ai" style="background:#8e8e93;color:#fff"><ha-icon icon="mdi:help-rounded"></ha-icon></span>'; }
+    return `<span class="ai" style="background:linear-gradient(180deg,${esc(a.color_from || '#8e8e93')} 0%,${esc(a.color_to || a.color_from || '#636366')} 100%);color:${esc(a.glyph_color || '#fff')}">${a.icon === 'hv:home' ? HUB_HOME_SVG : hvHubCalGlyph(a, this.hub && this.hub._hass)}</span>`; },
   async picker(anchor) { if (!this.hub || this.busy) return; hvEcl.closeMenu(); hvEcl.ensure(); const k = await this.ctx(); if (!this.hub) return;
     const wrap = hvEcl.menu = document.createElement('div'); wrap.innerHTML = '<div class="scrim"></div><div class="menu apk" role="menu" aria-label="Add App"></div>';
     const m = wrap.querySelector('.menu'), close = () => hvEcl.closeMenu();
     const head = t => { const d = document.createElement('div'); d.className = 't'; d.textContent = t; m.appendChild(d); };
     const row = (ico, txt, sub, fn) => { const b = document.createElement('button'); b.setAttribute('role', 'menuitem'); b.innerHTML = `${ico}<span class="tx"><span></span>${sub ? '<small></small>' : ''}</span>`;
       b.querySelector('.tx > span').textContent = txt; if (sub) b.querySelector('small').textContent = sub; b.addEventListener('click', e => { e.stopPropagation(); fn(); }); m.appendChild(b); return b; };
-    const list = () => { m.innerHTML = ''; head('Add App'); const xs = HUB_APP_CATALOG.filter(x => !k.have.has(x.key) && this.avail(x, k)).sort((a, b) => String(a.name).localeCompare(String(b.name), undefined, { sensitivity: 'base' })); // A-Z by the name on the row
+    const list = () => { m.innerHTML = ''; head('Add App'); // the built-in apps and Settings › Custom Apps not on this Home Screen yet, A-Z by the name on the row
+      const xs = HUB_APP_CATALOG.filter(x => !k.have.has(x.key) && this.avail(x, k)).concat(hvCaList(this.hub._config).filter(e => !k.have.has('ext:' + e.id)).map(e => ({ ca: e, name: String(e.name || 'App') })))
+        .sort((a, b) => String(a.name).localeCompare(String(b.name), undefined, { sensitivity: 'base' }));
       if (!xs.length) { const d = document.createElement('div'); d.className = 'em'; d.textContent = 'All apps are on the Home Screen'; m.appendChild(d); }
-      for (const x of xs) row(this.icoHtml(x), x.name, '', () => { if (x.key === 'home' || x.key === 'security') choose(x); else { close(); this.add(x, k); } });
+      for (const x of xs) if (x.ca) row(this.icoHtml({ kind: 'external', custom_app: x.ca.id }), x.name, 'Custom app', () => { close(); this.addExt(x.ca); });
+        else row(this.icoHtml(x), x.name, '', () => { if (x.key === 'home' || x.key === 'security') choose(x); else { close(); this.add(x, k); } });
       hvEcl.place(m, anchor); const f = m.querySelector('button'); if (f) f.focus({ preventScroll: true }); };
     // Home and Security: the icon always comes back; the choice is what the page behind it shows
     const choose = x => { m.innerHTML = ''; head(x.key === 'home' ? 'Home page' : 'Security page'); const home = x.key === 'home';
@@ -4183,6 +4300,9 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
       hvEcl.place(m, anchor); const f = m.querySelector('button'); if (f) f.focus({ preventScroll: true }); };
     wrap.querySelector('.scrim').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); close(); });
     hvEcl.lay.appendChild(wrap); list(); },
+  // a custom app (Settings › Custom Apps): its entry there stays the truth for the name, icon and link; this keeps a copy for older versions
+  addExt(e) { const a = { kind: 'external', custom_app: e.id, name: String(e.name || 'App'), icon: e.icon || 'mdi:application', color_from: hvExtCol(e.color), color_to: hvExtShade(e.color, 0.3) };
+    this.change(raw => this.edit(raw, 'app', l => l.push(a))); hvToast(`${a.name} added · tap an empty spot to save`, 'hv-arrange'); },
   add(x, k, mode) { const a = this.entry(x, k); this.change(raw => this.edit(raw, 'app', l => l.push(a)));
     if (mode) this.pend = (this.pend || []).filter(p => p.key !== x.key).concat({ key: x.key, mode, path: x.key === 'home' ? k.homePath : 'security' });
     hvToast(`${a.name} added · tap an empty spot to save`, 'hv-arrange'); },
@@ -5066,7 +5186,7 @@ const HUB_APP_CATALOG = [
 // a fresh copy of a catalog app as an apps[] entry (no catalog-only keys)
 const hubAppBase = k => { const c = HUB_APP_CATALOG.find(x => x.key === k); if (!c) return null; const a = Object.assign({}, c); delete a.key; delete a.views; return a; };
 // which catalog app an apps[] entry is: its kind (weather, calendar, assistant, Music) or, for a page, the page's last path segment
-const hvHubAppKey = a => { const k = (a && a.kind) || 'navigate'; if (k === 'now_playing') return 'music'; if (k !== 'navigate') return k;
+const hvHubAppKey = a => { const k = (a && a.kind) || 'navigate'; if (k === 'now_playing') return 'music'; if (k === 'external') return 'ext:' + (a.custom_app || ''); if (k !== 'navigate') return k;
   const b = String(a.navigation_path || 'home').replace(/[?#].*$/, '').replace(/\/+$/, '').split('/').pop() || 'home'; return b === 'my-home' ? 'home' : b === 'lights-on' ? 'lights' : b; };
 const HUB_APPS = ['home', 'security', 'music', 'weather'].map(hubAppBase);
 const HUB_CSS = `:host{display:block;position:relative;font-family:${FONT};color:#fff;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none}
@@ -6432,6 +6552,8 @@ const HV_SET_PAGES = [
     sec: [{ f: ['swipe_open_home', 'swipe_page'] }, { f: ['edge_sidebar', 'block_pull_refresh'] }] },
   { id: 'apps', t: 'Apps', i: 'mdi:apps', c: '#007aff', g: 2, d: 'The app icons on the Home Screen and what each one opens.',
     sec: [{ f: ['apps'] }, { f: ['@appsnote'] }] },
+  { id: 'customapps', t: 'Custom Apps', i: 'mdi:apps-box', c: '#5e5ce6', g: 2, d: 'Buttons that open other apps on this device (Google Home, Spotify, …), with a confirm before leaving Home Assistant.',
+    sec: [{ bare: true, f: ['@customapps'] }, { f: ['@canote'] }] },
   { id: 'calendar', t: 'Calendar', i: 'mdi:calendar', c: '#ff3b30', g: 2, d: 'The calendar on the Home Screen.',
     sec: [{ f: ['show_calendar', 'calendar_show_weather'] }, { f: ['calendar_entities'] },
       { h: 'Layout', f: ['calendar_layout', 'calendar_columns', 'calendar_days', 'calendar_size', 'calendar_rows', 'calendar_title', 'calendar_min_height'] }] },
@@ -6453,6 +6575,8 @@ const HV_SET_ACTS = {
   '@update': { l: 'Software Update', h: 'Home Assistant updates: Core, OS, Supervisor, add-ons, HACS, NotHomeView release. Check now, install.', i: 'mdi:cellphone-arrow-down', nav: true },
   '@sspick': { l: 'Screensaver style', h: 'Photo clock, Info dashboard, Abstract fluid, Modern typographic or Whimsical minimalist: swipe or tap to choose. Screensaver colors for the chosen style (colour pickers, swatches, reset to default colors) are underneath.', pick: true },
   '@wallpair': { l: 'Wallpaper', h: 'Screensaver (Outer) and Home Screen background (Inner): Customize each. Screensaver style and colours; Photos, a device or Home Assistant photo, gradients and colours behind the apps, background blur, Match Outer wallpaper.', wp: true },
+  '@customapps': { l: 'Custom Apps', h: 'Your custom apps: add, edit, reorder or delete. App Store search for the name and icon, a preset or your own link (URL scheme), ask before opening.', ca: true },
+  '@canote': { l: '', h: 'Add a custom app to the Home Screen with Add App (edit the Home Screen, then Add App).', note: true },
   '@wpnote': { l: '', h: 'The Home Screen background behind the apps is set in Wallpaper › Inner (Customize), with its blur.', note: true },
   '@assistface': { l: 'Assistant', h: 'Orb or Homey: what the compact popup shows when the mic opens (Mic opens a floating orb). Swipe or tap to choose; applies at once.', face: true },
   '@wwjarvis': { l: 'Hey Jarvis', h: 'Say “Hey Jarvis” to open the assistant. Listens on this device only, while the dashboard is open; no audio leaves the browser. Sensitivity is in the assistant\'s own settings (Quiet).', ww: 'jarvis' },
@@ -6532,9 +6656,13 @@ button.r{all:unset;box-sizing:border-box;cursor:pointer;display:flex;align-items
 const hvSetNorm = (k, v) => { // the value written for an option: undefined = remove the key (empty, or the default), as in the card editor
   if (v === undefined || v === null || v === '' || (typeof v === 'number' && isNaN(v)) || (Array.isArray(v) && !v.length && k !== 'apps')) return undefined;
   if (k !== 'apps' && HVHubCard.defaults[k] === v) return undefined; if (k === 'calendar_show_weather' && v === true) return undefined;
+  if (k === 'custom_apps' && Array.isArray(v)) return v.filter(x => x && x.id).map(x => { const o = {}; for (const [a, b] of Object.entries(x)) if (b !== undefined && b !== null && b !== '' && !(b && typeof b === 'object' && !Object.keys(b).length)) o[a] = b; return o; });
   if (k === 'apps' && Array.isArray(v)) return v.map(x => { const o = {}; for (const [a, b] of Object.entries(x || {})) if (b !== undefined && b !== '' && !(Array.isArray(b) && !b.length)) o[a] = b; return o; });
   return v; };
-const hvSetApply = (node, k, v) => { const was = hvBgLevel(node), n = hvSetNorm(k, v); if (n === undefined) delete node[k]; else node[k] = n; // Night theme = the default: the key goes
+// take apps out of a Home Screen config's apps[] (the grid order, home_layout, keeps pointing at the right ones)
+const hvAppsDrop = (raw, pred) => { if (raw && Array.isArray(raw.apps) && raw.apps.some(a => a && pred(a))) hvHubArr.edit(raw, 'app', l => { for (let i = l.length - 1; i >= 0; i--) if (l[i] && pred(l[i])) l.splice(i, 1); }); return raw; };
+const hvSetApply = (node, k, v) => { const was = hvBgLevel(node), ca0 = k === 'custom_apps' ? hvCaList(node).map(x => x.id) : null, n = hvSetNorm(k, v); if (n === undefined) delete node[k]; else node[k] = n;
+  if (ca0) { const keep = new Set(hvCaList(node).map(x => x.id)), gone = new Set(ca0.filter(i => !keep.has(i))); if (gone.size) hvAppsDrop(node, a => a.kind === 'external' && gone.has(a.custom_app)); } // a deleted custom app leaves the Home Screen too // Night theme = the default: the key goes
   if (k === 'bg_blur_level') { delete node.bg_transparency; if (Number(v) !== was) delete node.blur; } // a level replaces the older transparency (same look); a new level drops an older px blur
   if (k === 'show_homie' && n !== true && (node.side_cards || []).some(x => x && x.type === HV_HOMIE_T)) { const rows = hvHubArr.sideRows(node), keep = rows.filter(r => r.card.type !== HV_HOMIE_T); hvHubArr.sideWrite(node, keep); if (Array.isArray(node.home_layout)) node.home_layout = hvHubArr.remap(node.home_layout, 's', rows, keep); } // off: the Homie tile goes
   return node; };
@@ -6648,6 +6776,7 @@ function hvOpenSettings(hub, app, from) {
   const rowHtml = (k, x, d, dis) => { const lb = label(k), hp = help(k), D = dis ? ' disabled' : '', tx = `<div class="tx"><span class="l">${esc(lb)}</span>${hp ? `<small>${esc(hp)}</small>` : ''}</div>`;
     const ln = `<span class="l">${esc(lb)}</span>`, sm = hp ? `<small>${esc(hp)}</small>` : ''; // one-line rows: label | control, the helper underneath
     const a = HV_SET_ACTS[k]; if (a) { if (a.note) return `<div class="r note"><small>${esc(a.h)}</small></div>`;
+      if (a.ca) return '<div class="r stk" data-k="@customapps"><div data-calist></div></div>';
       if (a.ww) { const ok = hvWwSupport(), miss = a.ww === 'homey' && HVWW.hmOk === false, on = ok && hvWwPh(a.ww);
         if (ok && a.ww === 'homey' && HVWW.hmOk == null) hvWwHmCheck().then(() => { if (root && root.isConnected) paintPane(); });
         const why = !ok ? 'Not available on this device (iPhone / iPad). Use the mic button instead.' : miss ? 'Needs its wake word model (wakeword/hey_homey.onnx, next to homeview-cards.js): see the wake word README.' : a.h;
@@ -6737,6 +6866,13 @@ function hvOpenSettings(hub, app, from) {
   const wpMount = () => { if (!pane) return; const a = pane.querySelector('[data-wpair]'), b = pane.querySelector('[data-wpsub]'); if (!a && !b) return; const ui = hvWallpaperUI(wpCtx);
     const put = (box, el) => { const h0 = document.createElement('div'); h0.className = 'wph'; const r = h0.attachShadow({ mode: 'open' }); r.innerHTML = `<style>${HV_WP_CSS}${HV_SS_PICK_CSS}</style>`; r.appendChild(el); box.appendChild(h0); };
     if (a) put(a, ui.pair()); if (b) { const v = b.dataset.wpsub; put(b, v === 'wp-outer' ? ui.outerGallery() : v === 'wp-inner' ? ui.innerPage() : ui.styleSettings(v.slice(9))); } };
+  // Custom Apps: the list and the add / edit page (hvCustomAppsUI), in their own shadow root; the open page is kept across repaints
+  const caCtx = { H: () => H(), cfg: () => data(), save: (k, v) => save(k, v), hub: () => live(), go: v => subGo(v), flash: (m, e) => flash(m, e),
+    day: () => hvMode((st.cfg || {}).theme, H()) === 'day', get ro() { return ro(); } };
+  let caEl = null, caKey = ''; const caMount = () => { if (!pane) return; const box = pane.querySelector('[data-calist]') || pane.querySelector('[data-casub]'); if (!box) { caEl = null; caKey = ''; return; }
+    const key = box.hasAttribute('data-calist') ? 'list' : st.sub; if (!caEl || caKey !== key) { const ui = hvCustomAppsUI(caCtx); caEl = document.createElement('div'); caEl.className = 'cah';
+      const r = caEl.attachShadow({ mode: 'open' }); r.innerHTML = `<style>${HV_CA_CSS}</style>`; r.appendChild(key === 'list' ? ui.list() : ui.editor(key.startsWith('ca:') ? key.slice(3) : null)); caKey = key; }
+    else { const el = caEl.shadowRoot.lastElementChild; if (el && el._refresh) el._refresh(); } box.appendChild(caEl); };
   // Assistant & timer: Orb / Homey carousel (assistant_face), its own shadow root like the screensaver picker
   let fPick = null; const fMount = () => { const box = pane && pane.querySelector('[data-fpick]'); if (!box) return;
     if (!fPick) { fPick = document.createElement('div'); fPick.className = 'ssh'; fPick.attachShadow({ mode: 'open' }).appendChild(hvFacePicker({ get: () => data().assistant_face, set: v => save('assistant_face', v) })); }
@@ -6787,7 +6923,9 @@ function hvOpenSettings(hub, app, from) {
     return h; };
   const wpT = v => v === 'wp-outer' ? 'Outer Wallpaper' : v === 'wp-inner' ? 'Inner Wallpaper' : ((HV_SSS.find(x => 'wp-style:' + x.v === v) || {}).l || 'Wallpaper');
   const wpSub = () => { const t = wpT(st.sub); return `<div class="ph"><button class="bk" data-act="wpback" aria-label="Back to Wallpaper"><ha-icon icon="mdi:chevron-left"></ha-icon>Wallpaper</button><span class="nt">${esc(t)}</span></div><h1 class="sbt">${esc(t)}</h1><div data-wpsub="${esc(st.sub)}"></div>`; };
-  const subHtml = () => st.sub.startsWith('wp-') ? wpSub() : st.sub === 'about' ? aboutHtml() : st.sub === 'update' ? updHtml() : st.sub.startsWith('upd:') ? updDetail(st.sub.slice(4)) : '';
+  const caSub = () => { const e = st.sub.startsWith('ca:') ? hvCaOf(st.cfg, st.sub.slice(3)) : null, t = e ? (e.name || 'App') : st.sub === 'ca-new' ? 'New Custom App' : 'Custom App';
+    return `<div class="ph"><button class="bk" data-act="caback" aria-label="Back to Custom Apps"><ha-icon icon="mdi:chevron-left"></ha-icon>Custom Apps</button><span class="nt">${esc(t)}</span></div><h1 class="sbt">${esc(t)}</h1><div data-casub></div>`; };
+  const subHtml = () => st.sub === 'ca-new' || st.sub.startsWith('ca:') ? caSub() : st.sub.startsWith('wp-') ? wpSub() : st.sub === 'about' ? aboutHtml() : st.sub === 'update' ? updHtml() : st.sub.startsWith('upd:') ? updDetail(st.sub.slice(4)) : '';
   const subGo = v => { st.sub = v; st.ucf = null; paintPane(); st.usig = subSig(); if (pane) pane.scrollTop = 0; const bd = root && root.parentNode; if (bd && !st.wide) bd.scrollTop = 0; };
   const uCheck = async () => { if (!admin || st.uchk) return; const ids = Object.keys(H().states || {}).filter(k => k.startsWith('update.')); st.uchk = true; if (st.sub === 'update') paintPane();
     try { if (ids.length) await H().callService('homeassistant', 'update_entity', { entity_id: ids }); } catch (e) { flash('Couldn\'t check: ' + ((e && (e.message || e.code)) || e), true); }
@@ -6796,7 +6934,7 @@ function hvOpenSettings(hub, app, from) {
     st.ucf = null; st.uins = id; paintPane(); flash('Installing ' + hvUpdName(x) + '…');
     try { await H().callService('update', 'install', data); } catch (e) { flash('Not installed: ' + ((e && (e.message || e.code)) || e), true); } finally { st.uins = null; if (root && root.isConnected) paintPane(); } };
   const subAct = (a, t) => { if (a === 'about') { subGo('about'); aboutLive(); return true; } if (a === 'update') { subGo('update'); hvGhRel.load(false).then(() => { if (st.sub === 'update') paintPane(); paintSide(); }); if (admin && !st.uchk0) { st.uchk0 = true; uCheck(); } return true; }
-    if (a === 'wpback') { subGo(null); return true; }
+    if (a === 'wpback' || a === 'caback') { subGo(null); return true; }
     if (a === 'subback') { subGo(null); return true; } if (a === 'subupd') { subGo('update'); return true; }
     if (a === 'updopen') { subGo('upd:' + t.dataset.id); return true; } if (a === 'updcheck') { uCheck(); return true; }
     if (a === 'updbackup') { st.ubk = !st.ubk; t.setAttribute('aria-checked', String(st.ubk)); return true; }
@@ -6810,7 +6948,7 @@ function hvOpenSettings(hub, app, from) {
   const subSig = () => { const S = H().states || {}; let o = ''; for (const k in S) if (k.startsWith('update.')) { const x = S[k], a = x.attributes || {}; o += k + x.state + a.latest_version + a.in_progress + a.update_percentage + ';'; }
     if (st.sub === 'about') { const c = st.cfg || {}, W = hvAboutPick(H(), 'wifi', c), B = hvAboutPick(H(), 'batt', c); o += '|' + sv(S, W.id) + sv(S, B.id) + (B.id ? sv(S, B.id.replace(/_battery_level$/, '_battery_state')) : '') + W.cands.length + B.cands.length + (H().config || {}).version; } return o; };
   const paintSide = () => { if (list) list.innerHTML = sideHtml(); };
-  const paintPane = () => { if (!pane) return; const sy = pane.scrollTop; for (const f of forms.values()) f.remove(); if (ssPick) ssPick.remove(); if (fPick) fPick.remove(); pane.innerHTML = paneHtml(); ssMount(); fMount(); wpMount(); pane.scrollTop = sy; formsMount(); pvPaint(hvBgLevel(st.cfg || {})); albCheck(); };
+  const paintPane = () => { if (!pane) return; const sy = pane.scrollTop; for (const f of forms.values()) f.remove(); if (ssPick) ssPick.remove(); if (fPick) fPick.remove(); pane.innerHTML = paneHtml(); ssMount(); fMount(); wpMount(); caMount(); pane.scrollTop = sy; formsMount(); pvPaint(hvBgLevel(st.cfg || {})); albCheck(); };
   const paint = () => { if (!root) return;
     if (!st.ready) { root.classList.remove('pg'); list.innerHTML = '<div class="grp"><div class="empty">Loading…</div></div>'; pane.innerHTML = ''; return; }
     if (st.nohub) { root.classList.add('nohub', 'pg'); root.classList.remove('wide'); side.style.display = 'none';
@@ -7537,12 +7675,15 @@ class HVHubCard extends HTMLElement {
   // --- render
   _rSig() { const c = this._config, h = this._hass, p = this._person();
     const first = (c.name || (p && p.attributes.friendly_name) || (h.user && h.user.name) || '').trim().split(/\s+/)[0] || '';
-    const now = new Date(); return JSON.stringify([first, p && p.attributes.entity_picture, this._greeting(), c.apps, c.ring_color, c.photo_label, c.show_calendar, c.assistant_enabled === true && c.assistant_button !== false, now.getFullYear(), now.getMonth(), now.getDate()]); }
-  _appsHtml(c) { const glyph = a => a.icon === 'hv:home' ? HUB_HOME_SVG : hvHubCalGlyph(a, this._hass);
-    return c.apps.map((a, i) => `<button class="app" data-app="${i}" aria-label="${esc(a.name || '')}"><span class="ico" style="background:linear-gradient(180deg,${esc(a.color_from || '#8e8e93')} 0%,${esc(a.color_to || a.color_from || '#636366')} 100%);color:${esc(a.glyph_color || '#fff')}">${glyph(a)}</span><span class="lb">${esc(a.name || '')}</span></button>`).join(''); }
+    const now = new Date(); return JSON.stringify([first, p && p.attributes.entity_picture, this._greeting(), c.apps, c.custom_apps, c.ring_color, c.photo_label, c.show_calendar, c.assistant_enabled === true && c.assistant_button !== false, now.getFullYear(), now.getMonth(), now.getDate()]); }
+  _appsHtml(c) { const glyph = a => a.icon === 'hv:home' ? HUB_HOME_SVG : hvHubCalGlyph(a, this._hass); let ms = false;
+    const ext = (a, i) => { const e = hvCaOf(c, a.custom_app), nm = e ? String(e.name || 'App') : 'Missing app', g = e ? hvExtGlyph(e) : '<ha-icon icon="mdi:help-rounded"></ha-icon>'; if (/data-ms=/.test(g)) ms = true; // Settings › Custom Apps is the truth
+      return `<button class="app" data-app="${i}" aria-label="${esc(nm)}"><span class="ico" style="background:${e ? hvExtBg(e) : 'linear-gradient(180deg,#8e8e93 0%,#636366 100%)'};color:#fff">${g}</span><span class="lb">${esc(nm)}</span></button>`; };
+    const h = c.apps.map((a, i) => a && a.kind === 'external' ? ext(a, i) : `<button class="app" data-app="${i}" aria-label="${esc(a.name || '')}"><span class="ico" style="background:linear-gradient(180deg,${esc(a.color_from || '#8e8e93')} 0%,${esc(a.color_to || a.color_from || '#636366')} 100%);color:${esc(a.glyph_color || '#fff')}">${glyph(a)}</span><span class="lb">${esc(a.name || '')}</span></button>`).join('');
+    if (ms) setTimeout(() => hvExtMs(this.shadowRoot, this), 0); return h; }
   // 1.32.0 Home Screen arrange: a new config applied in place (apps redrawn, side tiles reordered / resized with their elements kept, no rebuild)
   _arrSet(raw) { const old = this._config; this._hvRaw = raw; const nc = Object.assign({}, HVHubCard.defaults, raw); if (!Array.isArray(nc.apps) || !nc.apps.length) nc.apps = HUB_APPS; this._config = nc;
-    if (!this._w) return this._render(); if (JSON.stringify(old && old.apps) !== JSON.stringify(nc.apps)) { const a = this._w.querySelector('.apps'); if (a) this._putApps(a, this._appsHtml(nc)); }
+    if (!this._w) return this._render(); if (JSON.stringify([old && old.apps, old && old.custom_apps]) !== JSON.stringify([nc.apps, nc.custom_apps])) { const a = this._w.querySelector('.apps'); if (a) this._putApps(a, this._appsHtml(nc)); }
     if (old && (old.show_calendar !== false) !== (nc.show_calendar !== false)) { this._sig = null; return this._render(); } // calendar shown / hidden: rebuild once
     if (this._cal && old && old.calendar_size !== nc.calendar_size) this._makeCal(this._cal);
     this._sig = this._rSig(); this._makeSide(); this._layout(); }
@@ -7779,6 +7920,8 @@ class HVHubCard extends HTMLElement {
   }
   // --- apps
   _runApp(_, i, page) { const a0 = this._config.apps[i]; if (!a0) return; const a = page ? Object.assign({}, a0, { open_as: 'page' }) : a0; const kind = a.kind || 'navigate';
+    if (kind === 'external') { if (this._edit || hvHubArr.hub === this) return; const e = hvCaOf(this._config, a.custom_app); if (!e) { hvToast('This app was removed in Settings › Custom Apps'); return; }
+      const b = this._w && this._w.querySelector(`.app[data-app="${i}"]`); hvOpenExternalApp(e, { confirm: e.confirm !== false, icon: e, anchor: b, hub: this, day: hvMode(this._config.theme, this._hass) === 'day' }); return; }
     if (kind === 'navigate' && a.open_as !== 'page' && !this._edit) { this._openViewSheet(a).then(ok => { if (!ok) this._runApp(_, i, true); }); return; }
     if (kind === 'navigate') { let p = this._path(a.navigation_path || 'home'); if (location.search && !p.includes('?')) p += location.search; history.pushState(null, '', p); fire(window, 'location-changed', { replace: false }); return; }
     if (kind === 'now_playing') { const ids = [a.entity].concat(a.entities || []).filter(Boolean); const def = Object.keys(this._hass.states).find(k => k.startsWith('media_player.'));
@@ -10464,6 +10607,228 @@ function hvWallpaperUI(ctx) {
   return { pair, outerGallery, styleSettings, innerPage }; }
 // Device Gallery: downscale (longest side 2560 px, JPEG 0.85), then upload into Media › nothomeview_wallpapers (or My media when that folder
 // can't be used). Admin only (Home Assistant's media upload). Returns the media-source id; throws an Error with a message people can read.
+// --- Settings › Custom Apps: the list (Edit: reorder, delete) and the add / edit page (App Store search, icon, colour, what it opens)
+const HV_CA_CSS = `
+:host{display:block;font-family:${FONT};color:var(--fg,#fff);-webkit-tap-highlight-color:transparent}
+*{box-sizing:border-box}ha-icon{display:inline-flex}button{font:inherit}
+.grp{border-radius:12px;background:var(--card,#1c1c1e);overflow:hidden;margin:0 0 24px}
+.r{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:12px;width:100%;min-height:52px;padding:8px 16px;position:relative;color:var(--fg,#fff)}
+button.r{cursor:pointer}button.r:active{background:var(--fld,rgba(118,118,128,.24))}button.r:focus-visible{outline:2px solid var(--blue,#0a84ff);outline-offset:-2px}
+.r + .r::before,.res > .r + .r::before{content:'';position:absolute;top:0;left:16px;right:0;border-top:.5px solid var(--sep,rgba(84,84,88,.65))}
+.ls .r + .r::before{left:68px}.r.stk{flex-direction:column;align-items:stretch;gap:8px;padding:11px 16px}
+.l{flex:1;min-width:0;font-size:17px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.tx small,.r small,.ft{font-size:13px;color:var(--fg2,rgba(235,235,245,.6));line-height:1.35;white-space:normal}.ft{margin:-16px 16px 24px}
+.ch{color:var(--fg2,rgba(235,235,245,.3));--mdc-icon-size:20px;flex:none}
+.ai{position:relative;flex:none;width:40px;height:40px;border-radius:22.5%;overflow:hidden;display:flex;align-items:center;justify-content:center;color:#fff;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.14)}
+.ai ha-icon{--mdc-icon-size:24px;display:flex}
+.hd{display:flex;justify-content:flex-end;margin:-6px 4px 6px}
+.lk{all:unset;cursor:pointer;color:var(--blue,#0a84ff);font-size:17px;padding:4px 2px}.lk:focus-visible{outline:2px solid var(--blue,#0a84ff);border-radius:4px}
+.add .l{color:var(--blue,#0a84ff)}.pl{flex:none;width:40px;height:40px;display:flex;align-items:center;justify-content:center;color:var(--blue,#0a84ff)}.pl ha-icon{--mdc-icon-size:28px}
+.mn{all:unset;cursor:pointer;flex:none;color:#ff453a;display:flex}.mn ha-icon{--mdc-icon-size:24px}
+.mv{display:flex;gap:2px;flex:none}.mv button{all:unset;cursor:pointer;width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--fg2,rgba(235,235,245,.6))}
+.mv button:active{background:var(--fld,rgba(118,118,128,.24))}.mv button:disabled{opacity:.3;cursor:default}.mv button:focus-visible{outline:2px solid var(--blue,#0a84ff)}
+.cf{flex-wrap:wrap}.cf .l{white-space:normal;font-size:15px;flex-basis:100%}.dz{all:unset;cursor:pointer;color:#fff;background:#ff3b30;border-radius:8px;padding:6px 14px;font-size:15px;font-weight:600}
+.em{color:var(--fg2,rgba(235,235,245,.6));justify-content:center}
+.gh{font-size:13px;text-transform:uppercase;letter-spacing:.02em;color:var(--fg2,rgba(235,235,245,.6));margin:0 16px 7px}
+/* the add / edit page */
+.pv{display:flex;flex-direction:column;align-items:center;gap:10px;margin:0 0 22px}
+.pv .ai{width:96px;height:96px;box-shadow:0 8px 22px rgba(0,0,0,.22),inset 0 0 0 .5px rgba(0,0,0,.14)}.pv .ai ha-icon{--mdc-icon-size:56px}
+.pv b{font-size:15px;font-weight:500;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pv b.ph{color:var(--fg2,rgba(235,235,245,.6))}
+.busy::after{content:'';position:absolute;inset:0;background:rgba(0,0,0,.35) center/28px no-repeat}
+.sp{flex:none;width:18px;height:18px;border-radius:50%;border:2px solid var(--fld,rgba(118,118,128,.24));border-top-color:var(--fg2,#999);animation:hvcs .8s linear infinite}@keyframes hvcs{to{transform:rotate(360deg)}}
+.srch{gap:8px;min-height:44px;margin:8px;padding:0 10px;width:calc(100% - 16px);border-radius:10px;background:var(--fld,rgba(118,118,128,.24))}
+.srch ha-icon{--mdc-icon-size:20px;color:var(--fg2,rgba(235,235,245,.6))}
+input.q,.fi{all:unset;box-sizing:border-box;flex:1;min-width:0;font-size:17px;color:var(--fg,#fff);-webkit-user-select:text;user-select:text}
+.fi.box{width:100%;padding:9px 12px;border-radius:10px;background:var(--fld,rgba(118,118,128,.24));font-size:16px}
+.r > .fi:not(.box){text-align:right}.fi::placeholder,input.q::placeholder{color:var(--fg2,rgba(235,235,245,.5))}
+input:disabled,button:disabled{opacity:.45;cursor:default}
+.st{padding:10px 16px 14px;font-size:15px;color:var(--fg2,rgba(235,235,245,.6));display:flex;gap:10px;align-items:center}
+.res .r{min-height:58px}.res .tx .l{font-size:16px}.bm{flex:none;font-size:12px;font-weight:600;color:#fff;background:var(--blue,#0a84ff);border-radius:99px;padding:2px 8px}
+.res img.ai{object-fit:cover;background:var(--fld,rgba(118,118,128,.24))}
+.ok{color:#30d158}.er{color:#ff453a}
+.icr .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.pill{all:unset;cursor:pointer;padding:6px 14px;border-radius:99px;background:var(--fld,rgba(118,118,128,.24));color:var(--blue,#0a84ff);font-size:15px}
+.pill:focus-visible,.sw button:focus-visible,.seg button:focus-visible{outline:2px solid var(--blue,#0a84ff);outline-offset:2px}
+.sw{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.sw button{all:unset;cursor:pointer;width:30px;height:30px;border-radius:50%;box-shadow:inset 0 0 0 .5px rgba(255,255,255,.25)}
+.sw button[aria-pressed="true"]{box-shadow:0 0 0 2px var(--card,#1c1c1e),0 0 0 4px var(--fg,#fff)}
+.sw input[type=color]{width:34px;height:34px;padding:0;border:0;background:none;cursor:pointer}
+.seg{display:flex;padding:8px}.seg > div{display:flex;flex:1;padding:2px;border-radius:9px;background:var(--fld,rgba(118,118,128,.24))}
+.seg button{all:unset;cursor:pointer;flex:1;text-align:center;padding:6px 0;border-radius:7px;font-size:14px;font-weight:500}
+.seg button[aria-pressed="true"]{background:var(--card2,#636366);box-shadow:0 3px 8px rgba(0,0,0,.12)}
+.ck{color:var(--blue,#0a84ff);--mdc-icon-size:22px;flex:none}
+.hint{padding:0 16px 12px;font-size:13px;line-height:1.35;color:var(--fg2,rgba(235,235,245,.6))}.hint:empty{display:none}
+details{margin:0 0 24px}summary{cursor:pointer;list-style:none;font-size:13px;text-transform:uppercase;letter-spacing:.02em;color:var(--fg2,rgba(235,235,245,.6));margin:0 16px 7px;display:flex;align-items:center;gap:4px}
+summary::-webkit-details-marker{display:none}summary ha-icon{--mdc-icon-size:18px;transition:transform .2s}details[open] summary ha-icon{transform:rotate(90deg)}details .grp{margin:0}
+.tg{all:unset;cursor:pointer;flex:none;position:relative;width:51px;height:31px;border-radius:99px;background:var(--off,rgba(120,120,128,.32));transition:background .2s}
+.tg::after{content:'';position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:0 3px 8px rgba(0,0,0,.15);transition:transform .2s}
+.tg[aria-checked="true"]{background:var(--on,#30d158)}.tg[aria-checked="true"]::after{transform:translateX(20px)}.tg:focus-visible{outline:2px solid var(--blue,#0a84ff);outline-offset:2px}
+.act .l{color:var(--blue,#0a84ff)}
+.bts{display:flex;gap:12px;margin:0 0 14px}.b{all:unset;box-sizing:border-box;cursor:pointer;flex:1;min-height:50px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:600}
+.b.pri{background:var(--blue,#0a84ff);color:#fff}.b.sec{background:var(--card,#1c1c1e);color:var(--blue,#0a84ff)}.b.del{width:100%;background:var(--card,#1c1c1e);color:#ff453a;margin-bottom:14px}
+.b:focus-visible{outline:2px solid var(--blue,#0a84ff);outline-offset:2px}.b:disabled{opacity:.45;cursor:default}
+.msg{margin:0 4px 14px;font-size:14px;color:#ff453a}.msg:empty{display:none}
+ha-icon-picker{display:block;flex:1;min-width:0}`;
+const HV_CA_COLS = ['#8e8e93', '#ff3b30', '#ff9500', '#ffcc00', '#34c759', '#00c7be', '#32ade6', '#007aff', '#5856d6', '#af52de', '#ff2d55', '#1c1c1e'];
+const HV_CA_ICONS = ['mdi:application', 'mdi:music', 'mdi:television-play', 'mdi:play-circle', 'mdi:shopping', 'mdi:cart', 'mdi:email', 'mdi:message', 'mdi:map', 'mdi:car', 'mdi:camera', 'mdi:home', 'mdi:lightbulb', 'mdi:thermostat', 'mdi:shield-home', 'mdi:calendar', 'mdi:web', 'mdi:podcast'];
+// the subtitle under a custom app: what it opens and whether it asks first
+const hvCaSub = e => { const p = hvExtPresetOf(e), u = hvExtUrlOk(e.url) || hvExtUrlOk(e.ios_url) || hvExtUrlOk(e.android_url) || hvExtUrlOk(e.web_url); let t;
+  if (p) t = 'Opens ' + p.name; else if (!u) t = 'No link yet';
+  else if (/^https?:/i.test(u)) { let h = u; try { h = new URL(u).hostname.replace(/^www\./, ''); } catch (x) {} t = /(^|\.)apps\.apple\.com$/.test(h) ? 'Opens its App Store page' : 'Opens ' + h; }
+  else t = 'Opens ' + (/^intent:/i.test(u) ? 'an Android app' : u.split(':')[0] + ':');
+  return t + (e.confirm === false ? ' · opens straight away' : ' · asks first'); };
+// a picture -> a small square data URL (180–256 px; JPEG 0.85 when the PNG would be over ~40 KB). '' when it can't be drawn.
+const hvCaSquare = (src, S) => { S = S || 192; const cv = document.createElement('canvas'); cv.width = cv.height = S; const g = cv.getContext('2d'), w = src.naturalWidth || src.width, h = src.naturalHeight || src.height, m = Math.min(w, h);
+  g.fillStyle = '#fff'; g.fillRect(0, 0, S, S); g.drawImage(src, (w - m) / 2, (h - m) / 2, m, m, 0, 0, S, S);
+  let d = cv.toDataURL('image/png'); if (d.length > 54000) d = cv.toDataURL('image/jpeg', 0.85); if (d.length > 54000 && S > 180) return hvCaSquare(src, 180); return d; };
+// the App Store artwork: drawn on a canvas and kept as a data URL (works offline, nothing fetched later); if Apple's CDN gives no CORS header the
+// canvas is tainted, so the https link is kept instead
+async function hvCaArt(u) { if (!/^https:\/\//i.test(String(u || ''))) return ''; const sm = String(u).replace(/\/\d+x\d+(bb)?\.(png|jpe?g|webp)$/i, '/256x256bb.$2');
+  const load = (s, cors) => new Promise((ok, no) => { const i = new Image(); if (cors) i.crossOrigin = 'anonymous'; i.referrerPolicy = 'no-referrer'; i.onload = () => ok(i); i.onerror = () => no(new Error('load')); i.src = s; });
+  let img; try { img = await load(sm, true); } catch (e) { try { img = await load(u, true); } catch (z) { return hvExtImgOk(sm) ? sm : ''; } }
+  try { return hvCaSquare(img); } catch (e) { return hvExtImgOk(img.src) ? img.src : ''; } }
+// a picture from this device -> a data URL (no upload: it lives in the card's config)
+async function hvCaFile(file) { if (!file || (!/^image\//.test(file.type || '') && !/\.(jpe?g|png|webp|gif|heic|heif|avif|bmp)$/i.test(file.name || ''))) throw new Error('That is not a picture.');
+  if (file.size > 25 * 1024 * 1024) throw new Error('That picture is over 25 MB.');
+  let src; try { src = await createImageBitmap(file); } catch (e) { src = await new Promise((ok, no) => { const i = new Image(), u = URL.createObjectURL(file); i.onload = () => { URL.revokeObjectURL(u); ok(i); }; i.onerror = () => { URL.revokeObjectURL(u); no(new Error('This browser can\'t read that picture.')); }; i.src = u; }); }
+  const d = hvCaSquare(src); if (src.close) src.close(); return d; }
+// Google Play from a link: id= of a Play Store page or a market:// link
+const hvCaPlayId = s => { const m = /(?:^|[?&#;])id=([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)/.exec(String(s || '').trim()); return m && /^(https:\/\/play\.google\.com\/|market:\/\/|play\.google\.com\/)/i.test(String(s).trim()) ? m[1] : ''; };
+function hvCustomAppsUI(ctx) {
+  const L = () => hvCaList(ctx.cfg()), clone = o => JSON.parse(JSON.stringify(o)), ico = e => `<span class="ai" style="background:${hvExtBg(e)}">${hvExtGlyph(e)}</span>`;
+  const ms = r => hvExtMs(r, ctx.hub());
+  // ---- the list
+  const list = () => { const box = document.createElement('div'); box.className = 'ca'; let edit = false, ask = null;
+    const row = (e, i, n, ro) => { const nm = esc(e.name || 'App');
+      if (ask === e.id) return `<div class="r cf" role="listitem"><span class="l">Delete ${nm}? It is also removed from the Home Screen.</span><button class="dz" data-a="delok" data-id="${esc(e.id)}">Delete</button><button class="lk" data-a="delno">Cancel</button></div>`;
+      if (edit && !ro) return `<div class="r" role="listitem"><button class="mn" data-a="del" data-id="${esc(e.id)}" aria-label="Delete ${nm}"><ha-icon icon="mdi:minus-circle"></ha-icon></button>${ico(e)}<span class="tx"><span class="l">${nm}</span></span>`
+        + `<span class="mv" data-no-sheet-drag><button data-a="up" data-i="${i}" aria-label="Move ${nm} up"${i ? '' : ' disabled'}><ha-icon icon="mdi:chevron-up"></ha-icon></button><button data-a="dn" data-i="${i}" aria-label="Move ${nm} down"${i < n - 1 ? '' : ' disabled'}><ha-icon icon="mdi:chevron-down"></ha-icon></button></span></div>`;
+      return `<button class="r" role="listitem" data-a="open" data-id="${esc(e.id)}">${ico(e)}<span class="tx"><span class="l">${nm}</span><small>${esc(hvCaSub(e))}</small></span><ha-icon class="ch" icon="mdi:chevron-right"></ha-icon></button>`; };
+    const paint = () => { const xs = L(), ro = ctx.ro; if (!xs.length || ro) edit = false;
+      box.innerHTML = (xs.length && !ro ? `<div class="hd"><button class="lk" data-a="edit" aria-pressed="${edit}">${edit ? 'Done' : 'Edit'}</button></div>` : '')
+        + `<div class="grp ls" role="list" aria-label="Custom apps">${xs.map((e, i) => row(e, i, xs.length, ro)).join('')}`
+        + (ro ? (xs.length ? '' : '<div class="r em">No custom apps</div>') : `<button class="r add" data-a="new"><span class="pl"><ha-icon icon="mdi:plus-circle"></ha-icon></span><span class="l">Add Custom App</span></button>`) + '</div>';
+      ms(box); };
+    box.addEventListener('click', ev => { const b = ev.composedPath().find(n => n.dataset && n.dataset.a); if (!b || b.disabled) return; const a = b.dataset.a, xs = L();
+      if (a === 'open') { ctx.go('ca:' + b.dataset.id); return; } if (ctx.ro) return;
+      if (a === 'new') { ctx.go('ca-new'); return; }
+      if (a === 'edit') { edit = !edit; ask = null; paint(); const e = box.querySelector('[data-a="edit"]'); if (e) e.focus(); return; }
+      if (a === 'del') { ask = b.dataset.id; paint(); const d = box.querySelector('[data-a="delno"]'); if (d) d.focus(); return; }
+      if (a === 'delno') { ask = null; paint(); return; }
+      if (a === 'delok') { const id = b.dataset.id; ask = null; ctx.save('custom_apps', xs.filter(x => x.id !== id)); paint(); return; }
+      if (a === 'up' || a === 'dn') { const i = Number(b.dataset.i), j = a === 'up' ? i - 1 : i + 1; if (j < 0 || j >= xs.length) return; const ys = xs.slice(); [ys[i], ys[j]] = [ys[j], ys[i]];
+        ctx.save('custom_apps', ys); paint(); const f = box.querySelector(`[data-a="${a}"][data-i="${j}"]`) || box.querySelector(`[data-i="${j}"]`); if (f) f.focus(); } });
+    box._refresh = paint; paint(); return box; };
+  // ---- add / edit
+  const editor = id => { const box = document.createElement('div'); box.className = 'ca ed'; const cur = id ? L().find(x => x.id === id) : null;
+    if (id && !cur) { box.innerHTML = '<div class="grp"><div class="r em">This app was deleted.</div></div>'; return box; }
+    const d = cur ? clone(cur) : { id: hvCaId(), name: '', icon: 'mdi:application', color: '#8e8e93', confirm: true }; if (!d.store) d.store = {};
+    const ro = ctx.ro, D = ro ? ' disabled' : ''; let mode = hvExtPresetOf(d) || !(d.url || d.ios_url || d.android_url || d.web_url) ? 'preset' : 'custom';
+    if (!cur) mode = 'preset'; let res = [], sst = '', best = null, ab = null, tmr = 0, hint = '', playSug = '', del = false, artBusy = false, q0 = '';
+    box.innerHTML = `<div class="pv"><span class="ai big"></span><b class="pn"></b></div>
+<div class="gh">App Store</div><div class="grp"><label class="r srch"><ha-icon icon="mdi:magnify"></ha-icon><input type="search" class="q" placeholder="Search the App Store" aria-label="Search the App Store" autocomplete="off" enterkeyhint="search"${D}></label><div class="res" role="listbox" aria-label="App Store results" aria-live="polite"></div></div>
+<div class="ft">Finds the app's name and icon. Only the words you type are sent to Apple.</div>
+<div class="grp"><label class="r stk"><span class="l">Google Play link</span><input class="fi box play" type="url" inputmode="url" placeholder="https://play.google.com/store/apps/details?id=…" aria-label="Google Play link" autocomplete="off"${D}><small class="pm"></small></label></div>
+<div class="gh">App</div><div class="grp">
+<label class="r"><span class="l" style="flex:none">Name</span><input class="fi nm" maxlength="40" placeholder="Name" aria-label="Name" autocomplete="off"${D}></label>
+<div class="r stk icr"><span class="l">Icon</span><div class="row ib"></div><small>The App Store picture, a picture of your own (it is kept in the Home Screen card), or a Material Design icon on the colour below.</small></div>
+<div class="r stk"><span class="l">Colour</span><div class="sw" role="group" aria-label="Colour"></div></div></div>
+<div class="gh">Opens</div><div class="grp op"><div class="r seg"><div role="group" aria-label="Opens"><button data-m="preset"${D}>Preset</button><button data-m="custom"${D}>Custom URL</button></div></div><div class="pre ls"></div>
+<label class="r stk cu"><input class="fi box url" type="url" inputmode="url" placeholder="spotify:  or  https://…" aria-label="Link (URL)" autocomplete="off" spellcheck="false"${D}><small class="ue er"></small></label><div class="hint"></div></div>
+<details class="adv"><summary><ha-icon icon="mdi:chevron-right"></ha-icon>Advanced</summary><div class="grp">
+<label class="r stk"><span class="l">iPhone / iPad link</span><input class="fi box" data-f="ios_url" type="url" placeholder="Same as above" spellcheck="false" autocomplete="off"${D}><small>Used instead on iPhone and iPad, e.g. the app's own URL scheme.</small><small class="er" data-e="ios_url"></small></label>
+<label class="r stk"><span class="l">Android link</span><input class="fi box" data-f="android_url" type="url" placeholder="intent://#Intent;package=…;end" spellcheck="false" autocomplete="off"${D}><small>Used instead on Android: an intent:// link with the app's package opens it, or its Play Store page.</small><small class="er" data-e="android_url"></small></label>
+<label class="r stk"><span class="l">Web link</span><input class="fi box" data-f="web_url" type="url" placeholder="https://…" spellcheck="false" autocomplete="off"${D}><small>Opened on a computer, and offered when the app isn't installed.</small><small class="er" data-e="web_url"></small></label></div></details>
+<div class="grp"><div class="r"><span class="l">Ask before opening</span><button class="tg cfm" role="switch" aria-label="Ask before opening"${D}></button></div></div>
+<div class="ft">Shows “Open “${'${name}'}”?” before leaving Home Assistant.</div>
+<div class="grp"><button class="r act test"><span class="l">Test</span><ha-icon class="ch" icon="mdi:open-in-new"></ha-icon></button></div>
+<div class="msg" role="alert"></div>${ro ? '' : '<div class="bts"><button class="b sec cancel">Cancel</button><button class="b pri save">Save</button></div>'}
+${cur && !ro ? '<div class="dl"></div>' : ''}`;
+    const $ = s => box.querySelector(s), q = $('.q'), nm = $('.nm'), url = $('.url'), msg = $('.msg');
+    const ft = box.querySelectorAll('.ft')[1]; const ftPaint = () => { ft.textContent = `Shows “Open “${(d.name || '').trim() || 'App'}”?” before leaving Home Assistant.`; };
+    const pvPaint = () => { const a = $('.pv .ai'); a.style.background = hvExtBg(d); a.innerHTML = hvExtGlyph(d); a.classList.toggle('busy', artBusy); const b = $('.pn'); b.textContent = (d.name || '').trim() || 'New App'; b.classList.toggle('ph', !(d.name || '').trim()); ms(a); ftPaint(); };
+    const resPaint = () => { const r = $('.res'); let h = '';
+      if (sst) h += `<div class="st">${sst === 'Searching…' ? '<span class="sp"></span>' : ''}<span${/Couldn/.test(sst) ? ' class="er"' : ''}>${esc(sst)}</span></div>`;
+      for (const x of res) { const i = res.indexOf(x), art = String(x.artworkUrl100 || x.artworkUrl60 || ''); h += `<button class="r" role="option" data-pick="${i}" aria-label="${esc(x.trackName)}${x.sellerName ? ', ' + esc(x.sellerName) : ''}"${D}>`
+        + (/^https:\/\//.test(art) ? `<img class="ai" alt="" src="${esc(art)}" referrerpolicy="no-referrer" loading="lazy">` : '<span class="ai" style="background:#8e8e93"><ha-icon icon="mdi:application"></ha-icon></span>')
+        + `<span class="tx"><span class="l">${esc(x.trackName)}</span><small>${esc(x.sellerName || '')}</small></span>${x === best ? '<span class="bm">Best match</span>' : ''}</button>`; }
+      if (playSug) h += `<button class="r" data-play="${esc(playSug)}"${D}><span class="ai" style="background:#01875f"><ha-icon icon="mdi:google-play"></ha-icon></span><span class="tx"><span class="l">Google Play</span><small>${esc(playSug)}</small></span></button>`;
+      r.innerHTML = h; };
+    const icoPaint = () => { const b = $('.ib'); const im = hvExtImgOk(d.icon_image);
+      b.innerHTML = (im ? `<span class="ai" style="background:${hvExtBg(d)}">${hvExtGlyph(d)}</span><button class="pill rm"${D}>Remove picture</button>` : '<div class="ip" style="flex:1;min-width:0;display:flex"></div>')
+        + (ro ? '' : '<button class="pill up">Upload image</button><input type="file" accept="image/*" hidden>'); ms(b);
+      if (!im) { const ip = b.querySelector('.ip'), P = customElements.get('ha-icon-picker');
+        if (P) { const p = document.createElement('ha-icon-picker'); p.hass = ctx.H(); p.value = d.icon || 'mdi:application'; p.label = 'Icon'; p.disabled = ro;
+          p.addEventListener('value-changed', ev => { ev.stopPropagation(); d.icon = (ev.detail && ev.detail.value) || 'mdi:application'; pvPaint(); }); ip.appendChild(p); }
+        else { ip.innerHTML = `<input class="fi box ic" list="hvcai" placeholder="mdi:application" aria-label="Icon (mdi:…)" spellcheck="false" autocomplete="off"${D}><datalist id="hvcai">${HV_CA_ICONS.map(i => `<option value="${i}">`).join('')}</datalist>`;
+          const t = ip.querySelector('input'); t.value = d.icon || ''; t.addEventListener('input', () => { const v = t.value.trim(); d.icon = /^[a-z0-9-]+:[a-z0-9-]+$/i.test(v) ? v : 'mdi:application'; pvPaint(); }); } }
+      const up = b.querySelector('.up'), fi = b.querySelector('input[type=file]');
+      if (up) up.onclick = () => fi.click(); if (fi) fi.onchange = async () => { const f = fi.files && fi.files[0]; fi.value = ''; if (!f) return; artBusy = true; pvPaint();
+        try { d.icon_image = await hvCaFile(f); msg.textContent = ''; } catch (e) { msg.textContent = (e && e.message) || String(e); } artBusy = false; pvPaint(); icoPaint(); };
+      const rm = b.querySelector('.rm'); if (rm) rm.onclick = () => { delete d.icon_image; pvPaint(); icoPaint(); }; };
+    const colPaint = () => { const s = $('.sw'), c = hvExtCol(d.color).toLowerCase();
+      s.innerHTML = HV_CA_COLS.map(x => `<button style="background:${x}" data-c="${x}" aria-label="${x}" aria-pressed="${x === c}"${D}></button>`).join('') + `<input type="color" value="${c.length === 4 ? '#' + c.slice(1).replace(/./g, z => z + z) : c}" aria-label="Custom colour"${D}>`;
+      s.querySelector('input').addEventListener('input', ev => { d.color = ev.target.value; pvPaint(); s.querySelectorAll('[data-c]').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.c === d.color.toLowerCase()))); }); };
+    const opPaint = () => { box.querySelectorAll('.seg [data-m]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.m === mode)));
+      const pr = $('.pre'), cu = $('.cu'), P = hvExtPresetOf(d); pr.hidden = mode !== 'preset'; cu.hidden = mode !== 'custom';
+      pr.innerHTML = HV_EXT_PRESETS.map(p => `<button class="r" data-preset="${p.key}" aria-pressed="${P === p}"${D}><span class="ai" style="background:${hvExtBg(p)}"><ha-icon icon="${p.icon}"></ha-icon></span><span class="tx"><span class="l">${esc(p.name)}</span><small>${p.ios_url && !p.url ? 'iPhone and iPad only' : p.url && /^https:/.test(p.url) ? 'Opens the app, or its website' : 'Opens the app'}</small></span>${P === p ? '<ha-icon class="ck" icon="mdi:check"></ha-icon>' : ''}</button>`).join('');
+      url.value = d.url || ''; $('.ue').textContent = hvExtUrlWhy(url.value); $('.hint').textContent = hint;
+      box.querySelectorAll('[data-f]').forEach(i => { i.value = d[i.dataset.f] || ''; const e = box.querySelector(`[data-e="${i.dataset.f}"]`); if (e) e.textContent = hvExtUrlWhy(i.value); }); };
+    const cfPaint = () => $('.cfm').setAttribute('aria-checked', String(d.confirm !== false));
+    const dlPaint = () => { const b = $('.dl'); if (!b) return; b.innerHTML = del ? `<div class="grp"><div class="r cf"><span class="l">Delete ${esc(d.name || 'this app')}? It is also removed from the Home Screen.</span><button class="dz delok">Delete</button><button class="lk delno">Cancel</button></div></div>` : '<button class="b del">Delete App</button>'; };
+    const usePreset = (p, keepName) => { for (const k of ['url', 'ios_url', 'android_url', 'web_url']) delete d[k]; Object.assign(d, hvExtPresetLinks(p)); if (p.itunes) d.store.itunes_id = p.itunes; if (p.pkg) d.store.play_id = p.pkg;
+      if (!keepName || !(d.name || '').trim()) d.name = p.name; if (!hvExtImgOk(d.icon_image)) { d.icon = p.icon; d.color = p.color; } hint = ''; mode = 'preset'; };
+    // the App Store: debounced, the previous request cancelled; the exact match (same name, bundle id, App Store id or seller) first
+    const exactOf = (xs, term) => { const n = hvCaNorm(term), s = d.store || {}; return xs.find(x => hvCaNorm(x.trackName) === n) || xs.find(x => (s.bundle_id && x.bundleId === s.bundle_id) || (s.itunes_id && Number(x.trackId) === Number(s.itunes_id))) || null; };
+    const playTry = (term, sig) => { playSug = ''; fetch(`https://play.google.com/store/search?q=${encodeURIComponent(term)}&c=apps`, { signal: sig, credentials: 'omit', referrerPolicy: 'no-referrer', mode: 'cors' })
+      .then(r => r.ok ? r.text() : '').then(t => { const m = /\/store\/apps\/details\?id=([A-Za-z0-9_.]+)/.exec(t || ''); if (m && q0 === term) { playSug = m[1]; resPaint(); } }).catch(() => {}); }; // Google Play has no CORS: quietly nothing
+    const search = async (term, auto) => { term = String(term || '').trim().slice(0, 100); q0 = term; if (ab) ab.abort(); ab = null; playSug = ''; best = null;
+      if (!term) { res = []; sst = ''; resPaint(); return null; } const my = ab = typeof AbortController === 'function' ? new AbortController() : null; sst = 'Searching…'; if (!auto) resPaint();
+      const cc0 = String((ctx.H().config || {}).country || '').toLowerCase(), cc = /^[a-z]{2}$/.test(cc0) ? cc0 : 'ca';
+      try { const r = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(term)}&entity=software&country=${cc}&limit=10`, { signal: my && my.signal, credentials: 'omit', referrerPolicy: 'no-referrer' });
+        if (!r.ok) throw new Error('HTTP ' + r.status); const j = await r.json(); if (my !== ab) return null;
+        res = ((j && j.results) || []).filter(x => x && x.trackName && x.trackId).slice(0, 10); best = exactOf(res, term); if (best) res = [best].concat(res.filter(x => x !== best)); sst = res.length ? '' : 'No apps found'; }
+      catch (e) { if (e && e.name === 'AbortError') return null; if (my !== ab) return null; res = []; sst = 'Couldn\'t reach the App Store. Check the connection and try again.'; }
+      if (!auto) { resPaint(); if (best) pick(best); else playTry(term, my && my.signal); } return best; }; // an exact match is used at once (name, icon, links)
+    const pick = async (x, fromPreset) => { if (!fromPreset) { d.name = String(x.trackName || '').slice(0, 40); }
+      d.store = Object.assign({}, d.store, { itunes_id: Number(x.trackId) || undefined, bundle_id: x.bundleId || undefined, seller: x.sellerName || undefined });
+      if (!fromPreset) { const p = hvExtPresetFor(x); if (p) { usePreset(p, true); d.name = String(x.trackName || p.name).slice(0, 40); }
+        else { if (/^https:\/\//.test(x.trackViewUrl || '')) d.web_url = x.trackViewUrl; hint = d.url || d.ios_url ? '' : 'Add the app\'s link (URL scheme) to open it directly; without one it opens its App Store page.'; if (!d.url) mode = 'custom'; } }
+      nm.value = d.name; opPaint(); artBusy = true; pvPaint(); const a = await hvCaArt(x.artworkUrl512 || x.artworkUrl100); artBusy = false; if (a) d.icon_image = a; pvPaint(); icoPaint(); };
+    q.addEventListener('input', () => { clearTimeout(tmr); const v = q.value; tmr = setTimeout(() => search(v), 350); });
+    q.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); clearTimeout(tmr); search(q.value); } });
+    $('.res').addEventListener('click', e => { const b = e.composedPath().find(n => n.dataset && (n.dataset.pick != null || n.dataset.play)); if (!b || ro) return;
+      if (b.dataset.play) { setPlay(b.dataset.play); return; } const x = res[Number(b.dataset.pick)]; if (x) pick(x); });
+    const setPlay = id => { d.store.play_id = id; d.android_url = `intent://#Intent;package=${id};end`; if (!/apps\.apple\.com/.test(d.web_url || '')) d.web_url = hvExtPlay(id); // an App Store page already there stays (iPhone / iPad fall back to it)
+      $('.pm').textContent = 'Android: opens ' + id + ' (or its Play Store page)'; $('.pm').className = 'pm ok'; opPaint(); };
+    $('.play').addEventListener('input', ev => { const v = ev.target.value.trim(), pm = $('.pm'); if (!v) { pm.textContent = ''; return; } const id = hvCaPlayId(v);
+      if (id) setPlay(id); else { pm.textContent = 'That isn\'t a Play Store app link (it needs …details?id=com.example.app).'; pm.className = 'pm er'; } });
+    nm.value = d.name || ''; nm.addEventListener('input', () => { d.name = nm.value; pvPaint(); });
+    $('.sw').addEventListener('click', e => { const b = e.composedPath().find(n => n.dataset && n.dataset.c); if (!b || ro) return; d.color = b.dataset.c; colPaint(); pvPaint(); icoPaint(); });
+    $('.seg').addEventListener('click', e => { const b = e.composedPath().find(n => n.dataset && n.dataset.m); if (!b || ro) return; mode = b.dataset.m; opPaint(); if (mode === 'custom') url.focus(); });
+    $('.pre').addEventListener('click', async e => { const b = e.composedPath().find(n => n.dataset && n.dataset.preset); if (!b || ro) return; const p = HV_EXT_PRESETS.find(x => x.key === b.dataset.preset); if (!p) return;
+      usePreset(p, !!cur); nm.value = d.name; opPaint(); pvPaint(); icoPaint(); colPaint();
+      if (p.itunes && !hvExtImgOk(d.icon_image)) { const x = await search(p.name, true); if (x && Number(x.trackId) === p.itunes && hvExtPresetOf(d) === p) pick(x, true); } }); // the real icon, when Apple has it
+    url.addEventListener('input', () => { d.url = url.value.trim(); if (!d.url) delete d.url; $('.ue').textContent = hvExtUrlWhy(url.value); hint = ''; $('.hint').textContent = ''; });
+    box.querySelectorAll('[data-f]').forEach(i => i.addEventListener('input', () => { const f = i.dataset.f, v = i.value.trim(); if (v) d[f] = v; else delete d[f]; const e = box.querySelector(`[data-e="${f}"]`); if (e) e.textContent = hvExtUrlWhy(v); }));
+    $('.cfm').addEventListener('click', () => { if (ro) return; d.confirm = d.confirm === false; cfPaint(); });
+    // the entry as it is saved: empty fields dropped, links checked
+    const clean = () => { const o = { id: d.id, name: String(d.name || '').trim().slice(0, 40), icon: d.icon || 'mdi:application', color: hvExtCol(d.color) };
+      if (hvExtImgOk(d.icon_image)) o.icon_image = d.icon_image; for (const k of ['url', 'ios_url', 'android_url', 'web_url']) { const v = String(d[k] || '').trim(); if (v) o[k] = v; }
+      const s = {}; for (const [k, v] of Object.entries(d.store || {})) if (v !== undefined && v !== null && v !== '') s[k] = v; if (Object.keys(s).length) o.store = s; o.confirm = d.confirm !== false; return o; };
+    const check = o => { if (!o.name) return 'Give the app a name.'; for (const k of ['url', 'ios_url', 'android_url', 'web_url']) if (o[k] && !hvExtUrlOk(o[k])) return hvExtUrlWhy(o[k]);
+      return o.url || o.ios_url || o.android_url || o.web_url ? '' : 'Choose a preset, pick an App Store result or add a link.'; };
+    $('.test').addEventListener('click', ev => { const o = clean(), w = check(Object.assign({}, o, { name: o.name || 'App' })); msg.textContent = w; if (w) return;
+      hvOpenExternalApp(Object.assign({}, o, { name: o.name || 'App' }), { confirm: o.confirm, anchor: ev.currentTarget, hub: ctx.hub(), day: ctx.day && ctx.day() }); });
+    if (!ro) { $('.cancel').addEventListener('click', () => ctx.go(null));
+      $('.save').addEventListener('click', () => { const o = clean(), w = check(o); msg.textContent = w; if (w) { const f = !o.name ? nm : mode === 'custom' ? url : null; if (f) f.focus(); return; }
+        const xs = L().map(x => clone(x)), i = xs.findIndex(x => x.id === o.id); if (i >= 0) xs[i] = o; else xs.push(o); ctx.save('custom_apps', xs); ctx.go(null); }); }
+    const dl = $('.dl'); if (dl) dl.addEventListener('click', e => { const t = e.target.closest('button'); if (!t) return;
+      if (t.classList.contains('del')) { del = true; dlPaint(); const n = dl.querySelector('.delno'); if (n) n.focus(); }
+      else if (t.classList.contains('delno')) { del = false; dlPaint(); }
+      else if (t.classList.contains('delok')) { ctx.save('custom_apps', L().filter(x => x.id !== d.id)); ctx.go(null); } });
+    pvPaint(); icoPaint(); colPaint(); opPaint(); cfPaint(); dlPaint(); box._title = cur ? (cur.name || 'App') : 'New Custom App'; return box; };
+  return { list, editor }; }
 async function hvWpUpload(hass, file, prog) { if (!hass || !hass.user || !hass.user.is_admin) throw new Error('Only an administrator can upload pictures to Home Assistant.');
   if (!/^image\//.test(file.type || '') && !/\.(jpe?g|png|webp|gif|heic|heif|avif|bmp)$/i.test(file.name || '')) throw new Error('That is not a picture.');
   let blob = file, name = `wallpaper_${new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14)}.jpg`;
