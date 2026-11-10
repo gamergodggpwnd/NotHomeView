@@ -4172,7 +4172,7 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
     const head = t => { const d = document.createElement('div'); d.className = 't'; d.textContent = t; m.appendChild(d); };
     const row = (ico, txt, sub, fn) => { const b = document.createElement('button'); b.setAttribute('role', 'menuitem'); b.innerHTML = `${ico}<span class="tx"><span></span>${sub ? '<small></small>' : ''}</span>`;
       b.querySelector('.tx > span').textContent = txt; if (sub) b.querySelector('small').textContent = sub; b.addEventListener('click', e => { e.stopPropagation(); fn(); }); m.appendChild(b); return b; };
-    const list = () => { m.innerHTML = ''; head('Add App'); const xs = HUB_APP_CATALOG.filter(x => !k.have.has(x.key) && this.avail(x, k));
+    const list = () => { m.innerHTML = ''; head('Add App'); const xs = HUB_APP_CATALOG.filter(x => !k.have.has(x.key) && this.avail(x, k)).sort((a, b) => String(a.name).localeCompare(String(b.name), undefined, { sensitivity: 'base' })); // A-Z by the name on the row
       if (!xs.length) { const d = document.createElement('div'); d.className = 'em'; d.textContent = 'All apps are on the Home Screen'; m.appendChild(d); }
       for (const x of xs) row(this.icoHtml(x), x.name, '', () => { if (x.key === 'home' || x.key === 'security') choose(x); else { close(); this.add(x, k); } });
       hvEcl.place(m, anchor); const f = m.querySelector('button'); if (f) f.focus({ preventScroll: true }); };
@@ -4225,7 +4225,7 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
     const side = () => { prov.innerHTML = ''; const row = (key, label, ico) => { const b = document.createElement('button'); b.className = 'pr' + (st.p === key ? ' on' : ''); b.dataset.p = key; b.setAttribute('role', 'option'); b.setAttribute('aria-selected', String(st.p === key));
         b.innerHTML = `${ico}<span></span>`; b.querySelector('span:last-child').textContent = label; b.addEventListener('click', e => { e.stopPropagation(); st.p = key; paint(); }); prov.appendChild(b); };
       row('sugg', 'Suggestions', '<span class="pi" style="background:linear-gradient(180deg,#bf5af2 0%,#7d3cff 100%)"><ha-icon icon="mdi:star-four-points"></ha-icon></span>');
-      for (const p of ['weather', 'calendar', 'homey']) if (match(p)) row(p, P[p].name, icoHtml(p)); };
+      for (const p of Object.keys(P).sort((a, b) => P[a].name.localeCompare(P[b].name, undefined, { sensitivity: 'base' }))) if (match(p)) row(p, P[p].name, icoHtml(p)); }; // Suggestions first, then A-Z
     const paint = () => { wrap._off(); if (st.p !== 'sugg' && !match(st.p)) st.p = 'sugg'; side(); wall.innerHTML = ''; const hd = $('.hd');
       if (st.p === 'sugg') { hd.innerHTML = '<h2>Suggestions</h2>'; const list = SUGG.filter(([p, k]) => match(p) && (!why(p, k) || (p === 'homey' && hm && k === 'square')));
         for (const [p, k] of list) wall.appendChild(preview(p, k));
@@ -5476,6 +5476,19 @@ function hvTimerScreen(T) {
   return host; }
 
 // ---- the assistant popup
+// the rainbow orb (the compact assistant popup's face, also its preview in Settings › Assistant & timer): inside an element with class bo
+const HV_ORB_CSS = `.bo span{position:absolute;border-radius:50%;display:block}
+.bo .ha{inset:-26px;background:conic-gradient(from 200deg,#ff5fd2,#a259ff,#3b82ff,#2fe0d0,#ffd25e,#ff7a59,#ff5fd2);filter:blur(26px);opacity:.55;animation:hvsp 6s linear infinite}
+.bo .ri{inset:-3px;background:conic-gradient(from 200deg,#ff5fd2,#a259ff,#3b82ff,#2fe0d0,#ffd25e,#ff7a59,#ff5fd2);filter:blur(3px);opacity:.95;animation:hvsp 6s linear infinite}
+.bo .co{inset:0;overflow:hidden;background:radial-gradient(circle at 50% 30%,rgba(90,90,115,.9) 0,rgba(22,22,34,.94) 58%,rgba(6,6,12,.97) 100%);
+ box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.28),inset 0 -18px 30px rgba(160,110,255,.45),inset 0 14px 26px rgba(80,200,255,.30)}
+.bo .bd1{left:14%;right:14%;top:48%;height:16%;background:linear-gradient(90deg,transparent,#ff7ad9 18%,#a98bff 36%,#6fb6ff 52%,#5ff0e0 66%,#ffe27a 82%,transparent);filter:blur(6px);opacity:.95;animation:hvbw 3.2s ease-in-out infinite}
+.bo .bd2{left:24%;right:24%;top:56%;height:7%;background:linear-gradient(90deg,transparent,#fff 40%,#fff 60%,transparent);filter:blur(4px);opacity:.55;animation:hvbw 3.2s ease-in-out infinite reverse}
+.bo .sp{left:22%;top:8%;width:56%;height:30%;background:linear-gradient(rgba(255,255,255,.55),rgba(255,255,255,0));filter:blur(1px)}
+.bo .li{left:16%;right:16%;bottom:10%;height:22%;border-radius:0 0 999px 999px;box-shadow:inset 0 -1.5px 0 rgba(255,255,255,.35)}
+@keyframes hvbw{0%,100%{transform:rotate(-6deg) translate3d(-7%,0,0) scaleX(.9)}50%{transform:rotate(-6deg) translate3d(7%,0,0) scaleX(1.08)}}
+@keyframes hvsp{to{transform:rotate(360deg)}}`;
+const HV_ORB_HTML = '<span class="ha"></span><span class="ri"></span><span class="co"><span class="bd1"></span><span class="bd2"></span><span class="sp"></span><span class="li"></span></span>';
 const ASSIST_CSS = `:host{position:fixed;inset:0;z-index:11;font-family:${FONT};-webkit-tap-highlight-color:transparent;--fg:#1c1c1e;--fg2:rgba(60,60,67,.62);--bub:#fff;--ubub:#0a84ff;--inp:rgba(118,118,128,.12);--sep:rgba(60,60,67,.12);--crd:rgba(255,255,255,.92);color:var(--fg);
  --st:${HV_FH_SAFE};--sb:env(safe-area-inset-bottom,0px);--sl:env(safe-area-inset-left,0px);--sr:env(safe-area-inset-right,0px)}
 :host([night]){--fg:#fff;--fg2:rgba(235,235,245,.6);--bub:rgba(255,255,255,.10);--inp:rgba(118,118,128,.26);--sep:rgba(255,255,255,.10);--crd:rgba(255,255,255,.08)}
@@ -5561,16 +5574,7 @@ const ASSIST_CSS = `:host{position:fixed;inset:0;z-index:11;font-family:${FONT};
 .bo{all:unset;cursor:pointer;pointer-events:auto;position:relative;flex:none;--os:116px;width:var(--os);height:var(--os);border-radius:50%;transform:scale(var(--lv,1));
  transition:width .35s cubic-bezier(.2,.9,.3,1),height .35s cubic-bezier(.2,.9,.3,1),transform .08s linear;-webkit-tap-highlight-color:transparent}
 :host([cap]) .bo{--os:92px}
-.bo span{position:absolute;border-radius:50%;display:block}
-.bo .ha{inset:-26px;background:conic-gradient(from 200deg,#ff5fd2,#a259ff,#3b82ff,#2fe0d0,#ffd25e,#ff7a59,#ff5fd2);filter:blur(26px);opacity:.55;animation:hvsp 6s linear infinite}
-.bo .ri{inset:-3px;background:conic-gradient(from 200deg,#ff5fd2,#a259ff,#3b82ff,#2fe0d0,#ffd25e,#ff7a59,#ff5fd2);filter:blur(3px);opacity:.95;animation:hvsp 6s linear infinite}
-.bo .co{inset:0;overflow:hidden;background:radial-gradient(circle at 50% 30%,rgba(90,90,115,.9) 0,rgba(22,22,34,.94) 58%,rgba(6,6,12,.97) 100%);
- box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.28),inset 0 -18px 30px rgba(160,110,255,.45),inset 0 14px 26px rgba(80,200,255,.30)}
-.bo .bd1{left:14%;right:14%;top:48%;height:16%;background:linear-gradient(90deg,transparent,#ff7ad9 18%,#a98bff 36%,#6fb6ff 52%,#5ff0e0 66%,#ffe27a 82%,transparent);filter:blur(6px);opacity:.95;animation:hvbw 3.2s ease-in-out infinite}
-.bo .bd2{left:24%;right:24%;top:56%;height:7%;background:linear-gradient(90deg,transparent,#fff 40%,#fff 60%,transparent);filter:blur(4px);opacity:.55;animation:hvbw 3.2s ease-in-out infinite reverse}
-.bo .sp{left:22%;top:8%;width:56%;height:30%;background:linear-gradient(rgba(255,255,255,.55),rgba(255,255,255,0));filter:blur(1px)}
-.bo .li{left:16%;right:16%;bottom:10%;height:22%;border-radius:0 0 999px 999px;box-shadow:inset 0 -1.5px 0 rgba(255,255,255,.35)}
-@keyframes hvbw{0%,100%{transform:rotate(-6deg) translate3d(-7%,0,0) scaleX(.9)}50%{transform:rotate(-6deg) translate3d(7%,0,0) scaleX(1.08)}}
+${HV_ORB_CSS}
 :host([st=listening]) .bo .ha{opacity:calc(.55 + var(--lv0,0) * .4);animation-duration:2.6s} :host([st=listening]) .bo .ri{animation-duration:2.6s} :host([st=listening]) .bo .bd1{animation-duration:1.3s}
 :host([st=thinking]) .bo .ha,:host([st=thinking]) .bo .ri{animation-duration:.9s} :host([st=thinking]) .bo .ha{opacity:.8}
 :host([st=speaking]) .bo .ha{animation:hvsp 3s linear infinite,hvpl 1.1s ease-in-out infinite} :host([st=speaking]) .bo .co{animation:hvps 1.1s ease-in-out infinite}
@@ -5891,7 +5895,7 @@ function hvAssist(hub, o) {
   o = o || {}; let compact = !!o.orb;
   const c = hub._config, h0 = hub._hass; const theme = c.assistant_theme && c.assistant_theme !== 'same' ? c.assistant_theme : c.theme;
   const host = document.createElement('homeview-assist'), sr = host.attachShadow({ mode: 'open' }); host.toggleAttribute('night', hvMode(theme, h0) !== 'day');
-  sr.innerHTML = `<style>${ASSIST_CSS}${HV_HEAD_CSS}</style><div class="ov"><div class="ow"><button class="bo" aria-label="Open the chat"><span class="ha"></span><span class="ri"></span><span class="co"><span class="bd1"></span><span class="bd2"></span><span class="sp"></span><span class="li"></span></span></button>
+  sr.innerHTML = `<style>${ASSIST_CSS}${HV_HEAD_CSS}</style><div class="ov"><div class="ow"><button class="bo" aria-label="Open the chat">${HV_ORB_HTML}</button>
     <div class="ost" role="status"><span class="wave" aria-hidden="true"><i style="--k:.5"></i><i style="--k:.8"></i><i style="--k:1"></i><i style="--k:.6"></i><i style="--k:.9"></i><i style="--k:.45"></i><i style="--k:.7"></i></span><span class="olt"></span></div>
     <div class="ohint">Tap the orb to see the chat</div><div class="cap" hidden aria-live="polite"><div class="q"></div><div class="a"></div><div class="mt"><span class="why"></span><span>Tap orb for chat</span></div></div></div></div>
     <div class="wrap"><div class="bg"></div>
@@ -6405,8 +6409,8 @@ const HV_SET_PAGES = [
     sec: [{ f: ['show_calendar', 'calendar_show_weather'] }, { f: ['calendar_entities'] },
       { h: 'Layout', f: ['calendar_layout', 'calendar_columns', 'calendar_days', 'calendar_size', 'calendar_rows', 'calendar_title', 'calendar_min_height'] }] },
   { id: 'assistant', t: 'Assistant & timer', i: 'mdi:microphone', c: 'linear-gradient(135deg,#ff5f9e,#a646f0 52%,#3d7bff)', g: 2, d: 'Talk or type to Home Assistant\'s Assist, timers and quiet mode.',
-    sec: [{ f: ['assistant_enabled', 'assistant_button'] }, { f: ['assistant_pipeline', 'assistant_theme'] }, { f: ['assistant_auto_listen', 'assistant_speak', 'timer_sound'] },
-      { h: 'Conversation', f: ['assistant_orb', 'assistant_face', 'assistant_continue', 'assistant_dismiss_phrases', 'assistant_silence_timeout', 'assistant_end_of_speech_pause', 'assistant_history_retention'] },
+    sec: [{ f: ['assistant_enabled', 'assistant_button'] }, { bare: true, f: ['@assistface'] }, { f: ['assistant_pipeline', 'assistant_theme'] }, { f: ['assistant_auto_listen', 'assistant_speak', 'timer_sound'] },
+      { h: 'Conversation', f: ['assistant_orb', 'assistant_continue', 'assistant_dismiss_phrases', 'assistant_silence_timeout', 'assistant_end_of_speech_pause', 'assistant_history_retention'] },
       { h: 'Wake word · this device', f: ['@wwjarvis', '@wwhomey'] },
       { h: 'Quiet mode: Auto', f: ['assistant_quiet_volume_entity', 'assistant_quiet_volume_below', 'assistant_quiet_focus_entity', 'assistant_quiet_start', 'assistant_quiet_end'] }] },
   { id: 'layout', t: 'Layout & weather', i: 'mdi:view-dashboard', c: '#ff9500', g: 2, d: 'The Photos and extra tiles\' sizes, the app icons\' size, and the weather.',
@@ -6421,6 +6425,7 @@ const HV_SET_ACTS = {
   '@about': { l: 'About', h: 'This device, Home Assistant and NotHomeView versions, Wi-Fi network, battery.', i: 'mdi:information-outline', nav: true },
   '@update': { l: 'Software Update', h: 'Home Assistant updates: Core, OS, Supervisor, add-ons, HACS, NotHomeView release. Check now, install.', i: 'mdi:cellphone-arrow-down', nav: true },
   '@sspick': { l: 'Screensaver style', h: 'Photo clock, Info dashboard, Abstract fluid, Modern typographic or Whimsical minimalist: swipe or tap to choose. Screensaver colors for the chosen style (colour pickers, swatches, reset to default colors) are underneath.', pick: true },
+  '@assistface': { l: 'Assistant', h: 'Orb or Homey: what the compact popup shows when the mic opens (Mic opens a floating orb). Swipe or tap to choose; applies at once.', face: true },
   '@wwjarvis': { l: 'Hey Jarvis', h: 'Say “Hey Jarvis” to open the assistant. Listens on this device only, while the dashboard is open; no audio leaves the browser. Sensitivity is in the assistant\'s own settings (Quiet).', ww: 'jarvis' },
   '@wwhomey': { l: 'Hey Homey', h: 'Say “Hey Homey” (also “Hey Homie” or just “Homie”) to open the assistant. On this device only, like Hey Jarvis; both can be on.', ww: 'homey' },
   '@appsnote': { l: '', h: 'To add apps or move them around on the Home Screen, use General › Edit Home Screen (Add App, drag to reorder).', note: true } };
@@ -6617,7 +6622,7 @@ function hvOpenSettings(hub, app, from) {
       if (a.ww) { const ok = hvWwSupport(), miss = a.ww === 'homey' && HVWW.hmOk === false, on = ok && hvWwPh(a.ww);
         if (ok && a.ww === 'homey' && HVWW.hmOk == null) hvWwHmCheck().then(() => { if (root && root.isConnected) paintPane(); });
         const why = !ok ? 'Not available on this device (iPhone / iPad). Use the mic button instead.' : miss ? 'Needs its wake word model (wakeword/hey_homey.onnx, next to homeview-cards.js): see the wake word README.' : a.h;
-        return `<div class="r" data-wwr="${k}"><span class="l">${esc(a.l)}</span><button class="sw" role="switch" data-ww="${a.ww}" aria-checked="${on}" aria-label="${esc(a.l)} wake word on this device"${!ok || miss ? ' disabled' : ''}></button><small>${esc(why)}</small></div>`; } if (a.pick) return `<div class="r stk" data-k="${k}" aria-label="${esc(a.l)}"><div data-sspick></div></div>`;
+        return `<div class="r" data-wwr="${k}"><span class="l">${esc(a.l)}</span><button class="sw" role="switch" data-ww="${a.ww}" aria-checked="${on}" aria-label="${esc(a.l)} wake word on this device"${!ok || miss ? ' disabled' : ''}></button><small>${esc(why)}</small></div>`; } if (a.face) return `<div class="r stk" data-k="assistant_face" aria-label="${esc(a.l)}"><div data-fpick></div></div>`; if (a.pick) return `<div class="r stk" data-k="${k}" aria-label="${esc(a.l)}"><div data-sspick></div></div>`;
       if (a.nav) { const n = k === '@update' ? hvUpdCount(H()) : 0; return `<button class="r act nav" data-act="${k.slice(1)}" aria-label="${esc(a.l)}${n ? ', ' + n + ' available' : ''}"><span class="sq" style="--c:#8e8e93"><ha-icon icon="${a.i}"></ha-icon></span><span class="tx"><span class="l">${esc(a.l)}</span></span>${n ? `<span class="bdg">${n}</span>` : ''}<ha-icon class="ch" icon="mdi:chevron-right"></ha-icon></button>`; }
       const off = k === '@wallpanel' && !customElements.get('wallpanel-view') ? ' disabled' : (k === '@sidecards' || k === '@setup') && (dis || st.nohub) ? ' disabled' : '';
       return `<button class="r act" data-act="${k.slice(1)}"${off}><span class="sq" style="--c:var(--blue)"><ha-icon icon="${a.i}"></ha-icon></span>${tx}<ha-icon class="ch" icon="mdi:chevron-right"></ha-icon></button>`; }
@@ -6697,6 +6702,10 @@ function hvOpenSettings(hub, app, from) {
   const ssMount = () => { const box = pane && pane.querySelector('[data-sspick]'); if (!box) return; const inner = ssPick && ssPick.shadowRoot.firstElementChild;
     if (!ssPick || !inner || inner._dead) { ssPick = document.createElement('div'); ssPick.className = 'ssh'; ssPick.attachShadow({ mode: 'open' }).appendChild(hvSsPicker(ssShim, { mode: 'carousel', onPick: ssRefresh })); }
     box.appendChild(ssPick); const pk = ssPick.shadowRoot.firstElementChild; if (pk && pk._recenter) pk._recenter(); };
+  // Assistant & timer: Orb / Homey carousel (assistant_face), its own shadow root like the screensaver picker
+  let fPick = null; const fMount = () => { const box = pane && pane.querySelector('[data-fpick]'); if (!box) return;
+    if (!fPick) { fPick = document.createElement('div'); fPick.className = 'ssh'; fPick.attachShadow({ mode: 'open' }).appendChild(hvFacePicker({ get: () => data().assistant_face, set: v => save('assistant_face', v) })); }
+    box.appendChild(fPick); const pk = fPick.shadowRoot.firstElementChild; if (pk && pk._recenter) requestAnimationFrame(() => pk._recenter()); };
   // --- General › About / Software Update: pushed pages inside Settings (read-only for everyone; installing needs an admin)
   const phSub = (back, t) => `<div class="ph"><button class="bk" data-act="${back}" aria-label="Back to ${esc(back === 'subback' ? 'General' : 'Software Update')}"><ha-icon icon="mdi:chevron-left"></ha-icon>${back === 'subback' ? 'General' : 'Software Update'}</button><span class="nt">${esc(t)}</span></div><h1 class="sbt">${esc(t)}</h1>`; // phones: a large title (the centred one is hidden there)
   const kv = (l, v, o) => { o = o || {}; return `<div class="r"${o.k ? ` data-ab="${o.k}"` : ''}><span class="l">${esc(l)}</span><span class="v"${o.copy ? ` data-copy="${esc(o.copy)}" title="Long press to copy"` : ''}>${esc(v)}</span>${o.note ? `<small>${esc(o.note)}</small>` : ''}</div>`; };
@@ -6763,7 +6772,7 @@ function hvOpenSettings(hub, app, from) {
   const subSig = () => { const S = H().states || {}; let o = ''; for (const k in S) if (k.startsWith('update.')) { const x = S[k], a = x.attributes || {}; o += k + x.state + a.latest_version + a.in_progress + a.update_percentage + ';'; }
     if (st.sub === 'about') { const c = st.cfg || {}, W = hvAboutPick(H(), 'wifi', c), B = hvAboutPick(H(), 'batt', c); o += '|' + sv(S, W.id) + sv(S, B.id) + (B.id ? sv(S, B.id.replace(/_battery_level$/, '_battery_state')) : '') + W.cands.length + B.cands.length + (H().config || {}).version; } return o; };
   const paintSide = () => { if (list) list.innerHTML = sideHtml(); };
-  const paintPane = () => { if (!pane) return; const sy = pane.scrollTop; for (const f of forms.values()) f.remove(); if (ssPick) ssPick.remove(); pane.innerHTML = paneHtml(); ssMount(); pane.scrollTop = sy; formsMount(); pvPaint(hvBgLevel(st.cfg || {})); albCheck(); };
+  const paintPane = () => { if (!pane) return; const sy = pane.scrollTop; for (const f of forms.values()) f.remove(); if (ssPick) ssPick.remove(); if (fPick) fPick.remove(); pane.innerHTML = paneHtml(); ssMount(); fMount(); pane.scrollTop = sy; formsMount(); pvPaint(hvBgLevel(st.cfg || {})); albCheck(); };
   const paint = () => { if (!root) return;
     if (!st.ready) { root.classList.remove('pg'); list.innerHTML = '<div class="grp"><div class="empty">Loading…</div></div>'; pane.innerHTML = ''; return; }
     if (st.nohub) { root.classList.add('nohub', 'pg'); root.classList.remove('wide'); side.style.display = 'none';
@@ -10157,6 +10166,42 @@ const HV_SS_CAR_CSS = `
 @media (max-width:560px){.spc{--cw:78cqw}.spc .cr{gap:12px}}
 .spc .vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}`;
 // o.mode 'carousel' (Settings) or the vertical list (the Screensaver settings popup); o.onPick(v, saved) after a style is stored
+// Settings › Assistant & timer: Orb or Homey for the compact popup (assistant_face), as a carousel like the screensaver style picker:
+// snap-scrolling previews (the live rainbow orb; Homey's head, idle bob + blink), the focused card's name / subtitle / Current pill, page dots.
+// Tap a card or a dot, swipe and let go, or the arrow keys: that face is saved at once. o.get() = the saved face, o.set(v) saves it.
+const HV_FACES = [{ v: 'orb', l: 'Orb', s: 'The floating rainbow orb' }, { v: 'homie', l: 'Homey', s: "Homey's animated head" }];
+const HV_FACE_CSS = `
+.spc .cd .th{position:relative;overflow:hidden;container-type:size;background:radial-gradient(120% 90% at 50% 0%,#3a3157 0%,#1b1828 55%,#0f0e17 100%)}
+.fpv{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7cqh;color:#fff;font-family:${FONT}}
+.fpv .bo{position:relative;flex:none;--os:42cqh;margin:2cqh 0 6cqh;width:var(--os);height:var(--os);border-radius:50%;pointer-events:none}
+.fpv .hb{position:relative;flex:none;width:58cqh;height:58cqh}.fpv .hh{display:block;position:absolute;inset:0;width:100%;height:100%;filter:drop-shadow(0 8px 14px rgba(0,0,0,.35))}
+.fpv .bo .co,.fpv .bo .sp{margin:0;padding:0;border:0} .fpv .bo .co{border-radius:50%} /* the orb's own .co / .sp, not the screensaver picker's colours panel / root */
+.fpv .lt{font-size:clamp(12px,5.4cqh,17px);font-weight:600;letter-spacing:.2px;text-shadow:0 1px 2px rgba(0,0,0,.5);opacity:.92}`;
+function hvFacePicker(o) { const p = document.createElement('div'); p.className = 'sp spc'; p.setAttribute('role', 'radiogroup'); p.setAttribute('aria-label', 'Assistant');
+  p.innerHTML = `<style>${HV_SS_PICK_CSS}${HV_SS_CAR_CSS}${HV_ORB_CSS}${HV_HEAD_CSS}${HV_FACE_CSS}</style><div class="ls cr" data-no-sheet-drag></div><div class="cinf" aria-live="polite"><div class="nm"><span class="cn"></span><span class="cur">Current</span></div><div class="sb"></div></div><div class="dots"></div>`;
+  const ls = p.querySelector('.ls'), V = HV_FACES.map(x => x.v), cur = () => (o.get() === 'homie' ? 'homie' : 'orb');
+  for (const x of HV_FACES) { const b = document.createElement('button'); b.className = 'it cd'; b.dataset.v = x.v; b.setAttribute('role', 'radio'); b.setAttribute('aria-label', x.l);
+    b.innerHTML = `<div class="th"><div class="fpv">${x.v === 'orb' ? `<div class="bo">${HV_ORB_HTML}</div>` : `<div class="hb">${hvHomeyHead()}</div>`}<span class="lt">Listening…</span></div></div><span class="vh">${x.l}. ${x.s}</span>`;
+    b.addEventListener('click', () => { center(x.v, true); pick(x.v); }); ls.appendChild(b); }
+  let foc = cur(), user = false, touch = false, setT = 0;
+  const info = () => { const x = HV_FACES.find(z => z.v === foc) || HV_FACES[0], inf = p.querySelector('.cinf'); inf.querySelector('.cn').textContent = x.l; inf.querySelector('.sb').textContent = x.s; inf.classList.toggle('on', foc === cur());
+    for (const b of ls.children) b.classList.toggle('fo', b.dataset.v === foc); for (const d of p.querySelectorAll('.dots button')) d.setAttribute('aria-current', String(d.dataset.v === foc)); };
+  const paint = v => { for (const b of ls.children) b.setAttribute('aria-checked', String(b.dataset.v === v)); info(); };
+  const pick = v => { if (!V.includes(v) || v === cur()) { paint(cur()); return; } paint(v); Promise.resolve(o.set(v)).then(() => { if (p.isConnected) paint(cur()); }, () => { if (p.isConnected) paint(cur()); }); };
+  const near = () => { const r = ls.getBoundingClientRect(), cx = r.left + r.width / 2; let best = null, dd = 1e9; for (const b of ls.children) { const q = b.getBoundingClientRect(), d = Math.abs(q.left + q.width / 2 - cx); if (d < dd) { dd = d; best = b; } } return best; };
+  const center = (v, smooth) => { const b = ls.querySelector(`[data-v="${v}"]`); if (!b || !ls.clientWidth) return; foc = v; info(); ls.scrollTo({ left: Math.max(0, b.offsetLeft - (ls.clientWidth - b.offsetWidth) / 2), behavior: smooth ? 'smooth' : 'auto' }); };
+  const settle = () => { if (touch) return; const b = near(); if (!b) return; if (b.dataset.v !== foc) { foc = b.dataset.v; info(); } if (user) { user = false; if (b.dataset.v !== cur()) pick(b.dataset.v); } };
+  const dots = p.querySelector('.dots');
+  for (const x of HV_FACES) { const d = document.createElement('button'); d.dataset.v = x.v; d.setAttribute('aria-label', x.l); d.addEventListener('click', () => { center(x.v, true); pick(x.v); }); dots.appendChild(d); }
+  ls.addEventListener('scroll', () => { if (!ls.clientWidth || !p.isConnected) return; if (touch) user = true; const b = near(); if (b && b.dataset.v !== foc) { foc = b.dataset.v; info(); } clearTimeout(setT); setT = setTimeout(settle, 140); }, { passive: true });
+  ls.addEventListener('touchstart', () => { touch = true; }, { passive: true });
+  for (const t of ['touchend', 'touchcancel']) ls.addEventListener(t, () => { touch = false; clearTimeout(setT); setT = setTimeout(settle, 220); }, { passive: true });
+  ls.addEventListener('wheel', () => { user = true; }, { passive: true });
+  ls.addEventListener('keydown', e => { if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return; e.preventDefault(); const v = V[V.indexOf(foc) + (e.key === 'ArrowRight' ? 1 : -1)]; if (v) { center(v, true); pick(v); ls.querySelector(`[data-v="${v}"]`).focus({ preventScroll: true }); } });
+  let w0 = 0; const fit = () => { const w = ls.clientWidth; if (!w) { w0 = 0; return; } if (w !== w0 && !touch) { w0 = w; center(user ? foc : cur(), false); } };
+  if (window.ResizeObserver) new ResizeObserver(fit).observe(ls); requestAnimationFrame(fit);
+  p._recenter = () => { user = false; w0 = ls.clientWidth; paint(cur()); center(cur(), false); }; // after being moved in the DOM, or the saved face changed elsewhere
+  paint(cur()); return p; }
 function hvSsPicker(card, o) { o = o || {}; const car = o.mode === 'carousel';
   const p = document.createElement('div'); p.className = car ? 'sp spc' : 'sp'; p.setAttribute('role', 'radiogroup'); p.setAttribute('aria-label', 'Screensaver style');
   p.innerHTML = car ? `<style>${HV_SS_PICK_CSS}${HV_SS_CAR_CSS}</style><div class="ls cr" data-no-sheet-drag></div><div class="cinf" aria-live="polite"><div class="nm"><span class="cn"></span><span class="cur">Current</span></div><div class="sb"></div></div><div class="dots"></div><div class="colors-host"></div><div class="note"></div>`
