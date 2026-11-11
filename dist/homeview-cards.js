@@ -448,6 +448,30 @@ ha-card.active{background:var(--hv-bg-on,linear-gradient(150deg,rgba(196,182,255
  border-color:var(--hv-border-on,rgba(225,215,255,.42));box-shadow:var(--hv-shadow-on,inset 0 1px 0 rgba(255,255,255,.35),0 1.2vh 3.6vh rgba(50,30,160,.30))}
 ha-card:focus-visible{box-shadow:0 0 0 2px var(--hv-accent,#d4c9ff)}
 ha-card.unavailable .c{opacity:.45}
+/* Liquid Glass tile material (Page Grid look: glass). Shared look with the Glass page; does not change that page. */
+:host([hv-glass]){aspect-ratio:auto;--hv-bg:linear-gradient(150deg,rgba(255,255,255,.10),rgba(255,255,255,.06) 48%,rgba(255,255,255,.08));
+ --hv-bg-on:linear-gradient(160deg,rgba(255,255,255,.56),rgba(255,255,255,.40));
+ --hv-border:transparent;--hv-border-on:transparent;--hv-text:#fff;--hv-text2:rgba(255,255,255,.66);--hv-text-strong:#fff;--hv-text-on:#1e1c45;--hv-text2-on:rgba(30,28,69,.62);
+ --hv-icon:#fff;--hv-icon-on:#1e1c45;--hv-shade:none;--hv-icon-shade:none;
+ --hv-blur:blur(6px) saturate(1.35) brightness(1.04);
+ --hv-shadow:0 1cqmin 2.8cqmin rgba(10,8,50,.24),inset 0 0 14px rgba(255,255,255,.15),inset 0 -8px 12px rgba(20,12,80,.14);
+ --hv-shadow-on:0 1cqmin 2.8cqmin rgba(10,8,50,.24),inset 0 0 14px rgba(255,255,255,.2),inset 0 -8px 12px rgba(20,12,80,.1)}
+:host([hv-glass]) ha-card{display:block;overflow:hidden;isolation:isolate;height:100%;max-height:100%;transform:translateZ(0) scale(1);
+ transition:transform .5s cubic-bezier(.34,1.7,.5,1),background .3s ease,color .3s,box-shadow .3s;border-color:transparent}
+:host([hv-glass]) ha-card::before{content:'';position:absolute;inset:0;border-radius:inherit;padding:1px;z-index:3;pointer-events:none;
+ background:linear-gradient(135deg,rgba(255,255,255,.55),rgba(255,255,255,.32) 32%,rgba(255,255,255,.15) 72%,rgba(255,255,255,.16));
+ -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}
+:host([hv-glass]) ha-card.dn{transform:translateZ(0) scale(.96);transition:transform .14s ease-out,background .3s,color .3s}
+:host([hv-glass]) ha-card.active{color:#1e1c45}
+:host([hv-glass]) .bl{position:absolute;z-index:4;width:var(--d);height:var(--d);left:var(--x);top:var(--y);margin:calc(var(--d) / -2) 0 0 calc(var(--d) / -2);border-radius:50%;pointer-events:none;
+ background:radial-gradient(circle,rgba(255,255,255,.55) 0%,rgba(255,255,255,.18) 40%,rgba(255,255,255,0) 70%);animation:hvgbl .7s ease-out forwards}
+:host([hv-glass]) .lv{position:absolute;inset:0;z-index:1;pointer-events:none;background:linear-gradient(180deg,rgba(255,255,255,.62),rgba(250,248,255,.48));transform-origin:50% 100%;transform:scaleY(var(--p,0));opacity:0;transition:opacity .25s,transform .08s linear}
+:host([hv-glass]) ha-card.drag .lv{opacity:1}
+:host([hv-glass]) .pc{position:absolute;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;font-size:clamp(28px,24cqmin,64px);font-weight:700;letter-spacing:-.02em;opacity:0;transform:scale(.85);
+ transition:opacity .25s,transform .35s cubic-bezier(.34,1.56,.64,1);pointer-events:none;color:#fff;text-shadow:0 1px 6px rgba(20,10,90,.35);font-variant-numeric:tabular-nums}
+:host([hv-glass]) .pc.dk{color:#1e1c45;text-shadow:none}
+:host([hv-glass]) ha-card.drag .pc{opacity:1;transform:none}:host([hv-glass]) ha-card.drag .root{opacity:0}
+@keyframes hvgbl{from{transform:scale(.05);opacity:1}to{transform:scale(1);opacity:0}}
 ha-ripple{--ha-ripple-color:var(--hv-text,#fff);--ha-ripple-hover-opacity:.04;--ha-ripple-pressed-opacity:.10;border-radius:inherit}
 /* tile layout = native vertical tile card as styled by HomeView */
 .c{height:100%;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:8px;text-align:center;pointer-events:none}
@@ -557,18 +581,26 @@ class HVBase extends HTMLElement {
   _bindPointer(el) {
     let timer = null, held = false, down = false, sx = 0, sy = 0;
     const cancel = () => { clearTimeout(timer); timer = null; down = false; held = false; };
+    const bloom = (x, y) => { if (!this.hasAttribute('hv-glass')) return; if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      const r = el.getBoundingClientRect(), b = document.createElement('span'); b.className = 'bl';
+      const d = Math.hypot(r.width, r.height) * 1.4; b.style.cssText = `--d:${d}px;--x:${x - r.left}px;--y:${y - r.top}px`; el.appendChild(b);
+      b.addEventListener('animationend', () => b.remove()); setTimeout(() => b.remove(), 900); };
     el.addEventListener('pointerdown', e => {
       if (e.pointerType === 'mouse' && e.button !== 0) return;
       if (e.composedPath().some(n => n.dataset && n.dataset.own !== undefined)) return; // own sub-buttons (chevrons)
       down = true; held = false; sx = e.clientX; sy = e.clientY; clearTimeout(timer);
+      if (this.hasAttribute('hv-glass')) el.classList.add('dn');
       timer = setTimeout(() => { timer = null; held = true; }, 500);
     });
-    el.addEventListener('pointermove', e => { if (down && Math.hypot(e.clientX - sx, e.clientY - sy) > 12) cancel(); });
+    el.addEventListener('pointermove', e => { if (down && Math.hypot(e.clientX - sx, e.clientY - sy) > 12) { cancel(); el.classList.remove('dn'); } });
     el.addEventListener('pointerup', e => {
+      el.classList.remove('dn');
+      if (this._glassBusy) { cancel(); return; }
       if (!down) return; const wasHeld = held; cancel();
-      if (wasHeld && this.hasHold()) this.runAction('hold'); else this.runAction('tap');
+      if (wasHeld && this.hasHold()) this.runAction('hold'); else { bloom(e.clientX, e.clientY); this.runAction('tap'); }
     });
-    el.addEventListener('pointercancel', cancel); el.addEventListener('pointerleave', cancel);
+    const cancel2 = () => { el.classList.remove('dn'); cancel(); };
+    el.addEventListener('pointercancel', cancel2); el.addEventListener('pointerleave', cancel2);
     el.addEventListener('contextmenu', e => { e.preventDefault(); });
     el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.runAction('tap'); } });
   }
@@ -669,6 +701,27 @@ class HVEntityCard extends HVBase {
 class HVLightCard extends HVEntityCard {
   static getStubConfig(hass) { return { entity: Object.keys(hass.states).find(k => k.startsWith('light.')) || 'light.example' }; }
   defaultAction(kind) { return { action: kind === 'tap' ? 'toggle' : 'more-info' }; }
+  _build() { super._build(); if (!this._card) return;
+    for (const c of ['fl', 'lv', 'pc']) { if (!this._card.querySelector('.' + c)) { const s = document.createElement('span'); s.className = c; this._card.appendChild(s); } }
+    this._bindGlassLight(this._card); }
+  _bindGlassLight(el) {
+    let p = null;
+    const dimOf = st => { if (!st) return false; const m = st.attributes && st.attributes.supported_color_modes; if (Array.isArray(m)) return m.some(x => x !== 'onoff');
+      return st.attributes.brightness != null || ((st.attributes.supported_features || 0) & 1) === 1; };
+    const pctOf = st => { const b = st && st.attributes && st.attributes.brightness; return b == null ? (st && st.state === 'on' ? 100 : 0) : Math.max(1, Math.min(100, Math.round(b / 2.55))); };
+    const show = v => { el.style.setProperty('--p', String(Math.max(0, Math.min(1, v / 100)))); const pc = el.querySelector('.pc'); if (pc) { pc.textContent = Math.round(v) + '%'; pc.classList.toggle('dk', v >= 45); } };
+    el.addEventListener('pointerdown', e => { if (!this.hasAttribute('hv-glass') || e.button > 0) return;
+      const st = this.stateObj, dim = dimOf(st) && st.state !== 'unavailable'; if (!dim) return;
+      p = { id: e.pointerId, y: e.clientY, t: Date.now(), moved: false, drag: false, h: el.getBoundingClientRect().height, start: st && st.state === 'on' ? pctOf(st) : 0 };
+      try { el.setPointerCapture(e.pointerId); } catch (x) {} });
+    el.addEventListener('pointermove', e => { if (!p || e.pointerId !== p.id) return; const dy = e.clientY - p.y;
+      if (!p.moved && Math.abs(dy) > 8) { p.moved = true; if (Math.abs(dy) >= 6) { p.drag = true; this._glassBusy = true; el.classList.add('drag'); el.classList.remove('dn'); show(p.start); } }
+      if (p.drag) { e.preventDefault(); const v = Math.max(1, Math.min(100, Math.round(p.start - dy / p.h * 100))); p.v = v; show(v);
+        const now = Date.now(); if (!p.sent || now - p.sent >= 200) { p.sent = now; this._hass && this._hass.callService('light', 'turn_on', { entity_id: this._config.entity, brightness_pct: v }); } } });
+    const up = e => { if (!p || (e.pointerId != null && e.pointerId !== p.id)) return; const q = p; p = null; el.classList.remove('drag');
+      if (q.drag) { const v = q.v != null ? q.v : q.start; this._hass && this._hass.callService('light', 'turn_on', { entity_id: this._config.entity, brightness_pct: v }); setTimeout(() => { this._glassBusy = false; }, 50); }
+      else this._glassBusy = false; };
+    el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up); }
   view() {
     const c = this._config, s = this.stateObj, h = this._hass;
     let sec = '';
@@ -3585,7 +3638,7 @@ function gridPack(items, C, R, dense = true) { // first fit in order; dense: a t
 }
 class HVGridCard extends HTMLElement {
   constructor() { super(); this.attachShadow({ mode: 'open' }); this._page = 0; }
-  static get defaults() { return { theme: 'inherit', portrait_rows: 3, portrait_columns: 3, landscape_rows: 3, landscape_columns: 4, portrait_shape: 'balanced', gap: 12, first_page_name: '', show_dots: true, fill_height: true, auto_rows: false, full_bleed: true, dense: true, edge_sidebar: true, swipe_back: false, swipe_back_path: '', block_pull_refresh: true }; }
+  static get defaults() { return { theme: 'inherit', look: '', portrait_rows: 3, portrait_columns: 3, landscape_rows: 3, landscape_columns: 4, portrait_shape: 'balanced', gap: 12, first_page_name: '', show_dots: true, fill_height: true, auto_rows: false, full_bleed: true, dense: true, edge_sidebar: true, swipe_back: false, swipe_back_path: '', block_pull_refresh: true }; }
   static getStubConfig() { return { cards: [{ type: 'clock', clock_style: 'analog', grid_options: { columns: 3, rows: 2 } }, { type: 'custom:homeview-nav-card', name: 'Home', icon: 'mdi:home-outline', navigation_path: '/lovelace/0' }] }; }
   static getConfigElement() { return document.createElement('homeview-grid-card-editor'); }
   setConfig(c) {
@@ -3641,6 +3694,15 @@ class HVGridCard extends HTMLElement {
   }
   disconnectedCallback() { const me = this; setTimeout(() => { if (!me.isConnected && me._arrDirty && me._edit && !me._arr) hvEcl.flush(me, 'Saved'); }, 400); setTimeout(() => { if (!me.isConnected && me._kids) hvGridPool.push({ g: me, t: Date.now(), kids: me._kids.filter(k => k.el && !k.brk).map(k => ({ j: JSON.stringify(k.cfg), el: k.el })) }); }, 0);
     this._edgeBind(false); this._backBind(false); removeEventListener('resize', this._bound); removeEventListener('hv-layout', this._bound); removeEventListener('orientationchange', this._bound); if (window.visualViewport) visualViewport.removeEventListener('resize', this._bound); }
+  _liq() { const c = this._config || {}; return c.look === 'glass' || c.theme === 'glass'; }
+  _glassClock(cell, el) {
+    cell.classList.add('liq-clock');
+    let disc = cell.querySelector(':scope > .disc');
+    if (!disc) { disc = document.createElement('div'); disc.className = 'disc'; disc.innerHTML = HVG_CLOCK; cell.appendChild(disc); }
+    const tick = () => { const d = new Date(), s = d.getSeconds(), m = d.getMinutes() + s / 60, h = (d.getHours() % 12) + m / 60;
+      const set = (c, a) => { const g = disc.querySelector('.' + c); if (g) g.setAttribute('transform', `rotate(${a} 50 50)`); };
+      set('hh', h * 30); set('hm', m * 6); set('hs', s * 6); };
+    tick(); clearTimeout(cell._ct); const loop = () => { tick(); cell._ct = setTimeout(loop, 1000 - new Date().getMilliseconds() + 5); }; loop(); }
   _shell() {
     if (this._sc) return;
     this.shadowRoot.innerHTML = `<style>
@@ -3653,6 +3715,17 @@ class HVGridCard extends HTMLElement {
 :host([hv-edit]) .cell::after{content:'';position:absolute;inset:1px;border-radius:var(--hv-radius,22px);border:1.5px dashed rgba(255,255,255,.45);pointer-events:none;z-index:5}
 :host([hv-edit][day]) .cell::after{border-color:rgba(60,60,67,.35)}
 .cell > *{flex:1;min-width:0;min-height:0;height:100%;width:100%;display:block}
+.cell.liq-clock{align-items:center;justify-content:center}
+.cell.liq-clock > :not(.disc){position:absolute;inset:0;opacity:0;pointer-events:none}
+.cell.liq-clock .disc{position:relative;width:min(100%,100cqmin);height:min(100%,100cqmin);max-width:100%;max-height:100%;border-radius:50%;flex:none;
+ background:linear-gradient(150deg,rgba(255,255,255,.10),rgba(255,255,255,.06) 48%,rgba(255,255,255,.08));
+ -webkit-backdrop-filter:blur(6px) saturate(1.35) brightness(1.04);backdrop-filter:blur(6px) saturate(1.35) brightness(1.04);
+ box-shadow:0 1cqmin 2.8cqmin rgba(10,8,50,.24),inset 0 0 14px rgba(255,255,255,.15),inset 0 -8px 12px rgba(20,12,80,.14)}
+.cell.liq-clock .disc::before{content:'';position:absolute;inset:0;border-radius:50%;padding:1px;pointer-events:none;
+ background:linear-gradient(135deg,rgba(255,255,255,.55),rgba(255,255,255,.32) 32%,rgba(255,255,255,.15) 72%,rgba(255,255,255,.16));
+ -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}
+.cell.liq-clock .disc svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+.pg{container-type:size}
 .dots{display:flex;justify-content:center;gap:8px;height:22px;align-items:center;margin-top:6px}
 .dots button{all:unset;cursor:pointer;width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.38);box-shadow:0 1px 3px rgba(0,0,30,.25);transition:all .25s ease}
 .dots button.on{width:22px;border-radius:4px;background:rgba(255,255,255,.95)}
@@ -3696,9 +3769,12 @@ class HVGridCard extends HTMLElement {
       let el = hvGridTake(own, cfg); if (!el) try { el = helpers ? helpers.createCardElement(cfg) : document.createElement('div'); } catch (e) { el = document.createElement('div'); el.textContent = String(e); }
       if (this._hass) el.hass = this._hass; if (this._edit != null) el.editMode = this._edit;
       const cell = document.createElement('div'); cell.className = 'cell'; cell.appendChild(el);
-      if (el.tagName && el.tagName.startsWith('HOMEVIEW-')) el.setAttribute('floor', '');
+      const liq = this._liq();
+      this.toggleAttribute('look-glass', liq);
+      if (el.tagName && el.tagName.startsWith('HOMEVIEW-')) { el.setAttribute('floor', ''); if (liq) el.setAttribute('hv-glass', ''); else el.removeAttribute('hv-glass'); }
+      if (liq && cfg && cfg.type === 'clock') this._glassClock(cell, el); else cell.classList.remove('liq-clock');
       const k = { cfg, el, cell };
-      el._hvK = k; if (!el._hvRb) { el._hvRb = 1; el.addEventListener('ll-rebuild', ev => { ev.stopPropagation(); const kk = el._hvK; if (!kk || !helpers) return; try { const n = helpers.createCardElement(kk.cfg); n.hass = this._hass; if (n.tagName.startsWith('HOMEVIEW-')) n.setAttribute('floor', ''); n._hvK = kk; kk.cell.replaceChild(n, kk.el); kk.el = n; } catch (x) {} }); }
+      el._hvK = k; if (!el._hvRb) { el._hvRb = 1; el.addEventListener('ll-rebuild', ev => { ev.stopPropagation(); const kk = el._hvK; if (!kk || !helpers) return; try { const n = helpers.createCardElement(kk.cfg); n.hass = this._hass; if (n.tagName.startsWith('HOMEVIEW-')) { n.setAttribute('floor', ''); if (this._liq()) n.setAttribute('hv-glass', ''); } n._hvK = kk; kk.cell.replaceChild(n, kk.el); kk.el = n; } catch (x) {} }); }
       return k;
     });
     this._kids = kids; this._packSig = null; this._layout(true);
@@ -3801,6 +3877,7 @@ Object.assign(LABELS, { first_page_name: 'First page name (tabs)' });
 const HV_THEME_OPTS = [{ value: 'night', label: 'Night (dark glass, default)' }, { value: 'day', label: 'Day (white)' }, { value: 'auto', label: 'Auto (follow sun)' }];
 const GRID_SCHEMA = [
   { name: 'theme', selector: { select: { mode: 'dropdown', options: [{ value: 'inherit', label: 'Same as all device pages (default)' }].concat(HV_THEME_OPTS.map(o => o.value === 'night' ? { value: 'night', label: 'Night (dark glass)' } : o)) } } },
+  { name: 'look', selector: { select: { mode: 'dropdown', options: [{ value: '', label: 'Standard tiles' }, { value: 'glass', label: 'Liquid Glass' }] } } },
   { type: 'grid', name: '', schema: [{ name: 'portrait_rows', selector: { number: { min: 1, max: 6, mode: 'box' } } }, { name: 'portrait_columns', selector: { number: { min: 1, max: 6, mode: 'box' } } }] },
   { type: 'grid', name: '', schema: [{ name: 'landscape_rows', selector: { number: { min: 1, max: 6, mode: 'box' } } }, { name: 'landscape_columns', selector: { number: { min: 1, max: 8, mode: 'box' } } }] },
   { type: 'grid', name: '', schema: [{ name: 'portrait_shape', selector: { select: { mode: 'dropdown', options: [{ value: 'balanced', label: 'Balanced (a bit taller than wide)' },
@@ -3811,7 +3888,7 @@ const GRID_SCHEMA = [
   { type: 'grid', name: '', schema: [{ name: 'swipe_back', selector: { boolean: {} } }, { name: 'swipe_back_path', selector: { navigation: {} } }] },
   { name: 'block_pull_refresh', selector: { boolean: {} } },
   { name: 'first_page_name', selector: { text: {} } }];
-Object.assign(LABELS, { portrait_rows: 'Portrait: rows per page', portrait_columns: 'Portrait: columns', landscape_rows: 'Landscape: rows per page', landscape_columns: 'Landscape: columns',
+Object.assign(LABELS, { look: 'Tile look', portrait_rows: 'Portrait: rows per page', portrait_columns: 'Portrait: columns', landscape_rows: 'Landscape: rows per page', landscape_columns: 'Landscape: columns',
   portrait_shape: 'Portrait tile shape', gap: 'Gap between tiles', show_dots: 'Page dots', fill_height: 'Size tiles to the screen height',
   auto_rows: 'Portrait: auto rows (fill the screen with near-square tiles)', full_bleed: 'Edge-to-edge pages (gutter between pages)', dense: 'Fill gaps with later tiles', edge_sidebar: 'Edge swipe opens sidebar (from the left edge, phones)', swipe_back: 'Swipe down from the top to go back', swipe_back_path: 'Swipe down goes to (empty = /<dashboard>/main)', block_pull_refresh: 'Block pull-to-refresh (with swipe down to go back)' });
 /* 1.31.1: tap-to-edit for the NotHomeView Page Grid (device pages). In the dashboard's edit mode every tile shows a thin outline;
@@ -7538,7 +7615,8 @@ const hvHomieBg = cols => { const bg = hvSsHex(cols && cols.bg) || '#1a1a1a', rf
   return `radial-gradient(70% 55% at 50% 80%, color-mix(in srgb, ${rf} 28%, ${bg}) 0%, transparent 72%), linear-gradient(180deg, color-mix(in srgb, ${bg} 80%, #ffffff) 0%, ${bg} 72%)`; };
 // what the Home Screen shows behind its apps: m 'photos' (the blurred Photos tile photo), 'face' (the parked screensaver face) or 'x' (css or a media picture)
 function hvInnerMode(c, style) { const I = hvInner(c), st = style || 'photo';
-  if (I.match) { if (st === 'photo') return { m: 'photos' }; if (st === 'homie') return { m: 'x', css: hvHomieBg(hvSsColors.get('homie')) }; return { m: 'face', style: st }; }
+  if (I.match) { if (st === 'photo') return { m: 'photos' }; if (st === 'homie') return { m: 'x', css: hvHomieBg(hvSsColors.get('homie')) };
+    if (st === 'glass') return { m: 'x', css: 'linear-gradient(160deg,#6461e6 0%,#5856dd 45%,#4c49d0 100%)' }; return { m: 'face', style: st }; }
   if (I.type === 'photos') return { m: 'photos' }; if (I.type === 'gradient') return { m: 'x', css: hvGradCss(I.value) }; if (I.type === 'color') return { m: 'x', css: hvSsHex(I.value) || '#1c1c1e' };
   return { m: 'x', media: typeof I.value === 'string' ? I.value : '', css: '' }; }
 const HV_BG_LEVELS = [null,
@@ -10659,11 +10737,12 @@ const hvSsOv = {
   _sweep(root, d) { if (!root || d > 14 || !root.querySelectorAll) return;
     root.querySelectorAll('#hv-ss-style').forEach(n => { try { n.remove(); } catch (e) {} });
     for (const el of root.querySelectorAll('*')) if (el.shadowRoot) this._sweep(el.shadowRoot, d + 1); },
-  hide() { try { hvSsKeep.off('glass'); } catch (e) {} const h = this.host; this.host = null; this.face = null; this.card = null; this._g = null; this.style = null; this.colKey = null; this._up = false;
+  hide() { try { hvSsKeep.off('glass'); } catch (e) {} const h = this.host; this.host = null; this.face = null; this.card = null; this._g = null; this._bornAt = 0; this.style = null; this.colKey = null; this._up = false;
     if (h) { try { h.remove(); } catch (e) {} } try { this._sweep(document, 0); } catch (e) {} },
   // Wallpanel can still report "running" after it has faded out (opacity 0 / visibility hidden / pointer-events none).
   // The style layer must not stay up then: it covers the screensaver settings dialog.
   showing(w) { if (!w) return false; let run = false; try { run = !!(w.screensaverRunning && w.screensaverRunning()); } catch (e) { return false; } if (!run) return false;
+    if (this.style === 'glass' && this.host && this.host.isConnected && this._up) return true;
     let cs; try { cs = getComputedStyle(w); } catch (e) { return false; }
     if (cs.visibility === 'hidden' || cs.display === 'none' || cs.pointerEvents === 'none') return false;
     const op = Number(cs.opacity); return isFinite(op) && op >= 0.05; },
@@ -10678,13 +10757,17 @@ const hvSsOv = {
     const op = cs ? Number(cs.opacity) : 0, faded = vis && isFinite(op) && op >= 0.05;
     // Only a layer that is marked visible and hit-testable but fully transparent. A start that is still
     // loading stays visibility:hidden / pointer-events:none and must not be stopped.
+    const stWant = (() => { try { return hvSs.get(); } catch (e) { return null; } })();
+    const glassWant = stWant === 'glass' || this.style === 'glass' || !!(this._g && this.host);
     const ghost = !!(run && cs && vis && cs.pointerEvents !== 'none' && !faded);
-    if (ghost) { this._ghost = this._ghost || Date.now(); if (Date.now() - this._ghost > 1200 && typeof w.stopScreensaver === 'function') { try { w.stopScreensaver(); } catch (e) {} } }
+    if (ghost && !glassWant) { this._ghost = this._ghost || Date.now(); if (Date.now() - this._ghost > 1200 && typeof w.stopScreensaver === 'function') { try { w.stopScreensaver(); } catch (e) {} } }
     else this._ghost = 0;
     // Keep the style up while Wallpanel is starting (often hidden / pointer-events:none) or fading out
     // (pointer-events:none while still opaque). Drop it only when the screensaver is gone, or is a
-    // transparent ghost that would cover the Settings dialog.
-    if (!w || ghost || !(run || faded)) {
+    // transparent ghost that would cover the Settings dialog. Glass is special: Wallpanel's photo-clock
+    // often fades in at opacity 0 (a "ghost") about a second after start — hiding our overlay then
+    // flashes the photos underneath, so we keep Glass up the whole time Wallpanel reports running.
+    if (!w || (ghost && !glassWant) || !(run || faded || (glassWant && run))) {
       const was = !!(this.host || this._up);
       if (was) this.hide();
       hvSsPhotoTint.clear();
@@ -10710,22 +10793,39 @@ const hvSsOv = {
     this.face.update(this.hass(), new Date()); },
   _mountGlass(w, z, overlayOp, run, force) {
     const born = !this.host || this.style !== 'glass' || !this.host.isConnected || this.host.parentNode !== w.parentNode;
-    if (born) { this.hide();
+    if (born) { const prev = this.host;
       const h = document.createElement('div'); h.id = 'hv-ss-style'; const sr = h.attachShadow({ mode: 'open' });
-      sr.innerHTML = `<style>:host{display:block}.stage{position:absolute;inset:0;padding-bottom:calc(28px + env(safe-area-inset-bottom,0px));box-sizing:border-box}homeview-glass-page{display:block;width:100%;height:100%}
+      sr.innerHTML = `<style>:host{display:block;background:#4c49d0}*{box-sizing:border-box}
+.bg{position:absolute;inset:0;overflow:hidden;background:linear-gradient(160deg,#6461e6 0%,#5856dd 45%,#4c49d0 100%);pointer-events:none;z-index:0;container-type:size}
+.bg i{position:absolute;left:50%;top:50%;width:150cqmax;border-radius:2.2cqmin;transform:translate(-50%,-50%) rotate(var(--a)) translateY(var(--o));height:var(--h);background:var(--c)}
+.bg i:nth-child(1){--a:42deg;--o:-38cqmin;--h:24cqmin;--c:linear-gradient(90deg,rgba(176,176,255,.6),rgba(140,140,255,.42))}
+.bg i:nth-child(2){--a:42deg;--o:-8cqmin;--h:13cqmin;--c:rgba(46,42,170,.62)}
+.bg i:nth-child(3){--a:42deg;--o:24cqmin;--h:26cqmin;--c:linear-gradient(90deg,rgba(140,140,255,.45),rgba(110,110,245,.25))}
+.bg i:nth-child(4){--a:45deg;--o:50cqmin;--h:10cqmin;--c:rgba(40,36,160,.6)}
+.bg i:nth-child(5){--a:-48deg;--o:-44cqmin;--h:20cqmin;--c:rgba(44,40,168,.55)}
+.bg i:nth-child(6){--a:-48deg;--o:-10cqmin;--h:22cqmin;--c:linear-gradient(90deg,rgba(160,160,255,.35),rgba(130,130,250,.5))}
+.bg i:nth-child(7){--a:-45deg;--o:16cqmin;--h:9cqmin;--c:rgba(38,34,150,.58)}
+.bg i:nth-child(8){--a:-48deg;--o:46cqmin;--h:24cqmin;--c:rgba(176,176,255,.5)}
+.bg i:nth-child(9){--a:45deg;--o:78cqmin;--h:18cqmin;--c:rgba(130,128,250,.4)}
+.stage{position:absolute;inset:0;padding-bottom:calc(28px + env(safe-area-inset-bottom,0px));box-sizing:border-box;z-index:1}homeview-glass-page{display:block;width:100%;height:100%}
 .grab{position:absolute;left:50%;bottom:calc(10px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);width:42px;height:5px;border-radius:3px;background:rgba(255,255,255,.5);
- z-index:6;pointer-events:none;box-shadow:0 0 10px rgba(0,0,0,.25)}</style><div class="stage"></div><div class="grab" aria-hidden="true"></div>`;
+ z-index:6;pointer-events:none;box-shadow:0 0 10px rgba(0,0,0,.25)}</style>
+<div class="bg" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="stage"></div><div class="grab" aria-hidden="true"></div>`;
       const card = document.createElement('homeview-glass-page');
-      try { card.setConfig((typeof hvGlassCfg !== 'undefined' && hvGlassCfg.get) ? hvGlassCfg.get() : {}); } catch (e) { try { card.setConfig({}); } catch (x) {} }
+      const cfg = Object.assign({}, (typeof hvGlassCfg !== 'undefined' && hvGlassCfg.get) ? hvGlassCfg.get() : {}, { background: 'none' });
+      try { card.setConfig(cfg); } catch (e) { try { card.setConfig({ background: 'none' }); } catch (x) {} }
       try { card.hass = this.hass(); } catch (e) {}
       sr.querySelector('.stage').appendChild(card);
-      this.card = card; this.face = null; this.style = 'glass'; this.colKey = 'glass'; this.host = h; this._up = true;
-      w.parentNode.appendChild(h); this._wireGlass(); try { hvSsKeep.on('glass'); } catch (e) {} }
+      this.card = card; this.face = null; this.style = 'glass'; this.colKey = 'glass'; this.host = h; this._up = true; this._bornAt = Date.now(); this._g = null;
+      const parent = (w && w.parentNode) || document.body; parent.appendChild(h);
+      if (prev && prev !== h) { try { prev.remove(); } catch (e) {} }
+      this._wireGlass(); try { hvSsKeep.on('glass'); } catch (e) {} }
     else if (this.card) { try { this.card.hass = this.hass(); } catch (e) {} }
-    this.host.style.cssText = `position:fixed;inset:0;z-index:${z + 1};pointer-events:auto;opacity:${overlayOp};transition:${born || run ? 'none' : 'opacity .4s linear'};transform:none`; },
+    this.host.style.cssText = `position:fixed;top:0;right:0;bottom:0;left:0;width:100%;height:100%;height:100dvh;z-index:${z + 1};pointer-events:auto;opacity:${overlayOp};transition:${born || run ? 'none' : 'opacity .4s linear'};transform:none;background:#4c49d0`; },
   _wireGlass() { const h = this.host; if (!h || h.__hvGlassWired) return; h.__hvGlassWired = true;
     const onTile = ev => { const path = ev.composedPath ? ev.composedPath() : []; return path.some(n => n && n.classList && (n.classList.contains('t') || n.classList.contains('ed') || n.classList.contains('cv'))); };
-    h.addEventListener('pointerdown', ev => { if (ev.button > 0 || this._g) return; const H = innerHeight || 800; if (ev.clientY < H * 0.88) return; if (onTile(ev)) return;
+    h.addEventListener('pointerdown', ev => { if (ev.button > 0 || this._g) return; if (this._bornAt && Date.now() - this._bornAt < 400) return;
+      const H = innerHeight || 800; if (ev.clientY < H * 0.88) return; if (onTile(ev)) return;
       ev.preventDefault(); ev.stopPropagation(); this._g = { y: ev.clientY, t: Date.now(), id: ev.pointerId, dy: 0 }; try { h.setPointerCapture(ev.pointerId); } catch (e) {} }, true);
     h.addEventListener('pointermove', ev => { const g = this._g; if (!g || g.leaving || ev.pointerId !== g.id) return;
       const dy = Math.max(0, g.y - ev.clientY); g.dy = dy; if (dy < 2) return; ev.preventDefault();
