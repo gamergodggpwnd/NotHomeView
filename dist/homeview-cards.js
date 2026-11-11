@@ -465,12 +465,12 @@ ha-card.unavailable .c{opacity:.45}
 :host([hv-glass]) ha-card.active{color:#1e1c45}
 :host([hv-glass]) .bl{position:absolute;z-index:4;width:var(--d);height:var(--d);left:var(--x);top:var(--y);margin:calc(var(--d) / -2) 0 0 calc(var(--d) / -2);border-radius:50%;pointer-events:none;
  background:radial-gradient(circle,rgba(255,255,255,.55) 0%,rgba(255,255,255,.18) 40%,rgba(255,255,255,0) 70%);animation:hvgbl .7s ease-out forwards}
-:host([hv-glass]) .lv{position:absolute;inset:0;z-index:1;pointer-events:none;background:linear-gradient(180deg,rgba(255,255,255,.62),rgba(250,248,255,.48));transform-origin:50% 100%;transform:scaleY(var(--p,0));opacity:0;transition:opacity .25s,transform .08s linear}
-:host([hv-glass]) ha-card.drag .lv{opacity:1}
+:host([hv-glass]) .lv{position:absolute;inset:0;z-index:1;pointer-events:none;background:linear-gradient(180deg,rgba(255,255,255,.62),rgba(250,248,255,.48));transform-origin:50% 100%;transform:translate3d(0,0,0) scaleY(0);opacity:0;transition:opacity .25s ease;will-change:transform;contain:paint;isolation:isolate;backface-visibility:hidden}
+:host([hv-glass]) ha-card.drag .lv{opacity:1;transition:none}:host([hv-glass]) ha-card.drag,:host([hv-glass]) ha-card.drag *{animation-play-state:paused !important}:host([hv-glass]) ha-card.drag,:host([hv-glass]) ha-card.drag.dn{transition:none;transform:translateZ(0) scale(1)}
 :host([hv-glass]) .pc{position:absolute;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;font-size:clamp(28px,24cqmin,64px);font-weight:700;letter-spacing:-.02em;opacity:0;transform:scale(.85);
  transition:opacity .25s,transform .35s cubic-bezier(.34,1.56,.64,1);pointer-events:none;color:#fff;text-shadow:0 1px 6px rgba(20,10,90,.35);font-variant-numeric:tabular-nums}
 :host([hv-glass]) .pc.dk{color:#1e1c45;text-shadow:none}
-:host([hv-glass]) ha-card.drag .pc{opacity:1;transform:none}:host([hv-glass]) ha-card.drag .root{opacity:0}
+:host([hv-glass]) ha-card.drag .pc{opacity:1;transform:none;transition:none}:host([hv-glass]) ha-card.drag .root{opacity:0}
 @keyframes hvgbl{from{transform:scale(.05);opacity:1}to{transform:scale(1);opacity:0}}
 ha-ripple{--ha-ripple-color:var(--hv-text,#fff);--ha-ripple-hover-opacity:.04;--ha-ripple-pressed-opacity:.10;border-radius:inherit}
 /* tile layout = native vertical tile card as styled by HomeView */
@@ -495,12 +495,25 @@ ha-ripple{--ha-ripple-color:var(--hv-text,#fff);--ha-ripple-hover-opacity:.04;--
    rect frozen at pointerdown. Service calls are leading+trailing ~4/s; the tile
    never redisplays a stale entity echo until it matches the last finger value. */
 const HV_LD = { ms: 250, hold: 1500, dead: 6 };
+let hvLdN = 0;
+const hvLdBusy = () => hvLdN > 0;
+const hvLdBegin = () => { hvLdN++; };
+const hvLdFinish = () => { hvLdN = Math.max(0, hvLdN - 1); };
 const hvLdPct = st => { const b = st && st.attributes && st.attributes.brightness; return b == null ? (st && st.state === 'on' ? 100 : 0) : Math.max(1, Math.min(100, Math.round(b / 2.55))); };
 const hvLdDim = st => { if (!st) return false; const m = st.attributes && st.attributes.supported_color_modes; if (Array.isArray(m)) return m.some(x => x !== 'onoff');
   return st.attributes.brightness != null || ((st.attributes.supported_features || 0) & 1) === 1; };
 const hvLdAbs = (p, y) => { const t = 1 - (y - p.top) / (p.h || 1); return Math.max(1, Math.min(100, Math.round(t * 99 + 1))); };
-const hvLdShow = (el, v) => { v = Math.max(1, Math.min(100, Math.round(v))); if (!el) return v;
-  el.style.setProperty('--p', String(v / 100)); const pc = el.querySelector('.pc'); if (pc) { pc.textContent = v + '%'; pc.classList.toggle('dk', v >= 45); } return v; };
+const hvLdNodes = el => { if (!el) return el; if (!el._lv || !el._lv.isConnected) el._lv = el.querySelector('.lv'); if (!el._pc || !el._pc.isConnected) el._pc = el.querySelector('.pc'); return el; };
+const hvLdShow = (el, v) => { const t0 = (typeof performance !== 'undefined') ? performance.now() : 0;
+  v = Math.max(1, Math.min(100, Math.round(v))); if (!el) return v; hvLdNodes(el);
+  if (el._lv && el._pv !== v) el._lv.style.transform = 'translate3d(0,0,0) scaleY(' + (v / 100) + ')';
+  if (el._pc && el._pc._tv !== v) { el._pc._tv = v; el._pc.textContent = v + '%'; const dk = v >= 45; if (el._pc._dk !== dk) { el._pc._dk = dk; el._pc.classList.toggle('dk', dk); } }
+  el._pv = v; if (typeof self !== 'undefined' && self.__ldPerf) { const dt = performance.now() - t0; self.__ldPerf.n = (self.__ldPerf.n || 0) + 1; self.__ldPerf.sum = (self.__ldPerf.sum || 0) + dt; if (dt > (self.__ldPerf.max || 0)) self.__ldPerf.max = dt; }
+  return v; };
+const hvLdApply = (p, el, y, o, id) => { const v = hvLdAbs(p, y); if (v !== p.v) { p.v = v; hvLdShow(el, v); if (o && o._ld) o._ld.v = v; hvLdSchedule(p, o && o._hass, id); } };
+const hvLdMove = (p, el, y, o, id) => { p.yNow = y; if (p.raf) return; hvLdApply(p, el, y, o, id);
+  p.raf = requestAnimationFrame(() => { p.raf = 0; if (p.drag && p.yNow != null) hvLdApply(p, el, p.yNow, o, id); }); };
+const hvLdFlush = (p, el, o, id) => { if (p.raf) { cancelAnimationFrame(p.raf); p.raf = 0; } if (p.drag && p.yNow != null) hvLdApply(p, el, p.yNow, o, id); };
 const hvLdLock = (o, id, v, el) => { o._ld = { id, v, el, sticky: true }; if (el) { el.classList.add('drag'); hvLdShow(el, v); } };
 const hvLdLocked = (o, id) => { const L = o._ld; if (!L || !L.sticky) return false; return !id || !L.id || L.id === id; };
 const hvLdMatch = (o, st) => { const L = o._ld; return !!(L && st && st.state === 'on' && hvLdPct(st) === L.v); };
@@ -526,7 +539,7 @@ class HVBase extends HTMLElement {
     this._built = false; this._sig = null; this._render();
   }
   validate(c) { if (this.constructor.needsEntity && !c.entity) throw new Error('Please choose an entity'); }
-  set hass(h) { this._hass = h; this._render(); }
+  set hass(h) { this._hass = h; if (hvLdBusy()) return; this._render(); }
   get hass() { return this._hass; }
   watched() { const c = this._config || {}; return [c.entity].concat(c.entities || []).filter(Boolean).map(e => typeof e === 'string' ? e : e.entity).concat(tplEntities(c.label)); }
   get stateObj() { return this._hass && this._config.entity ? this._hass.states[this._config.entity] : undefined; }
@@ -737,20 +750,21 @@ class HVLightCard extends HVEntityCard {
     const idOf = () => this._config && this._config.entity;
     el.addEventListener('pointerdown', e => { if (!this.hasAttribute('hv-glass') || e.button > 0) return;
       const st = this.stateObj, dim = hvLdDim(st) && st.state !== 'unavailable'; if (!dim) return;
+      el.classList.remove('dn');
       const r = el.getBoundingClientRect();
       p = { id: e.pointerId, y: e.clientY, t: Date.now(), moved: false, drag: false, last: null, sent: 0, top: r.top, h: r.height };
       try { el.setPointerCapture(e.pointerId); } catch (x) {} });
     el.addEventListener('pointermove', e => { if (!p || e.pointerId !== p.id) return; const dy = e.clientY - p.y;
-      if (!p.moved && Math.abs(dy) > HV_LD.dead) { p.moved = true; p.drag = true; this._glassBusy = true; el.classList.add('drag'); el.classList.remove('dn');
+      if (!p.moved && Math.abs(dy) > HV_LD.dead) { p.moved = true; p.drag = true; this._glassBusy = true; hvLdBegin(); el.classList.add('drag'); el.classList.remove('dn');
         p.v = hvLdShow(el, hvLdAbs(p, e.clientY)); hvLdLock(this, idOf(), p.v, el); }
-      if (p.drag) { e.preventDefault(); e.stopPropagation(); const v = hvLdAbs(p, e.clientY); if (v !== p.v) { p.v = v; hvLdShow(el, v); if (this._ld) this._ld.v = v; hvLdSchedule(p, this._hass, idOf()); } } });
+      if (p.drag) { e.preventDefault(); e.stopPropagation(); hvLdMove(p, el, e.clientY, this, idOf()); } });
     const up = e => { if (!p || (e.pointerId != null && e.pointerId !== p.id)) return; const q = p; p = null;
-      if (q.drag) { e.preventDefault(); e.stopPropagation(); hvLdEnd(q, this._hass, idOf()); hvLdLock(this, idOf(), q.v, el); this._glassBusy = true; }
+      if (q.drag) { e.preventDefault(); e.stopPropagation(); hvLdFlush(q, el, this, idOf()); hvLdEnd(q, this._hass, idOf()); hvLdLock(this, idOf(), q.v, el); this._glassBusy = true; hvLdFinish(); }
       else this._glassBusy = false; };
     el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
     el.addEventListener('touchmove', e => { if (p && p.drag) { e.preventDefault(); e.stopPropagation(); } }, { passive: false });
     el.addEventListener('click', e => { if (this._glassBusy || hvLdLocked(this, idOf())) { e.preventDefault(); e.stopPropagation(); } }, true); }
-  set hass(h) { this._hass = h; const id = this._config && this._config.entity;
+  set hass(h) { this._hass = h; if (hvLdBusy()) return; const id = this._config && this._config.entity;
     if (hvLdLocked(this, id)) { const st = h && h.states && h.states[id]; if (hvLdKeep(this, st, this._card)) this._render(); return; }
     this._render(); }
   get hass() { return this._hass; }
@@ -820,7 +834,7 @@ class HVGarageChooserCard extends HTMLElement {
     if (!c || !c.entity) throw new Error('Please choose the first garage door');
     this._config = Object.assign({}, this.constructor.defaults, c); this._sig = null; this._render();
   }
-  set hass(h) { this._hass = h; this._render(); }
+  set hass(h) { this._hass = h; if (hvLdBusy()) return; this._render(); }
   get hass() { return this._hass; }
   getCardSize() { return 3; }
   getGridOptions() { return { columns: 6, rows: 3, min_columns: 3, min_rows: 2 }; }
@@ -1494,7 +1508,7 @@ class HVNowPlayingCard extends HTMLElement {
     this.toggleAttribute('fs', this._config.popup_style === 'fullscreen'); this._swipeAttr();
     this._sig = null; this._render();
   }
-  set hass(h) { this._hass = h; this._render(); }
+  set hass(h) { this._hass = h; if (hvLdBusy()) return; this._render(); }
   get hass() { return this._hass; }
   getCardSize() { return 8; }
   getGridOptions() { return { columns: 12, rows: 8, min_columns: 3, min_rows: 2 }; }
@@ -2173,7 +2187,7 @@ class HVCameraCard extends HTMLElement {
     if (!prev || prev.live_tile !== C.live_tile || prev.entity !== C.entity) this._alReset();
     this._swipeAttr(); this._sig = null; this._render();
   }
-  set hass(h) { this._hass = h; this._render(); }
+  set hass(h) { this._hass = h; if (hvLdBusy()) return; this._render(); }
   get hass() { return this._hass; }
   getCardSize() { return ({ '2x3': 3, '2x6': 3, '4x6': 6, '4x3': 6 })[(this._config || {}).size] || 3; }
   getGridOptions() { const g = CAM_SIZES[(this._config || {}).size] || CAM_SIZES['2x3']; return Object.assign({}, g, { min_columns: 3, min_rows: 2 }); }
@@ -3123,7 +3137,7 @@ const hvWithSize = (schema, cur, cls) => { // camera: in place of its placeholde
 class HVEditor extends HTMLElement {
   get _sizes() { return !!this.cardClass && this.cardClass.sizePresets !== false; }
   setConfig(c) { this._config = c; this._render(); }
-  set hass(h) { this._hass = h; this._render(); }
+  set hass(h) { this._hass = h; if (hvLdBusy()) return; this._render(); }
   get _hasLayout() {
     if (this.cardClass && this.cardClass.layoutSection === false) return false;
     if (this._inSections === undefined) this._inSections = hvInSectionsView(this.lovelace);
@@ -3678,7 +3692,7 @@ class HVGridCard extends HTMLElement {
     const old = this._config; this._config = Object.assign({}, HVGridCard.defaults, c);
     if (!old || JSON.stringify(old.cards) !== JSON.stringify(c.cards)) this._makeChildren(); else this._layout(true);
   }
-  set hass(h) { this._hass = h; (this._kids || []).forEach(k => { if (k.el) k.el.hass = h; }); this._arrBtn(); }
+  set hass(h) { this._hass = h; if (hvLdBusy()) { (this._kids || []).forEach(k => { if (k.el) k.el._hass = h; }); return; } (this._kids || []).forEach(k => { if (k.el) k.el.hass = h; }); this._arrBtn(); }
   get hass() { return this._hass; }
   // 1.32.0: small "Arrange" button next to the page dots (admins, storage-mode dashboards, outside HA's edit mode)
   _arrBtn() { hvGridCards.add(this); const b = this._arrB; if (!b) return; const now = Date.now(); if (this._arrT && now - this._arrT < 4000 && !this._arrF) return; this._arrT = now; this._arrF = false;
@@ -3731,8 +3745,8 @@ class HVGridCard extends HTMLElement {
     cell.classList.add('liq-clock');
     let disc = cell.querySelector(':scope > .disc');
     if (!disc) { disc = document.createElement('div'); disc.className = 'disc'; disc.innerHTML = HVG_CLOCK; cell.appendChild(disc); }
-    const tick = () => { const d = new Date(), s = d.getSeconds(), m = d.getMinutes() + s / 60, h = (d.getHours() % 12) + m / 60;
-      const set = (c, a) => { const g = disc.querySelector('.' + c); if (g) g.setAttribute('transform', `rotate(${a} 50 50)`); };
+    const tick = () => { if (hvLdBusy()) return; const d = new Date(), s = d.getSeconds(), m = d.getMinutes() + s / 60, h = (d.getHours() % 12) + m / 60;
+      const set = (c, a) => { const g = disc.querySelector('.' + c); if (!g) return; if (!g._hvH) { g._hvH = 1; g.removeAttribute('transform'); g.style.transformOrigin = '50px 50px'; g.style.transformBox = 'view-box'; g.style.willChange = 'transform'; } g.style.transform = 'rotate(' + a + 'deg)'; };
       set('hh', h * 30); set('hm', m * 6); set('hs', s * 6); };
     tick(); clearTimeout(cell._ct); const loop = () => { tick(); cell._ct = setTimeout(loop, 1000 - new Date().getMilliseconds() + 5); }; loop(); }
   _shell() {
@@ -3751,7 +3765,7 @@ class HVGridCard extends HTMLElement {
 .cell > *{flex:1;min-width:0;min-height:0;height:100%;width:100%;display:block}
 .cell.liq-clock{align-items:center;justify-content:center;container-type:size}
 .cell.liq-clock > :not(.disc){position:absolute;inset:0;opacity:0;pointer-events:none}
-.cell.liq-clock .disc{position:relative;aspect-ratio:1/1;width:100cqmin;height:100cqmin;max-width:100%;max-height:100%;border-radius:50%;flex:none;box-sizing:border-box;
+.cell.liq-clock .disc{position:relative;aspect-ratio:1/1;width:100cqmin;height:100cqmin;max-width:100%;max-height:100%;border-radius:50%;flex:none;box-sizing:border-box;contain:paint;isolation:isolate;transform:translateZ(0);
  background:linear-gradient(150deg,rgba(255,255,255,.10),rgba(255,255,255,.06) 48%,rgba(255,255,255,.08));
  -webkit-backdrop-filter:blur(6px) saturate(1.35) brightness(1.04);backdrop-filter:blur(6px) saturate(1.35) brightness(1.04);
  box-shadow:0 1cqmin 2.8cqmin rgba(10,8,50,.24),inset 0 0 14px rgba(255,255,255,.15),inset 0 -8px 12px rgba(20,12,80,.14)}
@@ -4870,7 +4884,7 @@ const HV_GE_CSS = `.hv-ge .hd{margin:4px 0 2px;font-weight:600;font-size:15px}.h
 .hv-ge ha-expansion-panel{margin-top:4px;--expansion-panel-content-padding:0 0 8px}`;
 class HVGridEditor extends HTMLElement {
   setConfig(c) { this._config = c; this._render(); }
-  set hass(h) { this._hass = h; this._render(); }
+  set hass(h) { this._hass = h; if (hvLdBusy()) return; this._render(); }
   set lovelace(l) { this._lovelace = l; if (this._ce) this._ce.lovelace = l; }
   _emit(cfg) { this._config = cfg; fire(this, 'config-changed', { config: cfg }); }
   _cards() { return (this._config.cards || []).slice(); }
@@ -4989,7 +5003,7 @@ class HVChipsCard extends HTMLElement {
   static getConfigElement() { return document.createElement('homeview-chips-card-editor'); }
   setConfig(c) { if (!c || (c.chips != null && !Array.isArray(c.chips))) throw new Error('chips must be a list');
     this._config = Object.assign({}, HVChipsCard.defaults, c, { chips: (c.chips || []).filter(x => x && typeof x === 'object') }); this._sig = null; this._render(); }
-  set hass(h) { this._hass = h; this._render(); }
+  set hass(h) { this._hass = h; if (hvLdBusy()) return; this._render(); }
   get hass() { return this._hass; }
   getCardSize() { return 1; }
   getGridOptions() { return { columns: 'full', rows: 'auto' }; }
@@ -5136,7 +5150,7 @@ const CHIPS_SCHEMA = [
   { type: 'grid', name: '', schema: [{ name: 'day_light', selector: { boolean: {} } }, { name: 'show_state', selector: { boolean: {} } }] }];
 class HVChipsEditor extends HTMLElement {
   setConfig(c) { this._config = c; this._render(); }
-  set hass(h) { this._hass = h; this._render(); }
+  set hass(h) { this._hass = h; if (hvLdBusy()) return; this._render(); }
   _render() {
     if (!this._hass || !this._config) return;
     if (!this._form) { const f = this._form = document.createElement('ha-form');
@@ -8657,7 +8671,7 @@ function hvHubHelp(s, cfg, albSt) { cfg = cfg || {};
 const hvHubLabel = s => s.name === 'theme' ? 'Device pages theme' : LABELS[s.name] || s.name;
 class HVHubEditor extends HTMLElement {
   setConfig(c) { this._config = c; this._render(); }
-  set hass(h) { this._hass = h; this._render(); }
+  set hass(h) { this._hass = h; if (hvLdBusy()) return; this._render(); }
   _render() {
     if (!this._hass || !this._config) return;
     const data = Object.assign({}, HVHubCard.defaults, { calendar_show_weather: true, apps: HUB_APPS }, this._config); data.bg_blur_level = hvBgLevel(this._config); // an older bg_transparency shows as its level
@@ -8791,12 +8805,12 @@ const HVG_CSS = `
  background:radial-gradient(circle,rgba(255,255,255,.55) 0%,rgba(255,255,255,.18) 40%,rgba(255,255,255,0) 70%);animation:hvgbl .7s ease-out forwards}
 @keyframes hvgbl{from{transform:scale(.05);opacity:1}to{transform:scale(1);opacity:0}}
 /* the light's brightness: a brighter glass that fills from the bottom while dragging */
-.lv{position:absolute;inset:0;z-index:1;pointer-events:none;background:linear-gradient(180deg,rgba(255,255,255,.62),rgba(250,248,255,.48));transform-origin:50% 100%;transform:scaleY(var(--p,0));opacity:0;transition:opacity .25s,transform .08s linear}
-.t.drag .lv{opacity:1}.t.drag .fl{opacity:0}
+.lv{position:absolute;inset:0;z-index:1;pointer-events:none;background:linear-gradient(180deg,rgba(255,255,255,.62),rgba(250,248,255,.48));transform-origin:50% 100%;transform:translate3d(0,0,0) scaleY(0);opacity:0;transition:opacity .25s ease;will-change:transform;contain:paint;isolation:isolate;backface-visibility:hidden}
+.t.drag .lv{opacity:1;transition:none}.t.drag .fl{opacity:0}.t.drag,.t.drag *{animation-play-state:paused !important}.t.drag{transition:none}
 .pc{position:absolute;inset:0;z-index:4;display:flex;align-items:center;justify-content:center;font-size:24cqmin;font-weight:700;letter-spacing:-.02em;opacity:0;transform:scale(.85);
  transition:opacity .25s,transform .35s cubic-bezier(.34,1.56,.64,1);pointer-events:none;color:#fff;text-shadow:0 1px 6px rgba(20,10,90,.35);font-variant-numeric:tabular-nums}
 .pc.dk{color:#1e1c45;text-shadow:none}
-.t.drag .pc{opacity:1;transform:none}.t.drag .in{opacity:0;transform:scale(.92)}
+.t.drag .pc{opacity:1;transform:none;transition:none}.t.drag .in{opacity:0;transform:scale(.92)}
 .in{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;text-align:center;padding:16cqmin 7cqmin 0;transition:opacity .25s,transform .35s cubic-bezier(.34,1.56,.64,1)}
 .ic{width:33cqmin;height:33cqmin;margin:0 0 9cqmin;display:flex;align-items:center;justify-content:center;transition:opacity .3s}
 .ic svg{width:100%;height:100%;fill:currentColor;overflow:visible}
@@ -8827,7 +8841,7 @@ const HVG_CSS = `
 .cv:focus-visible{outline:3px solid currentColor}.cv:disabled{opacity:.3;cursor:default}
 /* clock */
 .ck{display:flex;align-items:center;justify-content:center;container-type:size;min-width:0;min-height:0}
-.disc{position:relative;width:100cqmin;height:100cqmin;border-radius:50%;background:linear-gradient(150deg,rgba(255,255,255,.10),rgba(255,255,255,.06) 48%,rgba(255,255,255,.08));
+.disc{position:relative;width:100cqmin;height:100cqmin;border-radius:50%;contain:paint;isolation:isolate;transform:translateZ(0);background:linear-gradient(150deg,rgba(255,255,255,.10),rgba(255,255,255,.06) 48%,rgba(255,255,255,.08));
  -webkit-backdrop-filter:blur(6px) saturate(1.35) brightness(1.04);backdrop-filter:blur(6px) saturate(1.35) brightness(1.04);
  box-shadow:0 1cqmin 2.8cqmin rgba(10,8,50,.24),inset 0 0 14px rgba(255,255,255,.15),inset 0 -8px 12px rgba(20,12,80,.14)}
 .disc::before{content:'';position:absolute;inset:0;border-radius:50%;padding:1px;background:linear-gradient(135deg,rgba(255,255,255,.55),rgba(255,255,255,.32) 32%,rgba(255,255,255,.15) 72%,rgba(255,255,255,.16));
@@ -8868,7 +8882,7 @@ const HVG_CLOCK = `<svg viewBox="0 0 100 100" aria-hidden="true"><defs>${''}</de
 class HVGlassPage extends HTMLElement {
   setConfig(c) { if (!c || typeof c !== 'object') throw new Error('Invalid configuration'); this._config = Object.assign({}, c); this._sig = null;
     if (this.shadowRoot && this._built) { this._head(); this._render(); } }
-  set hass(h) { this._hass = h; const id = this._ent && this._config ? this._ent('light') : '';
+  set hass(h) { this._hass = h; if (hvLdBusy()) return; const id = this._ent && this._config ? this._ent('light') : '';
     if (hvLdLocked(this, id)) { const st = this._st('light'); if (hvLdKeep(this, st, this._ld && this._ld.el)) { this._sig = null; this._render(); } return; }
     this._render(); }
   get hass() { return this._hass; }
@@ -8903,11 +8917,11 @@ class HVGlassPage extends HTMLElement {
     r.querySelectorAll('.t').forEach(el => this._wire(el)); this._head(); }
   _head() { this.setAttribute('bg', this._c('background') === 'none' ? 'none' : 'indigo'); const h = this._c('height'); if (h && /^[\w.%() +*/-]+$/.test(String(h))) this.style.setProperty('--hvg-h', String(h)); else this.style.removeProperty('--hvg-h'); }
   // --- clock (transform only; ticks once a second)
-  _tick() { const r = this.shadowRoot; if (!r || !this.isConnected) return; const d = new Date(), s = d.getSeconds(), m = d.getMinutes() + s / 60, h = (d.getHours() % 12) + m / 60;
-    const set = (c, a) => { const g = r.querySelector('.' + c); if (g) g.setAttribute('transform', `rotate(${a} 50 50)`); };
+  _tick() { const r = this.shadowRoot; if (!r || !this.isConnected) return; if (hvLdBusy()) { this._ct = setTimeout(() => this._tick(), 1000); return; } const d = new Date(), s = d.getSeconds(), m = d.getMinutes() + s / 60, h = (d.getHours() % 12) + m / 60;
+    const set = (c, a) => { const g = r.querySelector('.' + c); if (!g) return; if (!g._hvH) { g._hvH = 1; g.removeAttribute('transform'); g.style.transformOrigin = '50px 50px'; g.style.transformBox = 'view-box'; g.style.willChange = 'transform'; } g.style.transform = 'rotate(' + a + 'deg)'; };
     set('hh', h * 30); set('hm', m * 6); set('hs', s * 6); clearTimeout(this._ct); this._ct = setTimeout(() => this._tick(), 1000 - d.getMilliseconds() + 5); }
   // --- live state
-  _render() { const r = this.shadowRoot; if (!r || !this._built || !this._hass || !this._config) return;
+  _render() { const r = this.shadowRoot; if (!r || !this._built || !this._hass || !this._config) return; if (hvLdLocked(this) || hvLdBusy()) return;
     const sig = JSON.stringify(['thermostat'].concat(HVG_SLOTS).map(s => { const st = this._st(s); return [this._ent(s), st && st.state, st && st.attributes, this._name(s), this._sub(s), this._pend[s] || 0]; }).concat([this._tmp, this._c('show_current_temp'), this._c('intercom_action')]));
     if (sig === this._sig) return; this._sig = sig; this._paintTh(); for (const s of HVG_SLOTS) this._paint(s); }
   _paint(s) { const el = this.shadowRoot.querySelector(`.t[data-s="${s}"]`); if (!el) return; const st = this._st(s), id = this._ent(s), d = id.split('.')[0];
@@ -9022,9 +9036,9 @@ class HVGlassPage extends HTMLElement {
       p = { id: e.pointerId, x: e.clientX, y: e.clientY, t: Date.now(), dim, moved: false, drag: false, held: false, top: r.top, h: r.height, start: st && st.state === 'on' ? this._pct(st) : 0 };
       el.classList.add('dn'); if (dim) try { el.setPointerCapture(e.pointerId); } catch (x) {}
       clearTimeout(this._t.h); this._t.h = setTimeout(() => { if (!p || p.moved) return; p.held = true; end(); this._edit(s); }, 500); });
-    el.addEventListener('pointermove', e => { if (!p || e.pointerId !== p.id) return; const dx = e.clientX - p.x, dy = e.clientY - p.y;
+    el.addEventListener('pointermove', e => { if (!p || e.pointerId !== p.id) return; p.yNow = e.clientY; const dx = e.clientX - p.x, dy = e.clientY - p.y;
       if (!p.moved && Math.hypot(dx, dy) > HV_LD.dead) { p.moved = true; if (p.dim && Math.abs(dy) >= Math.abs(dx) * 0.7) this._dragStart(el, p); else if (!p.drag) { clearTimeout(this._t.h); end(); } }
-      if (p.drag) { e.preventDefault(); e.stopPropagation(); this._dragMove(el, p, hvLdAbs(p, e.clientY)); } });
+      if (p.drag) { e.preventDefault(); e.stopPropagation(); this._dragMove(el, p, e.clientY); } });
     const up = e => { if (!p || (e.pointerId != null && e.pointerId !== p.id)) return; clearTimeout(this._t.h); const q = p; p = null; end();
       if (q.drag) { e.preventDefault(); e.stopPropagation(); this._dragEnd(el, q); return; }
       if (hvLdLocked(this, this._ent(s))) return;
@@ -9036,10 +9050,10 @@ class HVGlassPage extends HTMLElement {
       const v = Math.max(1, Math.min(100, (st.state === 'on' ? this._pct(st) : 0) + (e.key === 'ArrowUp' ? 10 : -10))); this._call('light', 'turn_on', { entity_id: this._ent(s), brightness_pct: v }, s); });
     el.addEventListener('contextmenu', e => e.preventDefault()); }
   _dragStart(el, p) { if (p.drag) return; p.drag = true; p.last = null; p.sent = 0; p.tm = 0; clearTimeout(this._t.h); el.classList.remove('dn'); el.classList.add('drag');
-    hvLdLock(this, this._ent('light'), p.v != null ? p.v : 1, el); }
+    hvLdBegin(); const v = hvLdAbs(p, p.yNow != null ? p.yNow : p.y); p.v = v; hvLdLock(this, this._ent('light'), v, el); }
   _dragShow(el, v) { return hvLdShow(el, v); }
-  _dragMove(el, p, v) { if (v === p.v) return; p.v = v; hvLdShow(el, v); if (this._ld) this._ld.v = v; hvLdSchedule(p, this._hass, this._ent('light')); }
-  _dragEnd(el, p) { const id = this._ent('light'); hvLdEnd(p, this._hass, id); hvLdLock(this, id, p.v, el);
+  _dragMove(el, p, y) { hvLdMove(p, el, y, this, this._ent('light')); }
+  _dragEnd(el, p) { const id = this._ent('light'); hvLdFlush(p, el, this, id); hvLdEnd(p, this._hass, id); hvLdLock(this, id, p.v, el); hvLdFinish();
     if (p.v != null) this._flash(el, p.v + '%'); }
 }
 HVGlassPage.sizePresets = false; HVGlassPage.layoutSection = false;
