@@ -489,6 +489,24 @@ ha-ripple{--ha-ripple-color:var(--hv-text,#fff);--ha-ripple-hover-opacity:.04;--
 .c.btn .tx{flex:none;margin-top:8px}
 `;
 
+
+/* shared light brightness drag for the Glass page and hv-glass light tiles:
+   only light.turn_on + brightness_pct, leading+trailing ~4/s, last finger value always wins, no stale send after it, ignore state while dragging and ~1.5s after. */
+const HV_LD = { ms: 250, hold: 1500, dead: 6 };
+const hvLdPct = st => { const b = st && st.attributes && st.attributes.brightness; return b == null ? (st && st.state === 'on' ? 100 : 0) : Math.max(1, Math.min(100, Math.round(b / 2.55))); };
+const hvLdDim = st => { if (!st) return false; const m = st.attributes && st.attributes.supported_color_modes; if (Array.isArray(m)) return m.some(x => x !== 'onoff');
+  return st.attributes.brightness != null || ((st.attributes.supported_features || 0) & 1) === 1; };
+const hvLdLock = (o, id, v) => { o._ld = { id, v, until: Date.now() + HV_LD.hold }; };
+const hvLdLocked = (o, id) => { const L = o._ld; if (!L) return false; if (Date.now() > L.until) { o._ld = null; return false; } return !id || !L.id || L.id === id; };
+const hvLdMatch = (o, st) => { const L = o._ld; return !!(L && st && st.state === 'on' && hvLdPct(st) === L.v); };
+const hvLdSend = (hass, id, v, p) => { v = Math.max(1, Math.min(100, Math.round(v))); if (p.last === v) return false; p.last = v; p.sent = Date.now();
+  if (hass && hass.callService) hass.callService('light', 'turn_on', { entity_id: id, brightness_pct: v }); return true; };
+const hvLdSchedule = (p, hass, id) => { const now = Date.now();
+  const fire = () => { if (!p.drag || p.v == null || p.v === p.last) return; hvLdSend(hass, id, p.v, p); };
+  if (!p.sent || now - p.sent >= HV_LD.ms) fire();
+  else { clearTimeout(p.tm); p.tm = setTimeout(fire, HV_LD.ms - (now - p.sent)); } };
+const hvLdEnd = (p, hass, id) => { clearTimeout(p.tm); p.tm = 0; p.drag = false; if (p.v != null && p.v !== p.last && !(p.last == null && p.v === p.start)) hvLdSend(hass, id, p.v, p); };
+
 /* ---------------- base card ---------------- */
 class HVBase extends HTMLElement {
   constructor() { super(); this.attachShadow({ mode: 'open' }); }
@@ -600,7 +618,8 @@ class HVBase extends HTMLElement {
       if (wasHeld && this.hasHold()) this.runAction('hold'); else { bloom(e.clientX, e.clientY); this.runAction('tap'); }
     });
     const cancel2 = () => { el.classList.remove('dn'); cancel(); };
-    el.addEventListener('pointercancel', cancel2); el.addEventListener('pointerleave', cancel2);
+    el.addEventListener('pointercancel', cancel2);
+    el.addEventListener('pointerleave', () => { if (this._glassBusy) return; cancel2(); });
     el.addEventListener('contextmenu', e => { e.preventDefault(); });
     el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.runAction('tap'); } });
   }
@@ -705,23 +724,27 @@ class HVLightCard extends HVEntityCard {
     for (const c of ['fl', 'lv', 'pc']) { if (!this._card.querySelector('.' + c)) { const s = document.createElement('span'); s.className = c; this._card.appendChild(s); } }
     this._bindGlassLight(this._card); }
   _bindGlassLight(el) {
+    if (el._hvLd) return; el._hvLd = true;
     let p = null;
-    const dimOf = st => { if (!st) return false; const m = st.attributes && st.attributes.supported_color_modes; if (Array.isArray(m)) return m.some(x => x !== 'onoff');
-      return st.attributes.brightness != null || ((st.attributes.supported_features || 0) & 1) === 1; };
-    const pctOf = st => { const b = st && st.attributes && st.attributes.brightness; return b == null ? (st && st.state === 'on' ? 100 : 0) : Math.max(1, Math.min(100, Math.round(b / 2.55))); };
     const show = v => { el.style.setProperty('--p', String(Math.max(0, Math.min(1, v / 100)))); const pc = el.querySelector('.pc'); if (pc) { pc.textContent = Math.round(v) + '%'; pc.classList.toggle('dk', v >= 45); } };
+    const idOf = () => this._config && this._config.entity;
     el.addEventListener('pointerdown', e => { if (!this.hasAttribute('hv-glass') || e.button > 0) return;
-      const st = this.stateObj, dim = dimOf(st) && st.state !== 'unavailable'; if (!dim) return;
-      p = { id: e.pointerId, y: e.clientY, t: Date.now(), moved: false, drag: false, h: el.getBoundingClientRect().height, start: st && st.state === 'on' ? pctOf(st) : 0 };
+      const st = this.stateObj, dim = hvLdDim(st) && st.state !== 'unavailable'; if (!dim) return;
+      p = { id: e.pointerId, y: e.clientY, t: Date.now(), moved: false, drag: false, last: null, sent: 0, h: el.getBoundingClientRect().height, start: st && st.state === 'on' ? hvLdPct(st) : 0 };
       try { el.setPointerCapture(e.pointerId); } catch (x) {} });
     el.addEventListener('pointermove', e => { if (!p || e.pointerId !== p.id) return; const dy = e.clientY - p.y;
-      if (!p.moved && Math.abs(dy) > 8) { p.moved = true; if (Math.abs(dy) >= 6) { p.drag = true; this._glassBusy = true; el.classList.add('drag'); el.classList.remove('dn'); show(p.start); } }
-      if (p.drag) { e.preventDefault(); const v = Math.max(1, Math.min(100, Math.round(p.start - dy / p.h * 100))); p.v = v; show(v);
-        const now = Date.now(); if (!p.sent || now - p.sent >= 200) { p.sent = now; this._hass && this._hass.callService('light', 'turn_on', { entity_id: this._config.entity, brightness_pct: v }); } } });
-    const up = e => { if (!p || (e.pointerId != null && e.pointerId !== p.id)) return; const q = p; p = null; el.classList.remove('drag');
-      if (q.drag) { const v = q.v != null ? q.v : q.start; this._hass && this._hass.callService('light', 'turn_on', { entity_id: this._config.entity, brightness_pct: v }); setTimeout(() => { this._glassBusy = false; }, 50); }
+      if (!p.moved && Math.abs(dy) > HV_LD.dead) { p.moved = true; p.drag = true; this._glassBusy = true; el.classList.add('drag'); el.classList.remove('dn'); show(p.start); }
+      if (p.drag) { e.preventDefault(); e.stopPropagation(); const v = Math.max(1, Math.min(100, Math.round(p.start - dy / p.h * 100))); if (v !== p.v) { p.v = v; show(v); hvLdSchedule(p, this._hass, idOf()); } } });
+    const up = e => { if (!p || (e.pointerId != null && e.pointerId !== p.id)) return; const q = p; p = null;
+      if (q.drag) { e.preventDefault(); e.stopPropagation(); hvLdEnd(q, this._hass, idOf()); hvLdLock(this, idOf(), q.v); this._glassBusy = true;
+        el.classList.remove('drag'); clearTimeout(this._ldT); this._ldT = setTimeout(() => { if (!hvLdLocked(this, idOf())) this._glassBusy = false; else { this._ld = null; this._glassBusy = false; } }, HV_LD.hold); }
       else this._glassBusy = false; };
-    el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up); }
+    el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+    el.addEventListener('click', e => { if (this._glassBusy || hvLdLocked(this, idOf())) { e.preventDefault(); e.stopPropagation(); } }, true); }
+  set hass(h) { this._hass = h; const id = this._config && this._config.entity;
+    if (hvLdLocked(this, id)) { const st = h && h.states && h.states[id]; if (hvLdMatch(this, st)) { this._ld = null; this._glassBusy = false; } else return; }
+    this._render(); }
+  get hass() { return this._hass; }
   view() {
     const c = this._config, s = this.stateObj, h = this._hass;
     let sec = '';
@@ -3715,9 +3738,9 @@ class HVGridCard extends HTMLElement {
 :host([hv-edit]) .cell::after{content:'';position:absolute;inset:1px;border-radius:var(--hv-radius,22px);border:1.5px dashed rgba(255,255,255,.45);pointer-events:none;z-index:5}
 :host([hv-edit][day]) .cell::after{border-color:rgba(60,60,67,.35)}
 .cell > *{flex:1;min-width:0;min-height:0;height:100%;width:100%;display:block}
-.cell.liq-clock{align-items:center;justify-content:center}
+.cell.liq-clock{align-items:center;justify-content:center;container-type:size}
 .cell.liq-clock > :not(.disc){position:absolute;inset:0;opacity:0;pointer-events:none}
-.cell.liq-clock .disc{position:relative;width:min(100%,100cqmin);height:min(100%,100cqmin);max-width:100%;max-height:100%;border-radius:50%;flex:none;
+.cell.liq-clock .disc{position:relative;aspect-ratio:1/1;width:100cqmin;height:100cqmin;max-width:100%;max-height:100%;border-radius:50%;flex:none;box-sizing:border-box;
  background:linear-gradient(150deg,rgba(255,255,255,.10),rgba(255,255,255,.06) 48%,rgba(255,255,255,.08));
  -webkit-backdrop-filter:blur(6px) saturate(1.35) brightness(1.04);backdrop-filter:blur(6px) saturate(1.35) brightness(1.04);
  box-shadow:0 1cqmin 2.8cqmin rgba(10,8,50,.24),inset 0 0 14px rgba(255,255,255,.15),inset 0 -8px 12px rgba(20,12,80,.14)}
@@ -3727,6 +3750,7 @@ class HVGridCard extends HTMLElement {
 .cell.liq-clock .disc svg{position:absolute;inset:0;width:100%;height:100%;display:block}
 .pg{container-type:size}
 .dots{display:flex;justify-content:center;gap:8px;height:22px;align-items:center;margin-top:6px}
+:host([look-glass]) .dots{position:absolute;left:0;right:0;bottom:calc(var(--hv-safe-bottom, env(safe-area-inset-bottom, 0px)) + 9px);margin-top:0;height:22px;z-index:2}
 .dots button{all:unset;cursor:pointer;width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.38);box-shadow:0 1px 3px rgba(0,0,30,.25);transition:all .25s ease}
 .dots button.on{width:22px;border-radius:4px;background:rgba(255,255,255,.95)}
 .dots.hide{display:none}
@@ -3797,9 +3821,20 @@ class HVGridCard extends HTMLElement {
     const pl = bleed ? Math.max(L, g) : 0, pr = bleed ? Math.max(Rm, g) : 0;
     const C = Math.max(1, Number(portrait ? c.portrait_columns : c.landscape_columns) || (portrait ? 3 : 4));
     const cw = Math.floor(((bleed ? vw - pl - pr : W) - (C - 1) * g) / C);
-    const dotsH = c.show_dots === false ? 0 : 28;
+    this.toggleAttribute('look-glass', this._liq());
+    let dotsH = c.show_dots === false ? 0 : 28;
     const safeTop = fr ? 0 : this._px('var(--hv-safe-top, env(safe-area-inset-top, 0px))');
-    const bottom = this._px('var(--hv-safe-bottom, env(safe-area-inset-bottom, 0px))') + 10;
+    const safeBot = this._px('var(--hv-safe-bottom, env(safe-area-inset-bottom, 0px))');
+    let bottom = safeBot + 10;
+    // Liquid Glass home: fill to the viewport bottom and sit the page dots
+    // 8–10px above the safe-area edge so the tile rows can use the leftover gap.
+    if (this._liq() && !this._edit && !fr) {
+      bottom = safeBot + 9;
+      if (c.show_dots !== false) dotsH = 22;
+      this.style.height = Math.max(0, Math.round(vh - rect.top)) + 'px';
+    } else {
+      this.style.height = '';
+    }
     // portrait: start below the status bar and the floating edit / screensaver buttons (they sit over the top-right tile otherwise)
     let top = rect.top;
     if (portrait) { top = Math.max(top, safeTop + 6);
@@ -8865,7 +8900,9 @@ class HVGlassPage extends HTMLElement {
   _paint(s) { const el = this.shadowRoot.querySelector(`.t[data-s="${s}"]`); if (!el) return; const st = this._st(s), id = this._ent(s), d = id.split('.')[0];
     const set = this._c('intercom_action') && s === 'intercom'; const un = !id && !set, gone = id && !st;
     el.querySelector('.tt').textContent = this._name(s); el.querySelector('.sb .a').textContent = un ? (s === 'intercom' ? 'Set action' : 'Set entity') : gone ? 'Not found' : this._sub(s);
-    el.classList.toggle('un', !!(un || gone)); const state = st ? st.state : '';
+    el.classList.toggle('un', !!(un || gone));
+    if (s === 'light' && (el.classList.contains('drag') || (hvLdLocked(this, id) && !hvLdMatch(this, st)))) return;
+    const state = st ? st.state : '';
     let on = false, txt = '';
     if (st) { if (d === 'lock') { on = state !== 'locked'; txt = { locked: 'Locked', unlocked: 'Unlocked', locking: 'Locking…', unlocking: 'Unlocking…', jammed: 'Jammed', open: 'Open', opening: 'Opening…' }[state] || state; }
       else if (d === 'scene' || d === 'script' || d === 'button' || d === 'input_button') { on = d === 'script' && state === 'on'; txt = 'Activated'; }
@@ -8912,7 +8949,7 @@ class HVGlassPage extends HTMLElement {
     if (d === 'scene' || d === 'script') { el._hold = true; el.classList.add('on', 'tw'); this._flash(el, 'Activated', 1600); clearTimeout(this._t.sc);
       this._t.sc = setTimeout(() => { el._hold = false; el.classList.remove('tw'); this._sig = null; this._render(); }, 1600); this._call(d, 'turn_on', { entity_id: id }); return; }
     if (d === 'button' || d === 'input_button') { this._flash(el, 'Pressed'); this._call(d, 'press', { entity_id: id }); return; }
-    if (d === 'light') { this._call('light', st.state === 'on' ? 'turn_off' : 'turn_on', { entity_id: id }, s); return; }
+    if (d === 'light') { if (hvLdLocked(this, id)) return; this._call('light', st.state === 'on' ? 'turn_off' : 'turn_on', { entity_id: id }, s); return; }
     if (['switch', 'fan', 'input_boolean', 'media_player', 'humidifier'].includes(d)) { this._call(d === 'media_player' ? 'media_player' : d, 'toggle', { entity_id: id }, s); return; }
     this._more(id); }
   _step(dir) { const st = this._st('thermostat'); if (!st) return; const a = st.attributes, step = Number(this._c('temp_step')) || Number(a.target_temp_step) || (this._hass.config && this._hass.config.unit_system && /F/.test(this._hass.config.unit_system.temperature) ? 1 : 0.5);
@@ -8971,22 +9008,23 @@ class HVGlassPage extends HTMLElement {
       el.classList.add('dn'); if (dim) try { el.setPointerCapture(e.pointerId); } catch (x) {}
       clearTimeout(this._t.h); this._t.h = setTimeout(() => { if (!p || p.moved) return; p.held = true; end(); this._edit(s); }, 500); });
     el.addEventListener('pointermove', e => { if (!p || e.pointerId !== p.id) return; const dx = e.clientX - p.x, dy = e.clientY - p.y;
-      if (!p.moved && Math.hypot(dx, dy) > 8) { p.moved = true; if (p.dim && Math.abs(dy) >= Math.abs(dx) * 0.7) this._dragStart(el, p); else if (!p.drag) { clearTimeout(this._t.h); end(); } }
+      if (!p.moved && Math.hypot(dx, dy) > HV_LD.dead) { p.moved = true; if (p.dim && Math.abs(dy) >= Math.abs(dx) * 0.7) this._dragStart(el, p); else if (!p.drag) { clearTimeout(this._t.h); end(); } }
       if (p.drag) { e.preventDefault(); this._dragMove(el, p, Math.max(1, Math.min(100, Math.round(p.start - dy / p.h * 100)))); } });
     const up = e => { if (!p || (e.pointerId != null && e.pointerId !== p.id)) return; clearTimeout(this._t.h); const q = p; p = null; end();
-      if (q.drag) { this._dragEnd(el, q); return; } if (e.type !== 'pointerup' || q.moved || q.held) return; this._bloom(el, e.clientX, e.clientY); this._tap(s, el); };
+      if (q.drag) { e.preventDefault(); e.stopPropagation(); this._dragEnd(el, q); return; }
+      if (hvLdLocked(this, this._ent(s))) return;
+      if (e.type !== 'pointerup' || q.moved || q.held) return; this._bloom(el, e.clientX, e.clientY); this._tap(s, el); };
     el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up); el.addEventListener('lostpointercapture', e => { if (p && p.drag) up(Object.assign({ type: 'pointercancel', pointerId: e.pointerId })); });
-    el.addEventListener('click', e => { if (e.detail === 0) this._tap(s, el); }); // keyboard (Enter / Space)
+    el.addEventListener('click', e => { if (el.classList.contains('drag') || hvLdLocked(this, this._ent(s))) { e.preventDefault(); e.stopPropagation(); return; } if (e.detail === 0) this._tap(s, el); }, true);
     el.addEventListener('keydown', e => { if (s !== 'light') return; const st = this._st(s); if (!this._dim(st) || !['ArrowUp', 'ArrowDown'].includes(e.key)) return; e.preventDefault();
       const v = Math.max(1, Math.min(100, (st.state === 'on' ? this._pct(st) : 0) + (e.key === 'ArrowUp' ? 10 : -10))); this._call('light', 'turn_on', { entity_id: this._ent(s), brightness_pct: v }, s); });
     el.addEventListener('contextmenu', e => e.preventDefault()); }
-  _dragStart(el, p) { if (p.drag) return; p.drag = true; p.last = null; p.sent = 0; p.v = p.start || 0; clearTimeout(this._t.h); el.classList.remove('dn'); el.classList.add('drag'); this._dragShow(el, p.v); }
+  _dragStart(el, p) { if (p.drag) return; p.drag = true; p.last = null; p.sent = 0; p.v = p.start || 0; p.tm = 0; clearTimeout(this._t.h); el.classList.remove('dn'); el.classList.add('drag'); this._dragShow(el, p.v); }
   _dragShow(el, v) { el.style.setProperty('--p', String(v / 100)); const pc = el.querySelector('.pc'); pc.textContent = v + '%'; pc.classList.toggle('dk', v >= 55); }
-  _dragMove(el, p, v) { if (v === p.v) return; p.v = v; this._dragShow(el, v); const now = Date.now();
-    if (now - p.sent >= 200) { p.sent = now; p.last = v; this._call('light', 'turn_on', { entity_id: this._ent('light'), brightness_pct: v }); } // at most ~5 a second
-    else { clearTimeout(this._t.dr); this._t.dr = setTimeout(() => { if (p.drag && p.v !== p.last) { p.sent = Date.now(); p.last = p.v; this._call('light', 'turn_on', { entity_id: this._ent('light'), brightness_pct: p.v }); } }, 200 - (now - p.sent)); } }
-  _dragEnd(el, p) { clearTimeout(this._t.dr); p.drag = false; if (p.v !== p.last && (p.last != null || p.v !== p.start)) this._call('light', 'turn_on', { entity_id: this._ent('light'), brightness_pct: p.v }, 'light'); // the final value
-    setTimeout(() => { el.classList.remove('drag'); this._flash(el, p.v + '%'); this._sig = null; this._render(); }, 120); }
+  _dragMove(el, p, v) { if (v === p.v) return; p.v = v; this._dragShow(el, v); hvLdSchedule(p, this._hass, this._ent('light')); }
+  _dragEnd(el, p) { const id = this._ent('light'); hvLdEnd(p, this._hass, id); hvLdLock(this, id, p.v);
+    setTimeout(() => { el.classList.remove('drag'); if (p.v != null) this._flash(el, p.v + '%'); }, 120);
+    clearTimeout(this._ldT); this._ldT = setTimeout(() => { this._ld = null; this._sig = null; this._render(); }, HV_LD.hold); }
 }
 HVGlassPage.sizePresets = false; HVGlassPage.layoutSection = false;
 HVGlassPage.schema = [
