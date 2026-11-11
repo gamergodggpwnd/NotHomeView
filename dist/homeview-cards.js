@@ -4475,7 +4475,7 @@ const HV_GAL_CSS = `
 .pv{all:unset;cursor:pointer;position:relative;display:flex;flex-direction:column;min-width:0;min-height:0;transition:transform .15s}.pv:active{transform:scale(.97)}
 .pv .cv{position:relative;flex:1;min-height:0;display:block;border-radius:calc(var(--I,60px) * .32);overflow:hidden;box-shadow:0 10px 26px rgba(0,0,0,.3)}
 .pv .hw > .hwi{position:absolute;inset:0;border-radius:inherit;box-shadow:none}.pv .hw{cursor:pointer}
-.pv .hpv{background:var(--hv-ss-bg,#1a1a1a)}.pv .hst{position:absolute;inset:0;container-type:size}
+.pv .hpv{background:var(--hv-ss-bg,#1a1a1a)}.pv .hst{position:absolute;inset:0;container-type:size}.pv .hv{background:rgba(255,255,255,.10)}.pv .hv > *{position:absolute;inset:0;width:100% !important;height:100% !important;display:block;pointer-events:none}
 .pv .badge{position:absolute;left:8px;top:8px;display:inline-flex;align-items:center;gap:4px;padding:3px 8px 3px 5px;border-radius:99px;font-size:11px;font-weight:600;background:rgba(0,0,0,.45);backdrop-filter:blur(8px)}.pv .badge ha-icon{--mdc-icon-size:14px;color:#30d158}
 .pv .cap{flex:none;height:34px;padding-top:6px;display:flex;flex-direction:column;align-items:center;text-align:center;line-height:1.2;overflow:hidden}.pv .cap b{font-size:13px;font-weight:600;white-space:nowrap}.pv .cap small{font-size:11px;color:rgba(235,235,245,.6);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .pv.no .cv{opacity:.4;filter:saturate(.4)}.pv.no{cursor:default}.pv.no:active{transform:none}
@@ -4486,6 +4486,30 @@ const HV_GAL_CSS = `
  .side{border-right:0;border-bottom:.5px solid rgba(255,255,255,.12);padding:18px 16px 12px;overflow:visible;gap:12px}.srch{margin-right:46px}
  .prov{flex-direction:row;overflow-x:auto;gap:8px;scrollbar-width:none}.prov::-webkit-scrollbar{display:none}.pr{flex:none;padding:6px 12px 6px 6px;border-radius:99px;background:rgba(118,118,128,.18);font-size:15px;gap:8px}.pr .pi{width:28px;height:28px;border-radius:8px}.pr.on{background:rgba(255,255,255,.22)}
  .main{padding:18px 16px calc(30px + env(safe-area-inset-bottom,0px))}.hd h2{font-size:24px}.x{top:18px}}`;
+const HV_GAL_SZ = [['square', 'Small', 2, 2], ['wide', 'Medium', 4, 2], ['big', 'Large', 4, 4]];
+const HV_GAL_LG = [['wide', 'Medium', 4, 2], ['big', 'Large', 4, 4]];
+const HV_GAL_XL = [['big', 'Large', 4, 4]];
+// NotHomeView cards offered in Add Card (sidebar + Suggestions). Internals (Hub, Page Grid, chips, page break, edit button, screensaver form, garage chooser, Homey — already a gallery entry) are left out.
+const HV_GAL = {
+  thermostat: { name: 'Thermostat', ico: 'mdi:thermostat', bg: 'linear-gradient(180deg,#ff9f0a 0%,#ff6b00 100%)', desc: 'Set point, mode and current temperature, from a climate entity.', tag: 'homeview-thermostat-card', sizes: HV_GAL_SZ, need: 'climate.', miss: 'No climate entity in Home Assistant', keys: 'climate climate control heat cool' },
+  light: { name: 'Lights', ico: 'mdi:lightbulb', bg: 'linear-gradient(180deg,#ffd60a 0%,#ff9f0a 100%)', fg: '#1c1c1e', desc: 'A light tile: tap to toggle, with brightness on the tile.', tag: 'homeview-light-card', sizes: HV_GAL_SZ, need: 'light.', miss: 'No light entity in Home Assistant', keys: 'light lights lamp brightness' },
+  music: { name: 'Music', ico: 'mdi:music', bg: 'linear-gradient(180deg,#ff375f 0%,#c9346c 100%)', desc: 'What is playing, from a media player. Tap opens Now Playing.', tag: 'homeview-music-card', sizes: HV_GAL_SZ, need: 'media_player.', miss: 'No media player in Home Assistant', keys: 'music media speaker now playing' },
+  nowplaying: { name: 'Now Playing', ico: 'mdi:play-box-multiple', bg: 'linear-gradient(180deg,#bf5af2 0%,#7d3cff 100%)', desc: 'Artwork, transport, progress and volume for a media player.', tag: 'homeview-now-playing-card', sizes: HV_GAL_LG, need: 'media_player.', miss: 'No media player in Home Assistant', keys: 'now playing media music artwork' },
+  tv: { name: 'TV', ico: 'mdi:television', bg: 'linear-gradient(180deg,#64d2ff 0%,#0a84ff 100%)', desc: 'A TV tile like Music; tap opens the TV player and remote.', tag: 'homeview-tv-card', sizes: HV_GAL_SZ, need: 'media_player.', miss: 'No media player in Home Assistant', keys: 'tv television remote' },
+  tvplayer: { name: 'TV Player', ico: 'mdi:television-play', bg: 'linear-gradient(180deg,#5e5ce6 0%,#3634a3 100%)', desc: 'The TV player on its own: picture, transport, apps and remote.', tag: 'homeview-tv-player-card', sizes: HV_GAL_LG, need: 'media_player.', miss: 'No media player in Home Assistant', keys: 'tv player television remote' },
+  camera: { name: 'Camera', ico: 'mdi:cctv', bg: 'linear-gradient(180deg,#8e8e93 0%,#636366 100%)', desc: 'A live camera tile, with a name overlay. Tap for a larger view.', tag: 'homeview-camera-card', sizes: HV_GAL_SZ, need: 'camera.', miss: 'No camera entity in Home Assistant', keys: 'camera security doorbell cctv' },
+  garage: { name: 'Garage', ico: 'mdi:garage', bg: 'linear-gradient(180deg,#acacb0 0%,#6e6e73 100%)', desc: 'Open or close a garage door, with optional confirmation.', tag: 'homeview-garage-card', sizes: HV_GAL_SZ, need: 'cover.', miss: 'No cover entity in Home Assistant', keys: 'garage door cover security' },
+  scene: { name: 'Scene', ico: 'mdi:palette', bg: 'linear-gradient(180deg,#32d74b 0%,#248a3d 100%)', desc: 'A scene or script button, with optional confirmation.', tag: 'homeview-scene-card', sizes: HV_GAL_SZ, need: ['scene.', 'script.'], miss: 'No scene or script in Home Assistant', keys: 'scene script good night morning' },
+  entity: { name: 'Info', ico: 'mdi:information', bg: 'linear-gradient(180deg,#7d7aff 0%,#5856d6 100%)', desc: 'Any entity as a tile: icon, name, and its state or a custom label.', tag: 'homeview-entity-card', sizes: HV_GAL_SZ, keys: 'info entity switch sensor status' },
+  group: { name: 'Group', ico: 'mdi:lightbulb-group', bg: 'linear-gradient(180deg,#ffd60a 0%,#c7a302 100%)', fg: '#1c1c1e', desc: 'Several lights or a group: how many are on, tap to toggle all.', tag: 'homeview-group-card', sizes: HV_GAL_SZ, need: 'light.', miss: 'No light entity in Home Assistant', keys: 'group lights all' },
+  nav: { name: 'Navigation', ico: 'mdi:arrow-right-bold', bg: 'linear-gradient(180deg,#0a84ff 0%,#0040dd 100%)', desc: 'Jump to another view, keeping URL parameters.', tag: 'homeview-nav-card', sizes: HV_GAL_SZ, keys: 'navigation link path view page' },
+  battery: { name: 'Battery', ico: 'mdi:battery', bg: 'linear-gradient(180deg,#30d158 0%,#248a3d 100%)', desc: 'Battery level as a glass bar, with a bolt while it is charging.', tag: 'homeview-battery-card', sizes: HV_GAL_SZ, keys: 'battery charge level' },
+  person: { name: 'People', ico: 'mdi:account', bg: 'linear-gradient(180deg,#64d2ff 0%,#0071e3 100%)', desc: 'A person tile: avatar, status and location. Tap opens a map.', tag: 'homeview-person-card', sizes: HV_GAL_SZ, need: 'person.', miss: 'No person entity in Home Assistant', keys: 'people person find my location security' },
+  events: { name: 'Events', ico: 'mdi:calendar-clock', bg: '#fff', fg: '#ff3b30', desc: 'Upcoming events from your calendars, on NotHomeView glass.', tag: 'homeview-calendar-card', sizes: HV_GAL_LG, need: 'calendar.', miss: 'No calendar in Home Assistant', keys: 'events calendar agenda upcoming' },
+  glass: { name: 'Glass', ico: 'mdi:view-dashboard-variant', bg: 'linear-gradient(180deg,#7d7aff 0%,#4c49d0 100%)', desc: 'A page of frosted-glass tiles: thermostat, analog clock, scene, lock and a light.', tag: 'homeview-glass-page', sizes: HV_GAL_XL, keys: 'glass clock climate lock light page screensaver' },
+  myhome: { name: 'My Home', ico: 'mdi:home-variant', bg: 'linear-gradient(180deg,#ff9f0a 0%,#c93400 100%)', desc: 'An Apple Home style page: pills, cameras, scenes and devices by room.', tag: 'homeview-myhome-card', sizes: HV_GAL_XL, keys: 'my home rooms devices scenes cameras' },
+  house: { name: 'House', ico: 'mdi:home-analytics', bg: 'linear-gradient(180deg,#64d2ff 0%,#2f8fe0 100%)', desc: 'A house overview with weather and the garage, as labels on the home.', tag: 'homeview-house-card', sizes: HV_GAL_LG, keys: 'house home overview weather garage' }
+};
 const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: null, rs: null, dirty: false, busy: false, conv: false,
   ok(h) { return !!(h && h._w && h.isConnected && !h._sheetO && h._config && h._config.arrange !== false && !hvInDialog(h) && hvEclOK(h)); },
   raw() { return JSON.parse(JSON.stringify(this.hub._hvRaw || {})); },
@@ -4573,17 +4597,25 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
     if (mode) this.pend = (this.pend || []).filter(p => p.key !== x.key).concat({ key: x.key, mode, path: x.key === 'home' ? k.homePath : 'security' });
     hvToast(`${a.name} added · tap an empty spot to save`, 'hv-arrange'); },
   // ---- Add Card: a gallery like the iPad widget gallery (search, the providers on the left, live previews at their real sizes on the right).
-  // Weather and Calendar cards (home_cards) and Homey (his tile: show_homie / the Homey side card). Tap a preview = add it at that size.
+  // Weather and Calendar cards (home_cards), Homey (his tile: show_homie / the Homey side card), and the NotHomeView cards in HV_GAL (as extra Home Screen tiles / side_cards).
+  // Tap a preview = add it at that size.
   hasHomey() { const c = this.hub._config || {}; return c.show_homie === true || (c.side_cards || []).some(x => x && x.type === HV_HOMIE_T); },
   addHomey(k) { if (!this.hub || this.hasHomey()) return; const u = k === 'big' ? 3 : k === 'wide' ? 2 : 1;
     this.change(raw => { raw.show_homie = true; this.edit(raw, 'side', rows => { const r = rows.find(x => x.card.type === HV_HOMIE_T); if (r && k !== 'square') { r.tile = Object.assign({}, r.tile || {}, { size: k }); if (r.sz != null) r.sz = u; } }); });
     hvToast('Homey added · tap an empty spot to save', 'hv-arrange');
     setTimeout(() => { const h = this.hub, i = h && (h._sideEls || []).findIndex(w => w._cfg && w._cfg.type === HV_HOMIE_T), el = i >= 0 && h._hgMap && h._hgMap.get('s:' + i); if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }, 400); },
   galItems() { const h = this.hub, S = (h._hass && h._hass.states) || {}, wx = hwWxId(h), cal = hwCalIds(h).length, hm = this.hasHomey();
-    const P = { weather: { name: 'Weather', ico: 'mdi:weather-partly-cloudy', bg: 'linear-gradient(180deg,#5ac8fa 0%,#2f8fe0 100%)', desc: 'Current conditions, the next hours and the days ahead, from your weather entity.', sizes: HW_SIZES.weather },
-      calendar: { name: 'Calendar', ico: 'mdi:calendar-today', bg: '#fff', fg: '#ff3b30', desc: "Today's date and what's coming up, from your calendars.", sizes: HW_SIZES.calendar },
-      homey: { name: 'Homey', ico: '', bg: 'linear-gradient(180deg,#5ccdff 0%,#2ba6e0 100%)', desc: 'The NotHomeView house mascot, as a living tile on your Home Screen. There is one Homey.', sizes: [['square', 'Small', 2, 2], ['wide', 'Medium', 4, 2], ['big', 'Large', 4, 4]] } };
-    const why = (p, k) => p === 'weather' ? (!wx ? 'No weather entity in Home Assistant' : k === 'sunset' && !S['sun.sun'] ? 'Needs the sun.sun entity (Sun integration)' : '') : p === 'calendar' ? (!cal ? 'No calendar in Home Assistant' : '') : (hm ? 'Already on your Home Screen' : '');
+    const P = { weather: { name: 'Weather', ico: 'mdi:weather-partly-cloudy', bg: 'linear-gradient(180deg,#5ac8fa 0%,#2f8fe0 100%)', desc: 'Current conditions, the next hours and the days ahead, from your weather entity.', sizes: HW_SIZES.weather, keys: 'weather forecast conditions sunset' },
+      calendar: { name: 'Calendar', ico: 'mdi:calendar-today', bg: '#fff', fg: '#ff3b30', desc: "Today's date and what's coming up, from your calendars.", sizes: HW_SIZES.calendar, keys: 'calendar date events agenda' },
+      homey: { name: 'Homey', ico: '', bg: 'linear-gradient(180deg,#5ccdff 0%,#2ba6e0 100%)', desc: 'The NotHomeView house mascot, as a living tile on your Home Screen. There is one Homey.', sizes: [['square', 'Small', 2, 2], ['wide', 'Medium', 4, 2], ['big', 'Large', 4, 4]], keys: 'homey homie mascot house' } };
+    for (const [k, g] of Object.entries(HV_GAL)) P[k] = { name: g.name, ico: g.ico, bg: g.bg, fg: g.fg || '#fff', desc: g.desc, sizes: g.sizes, keys: g.keys || '' };
+    const why = (p, k) => {
+      if (p === 'weather') return !wx ? 'No weather entity in Home Assistant' : (k === 'sunset' && !S['sun.sun'] ? 'Needs the sun.sun entity (Sun integration)' : '');
+      if (p === 'calendar') return !cal ? 'No calendar in Home Assistant' : '';
+      if (p === 'homey') return hm ? 'Already on your Home Screen' : '';
+      const g = HV_GAL[p]; if (!g || !g.need) return '';
+      const ids = Object.keys(S), need = g.need, ok = typeof need === 'string' ? ids.some(x => x.startsWith(need)) : need.some(d => ids.some(x => x.startsWith(d)));
+      return ok ? '' : (g.miss || 'No matching entity in Home Assistant'); };
     return { P, why, hm }; },
   cardPicker() { if (!this.hub || this.busy) return; hvEcl.closeMenu(); hvEcl.ensure(); const h = this.hub, { P, why, hm } = this.galItems();
     const wrap = hvEcl.menu = document.createElement('div'); wrap.innerHTML = '<div class="scrim gls"></div>'; const host = document.createElement('div'); host.className = 'galh'; wrap.appendChild(host);
@@ -4592,8 +4624,8 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
     const $ = q => sr.querySelector(q), wall = $('.wall'), main = $('.main'), prov = $('.prov'), inp = $('input');
     wrap._off = () => { for (const x of homeys) { clearInterval(x.iv); x.hm.stop(); } homeys.length = 0; }; // hvEcl.closeMenu: stop Homey's previews
     const icoHtml = p => p === 'homey' ? `<span class="pi" style="background:${P.homey.bg}">${HV_HOMIE_ICO}</span>` : `<span class="pi" style="background:${P[p].bg};color:${P[p].fg || '#fff'}"><ha-icon icon="${P[p].ico}"></ha-icon></span>`;
-    const SUGG = [['weather', 'medium'], ['calendar', 'small'], ['homey', 'square'], ['weather', 'small'], ['calendar', 'date'], ['weather', 'sunset'], ['calendar', 'medium'], ['homey', 'wide'], ['weather', 'large'], ['calendar', 'large'], ['calendar', 'xl']];
-    const match = p => { const q = st.q.trim().toLowerCase(); if (!q) return true; const x = P[p]; return [x.name, x.desc, ...x.sizes.map(s => s[1])].join(' ').toLowerCase().includes(q) || (p === 'homey' && /homie|mascot|house/.test(q)); };
+    const SUGG = [['weather', 'medium'], ['light', 'square'], ['calendar', 'small'], ['music', 'wide'], ['homey', 'square'], ['thermostat', 'wide'], ['weather', 'small'], ['camera', 'square'], ['calendar', 'date'], ['glass', 'big'], ['person', 'square'], ['weather', 'sunset'], ['scene', 'square'], ['nowplaying', 'wide'], ['garage', 'square'], ['calendar', 'medium'], ['homey', 'wide'], ['entity', 'square'], ['weather', 'large'], ['events', 'wide'], ['battery', 'square'], ['calendar', 'large'], ['house', 'wide'], ['tv', 'square'], ['calendar', 'xl']];
+    const match = p => { const q = st.q.trim().toLowerCase(); if (!q) return true; const x = P[p]; return [x.name, x.desc, x.keys || '', ...x.sizes.map(s => s[1])].join(' ').toLowerCase().includes(q) || (p === 'homey' && /homie|mascot|house/.test(q)); };
     const geo = () => { const W = Math.max(200, wall.clientWidth || main.clientWidth - 40), gg = W < 520 ? 10 : 14, gc = W >= 8 * 58 + 7 * gg ? 8 : 4, gu = Math.max(30, Math.min(76, Math.floor((W - (gc - 1) * gg) / gc)));
       wall.style.setProperty('--gc', gc); wall.style.setProperty('--gu', gu + 'px'); wall.style.setProperty('--gg', gg + 'px'); wall.style.setProperty('--hu', ((2 * gu + gg) / 1.55).toFixed(1) + 'px'); wall.style.setProperty('--I', Math.round(gu * 0.8) + 'px'); return { gc }; };
     const preview = (p, k, cap) => { const s = P[p].sizes.find(x => x[0] === k) || P[p].sizes[0], { gc } = geo(), w = Math.min(s[2], gc), hh = w < s[2] ? 4 : s[3], no = why(p, k), b = document.createElement('button');
@@ -4603,9 +4635,15 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
         const stg = b.querySelector('.hst'), cols = hvSsColors.get('homie') || {}; for (const d of HV_SS_COLS.homie) { const v = hvSsHex(cols[d.k]); if (v && v !== d.d) b.style.setProperty('--hv-ss-' + d.k, v); }
         requestAnimationFrame(() => { if (!stg.isConnected) return; const hmo = new HVHomie(stg, 'card', { pause: () => !stg.isConnected }), x = { hm: hmo, iv: 0 }; hmo.update(h._hass, (h._config || {}).weather_entity || null);
           x.iv = setInterval(() => { if (!stg.isConnected) { clearInterval(x.iv); hmo.stop(); return; } hmo.update(h._hass, (h._config || {}).weather_entity || null); }, 1000); homeys.push(x); }); }
+      else if (HV_GAL[p]) { const g = HV_GAL[p], cv = document.createElement('span'); cv.className = 'cv hv';
+        try { const cls = customElements.get(g.tag); let stub = {}; try { if (cls && cls.getStubConfig) stub = cls.getStubConfig(h._hass) || {}; } catch (x) {}
+          const el = document.createElement(g.tag); if (el.setConfig) el.setConfig(Object.assign({ type: 'custom:' + g.tag }, stub));
+          if (h._hass) el.hass = h._hass; if (el.tagName && el.tagName.startsWith('HOMEVIEW-')) el.setAttribute('floor', '');
+          cv.appendChild(el); } catch (x) { cv.innerHTML = `<span class="ph">${icoHtml(p)}</span>`; }
+        b.appendChild(cv); }
       else { const ty = p === 'weather' ? 'weather' : 'calendar'; b.innerHTML = `<span class="cv hw" data-ty="${ty}" data-sz="${k}"><span class="hwi">${hwHtml(h, { type: ty, size: k }, [w, hh])}</span></span>`; }
       const c = document.createElement('span'); c.className = 'cap'; c.innerHTML = '<b></b><small></small>'; c.querySelector('b').textContent = cap || (p === 'homey' ? 'Homey' : P[p].name); c.querySelector('small').textContent = no || `${s[1]} · ${s[2]} × ${s[3]}${w < s[2] ? ' (shows as Large here)' : ''}`; b.appendChild(c);
-      b.addEventListener('click', e => { e.stopPropagation(); if (no) { if (p === 'homey' && hm) hvToast('Homey is already on your Home Screen', 'hv-arrange'); return; } close(); if (p === 'homey') this.addHomey(k); else this.addCard(p, k); });
+      b.addEventListener('click', e => { e.stopPropagation(); if (no) { if (p === 'homey' && hm) hvToast('Homey is already on your Home Screen', 'hv-arrange'); return; } close(); if (p === 'homey') this.addHomey(k); else if (HV_GAL[p]) this.addHvCard(p, k); else this.addCard(p, k); });
       return b; };
     const side = () => { prov.innerHTML = ''; const row = (key, label, ico) => { const b = document.createElement('button'); b.className = 'pr' + (st.p === key ? ' on' : ''); b.dataset.p = key; b.setAttribute('role', 'option'); b.setAttribute('aria-selected', String(st.p === key));
         b.innerHTML = `${ico}<span></span>`; b.querySelector('span:last-child').textContent = label; b.addEventListener('click', e => { e.stopPropagation(); st.p = key; paint(); }); prov.appendChild(b); };
@@ -4626,6 +4664,12 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
   addCard(type, size) { let n = 0; this.change(raw => this.edit(raw, 'card', a => { a.push({ type, size }); n = a.length - 1; }));
     hvToast(`${type === 'weather' ? 'Weather' : 'Calendar'} card added · tap an empty spot to save`, 'hv-arrange');
     setTimeout(() => { const el = this.hub && this.hub._hgMap && this.hub._hgMap.get('w:' + n); if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }, 80); },
+  addHvCard(key, size) { const g = HV_GAL[key]; if (!g || !this.hub) return;
+    const cls = customElements.get(g.tag); let stub = {}; try { if (cls && cls.getStubConfig) stub = cls.getStubConfig(this.hub._hass) || {}; } catch (e) {}
+    const card = Object.assign({ type: 'custom:' + g.tag }, stub), sz = (size === 'big' || size === 'wide') ? size : 'square', u = sz === 'big' ? 3 : sz === 'wide' ? 2 : 1;
+    let n = 0; this.change(raw => this.edit(raw, 'side', rows => { rows.push({ card, tile: { size: sz }, sz: String(raw.side_sizes || '').trim() ? u : null }); n = rows.length - 1; }));
+    hvToast(`${g.name} card added · tap an empty spot to save`, 'hv-arrange');
+    setTimeout(() => { const el = this.hub && (this.hub._sideEls || [])[n]; if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }, 400); },
   // ---- the items (grid children by token)
   items() { const h = this.hub, out = []; if (!h || !h._hgMap) return out;
     for (const [tok, g] of h._hgMap) { if (!g.isConnected) continue; const m = /^([a-z]+)(?::(\d+))?$/.exec(tok), k = m[1], i = Number(m[2] || 0);
