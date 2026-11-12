@@ -10870,6 +10870,11 @@ const HV_SS_FACE_CSS = `
 .homie .hwd{position:absolute;left:0;right:0;top:5.5cqh;text-align:center;color:var(--hv-ss-text,#e6e6e6);font:700 7.6cqh/1 "Comic Neue","Chalkboard SE",ui-rounded,"SF Pro Rounded","Nunito","Varela Round",${FONT};letter-spacing:.06em;text-transform:uppercase}
 .homie .htm{position:absolute;left:0;right:0;top:15.5cqh;text-align:center;color:color-mix(in srgb,var(--hv-ss-text,#e6e6e6) 55%,transparent);font:600 3.6cqh/1 ui-rounded,"SF Pro Rounded",${FONT};letter-spacing:.08em;font-variant-numeric:tabular-nums}
 .homie .hdn{position:absolute;left:50%;top:59%;transform:translate(-50%,-50%);z-index:2;white-space:nowrap;color:color-mix(in srgb,var(--hv-ss-text,#e6e6e6) 80%,var(--hv-ss-bg,#1a1a1a));font:700 64cqh/.8 ui-rounded,"SF Pro Rounded",${FONT};letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+/* photo: wallpaper still + a lock-screen clock (Wallpanel shows the live photos; the switcher paints this stand-in) */
+.f.photo{background:#1a1e24}
+.photo .pf{position:absolute;inset:0;background:linear-gradient(180deg,#5d7088,#26303c) center/cover no-repeat}
+.photo .pdt{position:absolute;left:0;right:0;top:8%;text-align:center;font:600 5.2cqh/1 ${FONT};color:var(--hv-ss-text,#fff);opacity:.92;text-shadow:0 2px 10px rgba(0,0,0,.35);z-index:2}
+.photo .pclk{position:absolute;left:0;right:0;top:16%;text-align:center;font:200 22cqh/1 ${FONT};color:var(--hv-ss-text,#fff);text-shadow:0 2px 14px rgba(0,0,0,.4);letter-spacing:-.04em;z-index:2}
 /* glass: thumbnail + the parked Home Screen face (not the live screensaver; that mounts homeview-glass-page) */
 .f.glass{background:linear-gradient(160deg,#3a38c0 0%,#2c2ab0 45%,#24218c 100%)}
 .glass .stg{display:grid;gap:1.6cqh;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(3,minmax(0,1fr));grid-template-areas:"th th ck" "th th sc" "ic lk li";padding:2.4cqh;box-sizing:border-box}
@@ -10974,8 +10979,27 @@ class HVSsFace {
   _u_modular() {}
   _b_digital() { this.el.innerHTML = '<div class="stg"><div class="tm"><div class="hh"></div><div class="mm"></div></div></div>'; this._hhD = this.el.querySelector('.hh'); this._mmD = this.el.querySelector('.mm'); }
   _u_digital(d) { const hh = d.getHours() % 12 || 12, mm = String(d.getMinutes()).padStart(2, '0'); if (this._hhD) this._hhD.textContent = String(hh); if (this._mmD) this._mmD.textContent = ':' + mm; }
+  _b_photo() { this.el.innerHTML = '<div class="stg"><div class="pf"></div><div class="pdt"></div><div class="pclk"></div></div>'; }
+  _u_photo(d, hass) {
+    const u = (typeof hvSsPhotoUrl === 'function' && hvSsPhotoUrl()) || '';
+    const pf = this.el.querySelector('.pf');
+    if (pf && u && pf.dataset.src !== u) { pf.style.backgroundImage = 'url("'+String(u).replace(/"/g, '')+'")'; pf.dataset.src = u; }
+    const L = (hass && hass.locale && hass.locale.language) || undefined;
+    const pdt = this.el.querySelector('.pdt'), pclk = this.el.querySelector('.pclk');
+    if (pdt) pdt.textContent = d.toLocaleDateString(L, { weekday: 'short', month: 'short', day: 'numeric' });
+    if (pclk) pclk.textContent = d.toLocaleTimeString(L, { hour: 'numeric', minute: '2-digit' }).replace(/\s/g, '').replace(/([AP]M)$/i, '');
+  }
   update(hass, d) { d = d || new Date(); try { this['_u_' + this.s](d, hass); } catch (e) { /* keep the last frame */ } }
 }
+const hvSsPhotoUrl = () => {
+  try { if (typeof HV_HUBS !== 'undefined') for (const h of HV_HUBS) if (h && h._cur) return h._cur; } catch (e) {}
+  try {
+    const w = typeof ssWallpanel === 'function' ? ssWallpanel() : null;
+    const img = w && (w.querySelector('img') || (w.shadowRoot && w.shadowRoot.querySelector('img')));
+    if (img && (img.currentSrc || img.src)) return img.currentSrc || img.src;
+  } catch (e) {}
+  return '';
+};
 // Photo clock: tint Wallpanel's clock overlay only (never recolour photos)
 const hvSsPhotoTint = {
   el: null,
@@ -11123,7 +11147,7 @@ const HV_SS_SLOT = {
   digital: [{ id: 'tl', x: 3.5, y: 5, w: 36, h: 28 }, { id: 'bl', x: 3.5, y: 70, w: 36, h: 24 }],
   info: [{ id: 'media', x: 3, y: 70, w: 28, h: 26 }, { id: 'wx', x: 69, y: 70, w: 28, h: 26 }, { id: 'bc', x: 37, y: 88, w: 26, h: 10 }],
   glass: [],
-  homie: [{ id: 'br', x: 70, y: 78, w: 26, h: 18 }],
+  homie: [{ id: 'br', x: 22, y: 21, w: 56, h: 10 }],
   fluid: [{ id: 'bl', x: 3, y: 78, w: 28, h: 16 }, { id: 'br', x: 69, y: 78, w: 28, h: 16 }],
   whimsy: [{ id: 'bl', x: 3, y: 80, w: 26, h: 15 }, { id: 'br', x: 71, y: 80, w: 26, h: 15 }],
   modular: []
@@ -11208,9 +11232,12 @@ const HV_SS_SW_CSS = `
 .sheet .row .nm{font-weight:600;font-size:16px}
 .sheet .row .st{font-size:13px;color:rgba(255,255,255,.55);margin-top:1px}
 .sheet .rm{margin:8px 16px 16px;border:0;background:#2c2c2e;color:#ff453a;font:600 16px/1 system-ui;padding:12px;border-radius:12px;cursor:pointer}
-.slot{position:absolute;box-sizing:border-box;border-radius:14%;overflow:hidden;z-index:4;color:inherit}
-.slot.empty{border:1.5px dashed rgba(255,255,255,.55);background:rgba(255,255,255,.06)}
-.comp{width:100%;height:100%;display:flex;flex-direction:column;justify-content:center;padding:8% 10%;box-sizing:border-box;container-type:size;color:inherit}
+.slot{position:absolute;box-sizing:border-box;border-radius:14%;overflow:hidden;z-index:4;color:inherit;container-type:size}
+.slot.empty,.slot.setup{border:1px solid rgba(255,255,255,.42);background:rgba(20,20,24,.5);color:#fff;backdrop-filter:blur(16px) saturate(1.35);-webkit-backdrop-filter:blur(16px) saturate(1.35);box-shadow:inset 0 0 0 .5px rgba(255,255,255,.16),0 8px 22px rgba(0,0,0,.18)}
+.comp.setup{align-items:center;justify-content:center;gap:8cqh;padding:10% 8%;text-align:center}
+.comp.setup .i{--mdc-icon-size:32cqh;width:32cqh;height:32cqh;opacity:.92}
+.comp.setup .v{font-size:22cqh;font-weight:650;letter-spacing:.01em;opacity:.92;white-space:normal;text-overflow:ellipsis;max-height:60cqh}
+.comp{width:100%;height:100%;display:flex;flex-direction:column;justify-content:center;padding:8% 10%;box-sizing:border-box;container-type:normal;color:inherit}
 .comp .k{font-size:18cqh;opacity:.72;font-weight:600;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .comp .v{font-size:42cqh;font-weight:700;line-height:1.05;letter-spacing:-.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .comp.date{padding:10% 12%;justify-content:flex-end;color:inherit}
@@ -11223,6 +11250,11 @@ const HV_SS_SW_CSS = `
 .comp.wxw{justify-content:flex-end;padding:10% 12%}
 .comp.wxw .v{font-size:52cqh}
 .comp.wxw .sub{text-transform:none;font-weight:500;opacity:.7;font-size:14cqh;margin-top:2cqh}
+.slot.compact .comp.wxw{flex-direction:row;flex-wrap:nowrap;align-items:baseline;justify-content:center;gap:2.2cqw;padding:0 3%;}
+.slot.compact .comp.wxw .k{font-size:28cqh;letter-spacing:.08em;opacity:.8}
+.slot.compact .comp.wxw .v{font-size:36cqh;letter-spacing:-.03em}
+.slot.compact .comp.wxw .sub{font-size:26cqh;margin-top:0;letter-spacing:.02em;text-transform:none;opacity:.88}
+.homie .slot{color:var(--hv-ss-text,#e6e6e6);overflow:visible}
 .comp.ev{justify-content:flex-start;padding:10% 10%;gap:6cqh}
 .comp.ev .er{display:flex;flex-direction:column;gap:1cqh}
 .comp.ev .ed{font-size:14cqh;font-weight:600;opacity:.7}
@@ -11378,7 +11410,37 @@ const hvSsComp = {
     }
     const ic = st.icon ? `<ha-icon class="i" icon="${st.icon}"></ha-icon>` : '';
     return `<div class="comp">${ic}<div class="v">${esc(String(st.value || '—'))}</div><div class="k">${esc(st.label || st.name || '')}</div></div>`;
-  }
+  },
+  isSetup(st, entity) {
+    const v = String((st && (st.value || st.title || st.label || '')) || '');
+    const hay = v + ' ' + String(entity || '') + ' ' + String((st && st.name) || '');
+    return !!(st && st.setup) || /long press|edit widget|select vehicle|choose (a )?vehicle|not configured|unavailab|^unknown$|^—$|^-$/i.test(v)
+      || /select vehicle/i.test(hay);
+  },
+  setupHtml(st, entity) {
+    const hay = String(entity || '') + ' ' + String((st && (st.name || st.label)) || '');
+    const car = /vehicle|tesla|device_tracker|(^|\s)car(\s|$)/i.test(hay);
+    const icon = (st && st.icon) || (car ? 'mdi:car' : 'mdi:shape-outline');
+    const line = car ? 'Car' : ((st && (st.name || st.label)) || 'Widget');
+    return `<div class="comp setup"><ha-icon class="i" icon="${icon}"></ha-icon><div class="v">${esc(line)}</div></div>`;
+  },
+  emptyHtml() { return '<div class="comp setup"><ha-icon class="i" icon="mdi:plus"></ha-icon><div class="v">Add</div></div>'; }
+};
+
+const hvSsWidRich = face => !!(face && face.style === 'modular');
+const hvSsWidRows = (hass, face) => {
+  const S = (hass && hass.states) || {}, rich = hvSsWidRich(face);
+  const builtins = hvSsComp.builtins.filter(b => rich || b.entity !== 'builtin.clock');
+  const allow = id => {
+    if (/^(weather|calendar|device_tracker)\./.test(id)) return true;
+    if (/^media_player\./.test(id)) return true;
+    const s = S[id], a = (s && s.attributes) || {};
+    if (a.device_class === 'battery') return true;
+    if (/tesla|vehicle|(^|_)car(_|$)/i.test(id + ' ' + (a.friendly_name || '') + ' ' + (a.device_class || ''))) return true;
+    return false;
+  };
+  const ents = Object.keys(S).filter(allow).sort().map(id => ({ entity: id, name: (S[id].attributes && S[id].attributes.friendly_name) || id, icon: (S[id].attributes && S[id].attributes.icon) || 'mdi:shape' }));
+  return builtins.concat(ents);
 };
 
 const hvSsSwitch = {
@@ -11776,7 +11838,12 @@ const hvSsSwitch = {
     for (const s of slots) {
       const el = document.createElement('div'); el.className = 'slot' + (comps[s.id] ? '' : ' empty') + (s.h <= 18 ? ' compact' : ''); el.dataset.id = s.id;
       el.style.left = s.x + 'cqw'; el.style.top = s.y + 'cqh'; el.style.width = s.w + 'cqw'; el.style.height = s.h + 'cqh';
-      if (comps[s.id]) { const st = hvSsComp.state(hvSsOv.hass(), comps[s.id].entity); el.innerHTML = hvSsComp.html(st); el.dataset.entity = comps[s.id].entity; if (s.h <= 18) { const c = el.querySelector('.comp.date'); if (c) c.classList.add('compact'); } }
+      if (comps[s.id]) {
+        const st = hvSsComp.state(hvSsOv.hass(), comps[s.id].entity);
+        el.dataset.entity = comps[s.id].entity;
+        if (hvSsComp.isSetup(st, comps[s.id].entity)) { el.classList.add('setup'); el.innerHTML = hvSsComp.setupHtml(st, comps[s.id].entity); }
+        else { el.innerHTML = hvSsComp.html(st); if (s.h <= 18) { const c = el.querySelector('.comp.date'); if (c) c.classList.add('compact'); } }
+      } else if (editing) { el.innerHTML = hvSsComp.emptyHtml(); }
       if (editing && active) el.addEventListener('click', ev => { ev.stopPropagation(); ev.preventDefault(); this._openPicker(s.id, comps[s.id]); });
       else if (!editing && comps[s.id] && comps[s.id].entity && !String(comps[s.id].entity).startsWith('builtin.')) {
         el.addEventListener('click', ev => { ev.stopPropagation(); ev.preventDefault(); this._moreInfo(comps[s.id].entity); });
@@ -11897,35 +11964,99 @@ const hvSsSwitch = {
   },
   _openPicker(slotId, cur) {
     this.slotId = slotId;
-    const sr = this.host.shadowRoot; sr.querySelectorAll('.sheet').forEach(n => n.remove());
-    const sh = document.createElement('div'); sh.className = 'sheet on';
-    sh.innerHTML = `<div class="grab"></div><div class="hd"><h3>Add Widget</h3><button class="done" type="button">Done</button></div><input type="search" placeholder="Search" /><div class="cats"></div><div class="list"></div>${cur ? '<button class="rm" type="button">Remove Widget</button>' : ''}`;
-    const hass = hvSsOv.hass(), S = (hass && hass.states) || {};
-    hvSsComp._st = S;
-    const cats = sh.querySelector('.cats'); let cat = 'all';
-    const paint = () => {
-      const q = (sh.querySelector('input').value || '').toLowerCase();
-      const list = sh.querySelector('.list'); list.innerHTML = '';
-      const tes = hvSsComp.cats.find(c => c.k === cat) || hvSsComp.cats[0];
-      const rows = hvSsComp.builtins.concat(Object.keys(S).sort().map(id => ({ entity: id, name: (S[id].attributes && S[id].attributes.friendly_name) || id, icon: (S[id].attributes && S[id].attributes.icon) || 'mdi:shape', state: S[id] })));
-      for (const r of rows) {
-        if (cat !== 'all' && cat !== 'builtin' && !tes.test(r.entity)) continue;
-        if (cat === 'builtin' && !r.entity.startsWith('builtin.')) continue;
-        const name = r.name || r.entity;
-        if (q && !(`${name} ${r.entity}`).toLowerCase().includes(q)) continue;
-        const st = hvSsComp.state(hass, r.entity);
-        const row = document.createElement('div'); row.className = 'row';
-        const nm = r.entity.startsWith('builtin.') ? (r.name || st.name || name) : (st.name || name);
-        row.innerHTML = `<div class="ic"><ha-icon icon="${st.icon || 'mdi:shape'}"></ha-icon></div><div><div class="nm">${esc(nm)}</div><div class="st">${esc(String(st.value || r.entity))}</div></div>`;
-        row.addEventListener('click', () => { const face = this.draft.faces[this.i]; face.complications = Object.assign({}, face.complications || {}); face.complications[slotId] = { entity: r.entity }; sh.remove(); this._refreshCustomize(); });
-        list.appendChild(row);
-      }
+    const sr = this.host.shadowRoot; sr.querySelectorAll('.sheet,.gal-sheet,.gal-root').forEach(n => n.remove());
+    const face = this.draft.faces[this.i], rich = hvSsWidRich(face);
+    const hass = hvSsOv.hass(); hvSsComp._st = (hass && hass.states) || {};
+    const rows = hvSsWidRows(hass, face);
+    const cats = [
+      { k: 'sugg', l: 'Suggestions', ico: 'mdi:star-four-points', test: r => r.entity.startsWith('builtin.') },
+      { k: 'calendar', l: 'Calendar', ico: 'mdi:calendar', test: r => r.entity === 'builtin.date' || r.entity === 'builtin.event' || String(r.entity).startsWith('calendar.') },
+      { k: 'weather', l: 'Weather', ico: 'mdi:weather-partly-cloudy', test: r => r.entity === 'builtin.weather' || r.entity === 'builtin.sun' || String(r.entity).startsWith('weather.') },
+      { k: 'media', l: 'Music', ico: 'mdi:music', test: r => r.entity === 'builtin.media' || String(r.entity).startsWith('media_player.') },
+      { k: 'battery', l: 'Battery', ico: 'mdi:battery', test: r => r.entity === 'builtin.battery' || ((hass.states[r.entity] || {}).attributes || {}).device_class === 'battery' },
+      { k: 'car', l: 'Car', ico: 'mdi:car', test: r => /device_tracker|tesla|vehicle|(^|_)car(_|$)/i.test(r.entity + ' ' + (r.name || '')) }
+    ];
+    if (rich) cats.splice(1, 0, { k: 'clock', l: 'Clock', ico: 'mdi:clock-outline', test: r => r.entity === 'builtin.clock' });
+    const root = document.createElement('div'); root.className = 'gal-root';
+    root.innerHTML = `<style>
+.gal-root{position:absolute;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.38);pointer-events:auto}
+.gal-sheet{position:relative;width:min(1080px,calc(100% - 40px));height:min(680px,calc(100% - 40px));display:grid;grid-template-columns:248px 1fr;border-radius:30px;overflow:hidden;
+ background:rgba(30,30,32,.9);backdrop-filter:blur(34px) saturate(1.4);-webkit-backdrop-filter:blur(34px) saturate(1.4);box-shadow:0 30px 80px rgba(0,0,0,.5),inset 0 0 0 .5px rgba(255,255,255,.14);color:#fff;font-family:system-ui,-apple-system,sans-serif}
+.gal-sheet *{box-sizing:border-box}
+.gal-sheet .side{min-width:0;padding:18px 12px;border-right:.5px solid rgba(255,255,255,.12);overflow-y:auto;display:flex;flex-direction:column;gap:12px}
+.gal-sheet .srch{display:flex;align-items:center;gap:7px;height:40px;padding:0 11px;border-radius:12px;background:rgba(118,118,128,.24);color:rgba(235,235,245,.6)}
+.gal-sheet .srch ha-icon{--mdc-icon-size:20px}
+.gal-sheet .srch input{all:unset;flex:1;min-width:0;font-size:17px;color:#fff}
+.gal-sheet .srch input::placeholder{color:rgba(235,235,245,.6)}
+.gal-sheet .prov{display:flex;flex-direction:column;gap:2px}
+.gal-sheet .pr{all:unset;cursor:pointer;display:flex;align-items:center;gap:12px;padding:8px 10px;border-radius:12px;font-size:17px;font-weight:500;color:#fff}
+.gal-sheet .pr:hover{background:rgba(255,255,255,.06)}.gal-sheet .pr.on{background:rgba(255,255,255,.14)}
+.gal-sheet .pi{flex:none;width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.12);color:#fff}
+.gal-sheet .pi ha-icon{--mdc-icon-size:21px}
+.gal-sheet .main{min-width:0;overflow:hidden;padding:22px 26px 20px;display:flex;flex-direction:column}
+.gal-sheet .hd{margin:0 36px 8px 0}.gal-sheet .hd h2{margin:0;font-size:28px;font-weight:700;letter-spacing:-.01em}
+.gal-sheet .hd p{margin:4px 0 0;font-size:15px;color:rgba(235,235,245,.6);line-height:1.35}
+.gal-sheet .x{all:unset;position:absolute;top:16px;right:16px;width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.12);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:2}
+.gal-sheet .x ha-icon{--mdc-icon-size:18px}
+.gal-sheet .gstage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;position:relative}
+.gal-sheet .pv{width:min(100%,min(420px,70cqh));aspect-ratio:1.15;max-height:100%;border-radius:28px;background:rgba(255,255,255,.08);box-shadow:inset 0 0 0 .5px rgba(255,255,255,.16),0 16px 40px rgba(0,0,0,.28);overflow:hidden;cursor:pointer;color:#fff}
+.gal-sheet .pv .comp{font-size:18px}
+.gal-sheet .dots{display:flex;justify-content:center;gap:8px;margin:14px 0 4px}
+.gal-sheet .dots b{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.28);cursor:pointer}
+.gal-sheet .dots b.on{background:#fff}
+.gal-sheet .add{all:unset;align-self:center;margin-top:8px;padding:10px 22px;border-radius:14px;background:#0a84ff;color:#fff;font:600 16px/1 system-ui;cursor:pointer}
+.gal-sheet .rm{all:unset;align-self:center;margin-top:10px;color:#ff453a;font:600 15px/1 system-ui;cursor:pointer;padding:8px}
+</style>
+<div class="gal-sheet" role="dialog" aria-label="Add Widget" aria-modal="true">
+  <div class="side"><label class="srch"><ha-icon icon="mdi:magnify"></ha-icon><input type="search" placeholder="Search Widgets" aria-label="Search Widgets" autocomplete="off"></label><div class="prov"></div></div>
+  <div class="main"><button class="x" type="button" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button><div class="hd"><h2></h2><p></p></div><div class="gstage"></div><div class="dots"></div><button class="add" type="button">Add Widget</button>${cur ? '<button class="rm" type="button">Remove Widget</button>' : ''}</div>
+</div>`;
+    const pick = { cat: 'sugg', i: 0, var: 0 };
+    const variants = (r) => {
+      const st = hvSsComp.state(hass, r.entity);
+      const out = [];
+      if (r.entity === 'builtin.clock' || st.kind === 'clock') out.push({ k: 'clock', l: 'Clock', html: hvSsComp.html(st) });
+      else if (st.kind === 'date') out.push({ k: 'date', l: 'Date', html: hvSsComp.html(st) });
+      else if (st.kind === 'weather') out.push({ k: 'weather', l: rich ? 'Weather' : 'Weather line', html: hvSsComp.html(st) });
+      else if (st.kind === 'media') out.push({ k: 'media', l: rich ? 'Now playing' : 'Now playing', html: hvSsComp.html(st) });
+      else if (hvSsComp.isSetup(st, r.entity)) out.push({ k: 'setup', l: r.name, html: hvSsComp.setupHtml(st, r.entity) });
+      else out.push({ k: 'line', l: r.name, html: hvSsComp.html(st) });
+      return out;
     };
-    for (const c of hvSsComp.cats) { const b = document.createElement('b'); b.textContent = c.l; if (c.k === cat) b.className = 'on'; b.addEventListener('click', () => { cat = c.k; for (const x of cats.children) x.classList.toggle('on', x.textContent === c.l); paint(); }); cats.appendChild(b); }
-    sh.querySelector('input').addEventListener('input', paint);
-    sh.querySelector('.done').addEventListener('click', () => sh.remove());
-    const rm = sh.querySelector('.rm'); if (rm) rm.addEventListener('click', () => { const face = this.draft.faces[this.i]; if (face.complications) delete face.complications[slotId]; sh.remove(); this._refreshCustomize(); });
-    paint(); sr.appendChild(sh);
+    const filtered = () => {
+      const q = (root.querySelector('input').value || '').toLowerCase();
+      const cat = cats.find(c => c.k === pick.cat) || cats[0];
+      return rows.filter(r => cat.test(r) && (!q || (`${r.name} ${r.entity}`).toLowerCase().includes(q)));
+    };
+    const paintMain = () => {
+      const list = filtered(), r = list[pick.i] || list[0];
+      const hd = root.querySelector('.hd h2'), p = root.querySelector('.hd p'), stage = root.querySelector('.gstage'), dots = root.querySelector('.dots');
+      if (!r) { hd.textContent = 'No widgets'; p.textContent = rich ? 'Nothing matches this search.' : 'Compact text and icon widgets only on this face.'; stage.innerHTML = ''; dots.innerHTML = ''; return; }
+      const vs = variants(r); if (pick.var >= vs.length) pick.var = 0;
+      hd.textContent = r.name || r.entity;
+      p.textContent = rich ? 'Tap a preview to add this widget, including artwork and large clocks.' : 'Compact text and icon widgets for this face.';
+      stage.innerHTML = `<button class="pv" type="button">${vs[pick.var].html}</button>`;
+      dots.innerHTML = vs.map((v, i) => `<b class="${i === pick.var ? 'on' : ''}" data-i="${i}"></b>`).join('');
+      dots.querySelectorAll('b').forEach(b => b.addEventListener('click', () => { pick.var = +b.dataset.i; paintMain(); }));
+      const add = () => { const f = this.draft.faces[this.i]; f.complications = Object.assign({}, f.complications || {}); f.complications[slotId] = { entity: r.entity }; root.remove(); this._refreshCustomize(); };
+      stage.querySelector('.pv').addEventListener('click', add);
+      root.querySelector('.add').onclick = add;
+    };
+    const paintSide = () => {
+      const prov = root.querySelector('.prov'); prov.innerHTML = '';
+      cats.forEach(c => {
+        const b = document.createElement('button'); b.type = 'button'; b.className = 'pr' + (c.k === pick.cat ? ' on' : '');
+        const ICO = { sugg:'<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z"/></svg>', calendar:'<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="1.8"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></svg>', weather:'<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"><circle cx="9" cy="9" r="3"/><path d="M5 15.5h11a3.5 3.5 0 0 0 0-7 5 5 0 0 0-9.5 1"/></svg>', media:'<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="1.8"><path d="M9 18V6l10-2v12"/><circle cx="7" cy="18" r="2.4"/><circle cx="17" cy="16" r="2.4"/></svg>', battery:'<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="1.8"><rect x="3" y="8" width="15" height="8" rx="1.5"/><path d="M18 11h2v2h-2M6 10.5h7v3H6z"/></svg>', car:'<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"><path d="M4 14l2-5h12l2 5v4H4v-4z"/><circle cx="7.5" cy="16.5" r="1.4"/><circle cx="16.5" cy="16.5" r="1.4"/></svg>', clock:'<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><path d="M12 8v5l3 2"/></svg>' };
+        b.innerHTML = `<span class="pi">${ICO[c.k] || ''}</span><span>${c.l}</span>`;
+        b.addEventListener('click', () => { pick.cat = c.k; pick.i = 0; pick.var = 0; paintSide(); paintMain(); });
+        prov.appendChild(b);
+      });
+    };
+    root.querySelector('input').addEventListener('input', () => { pick.i = 0; paintMain(); });
+    root.querySelector('.x').addEventListener('click', () => root.remove());
+    const rm = root.querySelector('.rm'); if (rm) rm.addEventListener('click', () => { const f = this.draft.faces[this.i]; if (f.complications) delete f.complications[slotId]; root.remove(); this._refreshCustomize(); });
+    paintSide(); paintMain();
+    sr.appendChild(root);
   },
   async _save() {
     const data = this.draft; data.i = this.i;
