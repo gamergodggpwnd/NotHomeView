@@ -1892,6 +1892,15 @@ const hvExtMiss = (t, u, o) => { o = o || {}; const w = hvExtUrlOk(t.web_url), w
 // Without it the launch happens before the first await, so a tap that calls this still counts as the gesture.
 // Known apps (Tesla, Spotify, …) get a URL scheme from HV_EXT_KNOWN when none was saved; an App Store page is not opened on iPhone or Android unless he taps it on the toast.
 function hvOpenExternalApp(target, o) { o = o || {}; const t = hvExtKnownFill(target || {}), p = hvExtPlatform();
+  if (p === 'android' && typeof hvExtIsFaceTime === 'function' && hvExtIsFaceTime(t)) {
+    if (o.toast !== false) {
+      const message = "FaceTime isn't available on Android. You'll need a FaceTime link sent to this device to use FaceTime.";
+      const ha = document.querySelector('home-assistant');
+      if (ha) ha.dispatchEvent(new CustomEvent('hass-notification', { bubbles: true, composed: true, detail: { message, duration: 7000 } }));
+      else hvToast(message);
+    }
+    return Promise.resolve('none');
+  }
   let u = hvExtPick(t, p); if (u && hvExtStorePage(u) && p !== 'desktop') u = '';
   if (!u) { if (o.toast !== false) { const store = [t.web_url, t.store && t.store.play_id && hvExtPlay(t.store.play_id)].map(hvExtUrlOk).find(hvExtStorePage) || '';
       if (store) hvExtMiss(t, '', { noLink: true, store }); else hvToast(`${t.name || 'This app'} has no link to open on this device`); }
@@ -2012,7 +2021,7 @@ const HV_EXT_KNOWN = [
   { name: 'Calendar', itunes: 1108185179, bundle: 'com.apple.mobilecal', url: 'calshow://' },
   { name: 'Photos', itunes: 1584215428, bundle: 'com.apple.mobileslideshow', url: 'photos-redirect://' },
   { name: 'Reminders', itunes: 1108187841, bundle: 'com.apple.reminders', url: 'x-apple-reminder://' },
-  { name: 'FaceTime', itunes: 1110145091, bundle: 'com.apple.facetime', url: 'facetime://' },
+  { name: 'FaceTime', itunes: 1110145091, bundle: 'com.apple.facetime', url: 'facetime-open-link://' }, // open the app home; bare facetime:// is a call and iOS rejects it
   { name: 'Mail', itunes: 1108187098, bundle: 'com.apple.mobilemail', url: 'message://' },
   { name: 'Notes', itunes: 1110145109, bundle: 'com.apple.mobilenotes', url: 'mobilenotes://' },
   { name: 'Audible', itunes: 379693831, bundle: 'com.audible.iphone', url: 'audible://', pkg: 'com.audible.application', aka: ['Audible: Audiobooks & Podcasts'] }
@@ -2030,9 +2039,22 @@ const hvExtKnownOf = t => { if (!t) return null; const s = t.store || {}, itunes
 const hvExtKnownLinks = k => { const o = {}; if (k.url) o.url = k.url; if (k.ios_url) o.ios_url = k.ios_url;
   else if (k.url && !/^https?:/i.test(k.url)) o.ios_url = k.url; if (k.pkg) o.android_url = hvExtIntent(k.pkg, k.web);
   if (k.web) o.web_url = k.web; return o; };
+const hvExtBareFt = u => /^(facetime|facetime-audio|facetime-prompt|facetime-audio-prompt):(\/\/)?$/i.test(String(u || '').trim());
+const hvExtIsFaceTime = t => { if (!t) return false; const s = t.store || {};
+  if (Number(s.itunes_id || t.itunes_id || t.trackId) === 1110145091) return true;
+  if (String(s.bundle_id || t.bundle_id || t.bundleId || '') === 'com.apple.facetime') return true;
+  if (hvCaNorm(t.name) === 'facetime' || hvCaNorm(t.trackName) === 'facetime') return true;
+  return [t.url, t.ios_url].some(u => /^(facetime|facetime-open-link)[-a-z]*:/i.test(String(u || '').trim())); };
 const hvExtKnownFill = t => { const k = hvExtKnownOf(t); if (!k) return t || {}; const o = Object.assign({}, t), L = hvExtKnownLinks(k);
   if (!hvExtUrlOk(o.url) && L.url) o.url = L.url; if (!hvExtUrlOk(o.ios_url) && L.ios_url) o.ios_url = L.ios_url;
-  if (!hvExtUrlOk(o.android_url) && L.android_url) o.android_url = L.android_url; if (!hvExtUrlOk(o.web_url) && L.web_url) o.web_url = L.web_url; return o; };
+  if (!hvExtUrlOk(o.android_url) && L.android_url) o.android_url = L.android_url; if (!hvExtUrlOk(o.web_url) && L.web_url) o.web_url = L.web_url;
+  // A saved bare facetime:// would still launch a call / be rejected on iOS; upgrade those to the open-app scheme.
+  if (k.bundle === 'com.apple.facetime' || hvCaNorm(k.name) === 'facetime') {
+    const open = L.url || 'facetime-open-link://';
+    if (!hvExtUrlOk(o.url) || hvExtBareFt(o.url)) o.url = open;
+    if (!hvExtUrlOk(o.ios_url) || hvExtBareFt(o.ios_url)) o.ios_url = open;
+  }
+  return o; };
 const HV_EXT_PRESETS = [
   { key: 'google_home', name: 'Google Home', icon: 'mdi:google-home', color: '#4285f4', url: 'googlehome://', pkg: 'com.google.android.apps.chromecast.app', itunes: 680819774, web: 'https://home.google.com/' },
   { key: 'spotify', name: 'Spotify', icon: 'mdi:spotify', color: '#1db954', url: 'spotify:', pkg: 'com.spotify.music', itunes: 324684580, web: 'https://open.spotify.com/' },
@@ -12182,7 +12204,7 @@ button.r{cursor:pointer}button.r:active{background:var(--fld,rgba(118,118,128,.2
 .r + .r::before,.res > .r + .r::before{content:'';position:absolute;top:0;left:16px;right:0;border-top:.5px solid var(--sep,rgba(84,84,88,.65))}
 .ls .r + .r::before{left:68px}.r.stk{flex-direction:column;align-items:stretch;gap:8px;padding:11px 16px}
 .l{flex:1;min-width:0;font-size:17px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
-.tx small,.r small,.ft{font-size:13px;color:var(--fg2,rgba(235,235,245,.6));line-height:1.35;white-space:normal}.ft{margin:-16px 16px 24px}
+.tx small,.r small,.ft,.asnote{font-size:13px;color:var(--fg2,rgba(235,235,245,.6));line-height:1.35;white-space:normal}.ft{margin:-16px 16px 24px}.asnote{margin:-16px 16px 24px}.asnote[hidden]{display:none}.asg.dis{opacity:.45;pointer-events:none;filter:grayscale(.15)}.asg.dis input{pointer-events:none}
 .ch{color:var(--fg2,rgba(235,235,245,.3));--mdc-icon-size:20px;flex:none}
 .ai{position:relative;flex:none;width:40px;height:40px;border-radius:22.5%;overflow:hidden;display:flex;align-items:center;justify-content:center;color:#fff;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.14)}
 .ai ha-icon{--mdc-icon-size:24px;display:flex}
@@ -12288,12 +12310,13 @@ function hvCustomAppsUI(ctx) {
   // ---- add / edit
   const editor = id => { const box = document.createElement('div'); box.className = 'ca ed'; const cur = id ? L().find(x => x.id === id) : null;
     if (id && !cur) { box.innerHTML = '<div class="grp"><div class="r em">This app was deleted.</div></div>'; return box; }
-    const d = cur ? clone(cur) : { id: hvCaId(), name: '', icon: 'mdi:application', color: '#8e8e93', confirm: true }; if (!d.store) d.store = {};
+    const d = cur ? clone(cur) : { id: hvCaId(), name: '', icon: 'mdi:application', color: '#8e8e93', confirm: true }; if (!d.store) d.store = {}; try { Object.assign(d, hvExtKnownFill(d)); if (!d.store) d.store = {}; } catch (e) {}
     const ro = ctx.ro, D = ro ? ' disabled' : ''; let mode = hvExtPresetOf(d) || !(d.url || d.ios_url || d.android_url || d.web_url) ? 'preset' : 'custom';
     if (!cur) mode = 'preset'; let res = [], sst = '', best = null, ab = null, tmr = 0, hint = '', playSug = '', del = false, artBusy = false, q0 = '';
     box.innerHTML = `<div class="pv"><span class="ai big"></span><b class="pn"></b></div>
-<div class="gh">App Store</div><div class="grp"><label class="r srch"><ha-icon icon="mdi:magnify"></ha-icon><input type="search" class="q" placeholder="Search the App Store" aria-label="Search the App Store" autocomplete="off" enterkeyhint="search"${D}></label><div class="res" role="listbox" aria-label="App Store results" aria-live="polite"></div></div>
-<div class="ft">Finds the app's name and icon. Only the words you type are sent to Apple.</div>
+<div class="gh ash">App Store</div><div class="grp asg"><label class="r srch"><ha-icon icon="mdi:magnify"></ha-icon><input type="search" class="q" placeholder="Search the App Store" aria-label="Search the App Store" autocomplete="off" enterkeyhint="search"${D}></label><div class="res" role="listbox" aria-label="App Store results" aria-live="polite"></div></div>
+<div class="ft asft">Finds the app's name and icon. Only the words you type are sent to Apple.</div>
+<div class="asnote" hidden></div>
 <div class="grp"><label class="r stk"><span class="l">Google Play link</span><input class="fi box play" type="url" inputmode="url" placeholder="https://play.google.com/store/apps/details?id=…" aria-label="Google Play link" autocomplete="off"${D}><small class="pm"></small></label></div>
 <div class="gh">App</div><div class="grp">
 <label class="r"><span class="l" style="flex:none">Name</span><input class="fi nm" maxlength="40" placeholder="Name" aria-label="Name" autocomplete="off"${D}></label>
@@ -12339,7 +12362,14 @@ ${cur && !ro ? '<div class="dl"></div>' : ''}`;
       const pr = $('.pre'), cu = $('.cu'), P = hvExtPresetOf(d); pr.hidden = mode !== 'preset'; cu.hidden = mode !== 'custom';
       pr.innerHTML = HV_EXT_PRESETS.map(p => `<button class="r" data-preset="${p.key}" aria-pressed="${P === p}"${D}><span class="ai" style="background:${hvExtBg(p)}"><ha-icon icon="${p.icon}"></ha-icon></span><span class="tx"><span class="l">${esc(p.name)}</span><small>${p.ios_url && !p.url ? 'iPhone and iPad only' : p.url && /^https:/.test(p.url) ? 'Opens the app, or its website' : 'Opens the app'}</small></span>${P === p ? '<ha-icon class="ck" icon="mdi:check"></ha-icon>' : ''}</button>`).join('');
       url.value = d.url || ''; $('.ue').textContent = hvExtUrlWhy(url.value); $('.hint').textContent = hint;
-      box.querySelectorAll('[data-f]').forEach(i => { i.value = d[i.dataset.f] || ''; const e = box.querySelector(`[data-e="${i.dataset.f}"]`); if (e) e.textContent = hvExtUrlWhy(i.value); }); };
+      box.querySelectorAll('[data-f]').forEach(i => { i.value = d[i.dataset.f] || ''; const e = box.querySelector(`[data-e="${i.dataset.f}"]`); if (e) e.textContent = hvExtUrlWhy(i.value); });
+      const asg = $('.asg'), qel = $('.q'), note = $('.asnote'), asft = $('.asft');
+      const asOff = hvExtPlatform() === 'android' && typeof hvExtIsFaceTime === 'function' && hvExtIsFaceTime(d);
+      if (asg) { asg.classList.toggle('dis', asOff); asg.setAttribute('aria-disabled', String(asOff)); }
+      if (qel) qel.disabled = !!(asOff || ro);
+      if (asft) asft.hidden = !!asOff;
+      if (note) { note.hidden = !asOff; note.textContent = asOff ? "FaceTime isn't available on Android. You'll need a FaceTime link sent to this device to use FaceTime." : ''; }
+    };
     const cfPaint = () => $('.cfm').setAttribute('aria-checked', String(d.confirm !== false));
     const dlPaint = () => { const b = $('.dl'); if (!b) return; b.innerHTML = del ? `<div class="grp"><div class="r cf"><span class="l">Delete ${esc(d.name || 'this app')}? It is also removed from the Home Screen.</span><button class="dz delok">Delete</button><button class="lk delno">Cancel</button></div></div>` : '<button class="b del">Delete App</button>'; };
     const usePreset = (p, keepName) => { for (const k of ['url', 'ios_url', 'android_url', 'web_url']) delete d[k]; Object.assign(d, hvExtPresetLinks(p)); if (p.itunes) d.store.itunes_id = p.itunes; if (p.pkg) d.store.play_id = p.pkg;
@@ -12372,7 +12402,7 @@ ${cur && !ro ? '<div class="dl"></div>' : ''}`;
       $('.pm').textContent = 'Android: opens ' + id + ' (or its Play Store page)'; $('.pm').className = 'pm ok'; opPaint(); };
     $('.play').addEventListener('input', ev => { const v = ev.target.value.trim(), pm = $('.pm'); if (!v) { pm.textContent = ''; return; } const id = hvCaPlayId(v);
       if (id) setPlay(id); else { pm.textContent = 'That isn\'t a Play Store app link (it needs …details?id=com.example.app).'; pm.className = 'pm er'; } });
-    nm.value = d.name || ''; nm.addEventListener('input', () => { d.name = nm.value; pvPaint(); });
+    nm.value = d.name || ''; nm.addEventListener('input', () => { d.name = nm.value; pvPaint(); opPaint(); });
     $('.sw').addEventListener('click', e => { const b = e.composedPath().find(n => n.dataset && n.dataset.c); if (!b || ro) return; d.color = b.dataset.c; colPaint(); pvPaint(); icoPaint(); });
     $('.seg').addEventListener('click', e => { const b = e.composedPath().find(n => n.dataset && n.dataset.m); if (!b || ro) return; mode = b.dataset.m; opPaint(); if (mode === 'custom') url.focus(); });
     $('.pre').addEventListener('click', async e => { const b = e.composedPath().find(n => n.dataset && n.dataset.preset); if (!b || ro) return; const p = HV_EXT_PRESETS.find(x => x.key === b.dataset.preset); if (!p) return;
