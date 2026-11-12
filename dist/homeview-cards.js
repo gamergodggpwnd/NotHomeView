@@ -11250,10 +11250,10 @@ const HV_SS_SW_CSS = `
 .comp.wxw{justify-content:flex-end;padding:10% 12%}
 .comp.wxw .v{font-size:52cqh}
 .comp.wxw .sub{text-transform:none;font-weight:500;opacity:.7;font-size:14cqh;margin-top:2cqh}
-.slot.compact .comp.wxw{flex-direction:row;flex-wrap:nowrap;align-items:baseline;justify-content:center;gap:2.2cqw;padding:0 3%;}
-.slot.compact .comp.wxw .k{font-size:28cqh;letter-spacing:.08em;opacity:.8}
-.slot.compact .comp.wxw .v{font-size:36cqh;letter-spacing:-.03em}
-.slot.compact .comp.wxw .sub{font-size:26cqh;margin-top:0;letter-spacing:.02em;text-transform:none;opacity:.88}
+.slot.compact .comp.wxw,.pv-src.compact .comp.wxw{flex-direction:row;flex-wrap:nowrap;align-items:baseline;justify-content:center;gap:2.2cqw;padding:0 3%;}
+.slot.compact .comp.wxw .k,.pv-src.compact .comp.wxw .k{font-size:28cqh;letter-spacing:.08em;opacity:.8}
+.slot.compact .comp.wxw .v,.pv-src.compact .comp.wxw .v{font-size:36cqh;letter-spacing:-.03em}
+.slot.compact .comp.wxw .sub,.pv-src.compact .comp.wxw .sub{font-size:26cqh;margin-top:0;letter-spacing:.02em;text-transform:none;opacity:.88}
 .homie .slot{color:var(--hv-ss-text,#e6e6e6);overflow:visible}
 .comp.ev{justify-content:flex-start;padding:10% 10%;gap:6cqh}
 .comp.ev .er{display:flex;flex-direction:column;gap:1cqh}
@@ -11999,8 +11999,13 @@ const hvSsSwitch = {
 .gal-sheet .x{all:unset;position:absolute;top:16px;right:16px;width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.12);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:2}
 .gal-sheet .x ha-icon{--mdc-icon-size:18px}
 .gal-sheet .gstage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;position:relative}
-.gal-sheet .pv{width:min(100%,min(420px,70cqh));aspect-ratio:1.15;max-height:100%;border-radius:28px;background:rgba(255,255,255,.08);box-shadow:inset 0 0 0 .5px rgba(255,255,255,.16),0 16px 40px rgba(0,0,0,.28);overflow:hidden;cursor:pointer;color:#fff}
-.gal-sheet .pv .comp{font-size:18px}
+.gal-sheet .pv{width:min(100%,min(380px,70cqh));aspect-ratio:1;max-height:100%;border-radius:28px;background:rgba(255,255,255,.08);box-shadow:inset 0 0 0 .5px rgba(255,255,255,.16),0 16px 40px rgba(0,0,0,.28);overflow:hidden;cursor:pointer;color:#fff;display:flex;align-items:center;justify-content:center;position:relative;container-type:size}
+.gal-sheet .pv-src{flex:none;container-type:size;color:inherit;transform-origin:center center;position:relative}
+.gal-sheet .pv-src .comp{width:100%;height:100%}
+.gal-sheet .pv-src .k,.gal-sheet .pv-src .v,.gal-sheet .pv-src .sub,.gal-sheet .pv-src .et,.gal-sheet .pv-src .ed,.gal-sheet .pv-src .mv{overflow:visible !important;text-overflow:clip !important;max-width:none;white-space:nowrap}
+.gal-sheet .pv-src .comp.media{overflow:visible}
+.gal-sheet .pv-src .comp.media .mv{min-width:max-content;flex:none}
+.gal-sheet .srch .si{flex:none;opacity:.7}
 .gal-sheet .dots{display:flex;justify-content:center;gap:8px;margin:14px 0 4px}
 .gal-sheet .dots b{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.28);cursor:pointer}
 .gal-sheet .dots b.on{background:#fff}
@@ -12008,8 +12013,8 @@ const hvSsSwitch = {
 .gal-sheet .rm{all:unset;align-self:center;margin-top:10px;color:#ff453a;font:600 15px/1 system-ui;cursor:pointer;padding:8px}
 </style>
 <div class="gal-sheet" role="dialog" aria-label="Add Widget" aria-modal="true">
-  <div class="side"><label class="srch"><ha-icon icon="mdi:magnify"></ha-icon><input type="search" placeholder="Search Widgets" aria-label="Search Widgets" autocomplete="off"></label><div class="prov"></div></div>
-  <div class="main"><button class="x" type="button" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button><div class="hd"><h2></h2><p></p></div><div class="gstage"></div><div class="dots"></div><button class="add" type="button">Add Widget</button>${cur ? '<button class="rm" type="button">Remove Widget</button>' : ''}</div>
+  <div class="side"><label class="srch"><svg class="si" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l5 5"/></svg><input type="search" placeholder="Search Widgets" aria-label="Search Widgets" autocomplete="off"></label><div class="prov"></div></div>
+  <div class="main"><button class="x" type="button" aria-label="Close"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button><div class="hd"><h2></h2><p></p></div><div class="gstage"></div><div class="dots"></div><button class="add" type="button">Add Widget</button>${cur ? '<button class="rm" type="button">Remove Widget</button>' : ''}</div>
 </div>`;
     const pick = { cat: 'sugg', i: 0, var: 0 };
     const variants = (r) => {
@@ -12035,11 +12040,47 @@ const hvSsSwitch = {
       const vs = variants(r); if (pick.var >= vs.length) pick.var = 0;
       hd.textContent = r.name || r.entity;
       p.textContent = rich ? 'Tap a preview to add this widget, including artwork and large clocks.' : 'Compact text and icon widgets for this face.';
-      stage.innerHTML = `<button class="pv" type="button">${vs[pick.var].html}</button>`;
+      let html = vs[pick.var].html;
+      const kind = vs[pick.var].k || '';
+      const compact = !rich && kind !== 'clock';
+      if (compact && kind === 'date') html = html.replace('class="comp date"', 'class="comp date compact"');
+      stage.innerHTML = `<button class="pv" type="button"><div class="pv-src${compact ? ' compact' : ''}" data-kind="${kind}">${html}</div></button>`;
+      const pv = stage.querySelector('.pv'), src = pv.querySelector('.pv-src');
+      const nat = rich
+        ? { clock:[260,260], date:[360,320], weather:[340,280], media:[380,240], setup:[240,180], line:[320,140], default:[300,240] }
+        : { date:[340,100], weather:[360,90], media:[380,110], event:[340,110], setup:[240,140], line:[340,100], default:[340,100] };
+      const [nw, nh] = nat[kind] || nat.default;
+      src.style.width = nw + 'px'; src.style.height = nh + 'px';
+      const ink = el => {
+        try {
+          if (el.childNodes && [...el.childNodes].some(n => n.nodeType === 3 && String(n.textContent||'').trim())) {
+            const rg = document.createRange(); rg.selectNodeContents(el); return rg.getBoundingClientRect();
+          }
+        } catch (e) {}
+        const rr = el.getBoundingClientRect();
+        return { left: rr.left, top: rr.top, right: Math.max(rr.right, rr.left + (el.scrollWidth||0)), bottom: Math.max(rr.bottom, rr.top + (el.scrollHeight||0)), width: rr.width, height: rr.height };
+      };
+      const fit = () => {
+        if (!pv.isConnected) return;
+        src.style.transform = 'none';
+        const br = pv.getBoundingClientRect(), pad = 36;
+        const s0 = src.getBoundingClientRect();
+        let L = s0.left, T = s0.top, R = s0.right, B = s0.bottom;
+        src.querySelectorAll('*').forEach(el => {
+          const rr = ink(el);
+          if ((rr.width||0) < 1 && (rr.height||0) < 1 && rr.right <= rr.left) return;
+          L = Math.min(L, rr.left); T = Math.min(T, rr.top);
+          R = Math.max(R, rr.right); B = Math.max(B, rr.bottom);
+        });
+        const cw = Math.max(nw, R - L), ch = Math.max(nh, B - T);
+        const s = Math.min((br.width - pad) / cw, (br.height - pad) / ch);
+        src.style.transform = 'scale(' + Math.max(0.2, s) + ')';
+      };
+      fit(); requestAnimationFrame(() => { fit(); requestAnimationFrame(fit); });
       dots.innerHTML = vs.map((v, i) => `<b class="${i === pick.var ? 'on' : ''}" data-i="${i}"></b>`).join('');
       dots.querySelectorAll('b').forEach(b => b.addEventListener('click', () => { pick.var = +b.dataset.i; paintMain(); }));
       const add = () => { const f = this.draft.faces[this.i]; f.complications = Object.assign({}, f.complications || {}); f.complications[slotId] = { entity: r.entity }; root.remove(); this._refreshCustomize(); };
-      stage.querySelector('.pv').addEventListener('click', add);
+      pv.addEventListener('click', add);
       root.querySelector('.add').onclick = add;
     };
     const paintSide = () => {
