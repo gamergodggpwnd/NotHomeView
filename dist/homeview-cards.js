@@ -11145,7 +11145,7 @@ const HV_SS_SW_CSS = `
 .card .lab{font-size:10px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#fff;margin:0 0 8px;text-shadow:0 1px 4px rgba(0,0,0,.45)}
 .card .win{position:relative;overflow:hidden;background:#111;border-radius:22%;box-shadow:0 18px 40px rgba(0,0,0,.45);isolation:isolate}
 .card .win > .f{position:absolute;inset:0;border-radius:inherit;overflow:hidden}
-.card .cz{margin-top:14px;border:0;background:rgba(60,60,67,.72);color:#fff;font:600 15px/1.1 system-ui,-apple-system,sans-serif;padding:9px 20px;border-radius:20px;cursor:pointer;-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+.card .cz{margin-top:14px;border:0;background:rgba(60,60,67,.72);color:#fff;font:600 15px/1.1 system-ui,-apple-system,sans-serif;padding:9px 20px;border-radius:20px;cursor:pointer;-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);touch-action:manipulation;-webkit-tap-highlight-color:rgba(255,255,255,.28);transition:transform .08s ease,background .08s ease,filter .08s ease}.card .cz:active,.card .cz.pressed{background:rgba(255,255,255,.28);transform:scale(.96);filter:brightness(1.2)}
 .card .cz[hidden]{display:none}
 .tabs{position:absolute;top:calc(14px + env(safe-area-inset-top,0px));left:0;right:0;display:flex;justify-content:center;gap:16px;z-index:5;pointer-events:auto}
 .tabs b{font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.38);padding:6px 0;cursor:pointer}
@@ -11359,7 +11359,7 @@ const hvSsSwitch = {
   reduced() { try { return !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) { return false; } },
   openFromSettings() { this.open('customize', { fromSettings: true }); },
   currentZ() { const w = ssWallpanel(); let z = 1000; try { z = parseInt(getComputedStyle(w || document.body).zIndex, 10) || 1000; } catch (e) {} return z; },
-  hide() { this._clearHold(); this._g = null; this.mode = null; this.draft = null; this.slotId = null; if (this._iv) { clearInterval(this._iv); this._iv = null; } if (this._liv) { clearInterval(this._liv); this._liv = null; }
+  hide() { this._clearHold(); this._g = null; this.mode = null; this.draft = null; this.slotId = null; this.fromSettings = false; try { hvSsKeep.off('ssswitch'); } catch (e) {} if (this._iv) { clearInterval(this._iv); this._iv = null; } if (this._liv) { clearInterval(this._liv); this._liv = null; }
     try { this._coverLive(false); } catch (e) {}
     const h = this.host; this.host = null; this._faces = null; if (h) { try { h.remove(); } catch (e) {} } document.querySelectorAll('#hv-ss-switch').forEach(n => n.remove()); },
   _clearHold() { if (this._hold) { clearTimeout(this._hold); this._hold = null; } },
@@ -11382,7 +11382,7 @@ const hvSsSwitch = {
     const h = this.host; if (!h) return;
     const z = this.currentZ();
     const editing = this.mode === 'switch' || this.mode === 'customize';
-    h.style.cssText = `position:fixed;inset:0;z-index:${z + 2};pointer-events:auto;touch-action:none;background:${editing ? '#000' : 'rgba(0,0,0,0.01)'};`;
+    h.style.cssText = `position:fixed;inset:0;z-index:${z + 2};pointer-events:auto;touch-action:${editing ? 'manipulation' : 'none'};background:${editing ? '#000' : 'rgba(0,0,0,0.01)'};`;
     const dim = h.shadowRoot && h.shadowRoot.querySelector('.dim');
     if (!editing) { if (dim) dim.classList.remove('on'); }
     else if (dim) dim.classList.add('on');
@@ -11493,7 +11493,11 @@ const hvSsSwitch = {
     };
     h.addEventListener('pointerup', end, true); h.addEventListener('pointercancel', end, true);
   },
-  _dismiss() { try { const w = ssWallpanel(); if (w && typeof w.stopScreensaver === 'function') w.stopScreensaver(); } catch (e) {} },
+  _dismiss() {
+    try { hvSsEatTap(600); } catch (e) {}
+    this.hide();
+    try { hvSsOv.tick(true); } catch (e) {}
+  },
   _liveSwipe() {},
   _prepTrack() {},
   renderLivePeek() {},
@@ -11501,6 +11505,8 @@ const hvSsSwitch = {
   open(mode, opts) {
     opts = opts || {};
     this.ensure(true);
+    this.fromSettings = !!opts.fromSettings;
+    try { hvSsKeep.on('ssswitch'); } catch (e) {}
     const data = JSON.parse(JSON.stringify(hvSsFaces.raw()));
     this.draft = data; this.i = data.i; this.mode = mode; this.tab = 'style'; this.slotId = null;
     this.layout();
@@ -11543,7 +11549,13 @@ const hvSsSwitch = {
       this._paintSlots(f.el, face, mode === 'customize' && this.tab === 'widgets', true);
       this._faces.push({ el: card, face: f, faceData: face, n });
       if (mode !== 'peek') {
-        card.querySelector('.cz').addEventListener('click', ev => { ev.stopPropagation(); if (this._heldClickUntil && Date.now() < this._heldClickUntil) return; if (this._suppressTap && Date.now() - this._suppressTap < 400) return; this.i = n; this.mode = 'customize'; this.tab = 'style'; this._paintCards(this.draft, this.i, 'customize'); this._paintChrome(); });
+        const cz = card.querySelector('.cz');
+        const press = ev => { if (ev && ev.stopPropagation) ev.stopPropagation(); cz.classList.add('pressed'); };
+        const unpress = () => cz.classList.remove('pressed');
+        cz.addEventListener('pointerdown', press);
+        cz.addEventListener('touchstart', press, { passive: true });
+        for (const typ of ['pointerup','pointercancel','pointerleave','touchend','touchcancel','lostpointercapture']) cz.addEventListener(typ, unpress);
+        for (const typ of ['pointerup','touchend','click']) cz.addEventListener(typ, ev => this._onCustomize(n, ev));
         win.addEventListener('click', ev => { if (this.mode !== 'switch') return; ev.stopPropagation(); if (this._heldClickUntil && Date.now() < this._heldClickUntil) return; if (this._suppressTap && Date.now() - this._suppressTap < 400) return; this._activate(n); });
       }
       track.appendChild(card);
@@ -11750,12 +11762,37 @@ const hvSsSwitch = {
   async _save() {
     const data = this.draft; data.i = this.i;
     await hvSsFaces.commit(data, hvSsOv.hass());
-    this.hide(); hvSsOv.tick(true);
+    try { hvSsEatTap(600); } catch (e) {}
+    if (this.fromSettings) { this.hide(); try { hvSsOv.tick(true); } catch (e) {} return; }
+    this._backToSwitch();
   },
   _cancel() {
-    this.draft = null; this.mode = 'switch';
-    const data = hvSsFaces.raw(); this.i = data.i;
-    this._paintCards(data, this.i, 'switch');
+    try { hvSsEatTap(600); } catch (e) {}
+    if (this.fromSettings) { this.hide(); try { hvSsOv.tick(true); } catch (e) {} return; }
+    this.draft = null;
+    this._backToSwitch();
+  },
+  _backToSwitch() {
+    this.mode = 'switch'; this.tab = 'style'; this.slotId = null;
+    const data = this.draft || hvSsFaces.raw(); this.draft = JSON.parse(JSON.stringify(data)); this.i = this.draft.i;
+    try { hvSsKeep.on('ssswitch'); } catch (e) {}
+    try { this._coverLive(true); } catch (e) {}
+    this._paintCards(this.draft, this.i, 'switch');
+    this.layout();
+  },
+  _onCustomize(n, ev) {
+    if (ev) { try { ev.preventDefault(); } catch (e) {} ev.stopPropagation(); try { ev.stopImmediatePropagation(); } catch (e) {} }
+    if (this.mode === 'customize') return;
+    this._heldOpen = false; this._heldClickUntil = 0; this._suppressTap = 0;
+    try { hvSsEatTap._at = 0; } catch (e) {}
+    this.i = n; if (this.draft) this.draft.i = n;
+    this.mode = 'customize'; this.tab = 'style'; this.slotId = null;
+    try { hvSsKeep.on('ssswitch'); } catch (e) {}
+    try { this._coverLive(true); } catch (e) {}
+    this._paintCards(this.draft, this.i, 'customize');
+    this._paintChrome();
+    this.layout();
+    try { hvSsEatTap(400); } catch (e) {}
   },
   async _activate(n) {
     const data = this.draft || hvSsFaces.raw(); data.i = n;
@@ -11779,6 +11816,12 @@ const hvSsSwitch = {
     return false;
   },
   _docDown(ev) {
+    if (this.mode === 'switch' || this.mode === 'customize') {
+      if (this._heldOpen) { this._heldOpen = false; this._clearHold(); this._g = null; }
+      this._heldClickUntil = 0;
+      try { hvSsEatTap._at = 0; } catch (e) {}
+      return;
+    }
     if (typeof hvSsVisible === 'function' && !hvSsVisible()) return;
     if (ev.type === 'pointerdown' && (ev.button > 0 || ev.isPrimary === false)) return;
     const p = this._pt(ev); if (p.x == null || !isFinite(p.x)) return;
