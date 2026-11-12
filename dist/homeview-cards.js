@@ -4325,6 +4325,24 @@ function hvGridRows(blocks, N) { const occ = []; let rows = 0; const free = (r, 
   for (const [w0, h] of blocks) { const w = Math.min(w0, N); let done = false;
     for (let r = 0; !done && r < 400; r++) for (let x = 0; x + w <= N; x++) if (free(r, x, w, h)) { for (let y = r; y < r + h; y++) { occ[y] = occ[y] || []; for (let z = x; z < x + w; z++) occ[y][z] = 1; } rows = Math.max(rows, r + h); done = true; break; } }
   return rows; }
+// pin a card at a cell, then pack every other item (frozen order) into the next free cells, pushing later / larger cards down so nothing overlaps
+function hvGridReflow(others, N, pinAt, pinWH) { const occ = [];
+  const used = (r, c0, w, h) => { for (let y = r; y < r + h; y++) for (let x = c0; x < c0 + w; x++) if (occ[y] && occ[y][x]) return true; return false; };
+  const mark = (r, c0, w, h) => { for (let y = r; y < r + h; y++) { occ[y] = occ[y] || []; for (let z = c0; z < c0 + w; z++) occ[y][z] = 1; } };
+  const fit = (w0, h) => { const w = Math.min(w0, N); for (let r = 0; r < 400; r++) for (let x = 0; x + w <= N; x++) if (!used(r, x, w, h)) return [x, r]; return [0, 0]; };
+  const pw = Math.min(pinWH[0], N), ph = pinWH[1], pc = Math.max(0, Math.min(N - pw, pinAt[0] | 0)), pr = Math.max(0, pinAt[1] | 0);
+  mark(pr, pc, pw, ph);
+  return { pin: [pc, pr], rest: others.map(([w, h]) => { const at = fit(w, h); mark(at[1], at[0], Math.min(w, N), h); return at; }) }; }
+function hvPlacesOk(places, toks, sizes, N) { if (!places || !toks || !toks.length) return false; const occ = [];
+  const used = (r, c0, w, h) => { for (let y = r; y < r + h; y++) for (let x = c0; x < c0 + w; x++) if (occ[y] && occ[y][x]) return true; return false; };
+  const mark = (r, c0, w, h) => { for (let y = r; y < r + h; y++) { occ[y] = occ[y] || []; for (let z = c0; z < c0 + w; z++) occ[y][z] = 1; } };
+  for (let i = 0; i < toks.length; i++) { const p = places[toks[i]]; if (!p || p.length < 2) return false;
+    const w = Math.min(sizes[i][0], N), h = sizes[i][1], c = +p[0], r = +p[1];
+    if (!(c >= 0 && r >= 0 && Number.isFinite(c) && Number.isFinite(r) && c + w <= N) || used(r, c, w, h)) return false; mark(r, c, w, h); }
+  return true; }
+function hvGridPlace(el, at, wh) { if (!el || !at) return; const w = Math.max(1, (wh && wh[0]) || 1), h = Math.max(1, (wh && wh[1]) || 1);
+  el.style.gridColumn = (at[0] + 1) + ' / span ' + w; el.style.gridRow = (at[1] + 1) + ' / span ' + h; }
+function hvPlacesSig(p) { return JSON.stringify(Object.keys(p || {}).sort().map(k => [k, p[k]])); }
 // ---- data (per Home Screen, shared by its cards)
 const hwWxId = hub => { const c = hub._config || {}, S = (hub._hass && hub._hass.states) || {}; return (c.weather_entity && S[c.weather_entity] ? c.weather_entity : '') || (S['weather.forecast_home'] ? 'weather.forecast_home' : Object.keys(S).find(k => k.startsWith('weather.')) || ''); };
 const hwCalIds = hub => { const c = hub._config || {}, S = (hub._hass && hub._hass.states) || {};
@@ -4729,6 +4747,9 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
     d.up = ev => { if (ev.pointerId !== d.id) return; this.endDrag(); };
     try { cv.setPointerCapture(p.id); } catch (x) {} cv.addEventListener('pointermove', d.mv); cv.addEventListener('pointerup', d.up); cv.addEventListener('pointercancel', d.up);
     d.app = it.kind === 'app'; if (d.app) d.base = this.base(d); // an app: the cards stay where they are (see appTick)
+    if (!d.app && this.hub._hgM) { const M = this.hub._hgM, toks = d.o0, sizes = toks.map(tok => { const n = tok === d.tok ? g : d.k0.find(x => x._hvTok === tok); return (n && n._hvCells) || [1, 1]; });
+      const src = hvPlacesOk(this.hub._config && this.hub._config.home_places, toks, sizes, M.N) ? this.hub._config.home_places : null, pack = src ? null : hvGridPack(sizes, M.N);
+      d.p0 = {}; toks.forEach((tok, i) => { d.p0[tok] = (src ? src[tok] : pack[i]).slice(); }); d.placed = Object.fromEntries(Object.entries(d.p0).map(([k, v]) => [k, v.slice()])); d.pin = (d.p0[d.tok] || [0, 0]).slice(); }
     d.iv = setInterval(() => this.dragTick(), 40); if (navigator.vibrate) try { navigator.vibrate(12); } catch (x) {} if (hvEcl.lay) hvEcl.lay.classList.add('hdrag'); this.moveDrag(); this.tick(); },
   moveDrag() { const d = this.drag; if (!d) return; d.g.style.transform = `translate(${d.x - d.x0}px,${d.y - d.y0 + (scrollY - d.sy0)}px) scale(1.06)`; },
   // where the hole goes: the slot (DOM position) whose packing puts the dragged item nearest the cell under the finger. Uses the grid model
@@ -4741,11 +4762,19 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
     const ar = ap.getBoundingClientRect(), me = d.g._hvCells || [1, 1], pw = M.C + M.gx, phh = M.R + M.gy;
     const cx = Math.max(0, Math.min(M.N - Math.min(me[0], M.N), (d.x - d.ox - ar.left) / pw)), cy = Math.max(0, (d.y - d.oy - ar.top) / phh); // the cell the item's top-left is over
     if (d.app) return this.appTick(d, cx, cy, Math.floor((d.x - ar.left) / pw), Math.floor((d.y - ar.top) / phh));
-    const { kids, out } = this.slots(), cur = Math.min(kids.length, kids.filter(n => n.compareDocumentPosition(d.ph) & Node.DOCUMENT_POSITION_FOLLOWING).length), dist = k => Math.hypot(out[k][0] - cx, (out[k][1] - cy) * 1.15);
-    let best = cur; for (let k = 0; k < out.length; k++) if (dist(k) < dist(best) - 1e-6) best = k;
-    if (best === cur || dist(cur) - dist(best) < 0.35) { d.best = -1; return; } // stay put unless clearly better (no flicker between two slots)
-    if (best !== d.best) { d.best = best; d.at = Date.now(); return; } if (Date.now() - d.at < 120) return; d.best = -1; // the same better slot for 120 ms before anything moves
-    const m = this.snap(ap); if (best >= kids.length) ap.appendChild(d.ph); else ap.insertBefore(d.ph, kids[best]);
+    // a card: snap its top-left to the nearest cell (any overlap, not just a left/right edge) and, after 120 ms, pin it there; everyone else in the frozen start order packs around it
+    const tc = Math.round(cx), tr = Math.max(0, Math.round(cy)), key = tc + ',' + tr;
+    if (d.pin && d.pin[0] === tc && d.pin[1] === tr) { d.best = -1; return; }
+    if (d.best !== key) { d.best = key; d.at = Date.now(); return; } if (Date.now() - d.at < 120) return; d.best = -1;
+    this.applyCard(d, [tc, tr]); },
+  applyCard(d, pin) { const M = this.hub._hgM, me = d.g._hvCells || [1, 1], kids = d.k0.filter(n => n.parentNode === d.ap);
+    const rf = hvGridReflow(kids.map(n => n._hvCells || [1, 1]), M.N, pin, me), m = this.snap(d.ap), places = {};
+    places[d.tok] = rf.pin; hvGridPlace(d.ph, rf.pin, me);
+    kids.forEach((n, i) => { if (n._hvTok) places[n._hvTok] = rf.rest[i]; hvGridPlace(n, rf.rest[i], n._hvCells || [1, 1]); });
+    d.placed = places; d.pin = rf.pin.slice();
+    const nodes = kids.map((n, i) => ({ n, at: rf.rest[i] })).concat([{ n: d.ph, at: rf.pin }]);
+    nodes.sort((a, b) => a.at[1] - b.at[1] || a.at[0] - b.at[0]);
+    let ref = null; for (let i = nodes.length - 1; i >= 0; i--) { const n = nodes[i].n; if (n.nextSibling !== ref || n.parentNode !== d.ap) d.ap.insertBefore(n, ref); ref = n; }
     this.flip(m); if (navigator.vibrate) try { navigator.vibrate(6); } catch (x) {} this.tick(); },
   // dragging an app: the layout as it is now (grid model): the cards' cells, the cells the apps (and the hole) fill, and the other apps in reading order
   base(d) { const M = this.hub._hgM, its = [...d.ap.children].filter(n => n === d.ph || (n !== d.g && n._hvTok)), isApp = n => n === d.ph || /^a:/.test(n._hvTok), rd = (a, b) => a[1] - b[1] || a[0] - b[0];
@@ -4775,8 +4804,9 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
   endDrag() { const d = this.drag; if (!d) return; this.drag = null; clearInterval(d.iv); try { d.cv.releasePointerCapture(d.id); } catch (x) {}
     d.cv.removeEventListener('pointermove', d.mv); d.cv.removeEventListener('pointerup', d.up); d.cv.removeEventListener('pointercancel', d.up);
     if (hvEcl.lay) hvEcl.lay.classList.remove('hdrag'); const g = d.g, r0 = g.getBoundingClientRect(); g.classList.remove('lift'); for (const k of ['left', 'top', 'width', 'height', 'margin', 'transform']) g.style[k] = '';
-    if (d.ph.parentNode) d.ph.replaceWith(g); this.flip(new Map([[g, r0]]));
-    const now = this.order(d.ap); if (JSON.stringify(now) !== JSON.stringify(d.o0)) this.change(raw => { raw.home_layout = this.merge(now); }); else this.tick(); },
+    if (d.ph.parentNode) { if (!d.app && d.placed && d.placed[d.tok]) hvGridPlace(g, d.placed[d.tok], g._hvCells || [1, 1]); d.ph.replaceWith(g); } this.flip(new Map([[g, r0]]));
+    const now = this.order(d.ap), moved = d.app ? JSON.stringify(now) !== JSON.stringify(d.o0) : !!(d.placed && d.p0 && hvPlacesSig(d.placed) !== hvPlacesSig(d.p0));
+    if (moved) this.change(raw => { raw.home_layout = this.merge(now); if (!d.app && d.placed) raw.home_places = d.placed; else delete raw.home_places; }); else this.tick(); },
   // the grid's order with the items shown here in their new order (items not drawn yet keep their places)
   merge(dom) { const c = this.hub._config, cur = hvHomeOrder(c, hvSideN(c)), on = new Set(dom); let k = 0; return cur.map(t => on.has(t) ? dom[k++] : t); },
   shift(tok, dir) { this.change(raw => { const c = this.hub._config, L = hvHomeOrder(c, hvSideN(c)), i = L.indexOf(tok), j = i + dir; if (i < 0 || j < 0 || j >= L.length) return; [L[i], L[j]] = [L[j], L[i]]; raw.home_layout = L; }); },
@@ -8115,7 +8145,8 @@ class HVHubCard extends HTMLElement {
     this.toggleAttribute('hgrid', true); ap.classList.add('hg');
     // columns: 8 on a landscape tablet, 6 on a portrait one, 4 on a phone; an app icon fills most of a column
     const N = Wc >= 1000 ? 8 : Wc >= 680 ? 6 : 4, gx = Math.round(Math.max(12, Math.min(30, Wc * 0.024))), hs = hubTileSizes(c), toks = hvHomeOrder(c, hvSideN(c));
-    const cells = t => { const z = hvHomeCells(c, t, hs); return [Math.min(z[0], N), z[1]]; }, rows = hvGridRows(toks.map(cells), N);
+    const cells = t => { const z = hvHomeCells(c, t, hs); return [Math.min(z[0], N), z[1]]; };
+    const szs = toks.map(cells), packed = hvGridPack(szs, N), dragPl = (hvHubArr.drag && hvHubArr.hub === this && hvHubArr.drag.placed) || null, usePl = !!(dragPl || hvPlacesOk(c.home_places, toks, szs, N)), pl = dragPl || c.home_places, rows = usePl ? Math.max(1, ...toks.map((t, i) => ((pl[t] && +pl[t][1]) || packed[i][1]) + szs[i][1])) : hvGridRows(szs, N);
     const met = I => { const lfs = Math.round(Math.max(12, Math.min(17, I * 0.15))), lh = Math.round(lfs * 1.3), lg = Math.round(I * 0.08); return { I, lfs, lh, lg, R: I + lg + lh, gy: Math.round(Math.max(12, I * 0.2)) }; };
     let C = (Wc - (N - 1) * gx) / N, I = Math.max(52, Math.min(Math.floor(C * 0.8), Number(c.max_icon) || 140));
     const greetH = Math.max(15, Math.min(26, Wc * 0.03)) * 2.5, room = H - pt - pb - greetH - gap, need = i => { const m = met(i); return rows * m.R + Math.max(0, rows - 1) * m.gy; };
@@ -8128,10 +8159,12 @@ class HVHubCard extends HTMLElement {
       else if (k === 'cal') { el = this._hwMk('cal'); el._cfg = { type: 'calendar', size: hwCalSize(c.calendar_size) }; }
       else if (k === 'w') { const x = (c.home_cards || [])[i]; if (x) { el = this._hwMk('w:' + i); el._cfg = { type: x.type === 'calendar' ? 'calendar' : 'weather', size: hwSize(x.type === 'calendar' ? 'calendar' : 'weather', x.size)[0] }; } }
       if (!el) continue; const [w, h] = cells(t); el._hvTok = t; el._hvCells = [w, h]; map.set(t, el); els.push(el);
-      el.style.gridColumn = `span ${w}`; el.style.gridRow = `span ${h}`;
+      const at = usePl && pl[t] ? pl[t] : packed[toks.indexOf(t)];
+      if (usePl && at) hvGridPlace(el, at, [w, h]); else { el.style.gridColumn = `span ${w}`; el.style.gridRow = `span ${h}`; }
       if (el._cfg && el.classList.contains('hw')) { el.dataset.ty = el._cfg.type; el.dataset.sz = el._cfg.size; el.setAttribute('aria-label', el._cfg.type === 'weather' ? 'Weather' : 'Calendar'); live.add(el); } }
     if (this._hwM) for (const [k, el] of [...this._hwM]) if (!live.has(el)) { el.remove(); this._hwM.delete(k); }
     if (!(hvHubArr.drag && hvHubArr.hub === this)) hvOrder(ap, els); // a drag in progress owns the order until it drops
+    else if (dragPl) { const d = hvHubArr.drag; if (d.ph && dragPl[d.tok]) hvGridPlace(d.ph, dragPl[d.tok], d.g._hvCells || [1, 1]); }
     const ppw = phw && phw.querySelector('.pw'), ph = map.get('p'); if (ppw && ph) { const h = ph._hvCells[1]; ppw.style.setProperty('--ph', Math.max(40, h * M.R + (h - 1) * M.gy - (phw.querySelector('.lb') ? M.lh + M.lg : 0)) + 'px'); }
     set('--px', px + 'px'); set('--pt', Math.max(0, pt) + 'px'); set('--pb', pb + 'px'); set('--gap', gap + 'px'); set('--h', Math.floor(H) + 'px');
     set('--I', I + 'px'); set('--lfs', M.lfs + 'px'); set('--lh', M.lh + 'px'); set('--lg', M.lg + 'px'); set('--cg2', gx + 'px');
