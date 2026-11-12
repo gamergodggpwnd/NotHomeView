@@ -443,7 +443,7 @@ ha-card{position:relative;height:100%;width:100%;box-sizing:border-box;overflow:
  box-shadow:var(--hv-shadow,inset 0 1px 0 rgba(255,255,255,.25),0 1.2vh 3.6vh rgba(6,8,60,.26));
  backdrop-filter:var(--hv-blur,blur(26px) saturate(180%));-webkit-backdrop-filter:var(--hv-blur,blur(26px) saturate(180%));
  --ha-card-border-radius:var(--hv-radius,min(5.6vh,3vw));color:var(--hv-text,#fff);
- transition:background .25s ease,box-shadow .25s ease;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;outline:none}
+ transition:background .25s ease,box-shadow .25s ease;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;outline:none}:host([hv-home]){aspect-ratio:auto;height:100%;width:100%;overflow:hidden;border-radius:calc(var(--I,110px) * .26);--hv-radius:calc(var(--I,110px) * .26);--ha-card-border-radius:calc(var(--I,110px) * .26)}:host([hv-home]) ha-card{border-radius:inherit !important;border:0 !important;box-shadow:none !important;overflow:hidden;height:100%;width:100%;--ha-card-border-radius:inherit}
 ha-card.active{background:var(--hv-bg-on,linear-gradient(150deg,rgba(196,182,255,.46) 0%,rgba(160,140,250,.34) 100%));
  border-color:var(--hv-border-on,rgba(225,215,255,.42));box-shadow:var(--hv-shadow-on,inset 0 1px 0 rgba(255,255,255,.35),0 1.2vh 3.6vh rgba(50,30,160,.30))}
 ha-card:focus-visible{box-shadow:0 0 0 2px var(--hv-accent,#d4c9ff)}
@@ -4447,7 +4447,7 @@ const HW_CSS = `
 .c-x .dh.td span{color:#ff453a}.c-x .dh.td b{color:#fff;background:#ff453a;border-radius:99px;padding:0 .35em}
 .c-x .hc{position:relative}.c-x .hc span{position:absolute;left:0;font-size:calc(var(--f) * 10.5);color:rgba(235,235,245,.55);transform:translateY(-.6em)}.c-x .dg{border-left:1px solid rgba(84,84,88,.35)}
 .apps.hg{position:relative;grid-template-columns:repeat(var(--gn,8),var(--gc,100px));grid-auto-rows:var(--gr,120px);column-gap:var(--gx,24px);row-gap:var(--gy,20px);grid-auto-flow:row dense;width:max-content;max-width:100%}
-.apps.hg > .app{justify-self:center;align-self:start}.apps.hg > .tile,.apps.hg > .phw{width:100%;height:100%;min-width:0;min-height:0}
+.apps.hg > .app{justify-self:center;align-self:start}.apps.hg > .tile,.apps.hg > .phw{width:100%;height:100%;min-width:0;min-height:0}.tile.hv-hs{border-radius:calc(var(--I,110px) * .26);overflow:hidden;background:transparent;box-shadow:0 calc(var(--I,110px) * .06) calc(var(--I,110px) * .2) rgba(0,0,0,.3)}
 .apps.hg > .phw{gap:var(--lg,9px)}.apps.hg > .phw .pw{width:100%}
 .apps.hg > .hgp{border-radius:calc(var(--I,110px) * .26);background:rgba(255,255,255,.06);box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.14)}.apps.hg > .hgp.hga{background:none;box-shadow:none}
 .apps.hg{isolation:isolate}.apps.hg > .lift{position:absolute !important;z-index:1000;pointer-events:none;transition:none;filter:drop-shadow(0 18px 28px rgba(0,0,0,.35))}
@@ -4473,9 +4473,9 @@ const HV_GAL_CSS = `
 .ph{display:flex;align-items:center;gap:14px}.ph .pi{width:56px;height:56px;border-radius:14px}.ph .pi ha-icon{--mdc-icon-size:34px}
 .wall{display:grid;grid-template-columns:repeat(var(--gc,8),var(--gu,76px));grid-auto-rows:calc(var(--gu,76px) + 10px);gap:var(--gg,14px);grid-auto-flow:row dense;padding-bottom:12px}
 .pv{all:unset;cursor:pointer;position:relative;display:flex;flex-direction:column;min-width:0;min-height:0;transition:transform .15s}.pv:active{transform:scale(.97)}
-.pv .cv{position:relative;flex:1;min-height:0;display:block;border-radius:calc(var(--I,60px) * .32);overflow:hidden;box-shadow:0 10px 26px rgba(0,0,0,.3)}
+.pv .cv{position:relative;flex:1;min-height:0;display:block;border-radius:calc(var(--I,110px) * .26);overflow:hidden;background:transparent;box-shadow:0 calc(var(--I,110px) * .06) calc(var(--I,110px) * .2) rgba(0,0,0,.3)}
 .pv .hw > .hwi{position:absolute;inset:0;border-radius:inherit;box-shadow:none}.pv .hw{cursor:pointer}
-.pv .hpv{background:var(--hv-ss-bg,#1a1a1a)}.pv .hst{position:absolute;inset:0;container-type:size}.pv .hv{background:rgba(255,255,255,.10)}.pv .hv > *{position:absolute;inset:0;width:100% !important;height:100% !important;display:block;pointer-events:none}
+.pv .hpv{background:var(--hv-ss-bg,#1a1a1a);border-radius:calc(var(--I,110px) * .26);overflow:hidden}.pv .hst{position:absolute;inset:0;container-type:size}.pv .hv{background:transparent}.pv .hv > *{position:absolute;inset:0;width:100% !important;height:100% !important;display:block;pointer-events:none;border-radius:inherit;overflow:hidden}
 .pv .badge{position:absolute;left:8px;top:8px;display:inline-flex;align-items:center;gap:4px;padding:3px 8px 3px 5px;border-radius:99px;font-size:11px;font-weight:600;background:rgba(0,0,0,.45);backdrop-filter:blur(8px)}.pv .badge ha-icon{--mdc-icon-size:14px;color:#30d158}
 .pv .cap{flex:none;height:34px;padding-top:6px;display:flex;flex-direction:column;align-items:center;text-align:center;line-height:1.2;overflow:hidden}.pv .cap b{font-size:13px;font-weight:600;white-space:nowrap}.pv .cap small{font-size:11px;color:rgba(235,235,245,.6);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .pv.no .cv{opacity:.4;filter:saturate(.4)}.pv.no{cursor:default}.pv.no:active{transform:none}
@@ -4638,7 +4638,7 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
       else if (HV_GAL[p]) { const g = HV_GAL[p], cv = document.createElement('span'); cv.className = 'cv hv';
         try { const cls = customElements.get(g.tag); let stub = {}; try { if (cls && cls.getStubConfig) stub = cls.getStubConfig(h._hass) || {}; } catch (x) {}
           const el = document.createElement(g.tag); if (el.setConfig) el.setConfig(Object.assign({ type: 'custom:' + g.tag }, stub));
-          if (h._hass) el.hass = h._hass; if (el.tagName && el.tagName.startsWith('HOMEVIEW-')) el.setAttribute('floor', '');
+          if (h._hass) el.hass = h._hass; if (el.tagName && el.tagName.startsWith('HOMEVIEW-')) { el.setAttribute('floor', ''); el.setAttribute('hv-home', ''); }
           cv.appendChild(el); } catch (x) { cv.innerHTML = `<span class="ph">${icoHtml(p)}</span>`; }
         b.appendChild(cv); }
       else { const ty = p === 'weather' ? 'weather' : 'calendar'; b.innerHTML = `<span class="cv hw" data-ty="${ty}" data-sz="${k}"><span class="hwi">${hwHtml(h, { type: ty, size: k }, [w, hh])}</span></span>`; }
@@ -8047,7 +8047,7 @@ class HVHubCard extends HTMLElement {
       (this._sideEls || []).forEach(w => { if (w._dead || !pool.some(x => x.w === w)) w.remove(); });
       this._sideEls = list.map(cfg => { const j = JSON.stringify(cfg), pi = pool.findIndex(x => x.j === j); if (pi >= 0) return pool.splice(pi, 1)[0].w;
         const wrap = document.createElement('div'); wrap.className = 'tile'; let el; try { el = helpers ? helpers.createCardElement(cfg) : document.createElement('div'); } catch (e) { el = document.createElement('div'); el.textContent = String(e); }
-        if (this._hass) el.hass = this._hass; if (this._edit != null) el.editMode = this._edit; if (el.tagName && el.tagName.startsWith('HOMEVIEW-')) el.setAttribute('floor', ''); // readable text, like Page Grid tiles
+        if (this._hass) el.hass = this._hass; if (this._edit != null) el.editMode = this._edit; if (el.tagName && el.tagName.startsWith('HOMEVIEW-')) { el.setAttribute('floor', ''); if ((cfg.type || '') !== HV_HOMIE_T) { el.setAttribute('hv-home', ''); wrap.classList.add('hv-hs'); } }
         el._hvHub = this;
         el.addEventListener('ll-rebuild', ev => { ev.stopPropagation(); wrap._dead = true; this._sideSig = null; this._makeSide(); }); wrap.appendChild(el); wrap._card = el; wrap._cfg = cfg;
         wrap.addEventListener('click', ev => { const o = hubTileOpt(this._config, this._sideEls.indexOf(wrap));
