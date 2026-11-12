@@ -11191,7 +11191,7 @@ const HV_SS_SW_CSS = `
 .dim{position:absolute;inset:0;background:#000;opacity:0;transition:opacity .25s ease;pointer-events:none}
 .dim.on{opacity:1}
 .stage{position:absolute;inset:0;overflow:hidden}
-.track{position:absolute;top:0;bottom:0;left:0;display:flex;align-items:center;will-change:transform;touch-action:pan-x}
+.track{position:absolute;top:0;bottom:0;left:0;display:flex;align-items:center;will-change:transform;touch-action:none}
 .card{position:relative;flex:none;display:flex;flex-direction:column;align-items:center;pointer-events:auto}
 .card .lab{font-size:10px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#fff;margin:0 0 8px;text-shadow:0 1px 4px rgba(0,0,0,.45)}
 .card .win{position:relative;overflow:hidden;background:#111;border-radius:22%;box-shadow:0 18px 40px rgba(0,0,0,.45);isolation:isolate}
@@ -11472,7 +11472,7 @@ const hvSsSwitch = {
     const h = this.host; if (!h) return;
     const z = this.currentZ();
     const editing = this.mode === 'switch' || this.mode === 'customize';
-    h.style.cssText = `position:fixed;inset:0;z-index:${z + 2};pointer-events:auto;touch-action:${editing ? 'pan-x' : 'none'};background:${editing ? '#000' : 'rgba(0,0,0,0.01)'};`;
+    h.style.cssText = `position:fixed;inset:0;z-index:${z + 2};pointer-events:auto;touch-action:${this.mode === 'switch' ? 'none' : editing ? 'pan-x' : 'none'};background:${editing ? '#000' : 'rgba(0,0,0,0.01)'};`;
     const dim = h.shadowRoot && h.shadowRoot.querySelector('.dim');
     if (!editing) { if (dim) dim.classList.remove('on'); }
     else if (dim) dim.classList.add('on');
@@ -11707,6 +11707,7 @@ const hvSsSwitch = {
   _tickFaces() {
     if (this._iv) clearInterval(this._iv);
     this._iv = setInterval(() => {
+      if (this._dragging) return;
       const hass = hvSsOv.hass(), d = new Date();
       if (this._faces) for (const x of this._faces) { try { x.face.update(hass, d); this._paintSlots(x.face.el, x.faceData, this.mode === 'customize' && this.tab === 'widgets', x.faceData === this.draft.faces[this.i]); } catch (e) {} }
     }, 1000);
@@ -11721,8 +11722,13 @@ const hvSsSwitch = {
     const sr = this.host.shadowRoot, stg = sr.querySelector('.stage');
     const W = innerWidth || 800, H = innerHeight || 800, size = this._cardSize(mode);
     const gap = Math.round(size * 0.16);
+    const sig = mode + ':' + ((data && data.faces) || []).map(f => (f.style || '') + ':' + (f.layout || '')).join(',');
+    if (mode === 'switch' && this._track && this._track.isConnected && this._cardSig === sig && this._faces && this._faces.length === ((data && data.faces) || []).length) {
+      this._snapTrack(this._track, size, gap, data, i, true);
+      return;
+    }
     stg.innerHTML = '';
-    this._faces = [];
+    this._faces = []; this._track = null; this._cardSig = sig;
     const track = document.createElement('div'); track.className = 'track';
     const admin = hvSsIsAdmin();
     data.faces.forEach((face, n) => {
@@ -11731,7 +11737,7 @@ const hvSsSwitch = {
       const card = document.createElement('div'); card.className = 'card' + (mode === 'customize' ? ' editing' : '') + (isCur ? ' cur' : ''); card.style.width = size + 'px';
       const showLab = mode !== 'customize' && isCur;
       const showCz = mode !== 'customize' && isCur && admin;
-      card.innerHTML = `${showLab ? '<div class="lab">' + (HV_SS_LABEL[face.style] || face.style) + '</div>' : '<div class="lab" hidden></div>'}<div class="win"></div>${showCz ? '<button class="cz" type="button">Customize</button>' : '<button class="cz" type="button" hidden>Customize</button>'}`;
+      card.innerHTML = `<div class="lab"${showLab ? '' : ' hidden'}>${HV_SS_LABEL[face.style] || face.style || ''}</div><div class="win"></div><button class="cz" type="button"${showCz ? '' : ' hidden'}>Customize</button>`;
       card.style.marginRight = gap + 'px';
       const win = card.querySelector('.win'); win.style.width = size + 'px'; win.style.height = size + 'px';
       const f = this._mkFace(face, false); win.appendChild(f.el); this._applyFaceLook(f, face);
@@ -11755,6 +11761,7 @@ const hvSsSwitch = {
     const left = (W - size) / 2 - idx * (size + gap) - railShift;
     track.style.left = '0px'; track.style.transform = `translate3d(${left}px,0,0)`;
     track.style.transition = (mode === 'peek' || this.reduced()) ? 'none' : 'transform .28s cubic-bezier(.2,.8,.2,1)';
+    this._track = track;
     if (mode === 'switch' || mode === 'customize') this._wireTrack(track, size, gap, data);
     if (mode === 'customize') this._paintChrome();
     else { this._clearChrome(); if (mode === 'switch' && hvSsIsAdmin()) this._paintPlus(); }
@@ -11772,13 +11779,48 @@ const hvSsSwitch = {
     this.draft = data; this.i = data.faces.length - 1; data.i = this.i;
     this._paintCards(data, this.i, 'switch');
   },
+  _markCur(i) {
+    const admin = hvSsIsAdmin(), sw = this.mode === 'switch';
+    for (const x of (this._faces || [])) {
+      const on = x.n === i;
+      x.el.classList.toggle('cur', on);
+      const lab = x.el.querySelector('.lab'), cz = x.el.querySelector('.cz');
+      if (lab) {
+        lab.hidden = !(sw && on);
+        if (!lab.textContent) lab.textContent = (HV_SS_LABEL[(x.faceData || {}).style] || (x.faceData || {}).style || '');
+      }
+      if (cz) cz.hidden = !(sw && on && admin);
+    }
+  },
+  _snapTrack(track, size, gap, data, i, animate) {
+    const faces = (data && data.faces) || [];
+    i = Math.max(0, Math.min(faces.length - 1, i));
+    this.i = i; if (this.draft) this.draft.i = i;
+    if (!track) return;
+    const left = ((innerWidth || 800) - size) / 2 - i * (size + gap);
+    track.style.willChange = 'transform';
+    track.style.transition = (animate && !this.reduced()) ? 'transform .28s cubic-bezier(0,0,.2,1)' : 'none';
+    track.style.transform = 'translate3d(' + left + 'px,0,0)';
+    this._markCur(i);
+  },
   _wireTrack(track, size, gap, data) {
-    let g = null;
+    if (track.__hvWired) return; track.__hvWired = true;
+    let g = null, raf = 0, pending = null;
+    track.style.willChange = 'transform';
+    track.style.touchAction = 'none';
     const thresh = () => Math.max(24, (size || 0) * 0.15);
+    const base = () => ((innerWidth || 800) - size) / 2 - this.i * (size + gap);
+    const apply = (x, anim) => {
+      track.style.transition = anim && !this.reduced() ? 'transform .28s cubic-bezier(0,0,.2,1)' : 'none';
+      track.style.transform = 'translate3d(' + x + 'px,0,0)';
+    };
     track.addEventListener('pointerdown', ev => {
       if (this.mode !== 'switch') return;
-      if (ev.target.closest && (ev.target.closest('.cz') || ev.target.closest('.slot') || ev.target.closest('.tabs') || ev.target.closest('.rail'))) return;
-      g = { x: ev.clientX, y: ev.clientY, t: Date.now(), x0: ev.clientX, y0: ev.clientY, id: ev.pointerId, locked: false, dead: false };
+      if (ev.target.closest && (ev.target.closest('.cz') || ev.target.closest('.slot') || ev.target.closest('.tabs') || ev.target.closest('.rail') || ev.target.closest('.plus'))) return;
+      const card = ev.target.closest && ev.target.closest('.card');
+      const rec = card && (this._faces || []).find(x => x.el === card);
+      g = { x: ev.clientX, y: ev.clientY, t: Date.now(), x0: ev.clientX, y0: ev.clientY, id: ev.pointerId, locked: false, dead: false, n: rec ? rec.n : null };
+      this._dragging = false;
       track.style.transition = 'none';
       try { track.setPointerCapture(ev.pointerId); } catch (e) {}
     });
@@ -11789,29 +11831,46 @@ const hvSsSwitch = {
       if (!g.locked) {
         if (Math.hypot(dx, dy) < 8) return;
         if (Math.abs(dx) > Math.abs(dy) * 1.1) {
-          g.locked = true;
+          g.locked = true; this._dragging = true;
           try { ev.preventDefault(); ev.stopPropagation(); } catch (e) {}
         } else { g.dead = true; return; }
       } else {
         try { ev.preventDefault(); ev.stopPropagation(); } catch (e) {}
       }
-      const W = innerWidth || 800;
-      const left = (W - size) / 2 - this.i * (size + gap) + dx;
-      track.style.transform = `translate3d(${left}px,0,0)`;
+      pending = dx;
+      if (!raf) raf = requestAnimationFrame(() => {
+        raf = 0;
+        if (pending == null || !g || !g.locked) return;
+        apply(base() + pending, false);
+      });
     });
     const end = ev => {
       if (!g || (ev.pointerId != null && ev.pointerId !== g.id)) return;
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      if (pending != null && g.locked) apply(base() + pending, false);
+      const now = Date.now();
       const x = (ev.clientX || g.lx || g.x0);
-      const dx = (g.dx != null ? g.dx : x - g.x0), v = dx / Math.max(1, Date.now() - g.t);
-      let i = this.i;
-      if (g.locked && !g.dead) {
+      const dx = (g.dx != null ? g.dx : x - g.x0);
+      const dy = (g.dy != null ? g.dy : 0);
+      const dt = Math.max(1, now - g.t), v = dx / dt, dist = Math.hypot(dx, dy);
+      const wasTap = !g.locked && !g.dead && dist < 8 && dt < 300;
+      const nTap = g.n, locked = g.locked && !g.dead;
+      g = null; this._dragging = false; pending = null;
+      this._suppressTap = now;
+      if (wasTap && nTap != null && this.mode === 'switch') {
+        try { ev.preventDefault(); ev.stopPropagation(); } catch (e) {}
+        this._activate(nTap);
+        return;
+      }
+      if (locked) {
+        let i = this.i;
         const th = thresh();
         if (dx < -th || v < -0.3) i = Math.min(data.faces.length - 1, i + 1);
         else if (dx > th || v > 0.3) i = Math.max(0, i - 1);
+        this._snapTrack(track, size, gap, data, i, true);
+      } else {
+        this._snapTrack(track, size, gap, data, this.i, true);
       }
-      if (Math.abs(dx) > 10) this._suppressTap = Date.now();
-      g = null; this.i = i; if (this.draft) this.draft.i = i;
-      this._paintCards(this.draft, this.i, this.mode);
     };
     track.addEventListener('pointerup', end); track.addEventListener('pointercancel', end);
   },
