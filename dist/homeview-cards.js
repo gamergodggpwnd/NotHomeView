@@ -10902,7 +10902,7 @@ const hvSsOv = {
   _sweep(root, d) { if (!root || d > 14 || !root.querySelectorAll) return;
     root.querySelectorAll('#hv-ss-style').forEach(n => { try { n.remove(); } catch (e) {} });
     for (const el of root.querySelectorAll('*')) if (el.shadowRoot) this._sweep(el.shadowRoot, d + 1); },
-  hide() { try { if (typeof hvSsSwitch !== 'undefined' && hvSsSwitch && !hvSsSwitch.mode) hvSsSwitch.hide(); } catch (e) {} try { hvSsKeep.off('glass'); } catch (e) {} const h = this.host; this.host = null; this.face = null; this.card = null; this._g = null; this._bornAt = 0; this.style = null; this.colKey = null; this._up = false;
+  hide() { try { const w = typeof ssWallpanel === 'function' ? ssWallpanel() : null; const running = !!(w && typeof w.screensaverRunning === 'function' && w.screensaverRunning()); if (typeof hvSsSwitch !== 'undefined' && hvSsSwitch && !running) hvSsSwitch.hide(); } catch (e) {} try { hvSsKeep.off('glass'); } catch (e) {} const h = this.host; this.host = null; this.face = null; this.card = null; this._g = null; this._bornAt = 0; this.style = null; this.colKey = null; this._up = false;
     if (h) { try { h.remove(); } catch (e) {} } try { this._sweep(document, 0); } catch (e) {} },
   // Wallpanel can still report "running" after it has faded out (opacity 0 / visibility hidden / pointer-events none).
   // The style layer must not stay up then: it covers the screensaver settings dialog.
@@ -11071,7 +11071,7 @@ const hvSsIsAdmin = () => { try { const h = document.querySelector('home-assista
 const HV_SS_SW_CSS = `
 :host{all:initial;display:block;position:fixed;inset:0;font-family:system-ui,-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",sans-serif;-webkit-font-smoothing:antialiased;color:#fff}
 .dim{position:absolute;inset:0;background:#000;opacity:0;transition:opacity .25s ease;pointer-events:none}
-.dim.on{opacity:.86}
+.dim.on{opacity:1}
 .stage{position:absolute;inset:0;overflow:hidden}
 .track{position:absolute;top:0;bottom:0;left:0;display:flex;align-items:center;will-change:transform}
 .card{position:relative;flex:none;display:flex;flex-direction:column;align-items:center;pointer-events:auto}
@@ -11293,6 +11293,7 @@ const hvSsSwitch = {
   openFromSettings() { this.open('customize', { fromSettings: true }); },
   currentZ() { const w = ssWallpanel(); let z = 1000; try { z = parseInt(getComputedStyle(w || document.body).zIndex, 10) || 1000; } catch (e) {} return z; },
   hide() { this._clearHold(); this._g = null; this.mode = null; this.draft = null; this.slotId = null; if (this._iv) { clearInterval(this._iv); this._iv = null; } if (this._liv) { clearInterval(this._liv); this._liv = null; }
+    try { this._coverLive(false); } catch (e) {}
     const h = this.host; this.host = null; this._faces = null; if (h) { try { h.remove(); } catch (e) {} } document.querySelectorAll('#hv-ss-switch').forEach(n => n.remove()); },
   _clearHold() { if (this._hold) { clearTimeout(this._hold); this._hold = null; } },
   ensure(photo) {
@@ -11314,8 +11315,27 @@ const hvSsSwitch = {
     const h = this.host; if (!h) return;
     const z = this.currentZ();
     const editing = this.mode === 'switch' || this.mode === 'customize';
-    h.style.cssText = `position:fixed;inset:0;z-index:${z + 2};pointer-events:auto;`;
-    if (!editing) { /* live: transparent catcher */ h.style.background = 'transparent'; h.shadowRoot.querySelector('.dim').classList.remove('on'); }
+    h.style.cssText = `position:fixed;inset:0;z-index:${z + 2};pointer-events:auto;background:${editing ? '#000' : 'transparent'};`;
+    const dim = h.shadowRoot && h.shadowRoot.querySelector('.dim');
+    if (!editing) { if (dim) dim.classList.remove('on'); }
+    else if (dim) dim.classList.add('on');
+  },
+  _coverLive(on) {
+    if (!on) {
+      for (const el of (this._covered || [])) {
+        try { el.style.visibility = el.__hvVis || ''; el.removeAttribute('inert'); } catch (e) {}
+      }
+      this._covered = [];
+      return;
+    }
+    const els = [];
+    try { if (typeof hvSsOv !== 'undefined' && hvSsOv.host) els.push(hvSsOv.host); } catch (e) {}
+    try { const w = ssWallpanel(); if (w) els.push(w); } catch (e) {}
+    this._covered = [];
+    for (const el of els) {
+      if (!el || el === this.host || (this.host && (el === this.host.parentNode || el.contains(this.host)))) continue;
+      try { el.__hvVis = el.style.visibility; el.style.visibility = 'hidden'; el.setAttribute('inert', ''); this._covered.push(el); } catch (e) {}
+    }
   },
   arm(photo) {
     if (this.mode === 'switch' || this.mode === 'customize') { this.layout(); return; }
@@ -11325,11 +11345,12 @@ const hvSsSwitch = {
   },
   hookGlass(el) {
     if (!el || el.__hvSwGlass) return; el.__hvSwGlass = true;
-    // Do not preventDefault on tiles or the bottom swipe-up zone; only take horizontal swipe / long-press on empty glass.
+    // Long-press on empty background or the clock (.ck) opens the switcher. Never take over
+    // tile taps/drags, the bottom swipe-up, swipe_open_home, or a live face swipe.
     el.addEventListener('pointerdown', ev => {
       if (this.mode || ev.button > 0) return;
       const path = ev.composedPath ? ev.composedPath() : [];
-      if (path.some(n => n && n.classList && (n.classList.contains('t') || n.classList.contains('ed') || n.classList.contains('cv') || n.classList.contains('slot')))) return;
+      if (path.some(n => n && n.classList && (n.classList.contains('t') || n.classList.contains('ed') || n.classList.contains('cv') || n.classList.contains('slot') || n.classList.contains('hb') || n.classList.contains('grab')))) return;
       const H = innerHeight || 800;
       if (ev.clientY >= H * 0.88) return;
       this._g = { x: ev.clientX, y: ev.clientY, t: Date.now(), id: ev.pointerId, dx: 0, dy: 0, swiping: false, soft: true };
@@ -11339,19 +11360,11 @@ const hvSsSwitch = {
     el.addEventListener('pointermove', ev => {
       const g = this._g; if (!g || !g.soft || ev.pointerId !== g.id || this.mode) return;
       g.dx = ev.clientX - g.x; g.dy = ev.clientY - g.y;
-      if (!g.swiping && Math.hypot(g.dx, g.dy) > 10) {
-        this._clearHold();
-        if (Math.abs(g.dx) > Math.abs(g.dy) * 1.1) {
-          let edge = false;
-          try { edge = !!(hvSsHome.on() && g.x < 28 && g.dx > 0); } catch (e) {}
-          if (!edge) { g.swiping = true; this.ensure(true); this._liveSwipe(g.dx); }
-        }
-      } else if (g.swiping) this._liveSwipe(g.dx);
+      if (Math.hypot(g.dx, g.dy) > 10) { this._clearHold(); g.swiping = true; }
     }, true);
     const end = ev => {
       const g = this._g; if (!g || !g.soft || (ev.pointerId != null && ev.pointerId !== g.id)) return;
       this._clearHold(); this._g = null;
-      if (g.swiping) this._endLiveSwipe(g);
     };
     el.addEventListener('pointerup', end, true); el.addEventListener('pointercancel', end, true);
   },
@@ -11398,57 +11411,33 @@ const hvSsSwitch = {
     h.addEventListener('pointermove', ev => {
       const g = this._g; if (!g || ev.pointerId !== g.id || this.mode) return;
       g.dx = ev.clientX - g.x; g.dy = ev.clientY - g.y;
-      if (!g.swiping && Math.hypot(g.dx, g.dy) > 10) {
+      if (Math.hypot(g.dx, g.dy) > 10) {
         this._clearHold();
-        if (Math.abs(g.dx) > Math.abs(g.dy) * 1.1) {
-          // swipe_open_home from the left edge wins
-          let edge = false;
-          try { edge = !!(hvSsHome.on() && g.x < 28 && g.dx > 0); } catch (e) {}
-          if (!edge) { g.swiping = true; this._liveSwipe(g.dx); }
-        }
-      } else if (g.swiping) this._liveSwipe(g.dx);
+        g.swiping = true;
+        // Release capture so swipe_open_home from the left edge can still run.
+        try { if (hvSsHome.on() && g.x < 28 && g.dx > 0) h.releasePointerCapture(ev.pointerId); } catch (e) {}
+      }
     }, true);
     const end = ev => {
       const g = this._g; if (!g || (ev.pointerId != null && ev.pointerId !== g.id)) return;
       this._clearHold(); this._g = null;
-      if (g.swiping) { this._endLiveSwipe(g); return; }
+      if (g.swiping) return; // live swipe never shows the switcher or changes face
       if (Math.hypot(g.dx, g.dy) < 8 && Date.now() - g.t < 400 && ev.type === 'pointerup') this._dismiss();
     };
     h.addEventListener('pointerup', end, true); h.addEventListener('pointercancel', end, true);
   },
   _dismiss() { try { const w = ssWallpanel(); if (w && typeof w.stopScreensaver === 'function') w.stopScreensaver(); } catch (e) {} },
-  _liveSwipe(dx) {
-    this._prepTrack();
-    const W = innerWidth || 800;
-    const tr = this.host.shadowRoot.querySelector('.track');
-    if (tr) tr.style.transform = `translate3d(${dx}px,0,0)`;
-  },
-  _prepTrack() {
-    if (this._faces) return;
-    this.renderLivePeek();
-  },
-  renderLivePeek() {
-    const data = hvSsFaces.raw();
-    this._paintCards(data, data.i, 'peek');
-  },
-  async _endLiveSwipe(g) {
-    const W = innerWidth || 800, v = g.dx / Math.max(1, Date.now() - g.t);
-    const data = hvSsFaces.raw(); let i = data.i;
-    if (g.dx < -W * 0.18 || v < -0.6) i = Math.min(data.faces.length - 1, i + 1);
-    else if (g.dx > W * 0.18 || v > 0.6) i = Math.max(0, i - 1);
-    data.i = i;
-    const red = this.reduced();
-    const tr = this.host && this.host.shadowRoot.querySelector('.track');
-    if (tr) { tr.style.transition = red ? 'none' : 'transform .28s cubic-bezier(.2,.8,.2,1)'; tr.style.transform = 'translate3d(0,0,0)'; }
-    await hvSsFaces.commit(data, hvSsOv.hass());
-    setTimeout(() => { this._faces = null; if (this.host && this.mode == null) { const stg = this.host.shadowRoot.querySelector('.stage'); if (stg) stg.innerHTML = ''; } hvSsOv.tick(true); }, red ? 0 : 280);
-  },
+  _liveSwipe() {},
+  _prepTrack() {},
+  renderLivePeek() {},
+  async _endLiveSwipe() {},
   open(mode, opts) {
     opts = opts || {};
     this.ensure(true);
     const data = JSON.parse(JSON.stringify(hvSsFaces.raw()));
     this.draft = data; this.i = data.i; this.mode = mode; this.tab = 'style'; this.slotId = null;
     this.layout();
+    try { this._coverLive(true); } catch (e) {}
     this.host.shadowRoot.querySelector('.dim').classList.add('on');
     this._paintCards(data, this.i, mode);
     this._tickFaces();
@@ -11476,17 +11465,19 @@ const hvSsSwitch = {
     const admin = hvSsIsAdmin();
     data.faces.forEach((face, n) => {
       if (mode === 'customize' && n !== i) return;
-      const card = document.createElement('div'); card.className = 'card' + (mode === 'customize' ? ' editing' : ''); card.style.width = size + 'px';
-      const showLab = mode !== 'customize';
-      card.innerHTML = `${showLab ? '<div class="lab">' + (HV_SS_LABEL[face.style] || face.style) + '</div>' : '<div class="lab" hidden></div>'}<div class="win"></div>${mode !== 'customize' && admin ? '<button class="cz" type="button">Customize</button>' : '<button class="cz" type="button" hidden>Customize</button>'}`;
+      const isCur = n === i;
+      const card = document.createElement('div'); card.className = 'card' + (mode === 'customize' ? ' editing' : '') + (isCur ? ' cur' : ''); card.style.width = size + 'px';
+      const showLab = mode !== 'customize' && isCur;
+      const showCz = mode !== 'customize' && isCur && admin;
+      card.innerHTML = `${showLab ? '<div class="lab">' + (HV_SS_LABEL[face.style] || face.style) + '</div>' : '<div class="lab" hidden></div>'}<div class="win"></div>${showCz ? '<button class="cz" type="button">Customize</button>' : '<button class="cz" type="button" hidden>Customize</button>'}`;
       card.style.marginRight = gap + 'px';
       const win = card.querySelector('.win'); win.style.width = size + 'px'; win.style.height = size + 'px';
       const f = this._mkFace(face, false); win.appendChild(f.el); this._applyFaceLook(f, face);
       this._paintSlots(f.el, face, mode === 'customize' && this.tab === 'widgets', true);
       this._faces.push({ el: card, face: f, faceData: face, n });
       if (mode !== 'peek') {
-        card.querySelector('.cz').addEventListener('click', ev => { ev.stopPropagation(); this.i = n; this.mode = 'customize'; this.tab = 'style'; this._paintCards(this.draft, this.i, 'customize'); this._paintChrome(); });
-        win.addEventListener('click', ev => { if (this.mode === 'switch') { ev.stopPropagation(); this._activate(n); } });
+        card.querySelector('.cz').addEventListener('click', ev => { ev.stopPropagation(); if (this._suppressTap && Date.now() - this._suppressTap < 400) return; this.i = n; this.mode = 'customize'; this.tab = 'style'; this._paintCards(this.draft, this.i, 'customize'); this._paintChrome(); });
+        win.addEventListener('click', ev => { if (this.mode !== 'switch') return; ev.stopPropagation(); if (this._suppressTap && Date.now() - this._suppressTap < 400) return; this._activate(n); });
       }
       track.appendChild(card);
     });
@@ -11534,6 +11525,7 @@ const hvSsSwitch = {
       let i = this.i;
       if (dx < -40 || v < -0.5) i = Math.min(data.faces.length - 1, i + 1);
       else if (dx > 40 || v > 0.5) i = Math.max(0, i - 1);
+      if (Math.abs(dx) > 10) this._suppressTap = Date.now();
       g = null; this.i = i; this.draft.i = i;
       this._paintCards(this.draft, this.i, this.mode);
     };
