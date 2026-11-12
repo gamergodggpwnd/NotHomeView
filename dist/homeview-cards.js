@@ -1913,10 +1913,11 @@ const hvExtMiss = (t, u, o) => { o = o || {}; const w = hvExtUrlOk(t.web_url), w
 // Without it the launch happens before the first await, so a tap that calls this still counts as the gesture.
 // Known apps (Tesla, Spotify, …) get a URL scheme from HV_EXT_KNOWN when none was saved; an App Store page is not opened on iPhone or Android unless he taps it on the toast.
 const HV_FT_SHORTCUT = 'shortcuts://run-shortcut?name=Open%20FaceTime';
+const HV_FT_SHORTCUT_INSTALL = 'https://www.icloud.com/shortcuts/c566c68eaece4292a3bc166b9a997069';
 const hvExtFtMiss = () => {
-  const message = "FaceTime didn't open. Make a one-step Shortcut named Open FaceTime (Open App → FaceTime), then point this custom app at shortcuts://run-shortcut?name=Open%20FaceTime";
+  const message = "FaceTime didn't open. Add a one-step Shortcut named exactly Open FaceTime (Open App → FaceTime).";
   const ha = document.querySelector('home-assistant');
-  const detail = { message, duration: 10000, action: { text: 'Try Shortcut link', action: () => hvExtLaunch(HV_FT_SHORTCUT) } };
+  const detail = { message, duration: 10000, action: { text: 'Add Open FaceTime Shortcut', action: () => hvExtLaunch(HV_FT_SHORTCUT_INSTALL) } };
   if (ha) ha.dispatchEvent(new CustomEvent('hass-notification', { bubbles: true, composed: true, detail }));
   else hvToast(message);
 };
@@ -12289,7 +12290,7 @@ button.r{cursor:pointer}button.r:active{background:var(--fld,rgba(118,118,128,.2
 .r + .r::before,.res > .r + .r::before{content:'';position:absolute;top:0;left:16px;right:0;border-top:.5px solid var(--sep,rgba(84,84,88,.65))}
 .ls .r + .r::before{left:68px}.r.stk{flex-direction:column;align-items:stretch;gap:8px;padding:11px 16px}
 .l{flex:1;min-width:0;font-size:17px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
-.tx small,.r small,.ft,.asnote{font-size:13px;color:var(--fg2,rgba(235,235,245,.6));line-height:1.35;white-space:normal}.ft{margin:-16px 16px 24px}.asnote{margin:-16px 16px 24px}.asnote[hidden]{display:none}.asg.dis{opacity:.45;pointer-events:none;filter:grayscale(.15)}.asg.dis input{pointer-events:none}
+.tx small,.r small,.ft,.asnote{font-size:13px;color:var(--fg2,rgba(235,235,245,.6));line-height:1.35;white-space:normal}.ft{margin:-16px 16px 24px}.asnote{margin:-16px 16px 24px;display:flex;flex-wrap:wrap;align-items:center;gap:10px 12px}.asnote[hidden]{display:none}.asnote .astxt{flex:1 1 180px}.asbtn{all:unset;cursor:pointer;flex:none;font:600 13px/1.2 system-ui,-apple-system,sans-serif;padding:8px 14px;border-radius:16px;background:var(--blue,#0a84ff);color:#fff;-webkit-tap-highlight-color:transparent}.asbtn[hidden]{display:none}.asbtn:active{filter:brightness(1.15)}button.asbtn:focus-visible{outline:2px solid var(--blue,#0a84ff);outline-offset:2px}.asg.dis{opacity:.45;pointer-events:none;filter:grayscale(.15)}.asg.dis input{pointer-events:none}
 .ch{color:var(--fg2,rgba(235,235,245,.3));--mdc-icon-size:20px;flex:none}
 .ai{position:relative;flex:none;width:40px;height:40px;border-radius:22.5%;overflow:hidden;display:flex;align-items:center;justify-content:center;color:#fff;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.14)}
 .ai ha-icon{--mdc-icon-size:24px;display:flex}
@@ -12402,7 +12403,7 @@ function hvCustomAppsUI(ctx) {
     box.innerHTML = `<div class="pv"><span class="ai big"></span><b class="pn"></b></div>
 <div class="gh ash">App Store</div><div class="grp asg"><label class="r srch"><ha-icon icon="mdi:magnify"></ha-icon><input type="search" class="q" placeholder="Search the App Store" aria-label="Search the App Store" autocomplete="off" enterkeyhint="search"${D}></label><div class="res" role="listbox" aria-label="App Store results" aria-live="polite"></div></div>
 <div class="ft asft">Finds the app's name and icon. Only the words you type are sent to Apple.</div>
-<div class="asnote" hidden></div>
+<div class="asnote" hidden><span class="astxt"></span><button type="button" class="asbtn" hidden>Add Open FaceTime Shortcut</button></div>
 <div class="grp"><label class="r stk"><span class="l">Google Play link</span><input class="fi box play" type="url" inputmode="url" placeholder="https://play.google.com/store/apps/details?id=…" aria-label="Google Play link" autocomplete="off"${D}><small class="pm"></small></label></div>
 <div class="gh">App</div><div class="grp">
 <label class="r"><span class="l" style="flex:none">Name</span><input class="fi nm" maxlength="40" placeholder="Name" aria-label="Name" autocomplete="off"${D}></label>
@@ -12455,10 +12456,12 @@ ${cur && !ro ? '<div class="dl"></div>' : ''}`;
       if (qel) qel.disabled = !!(asOff || ro);
       if (asft) asft.hidden = !!asOff;
       if (note) {
+        const txt = note.querySelector('.astxt') || note;
+        const btn = note.querySelector('.asbtn');
         const iosFt = !asOff && hvExtPlatform() === 'ios' && typeof hvExtIsFaceTime === 'function' && hvExtIsFaceTime(d);
-        if (asOff) { note.hidden = false; note.textContent = "FaceTime isn't available on Android. You'll need a FaceTime link sent to this device to use FaceTime."; }
-        else if (iosFt) { note.hidden = false; note.textContent = 'On iPhone and iPad, make a one-step Shortcut named Open FaceTime (Open App → FaceTime). This app opens that Shortcut.'; }
-        else { note.hidden = true; note.textContent = ''; }
+        if (asOff) { note.hidden = false; txt.textContent = "FaceTime isn't available on Android. You'll need a FaceTime link sent to this device to use FaceTime."; if (btn) btn.hidden = true; }
+        else if (iosFt) { note.hidden = false; txt.textContent = 'On iPhone and iPad, add a one-step Shortcut named exactly Open FaceTime (Open App → FaceTime). This app opens that Shortcut.'; if (btn) btn.hidden = false; }
+        else { note.hidden = true; txt.textContent = ''; if (btn) btn.hidden = true; }
       }
     };
     const cfPaint = () => $('.cfm').setAttribute('aria-checked', String(d.confirm !== false));
@@ -12508,6 +12511,7 @@ ${cur && !ro ? '<div class="dl"></div>' : ''}`;
       const s = {}; for (const [k, v] of Object.entries(d.store || {})) if (v !== undefined && v !== null && v !== '') s[k] = v; if (Object.keys(s).length) o.store = s; o.confirm = d.confirm !== false; return o; };
     const check = o => { if (!o.name) return 'Give the app a name.'; for (const k of ['url', 'ios_url', 'android_url', 'web_url']) if (o[k] && !hvExtUrlOk(o[k])) return hvExtUrlWhy(o[k]);
       return o.url || o.ios_url || o.android_url || o.web_url ? '' : 'Choose a preset, pick an App Store result or add a link.'; };
+    const asbtn = $('.asbtn'); if (asbtn) asbtn.addEventListener('click', ev => { ev.preventDefault(); ev.stopPropagation(); hvExtLaunch(HV_FT_SHORTCUT_INSTALL); });
     $('.test').addEventListener('click', ev => { const o = clean(), w = check(Object.assign({}, o, { name: o.name || 'App' })); msg.textContent = w; if (w) return;
       hvOpenExternalApp(Object.assign({}, o, { name: o.name || 'App' }), { confirm: o.confirm, anchor: ev.currentTarget, hub: ctx.hub(), day: ctx.day && ctx.day() }); });
     if (!ro) { $('.cancel').addEventListener('click', () => ctx.go(null));
