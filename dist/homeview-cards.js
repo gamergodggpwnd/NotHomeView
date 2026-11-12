@@ -11688,6 +11688,31 @@ const hvSsSwitch = {
     const sr = this.host && this.host.shadowRoot; if (!sr) return;
     sr.querySelectorAll('.tabs,.rail,.auto,.x,.ck,.sheet,.plus').forEach(n => n.remove());
   },
+  _snapScroll() {
+    const sr = this.host && this.host.shadowRoot; if (!sr) return [];
+    const out = [];
+    for (const el of [sr, ...sr.querySelectorAll('*')]) {
+      try {
+        if ((el.scrollHeight > el.clientHeight + 1) || (el.scrollWidth > el.clientWidth + 1)) {
+          out.push({ cls: String(el.className || ''), tag: el.tagName, id: el.id || '', t: el.scrollTop, l: el.scrollLeft });
+        }
+      } catch (e) {}
+    }
+    return out;
+  },
+  _restoreScroll(snap) {
+    const sr = this.host && this.host.shadowRoot; if (!sr || !snap || !snap.length) return;
+    const els = [sr, ...sr.querySelectorAll('*')];
+    for (const s of snap) {
+      const el = els.find(e => e.tagName === s.tag && String(e.className || '') === s.cls && (e.id || '') === s.id);
+      if (el) { el.scrollTop = s.t; el.scrollLeft = s.l; }
+    }
+  },
+  _refreshCustomize() {
+    const snap = this._snapScroll();
+    this._paintCards(this.draft, this.i, 'customize');
+    this._restoreScroll(snap);
+  },
   _paintChrome() {
     const sr = this.host.shadowRoot; this._clearChrome();
     const face = this.draft.faces[this.i];
@@ -11717,7 +11742,7 @@ const hvSsSwitch = {
         b.addEventListener('click', () => {
           if (o.asStyle) { face.style = o.v; face.layout = o.v === 'modular' ? 'asymmetric' : (o.v === 'typo' ? 'editorial' : undefined); }
           else face.layout = o.v;
-          this._paintCards(this.draft, this.i, 'customize');
+          this._refreshCustomize();
         });
         rail.appendChild(b);
       }
@@ -11729,16 +11754,16 @@ const hvSsSwitch = {
         const b = document.createElement('button'); b.className = 'sw'; b.style.background = c;
         const cur = (face.colors && face.colors[main]) || (defs[0] && defs[0].d);
         if (cur && String(cur).toLowerCase() === c.toLowerCase()) b.classList.add('on');
-        b.addEventListener('click', () => { const cols = Object.assign({}, face.colors || {}); if (defs[0]) cols[defs[0].k] = c; if (defs[1]) cols[defs[1].k] = cols[defs[1].k] || defs[1].d; face.colors = cols; this._paintCards(this.draft, this.i, 'customize'); });
+        b.addEventListener('click', () => { const cols = Object.assign({}, face.colors || {}); if (defs[0]) cols[defs[0].k] = c; if (defs[1]) cols[defs[1].k] = cols[defs[1].k] || defs[1].d; face.colors = cols; this._refreshCustomize(); });
         rail.appendChild(b);
       }
       const custom = document.createElement('input'); custom.type = 'color'; custom.className = 'sw'; custom.title = 'Custom';
-      custom.addEventListener('input', ev => { const c = ev.target.value; const cols = Object.assign({}, face.colors || {}); if (defs[0]) cols[defs[0].k] = c; face.colors = cols; this._paintCards(this.draft, this.i, 'customize'); });
+      custom.addEventListener('input', ev => { const c = ev.target.value; const cols = Object.assign({}, face.colors || {}); if (defs[0]) cols[defs[0].k] = c; face.colors = cols; this._refreshCustomize(); });
       rail.appendChild(custom);
     } else if (this.tab === 'font') {
       for (const fo of HV_SS_FONTS) {
         const b = document.createElement('button'); b.className = 'th' + (face.font === fo.v ? ' on' : ''); b.style.fontFamily = fo.f; b.textContent = 'Ag'; b.style.color = '#fff'; b.style.fontSize = '18px';
-        b.addEventListener('click', () => { face.font = fo.v; this._paintCards(this.draft, this.i, 'customize'); });
+        b.addEventListener('click', () => { face.font = fo.v; this._refreshCustomize(); });
         rail.appendChild(b);
       }
     }
@@ -11749,7 +11774,7 @@ const hvSsSwitch = {
     const b = document.createElement('button'); b.className = 'auto';
     b.style.bottom = Math.round((H - size) / 2 - 52) + 'px';
     b.innerHTML = '<svg class="wand" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round"><path d="M4 20l8-8M14 4l1.5 3.5L19 9l-3.5 1.5L14 14l-1.5-3.5L9 9l3.5-1.5L14 4z"/></svg> Automatic';
-    b.addEventListener('click', () => { face.colors = null; this._paintCards(this.draft, this.i, 'customize'); });
+    b.addEventListener('click', () => { face.colors = null; this._refreshCustomize(); });
     sr.appendChild(b);
   },
   _openPicker(slotId, cur) {
@@ -11774,14 +11799,14 @@ const hvSsSwitch = {
         const row = document.createElement('div'); row.className = 'row';
         const nm = r.entity.startsWith('builtin.') ? (r.name || st.name || name) : (st.name || name);
         row.innerHTML = `<div class="ic"><ha-icon icon="${st.icon || 'mdi:shape'}"></ha-icon></div><div><div class="nm">${esc(nm)}</div><div class="st">${esc(String(st.value || r.entity))}</div></div>`;
-        row.addEventListener('click', () => { const face = this.draft.faces[this.i]; face.complications = Object.assign({}, face.complications || {}); face.complications[slotId] = { entity: r.entity }; sh.remove(); this._paintCards(this.draft, this.i, 'customize'); });
+        row.addEventListener('click', () => { const face = this.draft.faces[this.i]; face.complications = Object.assign({}, face.complications || {}); face.complications[slotId] = { entity: r.entity }; sh.remove(); this._refreshCustomize(); });
         list.appendChild(row);
       }
     };
     for (const c of hvSsComp.cats) { const b = document.createElement('b'); b.textContent = c.l; if (c.k === cat) b.className = 'on'; b.addEventListener('click', () => { cat = c.k; for (const x of cats.children) x.classList.toggle('on', x.textContent === c.l); paint(); }); cats.appendChild(b); }
     sh.querySelector('input').addEventListener('input', paint);
     sh.querySelector('.done').addEventListener('click', () => sh.remove());
-    const rm = sh.querySelector('.rm'); if (rm) rm.addEventListener('click', () => { const face = this.draft.faces[this.i]; if (face.complications) delete face.complications[slotId]; sh.remove(); this._paintCards(this.draft, this.i, 'customize'); });
+    const rm = sh.querySelector('.rm'); if (rm) rm.addEventListener('click', () => { const face = this.draft.faces[this.i]; if (face.complications) delete face.complications[slotId]; sh.remove(); this._refreshCustomize(); });
     paint(); sr.appendChild(sh);
   },
   async _save() {
