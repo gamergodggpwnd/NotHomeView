@@ -1872,7 +1872,13 @@ const hvExtPick = (t, p) => { const u = hvExtUrlOk(t.url), w = hvExtUrlOk(t.web_
 const hvExtLaunch = u => { if (/^intent:/i.test(u)) { const m = /^intent:\/\/#Intent;(?:.*;)?package=([A-Za-z0-9_.]+);/i.exec(u);
     if (m && hvExtCompanion() && !/;(action|component|scheme)=/i.test(u)) { location.href = 'app://' + m[1]; return; } location.href = u; return; }
   if (/^app:\/\//i.test(u)) { location.href = u; return; }
-  if (/^https?:/i.test(u)) { window.open(u, '_blank', 'noopener'); return; } window.open(u); };
+  if (/^https?:/i.test(u)) { window.open(u, '_blank', 'noopener'); return; }
+  // Custom schemes (tesla://, facetime-open-link://, shortcuts://, …): a same-turn
+  // top-level navigation is what Safari and the iOS Companion WKWebView can intercept
+  // from a tap. window.open often never becomes a navigation, so the page stays put
+  // and hvExtWatch reports a false "stayed".
+  try { if (typeof window !== 'undefined' && typeof window.__hvExtOnLaunch === 'function') window.__hvExtOnLaunch(u); } catch (e) {}
+  try { location.href = u; } catch (e) {} };
 // did we leave? the page hides, unloads or loses focus within ~1.5 s (up to 2.5 s while the page has no focus, e.g. iOS's own "Open in …?" prompt)
 const hvExtWatch = () => new Promise(res => { let gone = false, done = false; const t0 = Date.now(), on = () => { gone = true; }, vis = () => { if (document.hidden) gone = true; };
   document.addEventListener('visibilitychange', vis); addEventListener('pagehide', on); addEventListener('blur', on);
@@ -1891,6 +1897,18 @@ const hvExtMiss = (t, u, o) => { o = o || {}; const w = hvExtUrlOk(t.web_url), w
 // -> Promise<'left' | 'stayed' | 'none'>. With o.confirm the sheet comes first and the app opens inside its Open click (a user gesture).
 // Without it the launch happens before the first await, so a tap that calls this still counts as the gesture.
 // Known apps (Tesla, Spotify, …) get a URL scheme from HV_EXT_KNOWN when none was saved; an App Store page is not opened on iPhone or Android unless he taps it on the toast.
+const HV_FT_SHORTCUT = 'shortcuts://run-shortcut?name=Open%20FaceTime';
+const hvExtFtMiss = () => {
+  const message = "FaceTime didn't open. Make a one-step Shortcut named Open FaceTime (Open App → FaceTime), then point this custom app at shortcuts://run-shortcut?name=Open%20FaceTime";
+  const ha = document.querySelector('home-assistant');
+  const detail = { message, duration: 10000, action: { text: 'Try Shortcut link', action: () => hvExtLaunch(HV_FT_SHORTCUT) } };
+  if (ha) ha.dispatchEvent(new CustomEvent('hass-notification', { bubbles: true, composed: true, detail }));
+  else hvToast(message);
+};
+const HV_FT_SCHEMES = [
+  'facetime-open-link://', 'facetime-open-link:', 'facetime://', 'facetime:',
+  'facetime-group://', 'facetime-prompt:', 'facetime-audio://', HV_FT_SHORTCUT
+];
 function hvOpenExternalApp(target, o) { o = o || {}; const t = hvExtKnownFill(target || {}), p = hvExtPlatform();
   if (p === 'android' && typeof hvExtIsFaceTime === 'function' && hvExtIsFaceTime(t)) {
     if (o.toast !== false) {
@@ -1905,7 +1923,7 @@ function hvOpenExternalApp(target, o) { o = o || {}; const t = hvExtKnownFill(ta
   if (!u) { if (o.toast !== false) { const store = [t.web_url, t.store && t.store.play_id && hvExtPlay(t.store.play_id)].map(hvExtUrlOk).find(hvExtStorePage) || '';
       if (store) hvExtMiss(t, '', { noLink: true, store }); else hvToast(`${t.name || 'This app'} has no link to open on this device`); }
     return Promise.resolve('none'); }
-  const run = () => { hvExtLaunch(u); return hvExtWatch().then(r => { if (r === 'stayed' && o.toast !== false) hvExtMiss(t, u); return r; }); };
+  const run = () => { hvExtLaunch(u); return hvExtWatch().then(r => { if (r === 'stayed' && o.toast !== false) { if (p === 'ios' && typeof hvExtIsFaceTime === 'function' && hvExtIsFaceTime(t)) hvExtFtMiss(); else hvExtMiss(t, u); } return r; }); };
   return o.confirm ? hvExtConfirm(t, o, run) : run(); }
 // --- the icon of a custom app: its picture, else a white mdi glyph on a gradient of its colour
 const hvExtCol = c => /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(String(c || '')) ? String(c) : '#8e8e93';
@@ -12293,12 +12311,19 @@ function hvCustomAppsUI(ctx) {
         + `<span class="mv" data-no-sheet-drag><button data-a="up" data-i="${i}" aria-label="Move ${nm} up"${i ? '' : ' disabled'}><ha-icon icon="mdi:chevron-up"></ha-icon></button><button data-a="dn" data-i="${i}" aria-label="Move ${nm} down"${i < n - 1 ? '' : ' disabled'}><ha-icon icon="mdi:chevron-down"></ha-icon></button></span></div>`;
       return `<button class="r" role="listitem" data-a="open" data-id="${esc(e.id)}">${ico(e)}<span class="tx"><span class="l">${nm}</span><small>${esc(hvCaSub(e))}</small></span><ha-icon class="ch" icon="mdi:chevron-right"></ha-icon></button>`; };
     const paint = () => { const xs = L(), ro = ctx.ro; if (!xs.length || ro) edit = false;
+      const admin = !ro && !!(ctx.H && ctx.H() && ctx.H().user && ctx.H().user.is_admin === true);
+      const schemes = (typeof HV_FT_SCHEMES !== 'undefined' && HV_FT_SCHEMES) || [];
+      const test = admin && schemes.length ? `<div class="gh">FaceTime scheme test</div><div class="grp" role="group" aria-label="FaceTime scheme test"><div class="r stk"><small>Temporary. On this iPad, tap each and tell us which opens FaceTime’s recents / New Call screen.</small></div>`
+        + schemes.map(s => `<button class="r" data-a="ftscheme" data-u="${esc(s)}"><span class="l">${esc(s === HV_FT_SHORTCUT ? 'shortcuts:// … Open FaceTime' : s)}</span></button>`).join('') + '</div>' : '';
       box.innerHTML = (xs.length && !ro ? `<div class="hd"><button class="lk" data-a="edit" aria-pressed="${edit}">${edit ? 'Done' : 'Edit'}</button></div>` : '')
         + `<div class="grp ls" role="list" aria-label="Custom apps">${xs.map((e, i) => row(e, i, xs.length, ro)).join('')}`
-        + (ro ? (xs.length ? '' : '<div class="r em">No custom apps</div>') : `<button class="r add" data-a="new"><span class="pl"><ha-icon icon="mdi:plus-circle"></ha-icon></span><span class="l">Add Custom App</span></button>`) + '</div>';
+        + (ro ? (xs.length ? '' : '<div class="r em">No custom apps</div>') : `<button class="r add" data-a="new"><span class="pl"><ha-icon icon="mdi:plus-circle"></ha-icon></span><span class="l">Add Custom App</span></button>`) + '</div>'
+        + test;
       ms(box); };
     box.addEventListener('click', ev => { const b = ev.composedPath().find(n => n.dataset && n.dataset.a); if (!b || b.disabled) return; const a = b.dataset.a, xs = L();
-      if (a === 'open') { ctx.go('ca:' + b.dataset.id); return; } if (ctx.ro) return;
+      if (a === 'open') { ctx.go('ca:' + b.dataset.id); return; }
+      if (a === 'ftscheme') { const u = hvExtUrlOk(b.dataset.u); if (u) hvExtLaunch(u); return; }
+      if (ctx.ro) return;
       if (a === 'new') { ctx.go('ca-new'); return; }
       if (a === 'edit') { edit = !edit; ask = null; paint(); const e = box.querySelector('[data-a="edit"]'); if (e) e.focus(); return; }
       if (a === 'del') { ask = b.dataset.id; paint(); const d = box.querySelector('[data-a="delno"]'); if (d) d.focus(); return; }
