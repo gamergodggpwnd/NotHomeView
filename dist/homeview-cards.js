@@ -7199,7 +7199,8 @@ function hvOpenSettings(hub, app, from, goTo) {
     const h = live(); if (h && !h._sheetO && s && s.host.isConnected) h._sheetO = s; };
   const ssMount = () => { const box = pane && pane.querySelector('[data-sspick]'); if (!box) return; const inner = ssPick && ssPick.shadowRoot.firstElementChild;
     if (!ssPick || !inner || inner._dead) { ssPick = document.createElement('div'); ssPick.className = 'ssh'; ssPick.attachShadow({ mode: 'open' }).appendChild(hvSsPicker(ssShim, { mode: 'carousel', onPick: ssRefresh })); }
-    box.appendChild(ssPick); const pk = ssPick.shadowRoot.firstElementChild; if (pk && pk._recenter) pk._recenter(); };
+    box.appendChild(ssPick); const pk = ssPick.shadowRoot.firstElementChild; if (pk && pk._recenter) pk._recenter();
+    let cf = box.querySelector('.hv-ss-custfaces'); if (!cf) { cf = document.createElement('button'); cf.className = 'hv-ss-custfaces'; cf.type = 'button'; cf.textContent = 'Customize faces…'; cf.style.cssText = 'display:block;margin:14px auto 4px;border:0;background:rgba(255,255,255,.12);color:#fff;font:600 15px/1 system-ui;padding:10px 18px;border-radius:20px;cursor:pointer'; cf.addEventListener('click', ev => { ev.preventDefault(); ev.stopPropagation(); try { hvSsSwitch.openFromSettings(); } catch (e) {} }); box.appendChild(cf); } };
   // Wallpaper: the CURRENT pair and the Outer / Inner pages (hvWallpaperUI), each in its own shadow root
   const wpCtx = { H: () => H(), cfg: () => data(), save: (k, v) => save(k, v), hub: () => live(), go: v => subGo(v), flash: (m, e) => flash(m, e), wallpanel: () => act('wallpanel'),
     refresh: () => paintPane(), ssRefresh: () => ssRefresh(), get admin() { return !!(H().user && H().user.is_admin); }, get ro() { return ro(); } };
@@ -10179,9 +10180,11 @@ const HV_SSS = [
   { v: 'info', l: 'Info dashboard', s: 'Date, clock, weather and now playing' },
   { v: 'fluid', l: 'Abstract fluid', s: 'Glassy shapes on a soft gradient' },
   { v: 'typo', l: 'Modern typographic', s: 'Oversized numerals, white hands' },
+  { v: 'digital', l: 'Digital', s: 'Large typographic time with widgets' },
   { v: 'whimsy', l: 'Whimsical minimalist', s: 'Embossed numerals, dusty rose' },
   { v: 'homie', l: 'Homey', s: 'Homey waves, dances, and reacts to the weather' },
-  { v: 'glass', l: 'Glass', s: 'Live glass tiles you can use; swipe up for Home' }];
+  { v: 'glass', l: 'Glass', s: 'Live glass tiles you can use; swipe up for Home' },
+  { v: 'modular', l: 'Modular', s: 'Four widgets in a stacked or 2×2 layout' }];
 const HV_SSS_V = HV_SSS.map(x => x.v);
 // Meaningful colours per style (defaults match the reference designs). Only non-defaults are persisted.
 const HV_SS_COLS = {
@@ -10199,17 +10202,24 @@ const HV_SS_COLS = {
     { k: 'text', l: 'Numerals', d: '#060606' },
     { k: 'hands', l: 'Hands', d: '#ffffff' },
     { k: 'date', l: 'Date', d: '#0a0a0a' }],
+  digital: [
+    { k: 'bg', l: 'Background', d: '#1aa3b8' },
+    { k: 'text', l: 'Time / text', d: '#ffffff' }],
   whimsy: [
     { k: 'bg', l: 'Background', d: '#dcbdba' },
     { k: 'text', l: 'Hands', d: '#6d3431' },
     { k: 'accent', l: 'Second hand', d: '#ea5ab4' }],
+  modular: [
+    { k: 'bg', l: 'Background', d: '#0e3b4a' },
+    { k: 'text', l: 'Text', d: '#ffffff' },
+    { k: 'accent', l: 'Accent', d: '#7fd3e8' }],
   homie: [
     { k: 'bg', l: 'Background', d: '#1a1a1a' },
     { k: 'text', l: 'Weekday / date', d: '#e6e6e6' },
     { k: 'body', l: 'Homey: house walls', d: '#fffbf2' },
     { k: 'roof', l: 'Homey: roof, chimney and shoes', d: '#6ebcf4' },
     { k: 'limb', l: 'Homey: arms and legs', d: '#363a3d' }] };
-const HV_SS_SWATCH = ['#ffffff', '#0b0b0c', '#97a9af', '#5c9a68', '#f06aa8', '#5b78f0', '#6c7cf2', '#dcbdba', '#6d3431', '#ea5ab4', '#ffd166', '#118ab2', '#073b4c', '#ef476f'];
+const HV_SS_SWATCH = ['#ffffff', '#0b0b0c', '#97a9af', '#5c9a68', '#5ac8fa', '#1aa3b8', '#0a84ff', '#f06aa8', '#5b78f0', '#6c7cf2', '#dcbdba', '#6d3431', '#ea5ab4', '#ffd166', '#118ab2', '#073b4c', '#ef476f'];
 const hvSsDeep = (root, sel, d = 0) => { if (!root || d > 12) return null;
   if (root.shadowRoot) { const r = hvSsDeep(root.shadowRoot, sel, d + 1); if (r) return r; }
   const f = root.querySelector && root.querySelector(sel); if (f) return f;
@@ -10706,7 +10716,7 @@ function hvOpenHomie(hub) { if (!hub || hub._sheetO) return null; const cols = h
       const face = new HVSsFace('homie'); box.appendChild(face.el); const up = () => { try { face.applyColors(hvSsColors.get('homie')); face.update(hub._hass, new Date()); } catch (e) {} };
       up(); iv = setInterval(up, 1000); return { set hass(h) {} }; } }); }
 const HV_SS_FACE_CSS = `
-.f,.f *{pointer-events:none !important}
+.f,.f *{pointer-events:none !important}.f .slot,.f .slot *{pointer-events:auto !important}
 .f{position:absolute;inset:0;container-type:size;overflow:hidden;font-family:${FONT};-webkit-font-smoothing:antialiased;user-select:none}
 /* Design canvas is 128×100 (the landscape fit). Contain it in the viewport: a portrait screen
    letterboxes instead of stretching the canvas to the full height, which overlapped the info clock,
@@ -10745,12 +10755,18 @@ const HV_SS_FACE_CSS = `
  box-shadow:inset 0 1.2cqh 2cqh rgba(255,255,255,.45),inset 0 -1.5cqh 2.5cqh rgba(255,170,215,.65),0 1.5cqh 4cqh rgba(80,60,170,.25)}
 .fluid .sh::after{content:'';position:absolute;left:12%;top:6%;width:42%;height:18%;border-radius:50%;background:linear-gradient(180deg,rgba(255,255,255,.7),rgba(255,255,255,0));filter:blur(.4cqh)}
 /* typographic */
-.f.typo{background:var(--hv-ss-bg,#5c9a68)}
+.f.typo{background:var(--hv-ss-bg,#5c9a68);color:var(--hv-ss-date,#0a0a0a)}
 .typo .n{position:absolute;color:var(--hv-ss-text,#060606);font-weight:300;font-family:"Helvetica Neue",Helvetica,Arial,${FONT};line-height:.8;letter-spacing:-.04em;font-size:50cqh}
 .typo .n12{left:50%;top:9cqh;transform:translateX(-52%)} .typo .n6{left:50%;top:51cqh;transform:translateX(-50%)}
 .typo .n9{left:4cqw;top:31cqh} .typo .n3{right:4cqw;top:31cqh}
 .typo svg.h{position:absolute;inset:0;width:100%;height:100%}
-.typo .dc{position:absolute;left:5.5cqw;bottom:6cqh;color:var(--hv-ss-date,#0a0a0a);font-weight:600;font-size:4.6cqh;letter-spacing:.01em}
+.typo .dc{position:absolute;left:5.5cqw;bottom:6cqh;color:var(--hv-ss-date,#0a0a0a);font-weight:600;font-size:4.6cqh;letter-spacing:.01em;display:none}
+.typo.classic .n{font-weight:500;font-size:16cqh;letter-spacing:0;font-family:system-ui,-apple-system,"Helvetica Neue",sans-serif}
+.typo.classic .n12{top:7cqh;transform:translateX(-50%)}.typo.classic .n6{top:76cqh}.typo.classic .n9{left:6cqw;top:44cqh}.typo.classic .n3{right:6cqw;top:44cqh}
+.f.modular{background:var(--hv-ss-bg,#0e3b4a);color:var(--hv-ss-text,#fff)}
+.f.digital{background:var(--hv-ss-bg,#1aa3b8);color:var(--hv-ss-text,#fff)}
+.digital .tm{position:absolute;right:5cqw;top:8cqh;bottom:8cqh;width:54cqw;display:flex;flex-direction:column;justify-content:center;align-items:flex-end;font-weight:700;letter-spacing:-.07em;line-height:.82;color:var(--hv-ss-text,#fff);font-family:system-ui,-apple-system,"Helvetica Neue",sans-serif}
+.digital .hh,.digital .mm{font-size:44cqh}
 /* whimsy */
 .f.whimsy{background:linear-gradient(160deg,var(--hv-ss-bg,#dcbdba) 0%,color-mix(in srgb,var(--hv-ss-bg,#dcbdba) 85%,#000) 55%,color-mix(in srgb,var(--hv-ss-bg,#dcbdba) 75%,#000) 100%)}
 .whimsy .n{position:absolute;font-family:"Avenir Next","Helvetica Neue",${FONT};font-weight:400;font-size:15cqh;line-height:1;color:var(--hv-ss-bg,#d2b3b1);transform:translate(-50%,-50%);
@@ -10861,6 +10877,10 @@ class HVSsFace {
   _u_homie(d, hass) { const f = this.el, L = (hass && hass.locale && hass.locale.language) || undefined, q = c => f.querySelector(c), set = (c, t) => { const e = q(c); if (e.textContent !== t) e.textContent = t; };
     set('.hwd', d.toLocaleDateString(L, { weekday: 'long' })); set('.htm', d.toLocaleTimeString(L, { hour: 'numeric', minute: '2-digit' })); set('.hdn', String(d.getDate()));
     this._hmo.update(hass); }
+  _b_modular() { this.el.innerHTML = '<div class="stg"></div>'; }
+  _u_modular() {}
+  _b_digital() { this.el.innerHTML = '<div class="stg"><div class="tm"><div class="hh"></div><div class="mm"></div></div></div>'; this._hhD = this.el.querySelector('.hh'); this._mmD = this.el.querySelector('.mm'); }
+  _u_digital(d) { const hh = d.getHours() % 12 || 12, mm = String(d.getMinutes()).padStart(2, '0'); if (this._hhD) this._hhD.textContent = String(hh); if (this._mmD) this._mmD.textContent = ':' + mm; }
   update(hass, d) { d = d || new Date(); try { this['_u_' + this.s](d, hass); } catch (e) { /* keep the last frame */ } }
 }
 // Photo clock: tint Wallpanel's clock overlay only (never recolour photos)
@@ -10882,7 +10902,7 @@ const hvSsOv = {
   _sweep(root, d) { if (!root || d > 14 || !root.querySelectorAll) return;
     root.querySelectorAll('#hv-ss-style').forEach(n => { try { n.remove(); } catch (e) {} });
     for (const el of root.querySelectorAll('*')) if (el.shadowRoot) this._sweep(el.shadowRoot, d + 1); },
-  hide() { try { hvSsKeep.off('glass'); } catch (e) {} const h = this.host; this.host = null; this.face = null; this.card = null; this._g = null; this._bornAt = 0; this.style = null; this.colKey = null; this._up = false;
+  hide() { try { if (typeof hvSsSwitch !== 'undefined' && hvSsSwitch && !hvSsSwitch.mode) hvSsSwitch.hide(); } catch (e) {} try { hvSsKeep.off('glass'); } catch (e) {} const h = this.host; this.host = null; this.face = null; this.card = null; this._g = null; this._bornAt = 0; this.style = null; this.colKey = null; this._up = false;
     if (h) { try { h.remove(); } catch (e) {} } try { this._sweep(document, 0); } catch (e) {} },
   // Wallpanel can still report "running" after it has faded out (opacity 0 / visibility hidden / pointer-events none).
   // The style layer must not stay up then: it covers the screensaver settings dialog.
@@ -10921,7 +10941,7 @@ const hvSsOv = {
       return; }
     if (this._g) { if (this.card) try { this.card.hass = this.hass(); } catch (e) {} return; }
     const st = hvSs.get(), cols = hvSsColors.get(st), colKey = st + ':' + JSON.stringify(hvSsStrip(st, cols) || {});
-    if (st === 'photo') { this.hide(); hvSsPhotoTint.apply(cols.text); return; }
+    if (st === 'photo') { const keepSw = typeof hvSsSwitch !== 'undefined' && hvSsSwitch && hvSsSwitch.mode; if (!keepSw) this.hide(); hvSsPhotoTint.apply(cols.text); try { if (typeof hvSsSwitch !== 'undefined') hvSsSwitch.arm(true); } catch (e) {} return; }
     hvSsPhotoTint.clear();
     let z = parseInt(cs && cs.zIndex, 10); if (!(z > 0)) z = 1000;
     const overlayOp = run ? 1 : (isFinite(op) ? op : 1);
@@ -10935,7 +10955,7 @@ const hvSsOv = {
     // While Wallpanel is running/starting: stay fully opaque so its photo-clock never shows through a
     // translucent overlay during fade-in. Only match Wallpanel opacity while it is fading OUT after dismiss.
     this.host.style.cssText = `position:fixed;inset:0;z-index:${z + 1};pointer-events:none;opacity:${overlayOp};transition:${born || run ? 'none' : 'opacity .4s linear'}`;
-    this.face.update(this.hass(), new Date()); },
+    this.face.update(this.hass(), new Date()); try { if (typeof hvSsSwitch !== 'undefined') hvSsSwitch.arm(false); } catch (e) {} },
   _mountGlass(w, z, overlayOp, run, force) {
     const born = !this.host || this.style !== 'glass' || !this.host.isConnected || this.host.parentNode !== w.parentNode;
     if (born) { const prev = this.host;
@@ -10968,6 +10988,7 @@ const hvSsOv = {
     else if (this.card) { try { this.card.hass = this.hass(); } catch (e) {} }
     this.host.style.cssText = `position:fixed;top:0;right:0;bottom:0;left:0;width:100%;height:100%;height:100dvh;z-index:${z + 1};pointer-events:auto;opacity:${overlayOp};transition:${born || run ? 'none' : 'opacity .4s linear'};transform:none;background:#4c49d0`; },
   _wireGlass() { const h = this.host; if (!h || h.__hvGlassWired) return; h.__hvGlassWired = true;
+    try { if (typeof hvSsSwitch !== 'undefined') hvSsSwitch.hookGlass(h); } catch (e) {}
     const onTile = ev => { const path = ev.composedPath ? ev.composedPath() : []; return path.some(n => n && n.classList && (n.classList.contains('t') || n.classList.contains('ed') || n.classList.contains('cv'))); };
     h.addEventListener('pointerdown', ev => { if (ev.button > 0 || this._g) return; if (this._bornAt && Date.now() - this._bornAt < 400) return;
       const H = innerHeight || 800; if (ev.clientY < H * 0.88) return; if (onTile(ev)) return;
@@ -10994,6 +11015,698 @@ const hvSsOv = {
       if (home && home.path && home.path !== cur) hvNavigate(`/${(lv && lv.urlPath) || ssDash() || 'lovelace'}/${home.path}`);
     } catch (e) {} },
   start() { if (this.iv) return; this._hookStart(); this.iv = setInterval(() => { try { this._hookStart(); this.tick(); } catch (e) { /* next tick */ } try { hvSsHome.tick(); } catch (e) {} }, 250); } };
+
+const HV_SS_LABEL = { photo: 'PHOTO', info: 'INFO', fluid: 'FLUID', typo: 'ANALOG', digital: 'DIGITAL', whimsy: 'WHIMSY', homie: 'HOMEY', glass: 'GLASS', modular: 'MODULAR' };
+const HV_SS_FONTS = [
+  { v: 'system', l: 'System', f: 'system-ui,-apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif' },
+  { v: 'rounded', l: 'Rounded', f: 'ui-rounded,"SF Pro Rounded","Hiragino Maru Gothic ProN",system-ui,sans-serif' },
+  { v: 'serif', l: 'Serif', f: 'ui-serif,Georgia,"Times New Roman",serif' },
+  { v: 'mono', l: 'Mono', f: 'ui-monospace,"SF Mono",Menlo,monospace' },
+  { v: 'condensed', l: 'Condensed', f: '"Arial Narrow","Helvetica Neue Condensed",system-ui,sans-serif' }
+];
+const HV_SS_SLOT = {
+  photo: [{ id: 'bl', x: 3, y: 78, w: 28, h: 18 }, { id: 'br', x: 69, y: 78, w: 28, h: 18 }],
+  typo: [{ id: 'bl', x: 6, y: 82, w: 30, h: 14 }, { id: 'br', x: 64, y: 82, w: 30, h: 14 }],
+  digital: [{ id: 'tl', x: 3.5, y: 5, w: 36, h: 28 }, { id: 'bl', x: 3.5, y: 70, w: 36, h: 24 }],
+  info: [{ id: 'media', x: 3, y: 70, w: 28, h: 26 }, { id: 'wx', x: 69, y: 70, w: 28, h: 26 }, { id: 'bc', x: 37, y: 88, w: 26, h: 10 }],
+  glass: [],
+  homie: [{ id: 'br', x: 70, y: 78, w: 26, h: 18 }],
+  fluid: [{ id: 'bl', x: 3, y: 78, w: 28, h: 16 }, { id: 'br', x: 69, y: 78, w: 28, h: 16 }],
+  whimsy: [{ id: 'bl', x: 3, y: 80, w: 26, h: 15 }, { id: 'br', x: 71, y: 80, w: 26, h: 15 }],
+  modular: []
+};
+const HV_SS_MOD = {
+  /* Video 17.5s: date (taller) + events left, clock + weather right — not a 1+3 stack. */
+  asymmetric: [
+    { id: 'tall', x: 3.2, y: 3.5, w: 46, h: 52 },
+    { id: 'r1', x: 51.2, y: 3.5, w: 45.6, h: 52 },
+    { id: 'r2', x: 3.2, y: 57.5, w: 46, h: 39 },
+    { id: 'r3', x: 51.2, y: 57.5, w: 45.6, h: 39 }
+  ],
+  grid: [
+    { id: 'q1', x: 3.2, y: 3.5, w: 45.6, h: 46 },
+    { id: 'q2', x: 51.2, y: 3.5, w: 45.6, h: 46 },
+    { id: 'q3', x: 3.2, y: 51.5, w: 45.6, h: 45 },
+    { id: 'q4', x: 51.2, y: 51.5, w: 45.6, h: 45 }
+  ],
+  stack: [
+    { id: 'tall', x: 3.2, y: 3.5, w: 44, h: 93 },
+    { id: 'r1', x: 50.5, y: 3.5, w: 46.3, h: 29.5 },
+    { id: 'r2', x: 50.5, y: 35.2, w: 46.3, h: 29.5 },
+    { id: 'r3', x: 50.5, y: 66.8, w: 46.3, h: 29.5 }
+  ]
+};
+const hvSsSlotsFor = (face) => {
+  const st = (face && face.style) || 'photo';
+  if (st === 'modular') {
+    const l = face.layout;
+    if (l === 'grid' || l === '2x2') return HV_SS_MOD.grid;
+    if (l === 'stack') return HV_SS_MOD.stack;
+    return HV_SS_MOD.asymmetric;
+  }
+  return HV_SS_SLOT[st] || [];
+};
+const hvSsFontCss = (v) => ((HV_SS_FONTS.find(x => x.v === v) || HV_SS_FONTS[0]).f);
+const hvSsIsAdmin = () => { try { const h = document.querySelector('home-assistant'); return !!(h && h.hass && h.hass.user && h.hass.user.is_admin); } catch (e) { return false; } };
+const HV_SS_SW_CSS = `
+:host{all:initial;display:block;position:fixed;inset:0;font-family:system-ui,-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",sans-serif;-webkit-font-smoothing:antialiased;color:#fff}
+.dim{position:absolute;inset:0;background:#000;opacity:0;transition:opacity .25s ease;pointer-events:none}
+.dim.on{opacity:.86}
+.stage{position:absolute;inset:0;overflow:hidden}
+.track{position:absolute;top:0;bottom:0;left:0;display:flex;align-items:center;will-change:transform}
+.card{position:relative;flex:none;display:flex;flex-direction:column;align-items:center;pointer-events:auto}
+.card .lab{font-size:10px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#fff;margin:0 0 8px;text-shadow:0 1px 4px rgba(0,0,0,.45)}
+.card .win{position:relative;overflow:hidden;background:#111;border-radius:22%;box-shadow:0 18px 40px rgba(0,0,0,.45);isolation:isolate}
+.card .win > .f{position:absolute;inset:0;border-radius:inherit;overflow:hidden}
+.card .cz{margin-top:14px;border:0;background:rgba(60,60,67,.72);color:#fff;font:600 15px/1.1 system-ui,-apple-system,sans-serif;padding:9px 20px;border-radius:20px;cursor:pointer;-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+.card .cz[hidden]{display:none}
+.tabs{position:absolute;top:calc(14px + env(safe-area-inset-top,0px));left:0;right:0;display:flex;justify-content:center;gap:16px;z-index:5;pointer-events:auto}
+.tabs b{font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.38);padding:6px 0;cursor:pointer}
+.tabs b.on{color:#fff}
+.rail{position:absolute;right:max(8px, env(safe-area-inset-right,0px));top:50%;transform:translateY(-50%);display:flex;flex-direction:column;align-items:center;gap:10px;max-height:62%;overflow-y:auto;z-index:5;pointer-events:auto;scrollbar-width:none;padding:6px}
+.rail::-webkit-scrollbar{display:none}
+.rail .th{width:54px;height:54px;border-radius:14px;border:0;padding:0;background:#222;overflow:hidden;cursor:pointer;position:relative;flex:none;box-shadow:0 0 0 2px rgba(255,255,255,.12)}
+.rail .th.on{box-shadow:0 0 0 3px #fff}
+.rail .th .f{position:absolute;inset:0;pointer-events:none !important}
+.rail .sw{width:36px;height:36px;border-radius:50%;border:0;padding:0;cursor:pointer;flex:none;box-shadow:inset 0 0 0 1px rgba(255,255,255,.25)}
+.rail .sw.on{box-shadow:0 0 0 3px #fff, inset 0 0 0 1px rgba(0,0,0,.25)}
+.auto{position:absolute;left:50%;transform:translateX(-50%);display:inline-flex;align-items:center;gap:7px;border:0;background:rgba(48,48,52,.88);color:#fff;font:600 14px/1 system-ui;padding:8px 16px 8px 12px;border-radius:20px;cursor:pointer;z-index:5;pointer-events:auto;-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}
+.auto .wand{width:16px;height:16px;display:block;flex:none}
+.plus{position:absolute;right:calc(18px + env(safe-area-inset-right,0px));bottom:22%;width:36px;height:36px;border-radius:50%;border:0;background:rgba(48,48,52,.9);color:#fff;cursor:pointer;z-index:6;pointer-events:auto;display:flex;align-items:center;justify-content:center;-webkit-backdrop-filter:blur(12px)}
+.plus svg{width:18px;height:18px;display:block}
+.x,.ck{position:absolute;bottom:calc(16px + env(safe-area-inset-bottom,0px));width:46px;height:46px;border-radius:50%;border:0;cursor:pointer;z-index:6;pointer-events:auto;display:flex;align-items:center;justify-content:center}
+.x{left:calc(16px + env(safe-area-inset-left,0px));background:#3a3a3e;color:#fff}
+.ck{right:calc(16px + env(safe-area-inset-right,0px));background:#0a84ff;color:#fff}
+.x svg,.ck svg{width:22px;height:22px;display:block}
+.sheet{position:absolute;left:0;right:0;bottom:0;max-height:78%;background:#1c1c1e;border-radius:16px 16px 0 0;z-index:8;pointer-events:auto;display:flex;flex-direction:column;transform:translateY(110%);transition:transform .28s cubic-bezier(.2,.8,.2,1);color:#fff;box-shadow:0 -8px 40px rgba(0,0,0,.45)}
+.sheet.on{transform:none}
+.sheet .grab{width:36px;height:5px;border-radius:3px;background:rgba(255,255,255,.28);margin:8px auto 4px}
+.sheet .hd{display:flex;align-items:center;justify-content:space-between;padding:4px 16px 10px}
+.sheet .hd h3{margin:0;font-size:17px;font-weight:700}
+.sheet .hd .done{border:0;background:none;color:#0a84ff;font:600 17px/1 system-ui;cursor:pointer}
+.sheet input[type=search]{margin:0 16px 10px;border:0;border-radius:10px;background:#2c2c2e;color:#fff;font:400 16px/1.2 system-ui;padding:9px 12px;outline:none}
+.sheet .cats{display:flex;gap:8px;overflow-x:auto;padding:0 16px 10px;scrollbar-width:none}
+.sheet .cats b{flex:none;background:#2c2c2e;color:#fff;border-radius:14px;padding:6px 12px;font:600 13px/1 system-ui;cursor:pointer}
+.sheet .cats b.on{background:#0a84ff}
+.sheet .list{overflow:auto;padding:0 12px 24px;flex:1;-webkit-overflow-scrolling:touch}
+.sheet .row{display:flex;align-items:center;gap:12px;padding:10px 8px;border-bottom:1px solid rgba(255,255,255,.08);cursor:pointer}
+.sheet .row .ic{width:36px;height:36px;border-radius:9px;background:#2c2c2e;display:flex;align-items:center;justify-content:center;flex:none}
+.sheet .row .nm{font-weight:600;font-size:16px}
+.sheet .row .st{font-size:13px;color:rgba(255,255,255,.55);margin-top:1px}
+.sheet .rm{margin:8px 16px 16px;border:0;background:#2c2c2e;color:#ff453a;font:600 16px/1 system-ui;padding:12px;border-radius:12px;cursor:pointer}
+.slot{position:absolute;box-sizing:border-box;border-radius:14%;overflow:hidden;z-index:4;color:inherit}
+.slot.empty{border:1.5px dashed rgba(255,255,255,.55);background:rgba(255,255,255,.06)}
+.comp{width:100%;height:100%;display:flex;flex-direction:column;justify-content:center;padding:8% 10%;box-sizing:border-box;container-type:size;color:inherit}
+.comp .k{font-size:18cqh;opacity:.72;font-weight:600;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.comp .v{font-size:42cqh;font-weight:700;line-height:1.05;letter-spacing:-.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.comp.date{padding:10% 12%;justify-content:flex-end;color:inherit}
+.comp.date .k{font-size:16cqh;letter-spacing:.04em;opacity:.85;text-transform:none}
+.comp.date .v{font-size:62cqh;letter-spacing:-.06em;font-weight:700}
+.comp.date.compact{flex-direction:row;align-items:baseline;justify-content:flex-start;gap:8%;padding:2% 4%}
+.comp.date.compact .k,.comp.date.compact .v{font-size:36cqh;font-weight:650;letter-spacing:.02em}
+.comp.clock{align-items:center;padding:6%}
+.comp.clock svg{width:88%;height:88%}
+.comp.wxw{justify-content:flex-end;padding:10% 12%}
+.comp.wxw .v{font-size:52cqh}
+.comp.wxw .sub{text-transform:none;font-weight:500;opacity:.7;font-size:14cqh;margin-top:2cqh}
+.comp.ev{justify-content:flex-start;padding:10% 10%;gap:6cqh}
+.comp.ev .er{display:flex;flex-direction:column;gap:1cqh}
+.comp.ev .ed{font-size:14cqh;font-weight:600;opacity:.7}
+.comp.ev .et{font-size:20cqh;font-weight:650;line-height:1.15;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.comp.media{flex-direction:row;align-items:flex-end;gap:8%;padding:10%}
+.comp.media .art{width:38%;aspect-ratio:1;border-radius:14%;background:linear-gradient(160deg,#b9d7ee,#6f9ccc);background-size:cover;background-position:center;flex:none;box-shadow:0 4px 12px rgba(0,0,0,.25)}
+.comp.media .mv{flex:1;min-width:0}
+.comp.media .v{font-size:22cqh;text-transform:uppercase}
+`;
+
+const hvSsFaces = {
+  key() { return `hvSsFaces:${ssDash() || 'lovelace'}`; },
+  _cfg() { try { const lv = hvSsLv(), hub = lv && lv.config && hvHubCfgOf(lv.config); return hub || null; } catch (e) { return null; } },
+  _defaults() {
+    const cur = hvSs.get();
+    const faces = HV_SSS_V.map(s => {
+      const f = { style: s, colors: null, font: 'system', layout: s === 'modular' ? 'asymmetric' : (s === 'typo' ? 'editorial' : undefined), complications: {} };
+      if (s === 'modular') f.complications = { tall: { entity: 'builtin.date' }, r1: { entity: 'builtin.clock' }, r2: { entity: 'builtin.event' }, r3: { entity: 'builtin.weather' }, q1: { entity: 'builtin.date' }, q2: { entity: 'builtin.clock' }, q3: { entity: 'builtin.media' }, q4: { entity: 'builtin.weather' } };
+      if (s === 'typo') f.complications = { bl: { entity: 'builtin.date' } };
+      if (s === 'digital') f.complications = { tl: { entity: 'builtin.date' }, bl: { entity: 'builtin.weather' } };
+      return f;
+    });
+    const i = Math.max(0, HV_SSS_V.indexOf(cur));
+    return { faces, i };
+  },
+  raw() {
+    const hub = this._cfg(), loc = mhLs.get(this.key());
+    let data = null;
+    if (loc && Array.isArray(loc.faces) && loc.faces.length) data = loc;
+    else if (hub && Array.isArray(hub.screensaver_faces) && hub.screensaver_faces.length) data = { faces: hub.screensaver_faces, i: hub.screensaver_face_index || 0 };
+    if (!data) data = this._defaults();
+    data.faces = data.faces.filter(f => f && HV_SSS_V.includes(f.style));
+    if (!data.faces.length) data = this._defaults();
+    data.i = Math.max(0, Math.min(data.faces.length - 1, data.i | 0));
+    return data;
+  },
+  list() { return this.raw().faces; },
+  index() { return this.raw().i; },
+  active() { const d = this.raw(); return d.faces[d.i]; },
+  async commit(data, hass) {
+    data.i = Math.max(0, Math.min(data.faces.length - 1, data.i | 0));
+    const face = data.faces[data.i];
+    mhLs.set(this.key(), { faces: data.faces, i: data.i });
+    if (face) {
+      try { await hvSs.set(face.style, hass); } catch (e) {}
+      if (face.colors) { try { await hvSsColors.setStyle(face.style, face.colors, hass); } catch (e) {} }
+      else { try { await hvSsColors.setStyle(face.style, null, hass); } catch (e) {} }
+    }
+    try { await hvSsSaveHub(hass, hub => { hub.screensaver_faces = data.faces; hub.screensaver_face_index = data.i; return true; }); } catch (e) {}
+    return data;
+  }
+};
+
+const hvSsComp = {
+  cats: [
+    { k: 'all', l: 'All', test: () => true },
+    { k: 'weather', l: 'Weather', test: e => e.startsWith('weather.') },
+    { k: 'climate', l: 'Climate', test: e => e.startsWith('climate.') },
+    { k: 'light', l: 'Lights', test: e => e.startsWith('light.') },
+    { k: 'lock', l: 'Locks', test: e => e.startsWith('lock.') },
+    { k: 'cover', l: 'Covers', test: e => e.startsWith('cover.') },
+    { k: 'sensor', l: 'Sensors', test: e => /^(sensor|binary_sensor)\./.test(e) },
+    { k: 'media', l: 'Media', test: e => e.startsWith('media_player.') },
+    { k: 'person', l: 'People', test: e => e.startsWith('person.') },
+    { k: 'calendar', l: 'Calendar', test: e => e.startsWith('calendar.') },
+    { k: 'battery', l: 'Battery', test: e => { const s = this._st && this._st[e]; return !!(s && s.attributes && s.attributes.device_class === 'battery'); } },
+    { k: 'builtin', l: 'Built-in', test: e => e.startsWith('builtin.') }
+  ],
+  builtins: [
+    { entity: 'builtin.date', name: 'Date', icon: 'mdi:calendar' },
+    { entity: 'builtin.weather', name: 'Weather', icon: 'mdi:weather-partly-cloudy' },
+    { entity: 'builtin.event', name: 'Next event', icon: 'mdi:calendar-clock' },
+    { entity: 'builtin.sun', name: 'Sunrise / Sunset', icon: 'mdi:weather-sunset' },
+    { entity: 'builtin.battery', name: 'Battery', icon: 'mdi:battery' },
+    { entity: 'builtin.media', name: 'Now playing', icon: 'mdi:music' },
+    { entity: 'builtin.clock', name: 'Analog clock', icon: 'mdi:clock-outline' }
+  ],
+  state(hass, entity) {
+    const S = (hass && hass.states) || {}, L = (hass && hass.locale && hass.locale.language) || undefined;
+    if (entity === 'builtin.date') {
+      const d = new Date();
+      const wd = d.toLocaleDateString(L, { weekday: 'short' }) + ' ' + d.toLocaleDateString(L, { month: 'short' });
+      const day = String(d.getDate());
+      return { name: 'Date', icon: 'mdi:calendar', kind: 'date', value: day, label: wd, wd, day };
+    }
+    if (entity === 'builtin.weather' || (entity && entity.startsWith('weather.'))) {
+      const w = (entity && S[entity]) || S[Object.keys(S).find(k => k.startsWith('weather.')) || ''] || null;
+      if (!w) return { name: 'Weather', icon: 'mdi:weather-partly-cloudy', value: '—', label: 'Weather' };
+      const tp = w.attributes.temperature, u = w.attributes.temperature_unit || '';
+      const loc = w.attributes.friendly_name || 'Weather';
+      const raw = (w.state || '').replace(/_/g, ' ');
+      const pretty = { partlycloudy: 'Partly Cloudy', 'partly cloudy': 'Partly Cloudy', cloudy: 'Cloudy', sunny: 'Sunny', clear: 'Clear', rainy: 'Rainy', pouring: 'Pouring', snowy: 'Snowy', fog: 'Fog', hail: 'Hail', lightning: 'Lightning', windy: 'Windy' };
+      const cond = pretty[raw.toLowerCase()] || raw.replace(/\b\w/g, c => c.toUpperCase());
+      const forecast = w.attributes.forecast && w.attributes.forecast[0];
+      const hl = forecast ? (Math.round(forecast.temperature) + '° / ' + Math.round(forecast.templow != null ? forecast.templow : forecast.temperature) + '°') : '';
+      return { name: loc, icon: 'mdi:weather-partly-cloudy', kind: 'weather', value: (tp != null ? Math.round(tp) + '°' : w.state), label: loc, loc, condition: cond, hl };
+    }
+    if (entity === 'builtin.event' || (entity && entity.startsWith('calendar.'))) {
+      const evs = Object.values(S).filter(s => s && s.entity_id && s.entity_id.startsWith('calendar.') && s.attributes && (s.attributes.message || s.attributes.description));
+      const items = evs.slice(0, 3).map(s => {
+        let when = s.attributes.start_time || s.attributes.start || '';
+        try { if (when) when = new Date(when).toLocaleTimeString(L, { hour: 'numeric', minute: '2-digit' }); } catch (e) {}
+        return { t: s.attributes.message || s.attributes.description || s.attributes.friendly_name, d: when };
+      });
+      const ev = evs[0];
+      return { name: 'Next event', icon: 'mdi:calendar-clock', kind: 'event', value: ev ? (ev.attributes.message || 'Event') : 'No events', label: items[0] ? items[0].d : 'Calendar', items };
+    }
+    if (entity === 'builtin.sun') {
+      const sun = S['sun.sun']; const rise = sun && sun.attributes && sun.attributes.next_rising;
+      let txt = '—';
+      try { if (rise) txt = new Date(rise).toLocaleTimeString(L, { hour: 'numeric', minute: '2-digit' }); } catch (e) {}
+      return { name: 'Sun', icon: 'mdi:weather-sunset', value: txt, label: 'Sunrise' };
+    }
+    if (entity === 'builtin.battery') {
+      const b = Object.values(S).find(s => s && s.attributes && s.attributes.device_class === 'battery');
+      return { name: b ? (b.attributes.friendly_name || 'Battery') : 'Battery', icon: 'mdi:battery', value: b ? (b.state + (b.attributes.unit_of_measurement || '%')) : '—', label: 'Battery' };
+    }
+    if (entity === 'builtin.clock') {
+      const d = new Date(); return { name: 'Clock', icon: 'mdi:clock-outline', value: d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }), label: 'Clock', kind: 'clock', date: d };
+    }
+    if (entity === 'builtin.media' || (entity && entity.startsWith('media_player.'))) {
+      const m = (entity && entity.startsWith('media_player.') && S[entity]) || (entity === 'builtin.media' && Object.values(S).find(s => s && s.entity_id && s.entity_id.startsWith('media_player.') && (s.state === 'playing' || s.attributes.media_title))) || (entity && S[entity]);
+      return { name: m ? (m.attributes.media_title || m.attributes.friendly_name || 'Media') : 'Now playing', icon: 'mdi:music', kind: 'media', value: m ? (m.attributes.media_artist || m.state) : '—', label: 'Media', title: m && (m.attributes.media_title || m.attributes.friendly_name), artist: m && m.attributes.media_artist, art: m && (m.attributes.entity_picture || m.attributes.entity_picture_local), playing: !!(m && m.state === 'playing') };
+    }
+    const s = entity && S[entity];
+    if (!s) return { name: entity || '', icon: 'mdi:shape', value: '—', label: '' };
+    const unit = s.attributes.unit_of_measurement || '';
+    return { name: s.attributes.friendly_name || entity, icon: s.attributes.icon || 'mdi:shape', value: (s.state + (unit ? ' ' + unit : '')), label: s.attributes.device_class || s.entity_id.split('.')[0] };
+  },
+  html(st) {
+    if (st.kind === 'clock') {
+      const d = st.date || new Date(), ah = ((d.getHours() % 12) + d.getMinutes() / 60) / 12 * 360, am = d.getMinutes() / 60 * 360;
+      let ticks = '';
+      for (let i = 0; i < 12; i++) ticks += '<g transform="rotate(' + (i * 30) + ' 50 50)"><line x1="50" y1="8" x2="50" y2="14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></g>';
+      return '<div class="comp clock"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" fill="none" stroke="currentColor" stroke-width="2.4"/>' + ticks
+        + '<g transform="rotate(' + ah + ' 50 50)"><line x1="50" y1="50" x2="50" y2="24" stroke="currentColor" stroke-width="4" stroke-linecap="round"/></g>'
+        + '<g transform="rotate(' + am + ' 50 50)"><line x1="50" y1="50" x2="50" y2="16" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></g>'
+        + '<circle cx="50" cy="50" r="3.2" fill="currentColor"/></svg></div>';
+    }
+    if (st.kind === 'date') {
+      return `<div class="comp date"><div class="k">${esc(st.wd || st.label || '')}</div><div class="v">${esc(st.day || st.value || '')}</div></div>`;
+    }
+    if (st.kind === 'weather') {
+      return `<div class="comp wxw"><div class="k">${esc(st.loc || st.name || '')}</div><div class="v">${esc(String(st.value || '—'))}</div><div class="k sub">${esc(st.condition || st.hl || '')}</div></div>`;
+    }
+    if (st.kind === 'event') {
+      const items = (st.items && st.items.length) ? st.items : [{ t: st.value, d: st.label }];
+      return '<div class="comp ev">' + items.map(it => `<div class="er"><div class="ed">${esc(it.d || '')}</div><div class="et">${esc(it.t || '')}</div></div>`).join('') + '</div>';
+    }
+    if (st.kind === 'media') {
+      const art = st.art ? `<div class="art" style="background-image:url(&quot;${esc(st.art)}&quot;)"></div>` : '<div class="art"></div>';
+      return `<div class="comp media">${art}<div class="mv"><div class="v">${esc(st.title || st.name || 'Now playing')}</div><div class="k">${esc(st.artist || st.value || '')}</div></div></div>`;
+    }
+    const ic = st.icon ? `<ha-icon class="i" icon="${st.icon}"></ha-icon>` : '';
+    return `<div class="comp">${ic}<div class="v">${esc(String(st.value || '—'))}</div><div class="k">${esc(st.label || st.name || '')}</div></div>`;
+  }
+};
+
+const hvSsSwitch = {
+  host: null, mode: null, draft: null, tab: 'style', i: 0, slotId: null, _g: null, _hold: null, _iv: null, _faces: null,
+  reduced() { try { return !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) { return false; } },
+  openFromSettings() { this.open('customize', { fromSettings: true }); },
+  currentZ() { const w = ssWallpanel(); let z = 1000; try { z = parseInt(getComputedStyle(w || document.body).zIndex, 10) || 1000; } catch (e) {} return z; },
+  hide() { this._clearHold(); this._g = null; this.mode = null; this.draft = null; this.slotId = null; if (this._iv) { clearInterval(this._iv); this._iv = null; } if (this._liv) { clearInterval(this._liv); this._liv = null; }
+    const h = this.host; this.host = null; this._faces = null; if (h) { try { h.remove(); } catch (e) {} } document.querySelectorAll('#hv-ss-switch').forEach(n => n.remove()); },
+  _clearHold() { if (this._hold) { clearTimeout(this._hold); this._hold = null; } },
+  ensure(photo) {
+    const w = ssWallpanel(); if (!w && !photo) return null;
+    const parent = (w && w.parentNode) || document.body;
+    if (this.host && this.host.isConnected && this.host.parentNode === parent) return this.host;
+    this.hide();
+    const h = document.createElement('div'); h.id = 'hv-ss-switch';
+    const sr = h.attachShadow({ mode: 'open' });
+    sr.innerHTML = `<style>${HV_SS_SW_CSS}${HV_SS_FACE_CSS}
+.f .slot, .f .slot *{pointer-events:auto !important}
+.f, .f *:not(.slot):not(.slot *){pointer-events:none !important}
+</style><div class="dim"></div><div class="stage"></div>`;
+    parent.appendChild(h); this.host = h;
+    this._wireGest(h);
+    return h;
+  },
+  layout() {
+    const h = this.host; if (!h) return;
+    const z = this.currentZ();
+    const editing = this.mode === 'switch' || this.mode === 'customize';
+    h.style.cssText = `position:fixed;inset:0;z-index:${z + 2};pointer-events:auto;`;
+    if (!editing) { /* live: transparent catcher */ h.style.background = 'transparent'; h.shadowRoot.querySelector('.dim').classList.remove('on'); }
+  },
+  arm(photo) {
+    if (this.mode === 'switch' || this.mode === 'customize') { this.layout(); return; }
+    if (!photo && typeof hvSsOv !== 'undefined' && hvSsOv.style === 'glass') return;
+    this.ensure(!!photo); this.layout(); this._paintLiveSlots();
+    if (!this._liv) this._liv = setInterval(() => { if (!this.mode) this._paintLiveSlots(); }, 1000);
+  },
+  hookGlass(el) {
+    if (!el || el.__hvSwGlass) return; el.__hvSwGlass = true;
+    // Do not preventDefault on tiles or the bottom swipe-up zone; only take horizontal swipe / long-press on empty glass.
+    el.addEventListener('pointerdown', ev => {
+      if (this.mode || ev.button > 0) return;
+      const path = ev.composedPath ? ev.composedPath() : [];
+      if (path.some(n => n && n.classList && (n.classList.contains('t') || n.classList.contains('ed') || n.classList.contains('cv') || n.classList.contains('slot')))) return;
+      const H = innerHeight || 800;
+      if (ev.clientY >= H * 0.88) return;
+      this._g = { x: ev.clientX, y: ev.clientY, t: Date.now(), id: ev.pointerId, dx: 0, dy: 0, swiping: false, soft: true };
+      this._clearHold();
+      this._hold = setTimeout(() => { if (!this._g || this._g.swiping) return; this._g = null; this.open('switch'); }, 500);
+    }, true);
+    el.addEventListener('pointermove', ev => {
+      const g = this._g; if (!g || !g.soft || ev.pointerId !== g.id || this.mode) return;
+      g.dx = ev.clientX - g.x; g.dy = ev.clientY - g.y;
+      if (!g.swiping && Math.hypot(g.dx, g.dy) > 10) {
+        this._clearHold();
+        if (Math.abs(g.dx) > Math.abs(g.dy) * 1.1) {
+          let edge = false;
+          try { edge = !!(hvSsHome.on() && g.x < 28 && g.dx > 0); } catch (e) {}
+          if (!edge) { g.swiping = true; this.ensure(true); this._liveSwipe(g.dx); }
+        }
+      } else if (g.swiping) this._liveSwipe(g.dx);
+    }, true);
+    const end = ev => {
+      const g = this._g; if (!g || !g.soft || (ev.pointerId != null && ev.pointerId !== g.id)) return;
+      this._clearHold(); this._g = null;
+      if (g.swiping) this._endLiveSwipe(g);
+    };
+    el.addEventListener('pointerup', end, true); el.addEventListener('pointercancel', end, true);
+  },
+  _paintLiveSlots() {
+    const face = hvSsFaces.active(); if (!face || face.style === 'glass') return;
+    const live = (typeof hvSsOv !== 'undefined' && hvSsOv.face && hvSsOv.face.el) ? hvSsOv.face.el : null;
+    if (live) {
+      const comps = face.complications || {};
+      if (face.style === 'info') {
+        const mu = live.querySelector('.mu'); if (mu) mu.style.visibility = comps.media ? 'hidden' : '';
+        const wx = live.querySelector('.wx'); if (wx) wx.style.visibility = comps.wx ? 'hidden' : '';
+      }
+      const dc = live.querySelector('.dc'); if (dc) dc.style.display = 'none';
+    }
+    const h = this.host; if (!h || !h.shadowRoot) return;
+    const stg = h.shadowRoot.querySelector('.stage'); if (!stg) return;
+    let wrap = stg.querySelector('.f.live-slots');
+    if (!wrap) {
+      wrap = document.createElement('div'); wrap.className = 'f live-slots'; wrap.style.cssText = 'position:absolute;inset:0;background:transparent';
+      wrap.innerHTML = '<div class="stg"></div>'; stg.appendChild(wrap);
+    }
+    wrap.className = 'f live-slots ' + (face.style || '');
+    this._paintSlots(wrap, face, false, true);
+  },
+  _wireGest(h) {
+    if (h.__hvSwWired) return; h.__hvSwWired = true;
+    const sr = h.shadowRoot;
+    h.addEventListener('pointerdown', ev => {
+      if (ev.button > 0) return;
+      if (this.mode === 'customize' || this.mode === 'switch') return; // UI handles its own
+      const path = ev.composedPath ? ev.composedPath() : [];
+      if (path.some(n => n && n.classList && n.classList.contains('slot'))) return; // complications
+      if (hvSsOv.style === 'glass') {
+        const H = innerHeight || 800;
+        if (ev.clientY >= H * 0.88) return; // glass swipe-up
+        if (path.some(n => n && n.classList && (n.classList.contains('t') || n.classList.contains('ed') || n.classList.contains('cv')))) return;
+      }
+      ev.preventDefault();
+      this._g = { x: ev.clientX, y: ev.clientY, t: Date.now(), id: ev.pointerId, dx: 0, dy: 0, swiping: false };
+      try { h.setPointerCapture(ev.pointerId); } catch (e) {}
+      this._clearHold();
+      this._hold = setTimeout(() => { if (!this._g || this._g.swiping) return; this._g = null; this.open('switch'); }, 500);
+    }, true);
+    h.addEventListener('pointermove', ev => {
+      const g = this._g; if (!g || ev.pointerId !== g.id || this.mode) return;
+      g.dx = ev.clientX - g.x; g.dy = ev.clientY - g.y;
+      if (!g.swiping && Math.hypot(g.dx, g.dy) > 10) {
+        this._clearHold();
+        if (Math.abs(g.dx) > Math.abs(g.dy) * 1.1) {
+          // swipe_open_home from the left edge wins
+          let edge = false;
+          try { edge = !!(hvSsHome.on() && g.x < 28 && g.dx > 0); } catch (e) {}
+          if (!edge) { g.swiping = true; this._liveSwipe(g.dx); }
+        }
+      } else if (g.swiping) this._liveSwipe(g.dx);
+    }, true);
+    const end = ev => {
+      const g = this._g; if (!g || (ev.pointerId != null && ev.pointerId !== g.id)) return;
+      this._clearHold(); this._g = null;
+      if (g.swiping) { this._endLiveSwipe(g); return; }
+      if (Math.hypot(g.dx, g.dy) < 8 && Date.now() - g.t < 400 && ev.type === 'pointerup') this._dismiss();
+    };
+    h.addEventListener('pointerup', end, true); h.addEventListener('pointercancel', end, true);
+  },
+  _dismiss() { try { const w = ssWallpanel(); if (w && typeof w.stopScreensaver === 'function') w.stopScreensaver(); } catch (e) {} },
+  _liveSwipe(dx) {
+    this._prepTrack();
+    const W = innerWidth || 800;
+    const tr = this.host.shadowRoot.querySelector('.track');
+    if (tr) tr.style.transform = `translate3d(${dx}px,0,0)`;
+  },
+  _prepTrack() {
+    if (this._faces) return;
+    this.renderLivePeek();
+  },
+  renderLivePeek() {
+    const data = hvSsFaces.raw();
+    this._paintCards(data, data.i, 'peek');
+  },
+  async _endLiveSwipe(g) {
+    const W = innerWidth || 800, v = g.dx / Math.max(1, Date.now() - g.t);
+    const data = hvSsFaces.raw(); let i = data.i;
+    if (g.dx < -W * 0.18 || v < -0.6) i = Math.min(data.faces.length - 1, i + 1);
+    else if (g.dx > W * 0.18 || v > 0.6) i = Math.max(0, i - 1);
+    data.i = i;
+    const red = this.reduced();
+    const tr = this.host && this.host.shadowRoot.querySelector('.track');
+    if (tr) { tr.style.transition = red ? 'none' : 'transform .28s cubic-bezier(.2,.8,.2,1)'; tr.style.transform = 'translate3d(0,0,0)'; }
+    await hvSsFaces.commit(data, hvSsOv.hass());
+    setTimeout(() => { this._faces = null; if (this.host && this.mode == null) { const stg = this.host.shadowRoot.querySelector('.stage'); if (stg) stg.innerHTML = ''; } hvSsOv.tick(true); }, red ? 0 : 280);
+  },
+  open(mode, opts) {
+    opts = opts || {};
+    this.ensure(true);
+    const data = JSON.parse(JSON.stringify(hvSsFaces.raw()));
+    this.draft = data; this.i = data.i; this.mode = mode; this.tab = 'style'; this.slotId = null;
+    this.layout();
+    this.host.shadowRoot.querySelector('.dim').classList.add('on');
+    this._paintCards(data, this.i, mode);
+    this._tickFaces();
+  },
+  _tickFaces() {
+    if (this._iv) clearInterval(this._iv);
+    this._iv = setInterval(() => {
+      const hass = hvSsOv.hass(), d = new Date();
+      if (this._faces) for (const x of this._faces) { try { x.face.update(hass, d); this._paintSlots(x.face.el, x.faceData, this.mode === 'customize' && this.tab === 'widgets', x.faceData === this.draft.faces[this.i]); } catch (e) {} }
+    }, 1000);
+  },
+  _cardSize(mode) {
+    const W = innerWidth || 800, H = innerHeight || 800, short = Math.min(W, H);
+    if (mode === 'customize') return Math.round(short * 0.62);
+    if (mode === 'switch' || mode === 'peek') return Math.round(short * 0.72);
+    return short;
+  },
+  _paintCards(data, i, mode) {
+    const sr = this.host.shadowRoot, stg = sr.querySelector('.stage');
+    const W = innerWidth || 800, H = innerHeight || 800, size = this._cardSize(mode);
+    const gap = Math.round(size * 0.16);
+    stg.innerHTML = '';
+    this._faces = [];
+    const track = document.createElement('div'); track.className = 'track';
+    const admin = hvSsIsAdmin();
+    data.faces.forEach((face, n) => {
+      if (mode === 'customize' && n !== i) return;
+      const card = document.createElement('div'); card.className = 'card' + (mode === 'customize' ? ' editing' : ''); card.style.width = size + 'px';
+      const showLab = mode !== 'customize';
+      card.innerHTML = `${showLab ? '<div class="lab">' + (HV_SS_LABEL[face.style] || face.style) + '</div>' : '<div class="lab" hidden></div>'}<div class="win"></div>${mode !== 'customize' && admin ? '<button class="cz" type="button">Customize</button>' : '<button class="cz" type="button" hidden>Customize</button>'}`;
+      card.style.marginRight = gap + 'px';
+      const win = card.querySelector('.win'); win.style.width = size + 'px'; win.style.height = size + 'px';
+      const f = this._mkFace(face, false); win.appendChild(f.el); this._applyFaceLook(f, face);
+      this._paintSlots(f.el, face, mode === 'customize' && this.tab === 'widgets', true);
+      this._faces.push({ el: card, face: f, faceData: face, n });
+      if (mode !== 'peek') {
+        card.querySelector('.cz').addEventListener('click', ev => { ev.stopPropagation(); this.i = n; this.mode = 'customize'; this.tab = 'style'; this._paintCards(this.draft, this.i, 'customize'); this._paintChrome(); });
+        win.addEventListener('click', ev => { if (this.mode === 'switch') { ev.stopPropagation(); this._activate(n); } });
+      }
+      track.appendChild(card);
+    });
+    stg.appendChild(track);
+    const railShift = (mode === 'customize' && this.tab !== 'widgets') ? Math.min(36, Math.max(0, size * 0.08)) : 0;
+    const idx = (mode === 'customize') ? 0 : i;
+    const left = (W - size) / 2 - idx * (size + gap) - railShift;
+    track.style.left = '0px'; track.style.transform = `translate3d(${left}px,0,0)`;
+    track.style.transition = (mode === 'peek' || this.reduced()) ? 'none' : 'transform .28s cubic-bezier(.2,.8,.2,1)';
+    if (mode === 'switch' || mode === 'customize') this._wireTrack(track, size, gap, data);
+    if (mode === 'customize') this._paintChrome();
+    else { this._clearChrome(); if (mode === 'switch' && hvSsIsAdmin()) this._paintPlus(); }
+  },
+  _paintPlus() {
+    const sr = this.host && this.host.shadowRoot; if (!sr) return;
+    const b = document.createElement('button'); b.className = 'plus'; b.setAttribute('aria-label', 'Add face');
+    b.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M12 6v12M6 12h12"/></svg>';
+    b.addEventListener('click', ev => { ev.stopPropagation(); this._addFace(); });
+    sr.appendChild(b);
+  },
+  _addFace() {
+    const data = this.draft || hvSsFaces.raw();
+    data.faces.push({ style: 'typo', colors: null, font: 'system', layout: 'editorial', complications: { bl: { entity: 'builtin.date' } } });
+    this.draft = data; this.i = data.faces.length - 1; data.i = this.i;
+    this._paintCards(data, this.i, 'switch');
+  },
+  _wireTrack(track, size, gap, data) {
+    let g = null;
+    track.addEventListener('pointerdown', ev => {
+      if (ev.target.closest && (ev.target.closest('.cz') || ev.target.closest('.slot') || ev.target.closest('.tabs') || ev.target.closest('.rail'))) return;
+      g = { x: ev.clientX, t: Date.now(), x0: ev.clientX, id: ev.pointerId };
+      track.style.transition = 'none';
+      try { track.setPointerCapture(ev.pointerId); } catch (e) {}
+    });
+    track.addEventListener('pointermove', ev => {
+      if (!g || ev.pointerId !== g.id) return;
+      const dx = ev.clientX - g.x0, W = innerWidth || 800;
+      const railShift = (this.mode === 'customize' && this.tab !== 'widgets') ? Math.min(28, Math.max(0, size * 0.06)) : 0;
+      const left = (W - size) / 2 - this.i * (size + gap) + dx - railShift;
+      track.style.transform = `translate3d(${left}px,0,0)`;
+    });
+    const end = ev => {
+      if (!g || (ev.pointerId != null && ev.pointerId !== g.id)) return;
+      const dx = ev.clientX - g.x0, v = dx / Math.max(1, Date.now() - g.t);
+      let i = this.i;
+      if (dx < -40 || v < -0.5) i = Math.min(data.faces.length - 1, i + 1);
+      else if (dx > 40 || v > 0.5) i = Math.max(0, i - 1);
+      g = null; this.i = i; this.draft.i = i;
+      this._paintCards(this.draft, this.i, this.mode);
+    };
+    track.addEventListener('pointerup', end); track.addEventListener('pointercancel', end);
+  },
+  _mkFace(face, thumb) {
+    let f;
+    try { f = new HVSsFace(face.style, !!thumb); } catch (e) { f = new HVSsFace('info', !!thumb); }
+    this._applyFaceLook(f, face);
+    try { f.update(hvSsOv.hass(), new Date()); } catch (e) {}
+    return f;
+  },
+  _applyFaceLook(f, face) {
+    const cols = face.colors || hvSsColors.get(face.style);
+    try { f.applyColors(cols); } catch (e) {}
+    if (face.font) f.el.style.fontFamily = hvSsFontCss(face.font);
+    if (face.style === 'typo' && face.layout === 'classic') f.el.classList.add('classic');
+    else f.el.classList.remove('classic');
+  },
+  _paintSlots(root, face, editing, active) {
+    if (!root || !root.querySelector) return;
+    const stg = root.querySelector('.stg') || root;
+    stg.querySelectorAll('.slot').forEach(n => n.remove());
+    const slots = hvSsSlotsFor(face);
+    const comps = face.complications || {};
+    for (const s of slots) {
+      const el = document.createElement('div'); el.className = 'slot' + (comps[s.id] ? '' : ' empty') + (s.h <= 18 ? ' compact' : ''); el.dataset.id = s.id;
+      el.style.left = s.x + 'cqw'; el.style.top = s.y + 'cqh'; el.style.width = s.w + 'cqw'; el.style.height = s.h + 'cqh';
+      if (comps[s.id]) { const st = hvSsComp.state(hvSsOv.hass(), comps[s.id].entity); el.innerHTML = hvSsComp.html(st); el.dataset.entity = comps[s.id].entity; if (s.h <= 18) { const c = el.querySelector('.comp.date'); if (c) c.classList.add('compact'); } }
+      if (editing && active) el.addEventListener('click', ev => { ev.stopPropagation(); ev.preventDefault(); this._openPicker(s.id, comps[s.id]); });
+      else if (!editing && comps[s.id] && comps[s.id].entity && !String(comps[s.id].entity).startsWith('builtin.')) {
+        el.addEventListener('click', ev => { ev.stopPropagation(); ev.preventDefault(); this._moreInfo(comps[s.id].entity); });
+      }
+      if (!editing && !comps[s.id]) el.style.display = 'none';
+      if (!editing && comps[s.id]) el.classList.remove('empty');
+      stg.appendChild(el);
+    }
+    if (face.style === 'info') {
+      const mu = root.querySelector('.mu'); if (mu) mu.style.visibility = comps.media ? 'hidden' : '';
+      const wx = root.querySelector('.wx'); if (wx) wx.style.visibility = comps.wx ? 'hidden' : '';
+    }
+    const dc = root.querySelector('.dc'); if (dc) dc.style.display = 'none';
+  },
+  _moreInfo(entityId) {
+    try {
+      const ev = new CustomEvent('hass-more-info', { detail: { entityId }, bubbles: true, composed: true });
+      document.querySelector('home-assistant') ? document.querySelector('home-assistant').dispatchEvent(ev) : document.body.dispatchEvent(ev);
+      const z = this.currentZ() + 20;
+      const s = document.getElementById('hv-ss-moreinfo-z') || document.createElement('style');
+      s.id = 'hv-ss-moreinfo-z';
+      s.textContent = `ha-more-info-dialog,ha-dialog,hui-dialog-edit-entity,.mdc-dialog{z-index:${z} !important}`;
+      document.documentElement.appendChild(s);
+    } catch (e) {}
+  },
+  _clearChrome() {
+    const sr = this.host && this.host.shadowRoot; if (!sr) return;
+    sr.querySelectorAll('.tabs,.rail,.auto,.x,.ck,.sheet,.plus').forEach(n => n.remove());
+  },
+  _paintChrome() {
+    const sr = this.host.shadowRoot; this._clearChrome();
+    const face = this.draft.faces[this.i];
+    const hasFont = face.style === 'typo' || face.style === 'digital' || face.style === 'photo' || face.style === 'fluid' || face.style === 'whimsy';
+    const tabs = document.createElement('div'); tabs.className = 'tabs';
+    const names = [['style', 'STYLE']].concat([['color', 'COLOR']], hasFont ? [['font', 'FONT']] : [], [['widgets', 'WIDGETS']]);
+    for (const [k, l] of names) { const b = document.createElement('b'); b.textContent = l; if (k === this.tab) b.className = 'on'; b.addEventListener('click', () => { this.tab = k; this._paintCards(this.draft, this.i, 'customize'); }); tabs.appendChild(b); }
+    sr.appendChild(tabs);
+    const x = document.createElement('button'); x.className = 'x'; x.setAttribute('aria-label', 'Cancel'); x.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+    x.addEventListener('click', () => this._cancel());
+    const ck = document.createElement('button'); ck.className = 'ck'; ck.setAttribute('aria-label', 'Save'); ck.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l5 5 9-11"/></svg>';
+    ck.addEventListener('click', () => this._save());
+    sr.appendChild(x); sr.appendChild(ck);
+    if (this.tab === 'style' || this.tab === 'color' || this.tab === 'font') this._paintRail(face);
+    if (this.tab === 'color') this._paintAuto(face);
+  },
+  _paintRail(face) {
+    const sr = this.host.shadowRoot, rail = document.createElement('div'); rail.className = 'rail';
+    if (this.tab === 'style') {
+      const opts = face.style === 'modular' ? [{ v: 'asymmetric', l: 'Split' }, { v: 'grid', l: '2×2' }, { v: 'stack', l: 'Stack' }]
+        : face.style === 'typo' ? [{ v: 'editorial', l: 'Editorial' }, { v: 'classic', l: 'Classic' }]
+        : HV_SSS_V.map(s => ({ v: s, l: HV_SS_LABEL[s], asStyle: true }));
+      for (const o of opts) {
+        const b = document.createElement('button'); b.className = 'th' + (((face.layout || (face.style === 'modular' ? 'asymmetric' : 'editorial')) === o.v) || (o.asStyle && face.style === o.v) ? ' on' : '');
+        const thumb = this._mkFace(o.asStyle ? Object.assign({}, face, { style: o.v }) : Object.assign({}, face, { layout: o.v }), true);
+        b.appendChild(thumb.el);
+        b.addEventListener('click', () => {
+          if (o.asStyle) { face.style = o.v; face.layout = o.v === 'modular' ? 'asymmetric' : (o.v === 'typo' ? 'editorial' : undefined); }
+          else face.layout = o.v;
+          this._paintCards(this.draft, this.i, 'customize');
+        });
+        rail.appendChild(b);
+      }
+    } else if (this.tab === 'color') {
+      const defs = HV_SS_COLS[face.style] || [];
+      const main = (defs[0] && defs[0].k) || 'bg';
+      const swatches = Array.from(new Set([...(defs.map(d => d.d)), ...HV_SS_SWATCH]));
+      for (const c of swatches) {
+        const b = document.createElement('button'); b.className = 'sw'; b.style.background = c;
+        const cur = (face.colors && face.colors[main]) || (defs[0] && defs[0].d);
+        if (cur && String(cur).toLowerCase() === c.toLowerCase()) b.classList.add('on');
+        b.addEventListener('click', () => { const cols = Object.assign({}, face.colors || {}); if (defs[0]) cols[defs[0].k] = c; if (defs[1]) cols[defs[1].k] = cols[defs[1].k] || defs[1].d; face.colors = cols; this._paintCards(this.draft, this.i, 'customize'); });
+        rail.appendChild(b);
+      }
+      const custom = document.createElement('input'); custom.type = 'color'; custom.className = 'sw'; custom.title = 'Custom';
+      custom.addEventListener('input', ev => { const c = ev.target.value; const cols = Object.assign({}, face.colors || {}); if (defs[0]) cols[defs[0].k] = c; face.colors = cols; this._paintCards(this.draft, this.i, 'customize'); });
+      rail.appendChild(custom);
+    } else if (this.tab === 'font') {
+      for (const fo of HV_SS_FONTS) {
+        const b = document.createElement('button'); b.className = 'th' + (face.font === fo.v ? ' on' : ''); b.style.fontFamily = fo.f; b.textContent = 'Ag'; b.style.color = '#fff'; b.style.fontSize = '18px';
+        b.addEventListener('click', () => { face.font = fo.v; this._paintCards(this.draft, this.i, 'customize'); });
+        rail.appendChild(b);
+      }
+    }
+    sr.appendChild(rail);
+  },
+  _paintAuto(face) {
+    const sr = this.host.shadowRoot, H = innerHeight || 800, size = this._cardSize('customize');
+    const b = document.createElement('button'); b.className = 'auto';
+    b.style.bottom = Math.round((H - size) / 2 - 52) + 'px';
+    b.innerHTML = '<svg class="wand" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round"><path d="M4 20l8-8M14 4l1.5 3.5L19 9l-3.5 1.5L14 14l-1.5-3.5L9 9l3.5-1.5L14 4z"/></svg> Automatic';
+    b.addEventListener('click', () => { face.colors = null; this._paintCards(this.draft, this.i, 'customize'); });
+    sr.appendChild(b);
+  },
+  _openPicker(slotId, cur) {
+    this.slotId = slotId;
+    const sr = this.host.shadowRoot; sr.querySelectorAll('.sheet').forEach(n => n.remove());
+    const sh = document.createElement('div'); sh.className = 'sheet on';
+    sh.innerHTML = `<div class="grab"></div><div class="hd"><h3>Add Widget</h3><button class="done" type="button">Done</button></div><input type="search" placeholder="Search" /><div class="cats"></div><div class="list"></div>${cur ? '<button class="rm" type="button">Remove Widget</button>' : ''}`;
+    const hass = hvSsOv.hass(), S = (hass && hass.states) || {};
+    hvSsComp._st = S;
+    const cats = sh.querySelector('.cats'); let cat = 'all';
+    const paint = () => {
+      const q = (sh.querySelector('input').value || '').toLowerCase();
+      const list = sh.querySelector('.list'); list.innerHTML = '';
+      const tes = hvSsComp.cats.find(c => c.k === cat) || hvSsComp.cats[0];
+      const rows = hvSsComp.builtins.concat(Object.keys(S).sort().map(id => ({ entity: id, name: (S[id].attributes && S[id].attributes.friendly_name) || id, icon: (S[id].attributes && S[id].attributes.icon) || 'mdi:shape', state: S[id] })));
+      for (const r of rows) {
+        if (cat !== 'all' && cat !== 'builtin' && !tes.test(r.entity)) continue;
+        if (cat === 'builtin' && !r.entity.startsWith('builtin.')) continue;
+        const name = r.name || r.entity;
+        if (q && !(`${name} ${r.entity}`).toLowerCase().includes(q)) continue;
+        const st = hvSsComp.state(hass, r.entity);
+        const row = document.createElement('div'); row.className = 'row';
+        const nm = r.entity.startsWith('builtin.') ? (r.name || st.name || name) : (st.name || name);
+        row.innerHTML = `<div class="ic"><ha-icon icon="${st.icon || 'mdi:shape'}"></ha-icon></div><div><div class="nm">${esc(nm)}</div><div class="st">${esc(String(st.value || r.entity))}</div></div>`;
+        row.addEventListener('click', () => { const face = this.draft.faces[this.i]; face.complications = Object.assign({}, face.complications || {}); face.complications[slotId] = { entity: r.entity }; sh.remove(); this._paintCards(this.draft, this.i, 'customize'); });
+        list.appendChild(row);
+      }
+    };
+    for (const c of hvSsComp.cats) { const b = document.createElement('b'); b.textContent = c.l; if (c.k === cat) b.className = 'on'; b.addEventListener('click', () => { cat = c.k; for (const x of cats.children) x.classList.toggle('on', x.textContent === c.l); paint(); }); cats.appendChild(b); }
+    sh.querySelector('input').addEventListener('input', paint);
+    sh.querySelector('.done').addEventListener('click', () => sh.remove());
+    const rm = sh.querySelector('.rm'); if (rm) rm.addEventListener('click', () => { const face = this.draft.faces[this.i]; if (face.complications) delete face.complications[slotId]; sh.remove(); this._paintCards(this.draft, this.i, 'customize'); });
+    paint(); sr.appendChild(sh);
+  },
+  async _save() {
+    const data = this.draft; data.i = this.i;
+    await hvSsFaces.commit(data, hvSsOv.hass());
+    this.hide(); hvSsOv.tick(true);
+  },
+  _cancel() {
+    this.draft = null; this.mode = 'switch';
+    const data = hvSsFaces.raw(); this.i = data.i;
+    this._paintCards(data, this.i, 'switch');
+  },
+  async _activate(n) {
+    const data = this.draft || hvSsFaces.raw(); data.i = n;
+    await hvSsFaces.commit(data, hvSsOv.hass());
+    this.hide(); hvSsOv.tick(true);
+  }
+};
+if (typeof window !== 'undefined') window.hvSsAPI = { ov: hvSsOv, faces: hvSsFaces, sw: hvSsSwitch, slots: hvSsSlotsFor, labels: HV_SS_LABEL };
+
+
 /* swipe_open_home on the screensaver: a lock-screen-style Home button (bottom left) and a left-to-right swipe each open the
    Home app as a sheet over the running screensaver (it stays up until you close Home). Its own layer just above Wallpanel's and the style faces, only while the setting is on and a screensaver
    is showing (every style); only the button takes touches, so a tap anywhere else still reaches Wallpanel and dismisses it as before. */
