@@ -1869,22 +1869,28 @@ const hvExtPick = (t, p) => { const u = hvExtUrlOk(t.url), w = hvExtUrlOk(t.web_
   return u && /^https?:/i.test(u) ? u : (w || u); };
 // open it. intent: links go through location.href (the Companion app and Chrome both catch them there); in the Android Companion app a plain
 // "open this app" intent becomes app://<package>, which the app opens with the package's own launcher entry (or its Play Store page)
-const hvExtLaunch = u => { if (/^intent:/i.test(u)) { const m = /^intent:\/\/#Intent;(?:.*;)?package=([A-Za-z0-9_.]+);/i.exec(u);
-    if (m && hvExtCompanion() && !/;(action|component|scheme)=/i.test(u)) { location.href = 'app://' + m[1]; return; } location.href = u; return; }
-  if (/^app:\/\//i.test(u)) { location.href = u; return; }
-  if (/^https?:/i.test(u)) { window.open(u, '_blank', 'noopener'); return; }
-  // Custom schemes (tesla://, facetime-open-link://, shortcuts://, …): a same-turn
-  // top-level navigation is what Safari and the iOS Companion WKWebView can intercept
-  // from a tap. window.open often never becomes a navigation, so the page stays put
-  // and hvExtWatch reports a false "stayed".
-  try { if (typeof window !== 'undefined' && typeof window.__hvExtOnLaunch === 'function') window.__hvExtOnLaunch(u); } catch (e) {}
-  try { location.href = u; } catch (e) {} };
+const hvExtLaunch = (u, method) => { if (/^intent:/i.test(u)) { const m = /^intent:\/\/#Intent;(?:.*;)?package=([A-Za-z0-9_.]+);/i.exec(u);
+    if (m && hvExtCompanion() && !/;(action|component|scheme)=/i.test(u)) { location.href = 'app://' + m[1]; return { method: 'href', ok: true }; } location.href = u; return { method: 'href', ok: true }; }
+  if (/^app:\/\//i.test(u)) { location.href = u; return { method: 'href', ok: true }; }
+  if (/^https?:/i.test(u)) { const w = window.open(u, '_blank', 'noopener'); return { method: 'open', ok: !!w, win: !!w }; }
+  // Custom schemes: the pre-bfc752a path. iOS/Android Companion hands window.open()
+  // of these to the system, as HA's own "url" tap action does.
+  try { if (typeof window !== 'undefined' && typeof window.__hvExtOnLaunch === 'function') window.__hvExtOnLaunch(u, method || 'open'); } catch (e) {}
+  method = method || 'open';
+  if (method === 'href') { try { location.href = u; return { method, ok: true }; } catch (e) { return { method, ok: false }; } }
+  if (method === 'anchor') {
+    try { const a = document.createElement('a'); a.href = u; a.rel = 'noreferrer'; a.target = '_blank'; a.style.display = 'none';
+      document.body.appendChild(a); a.click(); a.remove(); return { method, ok: true }; }
+    catch (e) { return { method, ok: false }; }
+  }
+  try { const w = window.open(u); return { method: 'open', ok: true, win: !!w }; }
+  catch (e) { return { method: 'open', ok: false, win: false }; } };
 // did we leave? the page hides, unloads or loses focus within ~1.5 s (up to 2.5 s while the page has no focus, e.g. iOS's own "Open in …?" prompt)
 const hvExtWatch = () => new Promise(res => { let gone = false, done = false; const t0 = Date.now(), on = () => { gone = true; }, vis = () => { if (document.hidden) gone = true; };
-  document.addEventListener('visibilitychange', vis); addEventListener('pagehide', on); addEventListener('blur', on);
-  const end = v => { if (done) return; done = true; document.removeEventListener('visibilitychange', vis); removeEventListener('pagehide', on); removeEventListener('blur', on); res(v); };
-  const tick = () => { if (gone || document.hidden) return end('left'); const el = Date.now() - t0, foc = !document.hasFocus || document.hasFocus();
-    if (el >= 2500 || (el >= 1500 && foc)) return end('stayed'); setTimeout(tick, 100); };
+  document.addEventListener('visibilitychange', vis); addEventListener('pagehide', on); addEventListener('blur', on); try { addEventListener('freeze', on); } catch (e) {}
+  const end = v => { if (done) return; done = true; document.removeEventListener('visibilitychange', vis); removeEventListener('pagehide', on); removeEventListener('blur', on); try { removeEventListener('freeze', on); } catch (e) {} res(v); };
+  const left = () => gone || document.hidden || (typeof document.hasFocus === 'function' && !document.hasFocus());
+  const tick = () => { if (left()) return end('left'); if (Date.now() - t0 >= 1500) return end('stayed'); setTimeout(tick, 100); };
   setTimeout(tick, 100); });
 const hvExtMiss = (t, u, o) => { o = o || {}; const w = hvExtUrlOk(t.web_url), web = w && /^https:/i.test(w) && w !== u ? w : '', ha = document.querySelector('home-assistant');
   const store = hvExtUrlOk(o.store) || web, isStore = hvExtStorePage(store);
@@ -1905,9 +1911,10 @@ const hvExtFtMiss = () => {
   if (ha) ha.dispatchEvent(new CustomEvent('hass-notification', { bubbles: true, composed: true, detail }));
   else hvToast(message);
 };
+const HV_FT_METHODS = [{ id: 'open', label: 'window.open' }, { id: 'anchor', label: 'anchor click' }, { id: 'href', label: 'location.href' }];
 const HV_FT_SCHEMES = [
-  'facetime-open-link://', 'facetime-open-link:', 'facetime://', 'facetime:',
-  'facetime-group://', 'facetime-prompt:', 'facetime-audio://', HV_FT_SHORTCUT
+  'facetime-open-link://', 'facetime://', 'facetime:',
+  'facetime-audio://', 'facetime-group://', 'facetime-prompt:', HV_FT_SHORTCUT
 ];
 function hvOpenExternalApp(target, o) { o = o || {}; const t = hvExtKnownFill(target || {}), p = hvExtPlatform();
   if (p === 'android' && typeof hvExtIsFaceTime === 'function' && hvExtIsFaceTime(t)) {
@@ -1923,7 +1930,11 @@ function hvOpenExternalApp(target, o) { o = o || {}; const t = hvExtKnownFill(ta
   if (!u) { if (o.toast !== false) { const store = [t.web_url, t.store && t.store.play_id && hvExtPlay(t.store.play_id)].map(hvExtUrlOk).find(hvExtStorePage) || '';
       if (store) hvExtMiss(t, '', { noLink: true, store }); else hvToast(`${t.name || 'This app'} has no link to open on this device`); }
     return Promise.resolve('none'); }
-  const run = () => { hvExtLaunch(u); return hvExtWatch().then(r => { if (r === 'stayed' && o.toast !== false) { if (p === 'ios' && typeof hvExtIsFaceTime === 'function' && hvExtIsFaceTime(t)) hvExtFtMiss(); else hvExtMiss(t, u); } return r; }); };
+  const run = () => { const launched = hvExtLaunch(u); return hvExtWatch().then(r => {
+    const opened = r === 'left' || !!(launched && launched.win);
+    if (opened) return 'left';
+    if (r === 'stayed' && o.toast !== false) { if (p === 'ios' && typeof hvExtIsFaceTime === 'function' && hvExtIsFaceTime(t)) hvExtFtMiss(); else hvExtMiss(t, u); }
+    return r; }); };
   return o.confirm ? hvExtConfirm(t, o, run) : run(); }
 // --- the icon of a custom app: its picture, else a white mdi glyph on a gradient of its colour
 const hvExtCol = c => /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(String(c || '')) ? String(c) : '#8e8e93';
@@ -12278,6 +12289,11 @@ button.r{cursor:pointer}button.r:active{background:var(--fld,rgba(118,118,128,.2
 .cf{flex-wrap:wrap}.cf .l{white-space:normal;font-size:15px;flex-basis:100%}.dz{all:unset;cursor:pointer;color:#fff;background:#ff3b30;border-radius:8px;padding:6px 14px;font-size:15px;font-weight:600}
 .em{color:var(--fg2,rgba(235,235,245,.6));justify-content:center}
 .gh{font-size:13px;text-transform:uppercase;letter-spacing:.02em;color:var(--fg2,rgba(235,235,245,.6));margin:0 16px 7px}
+.ftr{flex-direction:column;align-items:stretch;gap:8px;padding:10px 16px}
+.ftr .fl{font-size:15px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all}
+.ftms{display:flex;flex-wrap:wrap;gap:8px}
+.ftm{all:unset;cursor:pointer;font:600 13px/1.1 system-ui;padding:8px 12px;border-radius:16px;background:var(--fld,rgba(118,118,128,.24));color:var(--fg,#fff)}
+.ftm:active{filter:brightness(1.25)}button.ftm:focus-visible{outline:2px solid var(--blue,#0a84ff);outline-offset:2px}
 /* the add / edit page */
 .pv{display:flex;flex-direction:column;align-items:center;gap:10px;margin:0 0 22px}
 .pv .ai{width:96px;height:96px;box-shadow:0 8px 22px rgba(0,0,0,.22),inset 0 0 0 .5px rgba(0,0,0,.14)}.pv .ai ha-icon{--mdc-icon-size:56px}
@@ -12356,8 +12372,11 @@ function hvCustomAppsUI(ctx) {
     const paint = () => { const xs = L(), ro = ctx.ro; if (!xs.length || ro) edit = false;
       const admin = !ro && !!(ctx.H && ctx.H() && ctx.H().user && ctx.H().user.is_admin === true);
       const schemes = (typeof HV_FT_SCHEMES !== 'undefined' && HV_FT_SCHEMES) || [];
-      const test = admin && schemes.length ? `<div class="gh">FaceTime scheme test</div><div class="grp" role="group" aria-label="FaceTime scheme test"><div class="r stk"><small>Temporary. On this iPad, tap each and tell us which opens FaceTime’s recents / New Call screen.</small></div>`
-        + schemes.map(s => `<button class="r" data-a="ftscheme" data-u="${esc(s)}"><span class="l">${esc(s === HV_FT_SHORTCUT ? 'shortcuts:// … Open FaceTime' : s)}</span></button>`).join('') + '</div>' : '';
+      const methods = (typeof HV_FT_METHODS !== 'undefined' && HV_FT_METHODS) || [{ id: 'open', label: 'window.open' }, { id: 'anchor', label: 'anchor click' }];
+      const test = admin && schemes.length ? `<div class="gh">FaceTime scheme test</div><div class="grp" role="group" aria-label="FaceTime scheme test"><div class="r stk"><small>Temporary. Try Tesla on the Home Screen first. Then tap each FaceTime method and tell us which one opens FaceTime’s recents / New Call screen.</small></div>`
+        + schemes.map(s => { const lab = s === HV_FT_SHORTCUT ? 'shortcuts:// … Open FaceTime' : s;
+          const btns = methods.map(m => `<button type="button" class="ftm" data-a="ftscheme" data-u="${esc(s)}" data-m="${m.id}">${esc(m.label)}</button>`).join('');
+          return `<div class="r ftr"><span class="fl">${esc(lab)}</span><div class="ftms">${btns}</div></div>`; }).join('') + '</div>' : '';
       box.innerHTML = (xs.length && !ro ? `<div class="hd"><button class="lk" data-a="edit" aria-pressed="${edit}">${edit ? 'Done' : 'Edit'}</button></div>` : '')
         + `<div class="grp ls" role="list" aria-label="Custom apps">${xs.map((e, i) => row(e, i, xs.length, ro)).join('')}`
         + (ro ? (xs.length ? '' : '<div class="r em">No custom apps</div>') : `<button class="r add" data-a="new"><span class="pl"><ha-icon icon="mdi:plus-circle"></ha-icon></span><span class="l">Add Custom App</span></button>`) + '</div>'
@@ -12365,7 +12384,7 @@ function hvCustomAppsUI(ctx) {
       ms(box); };
     box.addEventListener('click', ev => { const b = ev.composedPath().find(n => n.dataset && n.dataset.a); if (!b || b.disabled) return; const a = b.dataset.a, xs = L();
       if (a === 'open') { ctx.go('ca:' + b.dataset.id); return; }
-      if (a === 'ftscheme') { const u = hvExtUrlOk(b.dataset.u); if (u) hvExtLaunch(u); return; }
+      if (a === 'ftscheme') { const u = hvExtUrlOk(b.dataset.u); if (u) hvExtLaunch(u, b.dataset.m || 'open'); return; }
       if (ctx.ro) return;
       if (a === 'new') { ctx.go('ca-new'); return; }
       if (a === 'edit') { edit = !edit; ask = null; paint(); const e = box.querySelector('[data-a="edit"]'); if (e) e.focus(); return; }
