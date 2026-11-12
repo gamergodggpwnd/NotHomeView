@@ -1864,8 +1864,17 @@ const hvExtUrlWhy = u => { u = String(u == null ? '' : u).trim(); if (!u || hvEx
   if (/\s/.test(u)) return 'A link can\'t have spaces in it.'; if (!/^[a-z][a-z0-9+.-]*:/i.test(u)) return 'Add the start of the link, like https:// or spotify:';
   return 'That kind of link can\'t be used here. Use an app link (like spotify:) or an https:// address.'; };
 // the link for this device: iOS ios_url, Android android_url, else url; a computer uses web_url when url is an app's own scheme
-const hvExtPick = (t, p) => { const u = hvExtUrlOk(t.url), w = hvExtUrlOk(t.web_url);
-  if (p === 'ios') return hvExtUrlOk(t.ios_url) || u || w; if (p === 'android') return hvExtUrlOk(t.android_url) || u || w;
+const hvExtPick = (t, p) => { const u = hvExtUrlOk(t.url), w = hvExtUrlOk(t.web_url), ios = hvExtUrlOk(t.ios_url);
+  if (p === 'ios') {
+    if (ios && u && ios !== u) {
+      const k = typeof hvExtKnownOf === 'function' ? hvExtKnownOf(t) : null;
+      const L = k && typeof hvExtKnownLinks === 'function' ? hvExtKnownLinks(k) : {};
+      const auto = [L && (L.ios_url || L.url), typeof HV_FT_SHORTCUT !== 'undefined' ? HV_FT_SHORTCUT : '', 'facetime-open-link://', 'facetime-open-link:'].filter(Boolean);
+      if (auto.indexOf(ios) >= 0 && auto.indexOf(u) < 0 && !(typeof hvExtBareFt === 'function' && hvExtBareFt(u))) return u;
+    }
+    return ios || u || w;
+  }
+  if (p === 'android') return hvExtUrlOk(t.android_url) || u || w;
   return u && /^https?:/i.test(u) ? u : (w || u); };
 // open it. intent: links go through location.href (the Companion app and Chrome both catch them there); in the Android Companion app a plain
 // "open this app" intent becomes app://<package>, which the app opens with the package's own launcher entry (or its Play Store page)
@@ -1911,11 +1920,6 @@ const hvExtFtMiss = () => {
   if (ha) ha.dispatchEvent(new CustomEvent('hass-notification', { bubbles: true, composed: true, detail }));
   else hvToast(message);
 };
-const HV_FT_METHODS = [{ id: 'open', label: 'window.open' }, { id: 'anchor', label: 'anchor click' }, { id: 'href', label: 'location.href' }];
-const HV_FT_SCHEMES = [
-  'facetime-open-link://', 'facetime://', 'facetime:',
-  'facetime-audio://', 'facetime-group://', 'facetime-prompt:', HV_FT_SHORTCUT
-];
 function hvOpenExternalApp(target, o) { o = o || {}; const t = hvExtKnownFill(target || {}), p = hvExtPlatform();
   if (p === 'android' && typeof hvExtIsFaceTime === 'function' && hvExtIsFaceTime(t)) {
     if (o.toast !== false) {
@@ -1933,7 +1937,10 @@ function hvOpenExternalApp(target, o) { o = o || {}; const t = hvExtKnownFill(ta
   const run = () => { const launched = hvExtLaunch(u); return hvExtWatch().then(r => {
     const opened = r === 'left' || !!(launched && launched.win);
     if (opened) return 'left';
-    if (r === 'stayed' && o.toast !== false) { if (p === 'ios' && typeof hvExtIsFaceTime === 'function' && hvExtIsFaceTime(t)) hvExtFtMiss(); else hvExtMiss(t, u); }
+    if (r === 'stayed' && o.toast !== false) {
+      if (p === 'ios' && typeof hvExtIsFaceTime === 'function' && hvExtIsFaceTime(t) && !/^shortcuts:/i.test(u)) hvExtFtMiss();
+      else if (!/^shortcuts:/i.test(u)) hvExtMiss(t, u);
+    }
     return r; }); };
   return o.confirm ? hvExtConfirm(t, o, run) : run(); }
 // --- the icon of a custom app: its picture, else a white mdi glyph on a gradient of its colour
@@ -2050,7 +2057,7 @@ const HV_EXT_KNOWN = [
   { name: 'Calendar', itunes: 1108185179, bundle: 'com.apple.mobilecal', url: 'calshow://' },
   { name: 'Photos', itunes: 1584215428, bundle: 'com.apple.mobileslideshow', url: 'photos-redirect://' },
   { name: 'Reminders', itunes: 1108187841, bundle: 'com.apple.reminders', url: 'x-apple-reminder://' },
-  { name: 'FaceTime', itunes: 1110145091, bundle: 'com.apple.facetime', url: 'facetime-open-link://' }, // open the app home; bare facetime:// is a call and iOS rejects it
+  { name: 'FaceTime', itunes: 1110145091, bundle: 'com.apple.facetime', url: HV_FT_SHORTCUT }, // iOS: a Shortcut named Open FaceTime; bare facetime:// is a call and iOS rejects it
   { name: 'Mail', itunes: 1108187098, bundle: 'com.apple.mobilemail', url: 'message://' },
   { name: 'Notes', itunes: 1110145109, bundle: 'com.apple.mobilenotes', url: 'mobilenotes://' },
   { name: 'Audible', itunes: 379693831, bundle: 'com.audible.iphone', url: 'audible://', pkg: 'com.audible.application', aka: ['Audible: Audiobooks & Podcasts'] }
@@ -2074,15 +2081,21 @@ const hvExtIsFaceTime = t => { if (!t) return false; const s = t.store || {};
   if (String(s.bundle_id || t.bundle_id || t.bundleId || '') === 'com.apple.facetime') return true;
   if (hvCaNorm(t.name) === 'facetime' || hvCaNorm(t.trackName) === 'facetime') return true;
   return [t.url, t.ios_url].some(u => /^(facetime|facetime-open-link)[-a-z]*:/i.test(String(u || '').trim())); };
+const hvExtFtAuto = u => hvExtBareFt(u) || /^facetime-open-link:(\/\/)?$/i.test(String(u || '').trim());
 const hvExtKnownFill = t => { const k = hvExtKnownOf(t); if (!k) return t || {}; const o = Object.assign({}, t), L = hvExtKnownLinks(k);
-  if (!hvExtUrlOk(o.url) && L.url) o.url = L.url; if (!hvExtUrlOk(o.ios_url) && L.ios_url) o.ios_url = L.ios_url;
+  const isFt = k.bundle === 'com.apple.facetime' || hvCaNorm(k.name) === 'facetime';
+  const ftDef = isFt ? (typeof HV_FT_SHORTCUT !== 'undefined' ? HV_FT_SHORTCUT : 'shortcuts://run-shortcut?name=Open%20FaceTime') : '';
+  // A user-entered Custom URL is used verbatim. Only an empty field, a bare facetime:// (a call, rejected on iOS),
+  // or our previous auto-fill (facetime-open-link://) is filled from the known table.
+  if (!hvExtUrlOk(o.url) || (isFt && hvExtFtAuto(o.url))) o.url = (isFt ? ftDef : L.url) || o.url;
+  if (!hvExtUrlOk(o.url) && L.url) o.url = L.url;
+  // Don't invent an iOS-only link that would shadow a different user-entered Custom URL (the Test-button bug).
+  if (hvExtUrlOk(o.ios_url) && isFt && hvExtFtAuto(o.ios_url) && hvExtUrlOk(o.url) && o.url !== o.ios_url) delete o.ios_url;
+  else if (!hvExtUrlOk(o.ios_url)) {
+    if (isFt && hvExtUrlOk(o.url) && o.url !== ftDef && !hvExtFtAuto(o.url)) { /* leave ios_url empty so Pick uses url */ }
+    else if (L.ios_url) o.ios_url = isFt ? ftDef : L.ios_url;
+  } else if (isFt && hvExtFtAuto(o.ios_url)) o.ios_url = ftDef;
   if (!hvExtUrlOk(o.android_url) && L.android_url) o.android_url = L.android_url; if (!hvExtUrlOk(o.web_url) && L.web_url) o.web_url = L.web_url;
-  // A saved bare facetime:// would still launch a call / be rejected on iOS; upgrade those to the open-app scheme.
-  if (k.bundle === 'com.apple.facetime' || hvCaNorm(k.name) === 'facetime') {
-    const open = L.url || 'facetime-open-link://';
-    if (!hvExtUrlOk(o.url) || hvExtBareFt(o.url)) o.url = open;
-    if (!hvExtUrlOk(o.ios_url) || hvExtBareFt(o.ios_url)) o.ios_url = open;
-  }
   return o; };
 const HV_EXT_PRESETS = [
   { key: 'google_home', name: 'Google Home', icon: 'mdi:google-home', color: '#4285f4', url: 'googlehome://', pkg: 'com.google.android.apps.chromecast.app', itunes: 680819774, web: 'https://home.google.com/' },
@@ -2126,7 +2139,7 @@ function hvExtConfirm(t, o, run) { return new Promise(res => {
   const ok = r.querySelector('.ok'), no = r.querySelector('.no'); let done = false;
   const fin = v => { if (done) return; done = true; removeEventListener('keydown', key, true); host.remove(); if (v === 'none' && o.anchor && o.anchor.focus) { try { o.anchor.focus({ preventScroll: true }); } catch (e) {} } };
   const cancel = () => { fin('none'); res('none'); };
-  const open = () => { if (done) return; fin('open'); res(run()); }; // still inside the click / key handler
+  const open = () => { if (done) return; const p = run(); fin('open'); res(p); }; // window.open in this tap, then close the sheet
   const key = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancel(); }
     else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); open(); }
     else if (e.key === 'Tab') { e.preventDefault(); (r.activeElement === ok ? no : ok).focus(); } };
@@ -12289,11 +12302,6 @@ button.r{cursor:pointer}button.r:active{background:var(--fld,rgba(118,118,128,.2
 .cf{flex-wrap:wrap}.cf .l{white-space:normal;font-size:15px;flex-basis:100%}.dz{all:unset;cursor:pointer;color:#fff;background:#ff3b30;border-radius:8px;padding:6px 14px;font-size:15px;font-weight:600}
 .em{color:var(--fg2,rgba(235,235,245,.6));justify-content:center}
 .gh{font-size:13px;text-transform:uppercase;letter-spacing:.02em;color:var(--fg2,rgba(235,235,245,.6));margin:0 16px 7px}
-.ftr{flex-direction:column;align-items:stretch;gap:8px;padding:10px 16px}
-.ftr .fl{font-size:15px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all}
-.ftms{display:flex;flex-wrap:wrap;gap:8px}
-.ftm{all:unset;cursor:pointer;font:600 13px/1.1 system-ui;padding:8px 12px;border-radius:16px;background:var(--fld,rgba(118,118,128,.24));color:var(--fg,#fff)}
-.ftm:active{filter:brightness(1.25)}button.ftm:focus-visible{outline:2px solid var(--blue,#0a84ff);outline-offset:2px}
 /* the add / edit page */
 .pv{display:flex;flex-direction:column;align-items:center;gap:10px;margin:0 0 22px}
 .pv .ai{width:96px;height:96px;box-shadow:0 8px 22px rgba(0,0,0,.22),inset 0 0 0 .5px rgba(0,0,0,.14)}.pv .ai ha-icon{--mdc-icon-size:56px}
@@ -12370,21 +12378,12 @@ function hvCustomAppsUI(ctx) {
         + `<span class="mv" data-no-sheet-drag><button data-a="up" data-i="${i}" aria-label="Move ${nm} up"${i ? '' : ' disabled'}><ha-icon icon="mdi:chevron-up"></ha-icon></button><button data-a="dn" data-i="${i}" aria-label="Move ${nm} down"${i < n - 1 ? '' : ' disabled'}><ha-icon icon="mdi:chevron-down"></ha-icon></button></span></div>`;
       return `<button class="r" role="listitem" data-a="open" data-id="${esc(e.id)}">${ico(e)}<span class="tx"><span class="l">${nm}</span><small>${esc(hvCaSub(e))}</small></span><ha-icon class="ch" icon="mdi:chevron-right"></ha-icon></button>`; };
     const paint = () => { const xs = L(), ro = ctx.ro; if (!xs.length || ro) edit = false;
-      const admin = !ro && !!(ctx.H && ctx.H() && ctx.H().user && ctx.H().user.is_admin === true);
-      const schemes = (typeof HV_FT_SCHEMES !== 'undefined' && HV_FT_SCHEMES) || [];
-      const methods = (typeof HV_FT_METHODS !== 'undefined' && HV_FT_METHODS) || [{ id: 'open', label: 'window.open' }, { id: 'anchor', label: 'anchor click' }];
-      const test = admin && schemes.length ? `<div class="gh">FaceTime scheme test</div><div class="grp" role="group" aria-label="FaceTime scheme test"><div class="r stk"><small>Temporary. Try Tesla on the Home Screen first. Then tap each FaceTime method and tell us which one opens FaceTime’s recents / New Call screen.</small></div>`
-        + schemes.map(s => { const lab = s === HV_FT_SHORTCUT ? 'shortcuts:// … Open FaceTime' : s;
-          const btns = methods.map(m => `<button type="button" class="ftm" data-a="ftscheme" data-u="${esc(s)}" data-m="${m.id}">${esc(m.label)}</button>`).join('');
-          return `<div class="r ftr"><span class="fl">${esc(lab)}</span><div class="ftms">${btns}</div></div>`; }).join('') + '</div>' : '';
       box.innerHTML = (xs.length && !ro ? `<div class="hd"><button class="lk" data-a="edit" aria-pressed="${edit}">${edit ? 'Done' : 'Edit'}</button></div>` : '')
         + `<div class="grp ls" role="list" aria-label="Custom apps">${xs.map((e, i) => row(e, i, xs.length, ro)).join('')}`
-        + (ro ? (xs.length ? '' : '<div class="r em">No custom apps</div>') : `<button class="r add" data-a="new"><span class="pl"><ha-icon icon="mdi:plus-circle"></ha-icon></span><span class="l">Add Custom App</span></button>`) + '</div>'
-        + test;
+        + (ro ? (xs.length ? '' : '<div class="r em">No custom apps</div>') : `<button class="r add" data-a="new"><span class="pl"><ha-icon icon="mdi:plus-circle"></ha-icon></span><span class="l">Add Custom App</span></button>`) + '</div>';
       ms(box); };
     box.addEventListener('click', ev => { const b = ev.composedPath().find(n => n.dataset && n.dataset.a); if (!b || b.disabled) return; const a = b.dataset.a, xs = L();
       if (a === 'open') { ctx.go('ca:' + b.dataset.id); return; }
-      if (a === 'ftscheme') { const u = hvExtUrlOk(b.dataset.u); if (u) hvExtLaunch(u, b.dataset.m || 'open'); return; }
       if (ctx.ro) return;
       if (a === 'new') { ctx.go('ca-new'); return; }
       if (a === 'edit') { edit = !edit; ask = null; paint(); const e = box.querySelector('[data-a="edit"]'); if (e) e.focus(); return; }
@@ -12455,7 +12454,12 @@ ${cur && !ro ? '<div class="dl"></div>' : ''}`;
       if (asg) { asg.classList.toggle('dis', asOff); asg.setAttribute('aria-disabled', String(asOff)); }
       if (qel) qel.disabled = !!(asOff || ro);
       if (asft) asft.hidden = !!asOff;
-      if (note) { note.hidden = !asOff; note.textContent = asOff ? "FaceTime isn't available on Android. You'll need a FaceTime link sent to this device to use FaceTime." : ''; }
+      if (note) {
+        const iosFt = !asOff && hvExtPlatform() === 'ios' && typeof hvExtIsFaceTime === 'function' && hvExtIsFaceTime(d);
+        if (asOff) { note.hidden = false; note.textContent = "FaceTime isn't available on Android. You'll need a FaceTime link sent to this device to use FaceTime."; }
+        else if (iosFt) { note.hidden = false; note.textContent = 'On iPhone and iPad, make a one-step Shortcut named Open FaceTime (Open App → FaceTime). This app opens that Shortcut.'; }
+        else { note.hidden = true; note.textContent = ''; }
+      }
     };
     const cfPaint = () => $('.cfm').setAttribute('aria-checked', String(d.confirm !== false));
     const dlPaint = () => { const b = $('.dl'); if (!b) return; b.innerHTML = del ? `<div class="grp"><div class="r cf"><span class="l">Delete ${esc(d.name || 'this app')}? It is also removed from the Home Screen.</span><button class="dz delok">Delete</button><button class="lk delno">Cancel</button></div></div>` : '<button class="b del">Delete App</button>'; };
