@@ -10808,8 +10808,9 @@ function hvOpenHomie(hub) { if (!hub || hub._sheetO) return null; const cols = h
       const face = new HVSsFace('homie'); box.appendChild(face.el); const up = () => { try { face.applyColors(hvSsColors.get('homie')); face.update(hub._hass, new Date()); } catch (e) {} };
       up(); iv = setInterval(up, 1000); return { set hass(h) {} }; } }); }
 const HV_SS_FACE_CSS = `
-.f,.f *{pointer-events:none !important}.f .slot,.f .slot *{pointer-events:auto !important}
-.f{position:absolute;inset:0;container-type:size;overflow:hidden;font-family:${FONT};-webkit-font-smoothing:antialiased;user-select:none}
+.f,.f *{pointer-events:none !important;-webkit-user-select:none !important;user-select:none !important;-webkit-touch-callout:none !important;-webkit-user-drag:none}
+.f .slot,.f .slot *{pointer-events:auto !important}
+.f{position:absolute;inset:0;container-type:size;overflow:hidden;font-family:${FONT};-webkit-font-smoothing:antialiased;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
 /* Design canvas is 128×100 (the landscape fit). Contain it in the viewport: a portrait screen
    letterboxes instead of stretching the canvas to the full height, which overlapped the info clock,
    clipped fluid digits and collided whimsy numerals. */
@@ -11052,7 +11053,7 @@ const hvSsOv = {
     const born = !this.host || this.style !== 'glass' || !this.host.isConnected || this.host.parentNode !== w.parentNode;
     if (born) { const prev = this.host;
       const h = document.createElement('div'); h.id = 'hv-ss-style'; const sr = h.attachShadow({ mode: 'open' });
-      sr.innerHTML = `<style>:host{display:block;background:#4c49d0}*{box-sizing:border-box}
+      sr.innerHTML = `<style>:host{display:block;background:#4c49d0;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}*{box-sizing:border-box;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-user-drag:none}
 .bg{position:absolute;inset:0;overflow:hidden;background:linear-gradient(160deg,#6461e6 0%,#5856dd 45%,#4c49d0 100%);pointer-events:none;z-index:0;container-type:size}
 .bg i{position:absolute;left:50%;top:50%;width:150cqmax;border-radius:2.2cqmin;transform:translate(-50%,-50%) rotate(var(--a)) translateY(var(--o));height:var(--h);background:var(--c)}
 .bg i:nth-child(1){--a:42deg;--o:-38cqmin;--h:24cqmin;--c:linear-gradient(90deg,rgba(176,176,255,.6),rgba(140,140,255,.42))}
@@ -11161,11 +11162,12 @@ const hvSsSlotsFor = (face) => {
 const hvSsFontCss = (v) => ((HV_SS_FONTS.find(x => x.v === v) || HV_SS_FONTS[0]).f);
 const hvSsIsAdmin = () => { try { const h = document.querySelector('home-assistant'); return !!(h && h.hass && h.hass.user && h.hass.user.is_admin); } catch (e) { return false; } };
 const HV_SS_SW_CSS = `
-:host{all:initial;display:block;position:fixed;inset:0;font-family:system-ui,-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",sans-serif;-webkit-font-smoothing:antialiased;color:#fff}
+:host{all:initial;display:block;position:fixed;inset:0;font-family:system-ui,-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",sans-serif;-webkit-font-smoothing:antialiased;color:#fff;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+:host, :host *{-webkit-user-select:none !important;user-select:none !important;-webkit-touch-callout:none !important;-webkit-user-drag:none}
 .dim{position:absolute;inset:0;background:#000;opacity:0;transition:opacity .25s ease;pointer-events:none}
 .dim.on{opacity:1}
 .stage{position:absolute;inset:0;overflow:hidden}
-.track{position:absolute;top:0;bottom:0;left:0;display:flex;align-items:center;will-change:transform}
+.track{position:absolute;top:0;bottom:0;left:0;display:flex;align-items:center;will-change:transform;touch-action:pan-x}
 .card{position:relative;flex:none;display:flex;flex-direction:column;align-items:center;pointer-events:auto}
 .card .lab{font-size:10px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#fff;margin:0 0 8px;text-shadow:0 1px 4px rgba(0,0,0,.45)}
 .card .win{position:relative;overflow:hidden;background:#111;border-radius:22%;box-shadow:0 18px 40px rgba(0,0,0,.45);isolation:isolate}
@@ -11400,6 +11402,7 @@ const hvSsSwitch = {
 .f, .f *:not(.slot):not(.slot *){pointer-events:none !important}
 </style><div class="dim"></div><div class="stage"></div>`;
     parent.appendChild(h); this.host = h;
+    this._blockSelect(h);
     this._wireGest(h);
     return h;
   },
@@ -11407,7 +11410,7 @@ const hvSsSwitch = {
     const h = this.host; if (!h) return;
     const z = this.currentZ();
     const editing = this.mode === 'switch' || this.mode === 'customize';
-    h.style.cssText = `position:fixed;inset:0;z-index:${z + 2};pointer-events:auto;touch-action:${editing ? 'manipulation' : 'none'};background:${editing ? '#000' : 'rgba(0,0,0,0.01)'};`;
+    h.style.cssText = `position:fixed;inset:0;z-index:${z + 2};pointer-events:auto;touch-action:${editing ? 'pan-x' : 'none'};background:${editing ? '#000' : 'rgba(0,0,0,0.01)'};`;
     const dim = h.shadowRoot && h.shadowRoot.querySelector('.dim');
     if (!editing) { if (dim) dim.classList.remove('on'); }
     else if (dim) dim.classList.add('on');
@@ -11452,15 +11455,17 @@ const hvSsSwitch = {
     el.addEventListener('pointermove', ev => {
       const g = this._g; if (!g || !g.soft || ev.pointerId !== g.id || this.mode) return;
       g.dx = ev.clientX - g.x; g.dy = ev.clientY - g.y;
-      if (Math.hypot(g.dx, g.dy) > 10) { this._clearHold(); g.swiping = true; }
+      this._onLiveMove(g);
     }, true);
     const end = ev => {
       const g = this._g; if (!g || !g.soft || (ev.pointerId != null && ev.pointerId !== g.id)) return;
       this._clearHold(); this._g = null;
+      this._onLiveEnd(g, ev);
     };
     el.addEventListener('pointerup', end, true); el.addEventListener('pointercancel', end, true);
   },
   _paintLiveSlots() {
+    if (this._liveData || this._busy()) return;
     const face = hvSsFaces.active(); if (!face || face.style === 'glass') return;
     const live = (typeof hvSsOv !== 'undefined' && hvSsOv.face && hvSsOv.face.el) ? hvSsOv.face.el : null;
     if (live) {
@@ -11503,30 +11508,126 @@ const hvSsSwitch = {
     h.addEventListener('pointermove', ev => {
       const g = this._g; if (!g || ev.pointerId !== g.id || this.mode) return;
       g.dx = ev.clientX - g.x; g.dy = ev.clientY - g.y;
-      if (Math.hypot(g.dx, g.dy) > 10) {
-        this._clearHold();
-        g.swiping = true;
-        // Release capture so swipe_open_home from the left edge can still run.
-        try { if (hvSsHome.on() && g.x < 28 && g.dx > 0) h.releasePointerCapture(ev.pointerId); } catch (e) {}
-      }
+      this._onLiveMove(g);
     }, true);
     const end = ev => {
       const g = this._g; if (!g || (ev.pointerId != null && ev.pointerId !== g.id)) return;
       this._clearHold(); this._g = null;
-      if (g.swiping) return; // live swipe never shows the switcher or changes face
+      if (this._onLiveEnd(g, ev)) return;
+      if (g.swiping) return;
       if (Math.hypot(g.dx, g.dy) < 8 && Date.now() - g.t < 400 && ev.type === 'pointerup') this._dismiss();
     };
     h.addEventListener('pointerup', end, true); h.addEventListener('pointercancel', end, true);
   },
   _dismiss() {
     try { hvSsEatTap(600); } catch (e) {}
+    try { hvSsKeep.off('ssswipe'); hvSsKeep.off('ssswitch'); } catch (e) {}
     this.hide();
+    try { const w = ssWallpanel(); if (w && typeof w.stopScreensaver === 'function') w.stopScreensaver(); } catch (e) {}
     try { hvSsOv.tick(true); } catch (e) {}
+    try { hvSsMarkGone(); } catch (e) {}
   },
-  _liveSwipe() {},
-  _prepTrack() {},
-  renderLivePeek() {},
-  async _endLiveSwipe() {},
+  _killSelect() { try { const s = window.getSelection && window.getSelection(); if (s && s.removeAllRanges) s.removeAllRanges(); } catch (e) {} },
+  _blockSelect(el) {
+    if (!el || el.__hvNoSel) return; el.__hvNoSel = true;
+    const stop = ev => { ev.preventDefault(); ev.stopPropagation(); this._killSelect(); };
+    for (const typ of ['contextmenu', 'selectstart']) el.addEventListener(typ, stop, true);
+  },
+  _busy() { return this.mode === 'switch' || this.mode === 'customize'; },
+  _edgeStart(x, y) {
+    const W = innerWidth || 800, H = innerHeight || 800, m = 40;
+    return !(x > m && x < W - m && y > m && y < H - m);
+  },
+  _onLiveMove(g) {
+    if (!g || this._busy()) return;
+    if (g.live) { this._liveSwipe(g.dx); return; }
+    if (Math.hypot(g.dx || 0, g.dy || 0) <= 10) return;
+    this._clearHold();
+    if (Math.abs(g.dx) > Math.abs(g.dy) * 1.1 && !this._edgeStart(g.x, g.y)) this._armLiveSwipe(g);
+    else g.swiping = true;
+  },
+  _onLiveEnd(g, ev) {
+    if (!g || !g.live) return false;
+    if (g._ended) return true;
+    g._ended = true;
+    this._endLiveSwipe(g);
+    return true;
+  },
+  _armLiveSwipe(g) {
+    if (!g || g.live || this._busy()) return;
+    g.live = true; g.swiping = true;
+    this._clearHold();
+    try { hvSsKeep.on('ssswipe'); } catch (e) {}
+    this._prepLive();
+    this._liveSwipe(g.dx);
+  },
+  _prepLive() {
+    this.ensure(true);
+    this.layout();
+    const data = hvSsFaces.raw();
+    this._liveData = data;
+    this._paintLive(data);
+    try { this._coverLive(true); } catch (e) {}
+  },
+  _paintLive(data) {
+    const sr = this.host && this.host.shadowRoot, stg = sr && sr.querySelector('.stage'); if (!stg) return;
+    const W = innerWidth || 800, H = innerHeight || 800;
+    stg.innerHTML = '';
+    const track = document.createElement('div'); track.className = 'track live';
+    track.style.cssText = 'position:absolute;top:0;left:0;height:100%;display:flex;will-change:transform;touch-action:none;';
+    (data.faces || []).forEach(face => {
+      const card = document.createElement('div'); card.className = 'card live';
+      card.style.cssText = `flex:none;width:${W}px;height:${H}px;margin:0;`;
+      const win = document.createElement('div'); win.className = 'win';
+      win.style.cssText = `width:${W}px;height:${H}px;border-radius:0;box-shadow:none;overflow:hidden;background:transparent;`;
+      const f = this._mkFace(face, false); win.appendChild(f.el); this._applyFaceLook(f, face);
+      this._paintSlots(f.el, face, false, true);
+      card.appendChild(win); track.appendChild(card);
+    });
+    stg.appendChild(track);
+    this._faces = null;
+    track.style.transition = 'none';
+    track.style.transform = `translate3d(${-(data.i || 0) * W}px,0,0)`;
+  },
+  _liveSwipe(dx) {
+    if (!this.host || !this.host.shadowRoot) return;
+    const W = innerWidth || 800, data = this._liveData || hvSsFaces.raw();
+    const tr = this.host.shadowRoot.querySelector('.track.live'); if (!tr) return;
+    let x = -(data.i || 0) * W + (dx || 0);
+    const min = -Math.max(0, (data.faces || []).length - 1) * W, max = 0;
+    if (x > max) x = max + (x - max) * 0.22;
+    if (x < min) x = min + (x - min) * 0.22;
+    tr.style.transition = 'none';
+    tr.style.transform = `translate3d(${x}px,0,0)`;
+  },
+  _prepTrack() { this._prepLive(); },
+  renderLivePeek() { this._prepLive(); },
+  async _endLiveSwipe(g) {
+    const W = innerWidth || 800, data = this._liveData || hvSsFaces.raw();
+    const v = (g && g.dx || 0) / Math.max(1, Date.now() - ((g && g.t) || Date.now()));
+    let i = data.i || 0;
+    const th = W * 0.15;
+    if ((g && g.dx) < -th || v < -0.3) i = Math.min((data.faces || []).length - 1, i + 1);
+    else if ((g && g.dx) > th || v > 0.3) i = Math.max(0, i - 1);
+    const tr = this.host && this.host.shadowRoot && this.host.shadowRoot.querySelector('.track.live');
+    const red = this.reduced();
+    if (tr) { tr.style.transition = red ? 'none' : 'transform .32s cubic-bezier(.2,.8,.2,1)'; tr.style.transform = `translate3d(${-i * W}px,0,0)`; }
+    data.i = i;
+    try { await hvSsFaces.commit(data, hvSsOv.hass()); } catch (e) {}
+    try { hvSsEatTap(600); } catch (e) {}
+    const finish = () => {
+      try { hvSsKeep.off('ssswipe'); } catch (e) {}
+      this._liveData = null; this._faces = null;
+      if (this.host && this.mode == null) {
+        const stg = this.host.shadowRoot && this.host.shadowRoot.querySelector('.stage');
+        if (stg) stg.innerHTML = '';
+        try { this._coverLive(false); } catch (e) {}
+        this.layout();
+      }
+      try { hvSsOv.tick(true); } catch (e) {}
+    };
+    setTimeout(finish, red ? 0 : 320);
+  },
   open(mode, opts) {
     opts = opts || {};
     this.ensure(true);
@@ -11539,6 +11640,7 @@ const hvSsSwitch = {
     this.host.shadowRoot.querySelector('.dim').classList.add('on');
     this._paintCards(data, this.i, mode);
     this._tickFaces();
+    this._killSelect();
   },
   _tickFaces() {
     if (this._iv) clearInterval(this._iv);
@@ -11610,27 +11712,43 @@ const hvSsSwitch = {
   },
   _wireTrack(track, size, gap, data) {
     let g = null;
+    const thresh = () => Math.max(24, (size || 0) * 0.15);
     track.addEventListener('pointerdown', ev => {
+      if (this.mode !== 'switch') return;
       if (ev.target.closest && (ev.target.closest('.cz') || ev.target.closest('.slot') || ev.target.closest('.tabs') || ev.target.closest('.rail'))) return;
-      g = { x: ev.clientX, t: Date.now(), x0: ev.clientX, id: ev.pointerId };
+      g = { x: ev.clientX, y: ev.clientY, t: Date.now(), x0: ev.clientX, y0: ev.clientY, id: ev.pointerId, locked: false, dead: false };
       track.style.transition = 'none';
       try { track.setPointerCapture(ev.pointerId); } catch (e) {}
     });
     track.addEventListener('pointermove', ev => {
-      if (!g || ev.pointerId !== g.id) return;
-      const dx = ev.clientX - g.x0, W = innerWidth || 800;
-      const railShift = (this.mode === 'customize' && this.tab !== 'widgets') ? Math.min(28, Math.max(0, size * 0.06)) : 0;
-      const left = (W - size) / 2 - this.i * (size + gap) + dx - railShift;
+      if (!g || ev.pointerId !== g.id || g.dead) return;
+      const dx = ev.clientX - g.x0, dy = ev.clientY - g.y0;
+      g.lx = ev.clientX; g.ly = ev.clientY; g.dx = dx; g.dy = dy;
+      if (!g.locked) {
+        if (Math.hypot(dx, dy) < 8) return;
+        if (Math.abs(dx) > Math.abs(dy) * 1.1) {
+          g.locked = true;
+          try { ev.preventDefault(); ev.stopPropagation(); } catch (e) {}
+        } else { g.dead = true; return; }
+      } else {
+        try { ev.preventDefault(); ev.stopPropagation(); } catch (e) {}
+      }
+      const W = innerWidth || 800;
+      const left = (W - size) / 2 - this.i * (size + gap) + dx;
       track.style.transform = `translate3d(${left}px,0,0)`;
     });
     const end = ev => {
       if (!g || (ev.pointerId != null && ev.pointerId !== g.id)) return;
-      const dx = ev.clientX - g.x0, v = dx / Math.max(1, Date.now() - g.t);
+      const x = (ev.clientX || g.lx || g.x0);
+      const dx = (g.dx != null ? g.dx : x - g.x0), v = dx / Math.max(1, Date.now() - g.t);
       let i = this.i;
-      if (dx < -40 || v < -0.5) i = Math.min(data.faces.length - 1, i + 1);
-      else if (dx > 40 || v > 0.5) i = Math.max(0, i - 1);
+      if (g.locked && !g.dead) {
+        const th = thresh();
+        if (dx < -th || v < -0.3) i = Math.min(data.faces.length - 1, i + 1);
+        else if (dx > th || v > 0.3) i = Math.max(0, i - 1);
+      }
       if (Math.abs(dx) > 10) this._suppressTap = Date.now();
-      g = null; this.i = i; this.draft.i = i;
+      g = null; this.i = i; if (this.draft) this.draft.i = i;
       this._paintCards(this.draft, this.i, this.mode);
     };
     track.addEventListener('pointerup', end); track.addEventListener('pointercancel', end);
@@ -11887,7 +12005,7 @@ const hvSsSwitch = {
     const p = this._pt(ev); if (p.x == null || !isFinite(p.x)) return;
     if (g.id != null && p.id != null && ev.type.indexOf('pointer') === 0 && ev.pointerId !== g.id) return;
     g.dx = p.x - g.x; g.dy = p.y - g.y;
-    if (Math.hypot(g.dx, g.dy) > 10) { this._clearHold(); g.swiping = true; }
+    this._onLiveMove(g);
   },
   _docEnd(ev) {
     if (this._heldOpen) {
@@ -11901,6 +12019,7 @@ const hvSsSwitch = {
     if (g.src && g.src.indexOf('pointer') === 0 && ev.type.indexOf('touch') === 0) return;
     if (g.id != null && ev.pointerId != null && ev.type.indexOf('pointer') === 0 && ev.pointerId !== g.id) return;
     this._clearHold(); this._g = null;
+    if (this._onLiveEnd(g, ev)) return;
     if (g.swiping || this.mode === 'switch' || this.mode === 'customize') return;
     if (Math.hypot(g.dx || 0, g.dy || 0) < 8 && Date.now() - g.t < 400) {
       let st = null; try { st = typeof hvSsOv !== 'undefined' && hvSsOv.style; } catch (e) {}
@@ -11914,8 +12033,12 @@ const hvSsSwitch = {
     addEventListener('pointermove', ev => this._docMove(ev), true);
     addEventListener('touchmove', ev => this._docMove(ev), { capture: true, passive: true });
     for (const typ of ['pointerup', 'pointercancel', 'touchend', 'touchcancel']) addEventListener(typ, ev => this._docEnd(ev), true);
-    const eat = ev => { if (typeof hvSsEating === 'function' && hvSsEating()) { ev.stopImmediatePropagation(); try { ev.preventDefault(); } catch (e) {} } };
-    for (const typ of ['click', 'pointerup', 'touchend', 'mouseup', 'contextmenu']) addEventListener(typ, eat, true);
+    const eat = ev => {
+      const vis = this._busy() || this._liveData || (typeof hvSsVisible === 'function' && hvSsVisible());
+      if ((ev.type === 'contextmenu' || ev.type === 'selectstart') && vis) { try { ev.preventDefault(); ev.stopImmediatePropagation(); } catch (e) {} this._killSelect(); return; }
+      if (typeof hvSsEating === 'function' && hvSsEating()) { ev.stopImmediatePropagation(); try { ev.preventDefault(); } catch (e) {} }
+    };
+    for (const typ of ['click', 'pointerup', 'touchend', 'mouseup', 'contextmenu', 'selectstart']) addEventListener(typ, eat, true);
   }
 };
 try { hvSsSwitch._installDoc(); } catch (e) {}
@@ -11964,7 +12087,10 @@ const hvSsHome = {
     if (hub) { hub._openHome(); return; } const lv = hvSsLv(), vs = (lv && lv.config && lv.config.views) || [], v = vs.find(x => x.path === 'my-home') || vs.find(x => x.path === 'home');
     if (v) hvNavigate(`/${(lv && lv.urlPath) || ssDash() || 'lovelace'}/${v.path}`); } };
 // the screensaver swipe: a clear left-to-right swipe (not a tap, not a nudge) while the Home layer is up
-addEventListener('touchstart', e => { hvSsHome.g = null; if (!hvSsHome.host || e.touches.length !== 1) return; const t = e.touches[0], path = e.composedPath ? e.composedPath() : [];
+addEventListener('touchstart', e => { hvSsHome.g = null;
+  try { const sw = typeof hvSsSwitch !== 'undefined' && hvSsSwitch; if (sw && (sw._busy() || sw._liveData || (sw._g && sw._g.live))) return; } catch (err) {}
+  try { if (typeof hvSsVisible === 'function' && hvSsVisible()) return; } catch (err) {}
+  if (!hvSsHome.host || e.touches.length !== 1) return; const t = e.touches[0], path = e.composedPath ? e.composedPath() : [];
   const btn = !!(hvSsHome.host && (path.includes(hvSsHome.host) || path.some(n => n.classList && n.classList.contains('hb')))); if (btn) hvSsKeep.on('btn');
   hvSsHome.g = { x: t.clientX, y: t.clientY, t: Date.now(), btn }; }, { capture: true, passive: true });
 addEventListener('touchmove', e => { const s = hvSsHome.g; if (!s || !hvSsHome.host || !e.touches[0]) return; const t = e.touches[0], dx = t.clientX - s.x, dy = t.clientY - s.y;
