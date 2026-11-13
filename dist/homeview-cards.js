@@ -9125,6 +9125,34 @@ const HVG_CSS = `
 .pk .it[aria-current=true]{box-shadow:inset 0 0 0 2px #0a84ff}
 .pk .ok{position:absolute;right:18px;bottom:18px;width:58px;height:58px;border-radius:50%;border:0;background:#0a84ff;color:#fff;display:grid;place-items:center;cursor:pointer;padding:0;box-shadow:0 6px 20px rgba(10,132,255,.45);z-index:2}
 .pk .it.clr{aspect-ratio:auto;min-height:44px;justify-content:center;padding:8px 12px;grid-column:1/-1}
+/* Visual picker tweaks + in-tile widget overlays */
+.pk .ok{display:none}
+.pk .sbar{display:flex;align-items:center;gap:8px;margin:0 16px 10px;background:rgba(48,48,52,.72);border-radius:12px;padding:0 12px;height:36px;flex:none;-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px)}
+.pk .sbar svg{width:16px;height:16px;flex:none;opacity:.55}
+.pk .sbar input{flex:1;min-width:0;border:0;background:transparent;color:#fff;font:400 15px/1.2 system-ui,-apple-system,sans-serif;outline:none;height:36px}
+.pk .sbar input::placeholder{color:rgba(255,255,255,.45)}
+.pk .phd .ttl{font-weight:500}
+.pk .row{display:flex;gap:14px;overflow-x:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x;padding:4px 16px 18px;scrollbar-width:none}
+.pk .row::-webkit-scrollbar{display:none}
+.pk .wi{flex:none;width:88px;display:flex;flex-direction:column;align-items:center;gap:7px;background:transparent;border:0;color:#fff;padding:0;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.pk .wi .tile{width:88px;height:88px;border-radius:16px;background:rgba(44,44,48,.78);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);overflow:hidden;position:relative;box-shadow:inset 0 0 0 .5px rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center}
+.pk .wi.w2{width:184px}
+.pk .wi.w2 .tile{width:184px}
+.pk .wi.w22{width:184px}
+.pk .wi.w22 .tile{width:184px;height:184px}
+.pk .wi .lab{font-size:11px;font-weight:500;opacity:.86;text-align:center;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pk .wi .tile .icn{width:46%;height:46%;display:grid;place-items:center;color:#fff}
+.pk .wi .tile .icn svg,.pk .wi .tile .icn ha-icon{width:100%;height:100%;--mdc-icon-size:100%}
+.pk .wi .tile .onlab{position:absolute;left:8px;right:8px;bottom:8px;text-align:center;font-size:9px;font-weight:600;line-height:1.15;color:#fff}
+.pk .wi .tile .hv{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.pk .wi .tile .hv > *{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.t .vis{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:2;border-radius:inherit;overflow:hidden}
+.t.has-vis .in,.t.has-vis .lv,.t.has-vis .pc,.t.has-vis .fl{opacity:0;pointer-events:none}
+.t .vis.home svg{width:44%;height:44%;fill:#fff}
+.t .vis.icom{flex-direction:column;gap:4px;color:#fff}
+.t .vis.icom svg{width:36%;height:36%;fill:#fff}
+.t .vis.icom .onlab{font-size:9px;font-weight:600;text-align:center;line-height:1.15}
+.t .vis.hv > *{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 `;
 const HVG_CLOCK = (() => {
   const nums = Array.from({ length: 12 }, (_, i) => {
@@ -9168,7 +9196,8 @@ class HVGlassPage extends HTMLElement {
     addEventListener('hv-glass-cfg', this._onCfg); this._tick(); this._render(); }
   disconnectedCallback() { clearTimeout(this._ct); this._ct = 0; for (const k of Object.keys(this._t || {})) clearTimeout(this._t[k]); if (this._onCfg) removeEventListener('hv-glass-cfg', this._onCfg); }
   // --- config helpers
-  _c(k) { try { if (typeof hvGlassCfg !== 'undefined') { const loc = hvGlassCfg.raw(); if (loc && Object.prototype.hasOwnProperty.call(loc, k)) return loc[k]; } } catch (e) {}
+  _c(k) { if (this._pin && Object.prototype.hasOwnProperty.call(this._pin, k)) return this._pin[k];
+    try { if (typeof hvGlassCfg !== 'undefined') { const loc = hvGlassCfg.raw(); if (loc && Object.prototype.hasOwnProperty.call(loc, k)) return loc[k]; } } catch (e) {}
     const c = this._config || {}; return c[k]; }
   _ent(s) { const id = this._c(s + '_entity'); return typeof id === 'string' && /^[a-z_]+\.[\w-]+$/i.test(id) ? id : ''; }
   _st(s) { const id = this._ent(s); return id && this._hass ? this._hass.states[id] : undefined; }
@@ -9190,6 +9219,8 @@ class HVGlassPage extends HTMLElement {
     r.querySelectorAll('.t').forEach(el => this._wire(el)); this._head(); }
   _head() { const bg = this._c('background'); this.setAttribute('bg', bg === 'none' ? 'none' : 'indigo');
     const theme = this._c('theme') || 'indigo'; this.setAttribute('theme', ['blue','orange','light'].includes(theme) ? theme : 'indigo');
+    const accent = this._c('accent') || ({ indigo: '#5856e6', blue: '#2aa0ff', orange: '#e8872a', light: '#d5d9d2' }[theme] || '#5856e6');
+    if (accent) this.style.setProperty('--hvg-accent', accent); else this.style.removeProperty('--hvg-accent');
     const layout = this._c('layout') === 'grid3' ? 'grid3' : 'mixed';
     const gr = this.shadowRoot && this.shadowRoot.querySelector('.gr');
     if (gr) { gr.setAttribute('data-layout', layout); const hero = this._c('hero'); if (layout === 'mixed' && hero === 'light') gr.setAttribute('data-hero', 'light'); else gr.removeAttribute('data-hero'); }
@@ -9201,10 +9232,10 @@ class HVGlassPage extends HTMLElement {
     set('hh', h * 30); set('hm', m * 6); set('hs', s * 6); if (this._lm && !this._lm.hidden) { const tm = this._fmtTime(); this._lm.querySelectorAll('.ltime').forEach(n => { n.textContent = tm; }); } clearTimeout(this._ct); this._ct = setTimeout(() => this._tick(), 1000 - d.getMilliseconds() + 5); }
   // --- live state
   _render() { const r = this.shadowRoot; if (!r || !this._built || !this._hass || !this._config) return; if (hvLdLocked(this) || hvLdBusy()) return;
-    const sig = JSON.stringify(['thermostat'].concat(HVG_ALL_SLOTS).map(s => { const st = this._st(s); return [this._ent(s), st && st.state, st && st.attributes, this._name(s), this._sub(s), this._pend[s] || 0]; }).concat([this._tmp, this._c('show_current_temp'), this._c('intercom_action')]));
+    const sig = JSON.stringify(['thermostat'].concat(HVG_ALL_SLOTS).map(s => { const st = this._st(s); return [this._ent(s), st && st.state, st && st.attributes, this._name(s), this._sub(s), this._pend[s] || 0]; }).concat([this._tmp, this._c('show_current_temp'), this._c('intercom_action'), this._c('widgets'), this._c('theme'), this._c('accent'), this._c('layout'), this._c('color')]));
     if (sig === this._sig) return; this._sig = sig; this._paintTh(); for (const s of HVG_ALL_SLOTS) this._paint(s); this._paintWx(); }
   _paint(s) { const el = this.shadowRoot.querySelector(`.t[data-s="${s}"]`); if (!el) return; const st = this._st(s), id = this._ent(s), d = id.split('.')[0], builtin = id && id.indexOf('builtin.') === 0;
-    const set = this._c('intercom_action') && s === 'intercom'; const un = !id && !set, gone = id && !st && !builtin;
+    const cardish = id && id.indexOf('hvcard.') === 0; const set = this._c('intercom_action') && s === 'intercom'; const un = !id && !set, gone = id && !st && !builtin && !cardish;
     el.querySelector('.tt').textContent = this._name(s); el.querySelector('.sb .a').textContent = un ? (s === 'intercom' ? 'Set action' : 'Set entity') : gone ? 'Not found' : this._sub(s);
     el.classList.toggle('un', !!(un || gone));
     if ((s === 'light' || s === 'light2') && (el.classList.contains('drag') || (hvLdLocked(this, id) && !hvLdMatch(this, st)))) return;
@@ -9227,7 +9258,8 @@ class HVGlassPage extends HTMLElement {
     el.setAttribute('aria-label', lab); if (d === 'lock' || d === 'light' || d === 'switch' || d === 'fan' || d === 'input_boolean') el.setAttribute('aria-pressed', String(!!on)); else el.removeAttribute('aria-pressed');
     if ((s === 'light' || s === 'light2') && st && this._dim(st)) { el.style.touchAction = 'none'; el.setAttribute('aria-valuetext', on ? this._pct(st) + '%' : 'Off'); } else if (!(s === 'light' || s === 'light2')) { el.style.touchAction = ''; el.removeAttribute('aria-valuetext'); }
     if ((s === 'light' || s === 'light2') && !(this._lmOpen && this._ls === s)) { const bri = (st && on) ? this._pct(st) / 100 : 0; el.style.setProperty('--bri', String(bri)); const pc = el.querySelector('.pc'); if (pc) pc.textContent = (st && on) ? this._pct(st) + '%' : ''; }
-    if (builtin) { const lab = { 'builtin.clock': 'Clock I', 'builtin.clock2': 'Clock II', 'builtin.intercom': 'Intercom', 'builtin.home': 'Home' }[id] || 'Home'; if (!this._c(s + '_name')) el.querySelector('.tt').textContent = lab; const sub = el.querySelector('.sb .a'); if (sub && !this._c(s + '_subtitle')) sub.textContent = id === 'builtin.home' ? 'Home App' : 'Clock'; } }
+    if (builtin) { const lab = { 'builtin.clock': 'Clock I', 'builtin.clock2': 'Clock II', 'builtin.intercom': 'Intercom', 'builtin.home': 'Home' }[id] || 'Home'; if (!this._c(s + '_name')) el.querySelector('.tt').textContent = lab; const sub = el.querySelector('.sb .a'); if (sub && !this._c(s + '_subtitle')) sub.textContent = id === 'builtin.home' ? 'Home App' : 'Clock'; }
+    try { this._paintVis(el, s, id); } catch (e) {} }
   _flash(el, txt, ms) { const b = el.querySelector('.sb .b'); b.textContent = txt; el.classList.add('flash'); const s = el.dataset.s; clearTimeout(this._t['f' + s]);
     this._t['f' + s] = setTimeout(() => el.classList.remove('flash'), ms || 1700); }
   _tgt(st) { const a = st.attributes; return a.temperature != null ? Number(a.temperature) : a.target_temp_low != null ? Number(a.target_temp_low) : null; }
@@ -9318,43 +9350,216 @@ class HVGlassPage extends HTMLElement {
   _colorBack() { const lm = this._lm; if (!lm) return; const cw = lm.querySelector('.cw'), whe = lm.querySelector('.wh'); if (whe && !whe.hidden) { whe.hidden = true; lm.querySelector('.ring').hidden = false; return; } cw.hidden = true; }
   _colorCommit(preset) { const id = this._ent(this._ls); if (!id || id.indexOf('builtin.') === 0 || !this._hass) return; const data = { entity_id: id, brightness_pct: Math.max(1, this._lv || 100) }; if (preset && preset.kelvin) data.color_temp_kelvin = preset.kelvin; else if (preset && preset.h != null) data.hs_color = [preset.h, preset.s]; else if (this._lhs) data.hs_color = this._lhs; this._call('light', 'turn_on', data, this._ls); }
   _pkIcon(kind) { return { clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>', intercom: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="7" y="3" width="10" height="18" rx="2"/><circle cx="12" cy="16" r="1.4"/></svg>', home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 11l8-7 8 7v9a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1z"/></svg>', light: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 1 4 10c0 2-1 3-1 3H9s-1-1-1-3a6 6 0 0 1 4-10z"/></svg>', climate: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v18M8 7c2 2 6 2 8 0M8 17c2-2 6-2 8 0"/></svg>', lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="6" y="11" width="12" height="9" rx="1.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>', scene: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l2.2 6.5H21l-5.4 4 2.1 6.5L12 16.5 6.3 20l2.1-6.5L3 9.5h6.8z"/></svg>' }[kind] || ''; }
+_inWidEdit() { try { return !!(typeof hvSsSwitch !== 'undefined' && hvSsSwitch.mode === 'customize' && hvSsSwitch.tab === 'widgets'); } catch (e) { return false; } }
+  _clkSvg(kind) {
+    const ii = kind === 'ii' || kind === 'builtin.clock2';
+    let marks = '';
+    if (ii) {
+      for (let i = 0; i < 12; i++) marks += '<line x1="50" y1="8" x2="50" y2="14" transform="rotate(' + (i * 30) + ' 50 50)" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>';
+    } else {
+      const nums = [[50,20,'12'],[80,54,'3'],[50,88,'6'],[20,54,'9']];
+      marks = nums.map(n => '<text x="' + n[0] + '" y="' + n[1] + '" text-anchor="middle" font-size="11" font-weight="600" fill="currentColor" font-family="system-ui,sans-serif">' + n[2] + '</text>').join('');
+    }
+    const d = new Date(), ah = ((d.getHours() % 12) + d.getMinutes() / 60) / 12 * 360, am = d.getMinutes() / 60 * 360;
+    return '<svg viewBox="0 0 100 100" width="100%" height="100%" style="color:#fff"><circle cx="50" cy="50" r="46" fill="none" stroke="currentColor" stroke-width="2.2"/>' + marks
+      + '<g transform="rotate(' + ah + ' 50 50)"><line x1="50" y1="50" x2="50" y2="26" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"/></g>'
+      + '<g transform="rotate(' + am + ' 50 50)"><line x1="50" y1="50" x2="50" y2="16" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></g>'
+      + '<circle cx="50" cy="50" r="3" fill="currentColor"/></svg>';
+  }
+  _homeSvg() { return '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 3.2 3 11h2v9h6v-6h2v6h6v-9h2L12 3.2z"/></svg>'; }
+  _icomSvg() { return '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 2a8 8 0 0 0-8 8v2H2v8h6v-8H6v-2a6 6 0 1 1 12 0v2h-2v8h6v-8h-2v-2a8 8 0 0 0-8-8z"/></svg>'; }
+  _clearVis(el) { const v = el && el.querySelector('.vis'); if (v) v.remove(); if (el) { el.classList.remove('has-vis', 'is-clock'); } }
+  _ensureVis(el, cls) {
+    this._clearVis(el);
+    const v = document.createElement('div'); v.className = 'vis' + (cls ? ' ' + cls : '');
+    el.appendChild(v); el.classList.add('has-vis');
+    return v;
+  }
+  _mountHvCard(host, kind, entity) {
+    const g = (typeof HV_GAL !== 'undefined' && HV_GAL[kind]) || (kind === 'homie' ? { tag: 'homeview-homie-card', name: 'Homey' } : null);
+    if (!g || !g.tag) return false;
+    try {
+      const cls = customElements.get(g.tag);
+      let stub = {};
+      try { if (cls && cls.getStubConfig) stub = cls.getStubConfig(this._hass) || {}; } catch (x) {}
+      const cfg = Object.assign({ type: 'custom:' + g.tag }, stub);
+      if (entity) cfg.entity = entity;
+      const el = document.createElement(g.tag);
+      if (el.setConfig) el.setConfig(cfg);
+      if (this._hass) el.hass = this._hass;
+      if (el.tagName && el.tagName.startsWith('HOMEVIEW-')) { el.setAttribute('floor', ''); el.setAttribute('hv-home', ''); }
+      host.appendChild(el);
+      return true;
+    } catch (e) { return false; }
+  }
+  _paintVis(el, s, id) {
+    if (!el) return;
+    const w = (this._c('widgets') || {})[s];
+    const kind = (id && id.indexOf('hvcard.') === 0) ? id.slice(7) : (w && w.kind);
+    if (kind) {
+      const box = this._ensureVis(el, 'hv');
+      const ent = (w && w.entity) || (typeof hvGlassNhvEntity === 'function' ? hvGlassNhvEntity(this._hass, kind) : '');
+      if (!this._mountHvCard(box, kind, ent)) { this._clearVis(el); }
+      return;
+    }
+    if (id === 'builtin.clock' || id === 'builtin.clock2') {
+      const box = this._ensureVis(el, 'clk'); el.classList.add('is-clock');
+      box.innerHTML = this._clkSvg(id === 'builtin.clock2' ? 'ii' : 'i');
+      return;
+    }
+    if (id === 'builtin.home') {
+      const box = this._ensureVis(el, 'home');
+      box.innerHTML = this._homeSvg();
+      return;
+    }
+    if (id === 'builtin.intercom') {
+      const box = this._ensureVis(el, 'icom');
+      box.innerHTML = this._icomSvg() + '<div class="onlab">Intercom<br>Everywhere</div>';
+      return;
+    }
+    this._clearVis(el);
+  }
+  _pkRoot() {
+    try {
+      if (typeof hvSsSwitch !== 'undefined' && hvSsSwitch.host && hvSsSwitch.host.shadowRoot && hvSsSwitch.mode === 'customize') return hvSsSwitch.host.shadowRoot;
+    } catch (e) {}
+    return this.shadowRoot;
+  }
+  _closeEdit() {
+    try { if (typeof hvSsSwitch !== 'undefined' && hvSsSwitch.host) hvSsSwitch.host.classList.remove('pkopen'); } catch (e) {}
+    const roots = [];
+    if (this.shadowRoot) roots.push(this.shadowRoot);
+    try { if (typeof hvSsSwitch !== 'undefined' && hvSsSwitch.host && hvSsSwitch.host.shadowRoot) roots.push(hvSsSwitch.host.shadowRoot); } catch (e) {}
+    for (const r of roots) r.querySelectorAll('.ed,.pk').forEach(n => n.remove());
+  }
   _edit(s) { if (!this.shadowRoot) return; this._closeEdit(); const cur = this._ent(s), S = (this._hass && this._hass.states) || {};
-    const pk = document.createElement('div'); pk.className = 'pk'; pk.setAttribute('role', 'dialog'); pk.setAttribute('aria-label', 'Choose Scene or Accessory');
-    pk.innerHTML = '<div class="phd"><button type="button" class="px" aria-label="Close"><svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"/></svg></button><div class="ttl">Choose Accessory</div><span></span></div><div class="qs"><input class="q" type="search" placeholder="Scenes or Accessories" autocomplete="off" spellcheck="false"/></div><div class="body"></div><button type="button" class="ok" aria-label="Save"><svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l5 5 9-10"/></svg></button>';
+    const root = this._pkRoot();
+    try { if (root !== this.shadowRoot && typeof hvSsSwitch !== 'undefined' && hvSsSwitch.host) hvSsSwitch.host.classList.add('pkopen'); } catch (e) {}
+    const pk = document.createElement('div'); pk.className = 'pk on';
+    const icoBtn = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+    const mag = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l5 5"/></svg>';
+    pk.innerHTML = '<div class="phd"><button class="px" type="button" aria-label="Close">' + icoBtn + '</button><div class="ttl">Choose Scene or Accessory</div><span></span></div>'
+      + '<div class="sbar">' + mag + '<input class="q" type="search" placeholder="Scenes or Accessories" enterkeyhint="search"></div><div class="body"></div>';
+    root.appendChild(pk);
     const body = pk.querySelector('.body'), q = pk.querySelector('.q');
-    let pick = cur || '';
-    const other = [{ id: 'builtin.clock', name: 'Clock I', kind: 'clock' }, { id: 'builtin.clock2', name: 'Clock II', kind: 'clock' }, { id: 'builtin.intercom', name: 'Intercom', kind: 'intercom' }, { id: 'builtin.home', name: 'Home App', kind: 'home' }];
-    const collect = (doms) => Object.keys(S).filter(id => doms.includes((id.split('.')[0] || '')) && !(S[id] && S[id].state === 'unavailable') && !/browser_mod|adaptive_lighting/i.test(id)).map(id => ({ id, st: S[id], name: (S[id].attributes && S[id].attributes.friendly_name) || id })).sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
-    const self = this;
-    const addTile = function (grid, item, kind) { const b = document.createElement('button'); b.type = 'button'; b.className = 'it'; b.setAttribute('role', 'option'); if (item.id === pick) b.setAttribute('aria-current', 'true'); const cap = document.createElement('span'); cap.className = 'cap'; cap.appendChild(document.createTextNode(item.name || '')); if (kind === 'camera' && item.st) { const src = self._camSrc(item.st); if (src) { const img = document.createElement('img'); img.alt = ''; img.decoding = 'async'; img.referrerPolicy = 'no-referrer'; img.src = src; img.addEventListener('error', function () { img.remove(); }); b.appendChild(img); } const ago = self._ago(item.st); if (ago) { const sm = document.createElement('small'); sm.textContent = ago; cap.appendChild(sm); } } else { const ic = document.createElement('span'); ic.className = 'icn'; ic.innerHTML = self._pkIcon(kind || item.kind || 'scene'); b.appendChild(ic); } b.appendChild(cap); b.addEventListener('click', function () { pick = item.id; paint(); }); grid.appendChild(b); };
-    const section = function (title, items, kind) { if (!items.length) return; const sec = document.createElement('div'); sec.className = 'sec'; const h = document.createElement('div'); h.className = 'sh'; h.textContent = title; sec.appendChild(h); const grid = document.createElement('div'); grid.className = 'grid'; for (let i = 0; i < items.length; i++) addTile(grid, items[i], kind || items[i].kind); sec.appendChild(grid); body.appendChild(sec); };
-    const paint = function () { const term = q.value.trim().toLowerCase(); body.innerHTML = ''; const match = function (name, id) { return !term || String(name).toLowerCase().indexOf(term) >= 0 || (id && String(id).toLowerCase().indexOf(term) >= 0); };
-      if (!term) { const sec = document.createElement('div'); sec.className = 'sec'; const grid = document.createElement('div'); grid.className = 'grid'; const b = document.createElement('button'); b.type = 'button'; b.className = 'it clr'; b.textContent = 'Clear — no accessory'; if (!pick) b.setAttribute('aria-current', 'true'); b.addEventListener('click', function () { pick = ''; paint(); }); grid.appendChild(b); sec.appendChild(grid); body.appendChild(sec); }
-      section('Other', other.filter(function (o) { return match(o.name, o.id); }));
-      section('Scenes', collect(['scene', 'script']).filter(function (o) { return match(o.name, o.id); }), 'scene');
-      section('Cameras', collect(['camera']).filter(function (o) { return match(o.name, o.id); }), 'camera');
-      section('Lights', collect(['light']).filter(function (o) { return match(o.name, o.id); }), 'light');
-      section('Climate', collect(['climate']).filter(function (o) { return match(o.name, o.id); }), 'climate');
-      section('Locks', collect(['lock']).filter(function (o) { return match(o.name, o.id); }), 'lock');
-      if (!body.querySelector('.it')) { const e = document.createElement('div'); e.className = 'sh'; e.style.fontWeight = '500'; e.style.opacity = '.7'; e.textContent = 'No matches'; body.appendChild(e); }
+    pk.querySelector('.px').addEventListener('click', ev => { ev.preventDefault(); ev.stopPropagation(); this._closeEdit(); });
+    const choose = (id, extra) => {
+      const patch = {}, widgets = Object.assign({}, (this._c('widgets') || {}));
+      patch[s + '_entity'] = id || null;
+      if (id && id.indexOf('hvcard.') === 0) {
+        const kind = id.slice(7);
+        widgets[s] = { kind, entity: extra || (typeof hvGlassNhvEntity === 'function' ? hvGlassNhvEntity(this._hass, kind) : '') || '' };
+        const g = (typeof HV_GAL !== 'undefined' && HV_GAL[kind]) || (kind === 'homie' ? { name: 'Homey' } : null);
+        if (g && g.name) { patch[s + '_name'] = g.name; patch[s + '_subtitle'] = ''; }
+      } else {
+        if (widgets[s]) delete widgets[s];
+        if (id === 'builtin.clock') patch.clock_style = 'i';
+        if (id === 'builtin.clock2') patch.clock_style = 'ii';
+        if (id && id.indexOf('builtin.') === 0) {
+          const labels = { 'builtin.clock': ['Clock I', 'Clock'], 'builtin.clock2': ['Clock II', 'Clock'], 'builtin.intercom': ['Intercom', 'Intercom'], 'builtin.home': ['Home', 'Home App'] };
+          const lb = labels[id]; if (lb) { patch[s + '_name'] = lb[0]; patch[s + '_subtitle'] = lb[1]; }
+        } else if (id && S[id]) {
+          const fn = S[id].attributes && S[id].attributes.friendly_name;
+          if (fn) patch[s + '_name'] = fn;
+          patch[s + '_subtitle'] = (S[id].attributes && S[id].attributes.area) || this._sub(s) || '';
+        }
+      }
+      patch.widgets = Object.keys(widgets).length ? widgets : null;
+      try { hvGlassCfg.set(patch); } catch (e) {}
+      this._closeEdit(); this._sig = null; this._render();
     };
-    paint(); q.addEventListener('input', paint);
-    const finish = function (save) { if (!save) { self._closeEdit(); return; } const patch = {}; patch[s + '_entity'] = pick;
-      if (pick === 'builtin.clock') patch.clock_style = 'i'; if (pick === 'builtin.clock2') patch.clock_style = 'ii';
-      if (pick && pick.indexOf('builtin.') === 0) { const labels = { 'builtin.clock': ['Clock I', 'Clock'], 'builtin.clock2': ['Clock II', 'Clock'], 'builtin.intercom': ['Intercom', 'Intercom'], 'builtin.home': ['Home', 'Home App'] }[pick]; if (labels) { patch[s + '_name'] = labels[0]; patch[s + '_subtitle'] = labels[1]; } }
-      else if (pick && S[pick]) { patch[s + '_name'] = (S[pick].attributes && S[pick].attributes.friendly_name) || pick; const dom = pick.split('.')[0]; patch[s + '_subtitle'] = ({ light: 'Lights', scene: 'Scene', script: 'Scene', climate: 'Climate', lock: 'Lock', camera: 'Camera' })[dom] || ''; }
-      else { patch[s + '_name'] = null; patch[s + '_subtitle'] = null; }
-      if (typeof hvGlassCfg !== 'undefined') hvGlassCfg.set(patch); self._closeEdit(); };
-    pk.querySelector('.px').addEventListener('click', function () { finish(false); });
-    pk.querySelector('.ok').addEventListener('click', function () { finish(true); });
-    pk.addEventListener('keydown', function (e) { if (e.key === 'Escape') { e.stopPropagation(); finish(false); } });
-    this.shadowRoot.appendChild(pk); setTimeout(function () { q.focus(); }, 30); }
-
-  _bloom(el, x, y) { if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return; const r = el.getBoundingClientRect(), b = document.createElement('span'); b.className = 'bl';
+    const collect = (doms, pred) => Object.keys(S).filter(id => doms.includes(id.split('.')[0]) && (!pred || pred(id, S[id]))).sort((a, b) => {
+      const na = (S[a].attributes && S[a].attributes.friendly_name) || a, nb = (S[b].attributes && S[b].attributes.friendly_name) || b;
+      return na.localeCompare(nb);
+    });
+    const nameOf = id => (S[id] && S[id].attributes && S[id].attributes.friendly_name) || id.split('.')[1] || id;
+    const mkWi = (lab, tileHtml, id, extra, size) => {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'wi' + (size === '2x1' ? ' w2' : size === '2x2' ? ' w22' : '');
+      b.innerHTML = '<div class="tile">' + tileHtml + '</div><div class="lab"></div>';
+      b.querySelector('.lab').textContent = lab;
+      b.addEventListener('click', ev => { ev.preventDefault(); ev.stopPropagation(); choose(id, extra); });
+      return b;
+    };
+    const otherTile = item => {
+      if (item.id === 'builtin.clock' || item.id === 'builtin.clock2') return this._clkSvg(item.id === 'builtin.clock2' ? 'ii' : 'i');
+      if (item.id === 'builtin.home') return '<div class="icn">' + this._homeSvg() + '</div>';
+      if (item.id === 'builtin.intercom') return '<div class="icn">' + this._icomSvg() + '</div><div class="onlab">Intercom<br>Everywhere</div>';
+      return '';
+    };
+    const iconFor = (id) => {
+      try { if (this._pkIcon) return this._pkIcon(id, S[id]); } catch (e) {}
+      const d = id.split('.')[0];
+      const map = { scene: 'mdi:palette', light: 'mdi:lightbulb', camera: 'mdi:cctv', climate: 'mdi:thermostat', lock: 'mdi:lock', cover: 'mdi:garage', media_player: 'mdi:play-box', person: 'mdi:account', calendar: 'mdi:calendar', weather: 'mdi:weather-partly-cloudy' };
+      return map[d] || 'mdi:puzzle';
+    };
+    const mkEnt = (id, size) => {
+      const st = S[id], d = id.split('.')[0], lab = nameOf(id);
+      let tile = '';
+      if (d === 'camera') {
+        const src = this._camSrc(st);
+        tile = (src ? '<img alt="" src="' + src.replace(/"/g, '') + '">' : '') + '<div class="icn" style="display:' + (src ? 'none' : 'grid') + '"><ha-icon icon="mdi:cctv"></ha-icon></div>';
+      } else {
+        const ico = iconFor(id);
+        const ic = ico.indexOf('<') === 0 ? ico : '<ha-icon icon="' + ico + '"></ha-icon>';
+        tile = '<div class="icn">' + ic + '</div>';
+      }
+      return mkWi(lab, tile, id, '', size);
+    };
+    const paint = (filter) => {
+      body.innerHTML = '';
+      const f = String(filter || '').trim().toLowerCase();
+      const match = (name, id) => !f || String(name).toLowerCase().includes(f) || String(id).toLowerCase().includes(f);
+      const addSec = (title, nodes) => {
+        if (!nodes.length) return;
+        const sec = document.createElement('div'); sec.className = 'sec';
+        sec.innerHTML = '<div class="sh"></div>';
+        sec.querySelector('.sh').textContent = title;
+        const row = document.createElement('div'); row.className = 'row';
+        nodes.forEach(n => row.appendChild(n));
+        sec.appendChild(row);
+        body.appendChild(sec);
+      };
+      const other = [
+        { id: 'builtin.clock', name: 'Clock I' },
+        { id: 'builtin.clock2', name: 'Clock II' },
+        { id: 'builtin.intercom', name: 'Intercom' },
+        { id: 'builtin.home', name: 'Home App' }
+      ].filter(it => match(it.name, it.id));
+      addSec('Other', other.map(it => mkWi(it.name, otherTile(it), it.id)));
+      const nhv = [];
+      const kinds = (typeof HV_GAL !== 'undefined') ? Object.keys(HV_GAL) : [];
+      if (customElements.get('homeview-homie-card')) kinds.push('homie');
+      for (const kind of kinds) {
+        const g = (kind === 'homie') ? { name: 'Homey', ico: 'mdi:home-assistant', need: '' } : HV_GAL[kind];
+        if (!g) continue;
+        const ent = g.need ? (typeof hvGlassNhvEntity === 'function' ? hvGlassNhvEntity(this._hass, kind) : '') : '';
+        if (g.need && !ent) continue;
+        if (!match(g.name, 'hvcard.' + kind) && !match(ent, kind)) continue;
+        const size = (kind === 'nowplaying' || kind === 'tvplayer' || kind === 'events' || kind === 'music') ? '2x1' : (kind === 'thermostat' || kind === 'house' || kind === 'myhome' || kind === 'glass' || kind === 'homie') ? '2x2' : '1x1';
+        const host = document.createElement('div'); host.className = 'tile';
+        const b = mkWi(g.name, '<div class="hv"></div>', 'hvcard.' + kind, ent, size);
+        const box = b.querySelector('.hv');
+        if (!this._mountHvCard(box, kind, ent)) {
+          b.querySelector('.tile').innerHTML = '<div class="icn"><ha-icon icon="' + (g.ico || 'mdi:view-dashboard') + '"></ha-icon></div>';
+        }
+        nhv.push(b);
+      }
+      addSec('NotHomeView', nhv);
+      addSec('Scenes', collect(['scene', 'script']).filter(id => match(nameOf(id), id)).map(id => mkEnt(id)));
+      addSec('Cameras', collect(['camera']).filter(id => match(nameOf(id), id)).map(id => mkEnt(id)));
+      addSec('Lights', collect(['light']).filter(id => match(nameOf(id), id)).map(id => mkEnt(id)));
+      addSec('Climate', collect(['climate']).filter(id => match(nameOf(id), id)).map(id => mkEnt(id)));
+      addSec('Locks', collect(['lock']).filter(id => match(nameOf(id), id)).map(id => mkEnt(id)));
+    };
+    q.addEventListener('input', () => paint(q.value));
+    paint('');
+    try { q.focus(); } catch (e) {}
+  }
+    _bloom(el, x, y) { if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return; const r = el.getBoundingClientRect(), b = document.createElement('span'); b.className = 'bl';
     const d = Math.hypot(r.width, r.height) * 1.4; b.style.cssText = `--d:${d}px;--x:${x - r.left}px;--y:${y - r.top}px`; el.appendChild(b); b.addEventListener('animationend', () => b.remove()); setTimeout(() => b.remove(), 900); }
   // --- pointer handling: tap / hold / drag (light brightness)
   _wire(el) { const s = el.dataset.s, isLt = s === 'light' || s === 'light2';
-    if (s === 'thermostat') { el.addEventListener('click', e => { const b = e.target.closest('.cv'); if (b) { e.stopPropagation(); if (!b.disabled) this._step(Number(b.dataset.dir)); return; } });
+    if (s === 'thermostat') { el.addEventListener('click', e => { if (this._inWidEdit()) { e.stopPropagation(); this._edit('thermostat'); return; } const b = e.target.closest('.cv'); if (b) { e.stopPropagation(); if (!b.disabled) this._step(Number(b.dataset.dir)); return; } });
       let ht = 0; el.addEventListener('pointerdown', e => { if (e.target.closest('.cv')) return; clearTimeout(ht); ht = setTimeout(() => { if (typeof hvSsGuard === 'function' && hvSsGuard()) return; this._edit('thermostat'); }, 500); });
       ['pointerup', 'pointercancel', 'pointerleave'].forEach(t => el.addEventListener(t, () => clearTimeout(ht))); return; }
     let p = null; const end = () => { el.classList.remove('dn'); };
@@ -9368,6 +9573,7 @@ class HVGlassPage extends HTMLElement {
     const up = e => { if (!p || (e.pointerId != null && e.pointerId !== p.id)) return; clearTimeout(this._t.h); const q = p; p = null; end();
       if (hvLdLocked(this, this._ent(s))) return;
       if (e.type !== 'pointerup' || q.held) return;
+      if (this._inWidEdit()) { if (!q.moved) { this._bloom(el, e.clientX, e.clientY); this._edit(s); } return; }
       const short = Date.now() - q.t < 400, tiny = Math.hypot((e.clientX || q.x) - q.x, (e.clientY || q.y) - q.y) < 32;
       if (q.moved && !short && !tiny) return; this._bloom(el, e.clientX, e.clientY); this._tap(s, el); };
     el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
@@ -10396,7 +10602,7 @@ window.NotHomeView = Object.assign(window.NotHomeView || {}, { doorbell: {
 const HVG_OVERRIDE_KEYS = ['thermostat_entity', 'thermostat_name', 'thermostat_subtitle', 'scene_entity', 'scene_name', 'scene_subtitle',
   'intercom_entity', 'intercom_action', 'intercom_name', 'intercom_subtitle', 'lock_entity', 'lock_name', 'lock_subtitle', 'light_entity', 'light_name', 'light_subtitle',
   'light2_entity', 'light2_name', 'light2_subtitle', 'scene2_entity', 'scene2_name', 'scene2_subtitle', 'camera_entity', 'camera_name', 'camera_subtitle',
-  'extra_entity', 'extra_name', 'extra_subtitle', 'layout', 'theme', 'background', 'hero', 'clock_style'];
+  'extra_entity', 'extra_name', 'extra_subtitle', 'layout', 'theme', 'background', 'hero', 'clock_style', 'accent', 'color', 'widgets'];
 const hvGlassCfg = {
   key() { return `hvGlassCfg:${ssDash() || 'lovelace'}`; },
   raw() { const o = mhLs.get(this.key()); return o && typeof o === 'object' ? o : {}; },
@@ -10415,6 +10621,48 @@ const hvGlassCfg = {
     mhLs.set(this.key(), Object.keys(cur).length ? cur : null);
     try { fire(window, 'hv-glass-cfg', { cfg: this.get() }); } catch (e) {} }
 };
+
+const HV_GLASS_COLORS = [
+  { id: 'indigo', theme: 'indigo', accent: '#5856e6', l: 'Indigo' },
+  { id: 'blue', theme: 'blue', accent: '#2aa0ff', l: 'Blue' },
+  { id: 'orange', theme: 'orange', accent: '#e8872a', l: 'Orange' },
+  { id: 'light', theme: 'light', accent: '#d5d9d2', l: 'Light' },
+  { id: 'red', theme: 'orange', accent: '#ff3b30', l: 'Red' },
+  { id: 'pink', theme: 'orange', accent: '#ff2d55', l: 'Pink' },
+  { id: 'purple', theme: 'indigo', accent: '#af52de', l: 'Purple' },
+  { id: 'teal', theme: 'blue', accent: '#64d2ff', l: 'Teal' },
+  { id: 'green', theme: 'blue', accent: '#30d158', l: 'Green' },
+  { id: 'yellow', theme: 'light', accent: '#ffd60a', l: 'Yellow' }
+];
+function hvGlassAccent(cfg) {
+  cfg = cfg || ((typeof hvGlassCfg !== 'undefined' && hvGlassCfg.get) ? (hvGlassCfg.get() || {}) : {}) || {};
+  if (cfg.accent && /^#?[0-9a-f]{3,8}$/i.test(String(cfg.accent))) {
+    const a = String(cfg.accent);
+    return a.charAt(0) === '#' ? a : ('#' + a);
+  }
+  const id = cfg.color || cfg.theme || 'indigo';
+  const hit = HV_GLASS_COLORS.find(c => c.id === id) || HV_GLASS_COLORS.find(c => c.theme === id);
+  return (hit && hit.accent) || '#5856e6';
+}
+function hvGlassNhvEntity(hass, kind) {
+  const st = (hass && hass.states) || {};
+  const keys = Object.keys(st);
+  const first = (pre, pred) => keys.find(k => k.startsWith(pre + '.') && (!pred || pred(k, st[k])));
+  const attr = (k, ev) => ev && ev.attributes && ev.attributes[k];
+  if (kind === 'thermostat') return first('climate');
+  if (kind === 'light') return first('light');
+  if (kind === 'music' || kind === 'nowplaying') return first('media_player', (k, ev) => !/tv|television/i.test(k + ' ' + (attr('friendly_name', ev) || ''))) || first('media_player');
+  if (kind === 'tv' || kind === 'tvplayer') return first('media_player', (k, ev) => /tv|television/i.test(k + ' ' + (attr('friendly_name', ev) || ''))) || first('media_player');
+  if (kind === 'camera') return first('camera');
+  if (kind === 'garage') return first('cover', (k, ev) => /garage|door/i.test(k + ' ' + (attr('device_class', ev) || '') + ' ' + (attr('friendly_name', ev) || ''))) || first('cover');
+  if (kind === 'scene') return first('scene');
+  if (kind === 'person') return first('person');
+  if (kind === 'events') return first('calendar');
+  if (kind === 'battery') return first('sensor', (k, ev) => attr('device_class', ev) === 'battery');
+  if (kind === 'entity') return first('weather') || first('sensor');
+  return '';
+}
+
 
 /* ---------------- 1.6.0: screensaver styles ----------------
    Photo clock (Wallpanel's photos + clock, the default) or one of four full-screen live clocks: Info dashboard, Abstract fluid, Modern typographic,
@@ -11474,7 +11722,74 @@ const HV_SS_SW_CSS = `
 .comp.media .art{width:38%;aspect-ratio:1;border-radius:14%;background:linear-gradient(160deg,#b9d7ee,#6f9ccc);background-size:cover;background-position:center;flex:none;box-shadow:0 4px 12px rgba(0,0,0,.25)}
 .comp.media .mv{flex:1;min-width:0}
 .comp.media .v{font-size:22cqh;text-transform:uppercase}
-`;
+
+/* Glass customize: large floating X/check, light-weight tabs */
+:host(.gled) .tabs b{font-weight:400;font-size:12px;letter-spacing:.14em;color:rgba(255,255,255,.42)}
+:host(.gled) .tabs b.on{color:#fff;font-weight:400}
+:host(.gled) .x,:host(.gled) .ck{width:58px;height:58px;bottom:calc(22px + env(safe-area-inset-bottom,0px))}
+:host(.gled) .x{left:calc(22px + env(safe-area-inset-left,0px));background:#3a3a3e}
+:host(.gled) .ck{right:calc(22px + env(safe-area-inset-right,0px))}
+:host(.gled) .x svg,:host(.gled) .ck svg{width:26px;height:26px}
+:host(.gled.pkopen) .tabs,:host(.gled.pkopen) .x,:host(.gled.pkopen) .ck{visibility:hidden;pointer-events:none}
+
+/* Hide the default customize card while STYLE/COLOR carousels are up */
+.card.editing.g-hide{visibility:hidden;pointer-events:none}
+/* WIDGETS: full-size interactive glass preview, no highlight container */
+.card.editing.g-wid{margin:0!important;pointer-events:none}
+.card.editing.g-wid .win{border-radius:32px;box-shadow:none;background:transparent;overflow:hidden;pointer-events:auto}
+.card.editing.g-wid .f.glass,.card.editing.g-wid .f.glass *{pointer-events:auto!important}
+
+/* Horizontal layout / colour carousel */
+.gcar{position:absolute;inset:0;z-index:4;overflow:hidden;touch-action:none;pointer-events:auto}
+.gcar-tr{position:absolute;top:0;bottom:0;left:0;display:flex;align-items:center;gap:28px;will-change:transform;touch-action:none}
+.gcar-it{flex:none;display:flex;flex-direction:column;align-items:center;pointer-events:none}
+.gcar-hl{width:min(62vw,58vh,560px);height:min(62vw,58vh,560px);border-radius:36px;padding:16px;box-sizing:border-box;background:var(--gcar-accent,#e8872a);box-shadow:0 18px 40px rgba(0,0,0,.28)}
+.gcar-win{width:100%;height:100%;border-radius:24px;overflow:hidden;position:relative;background:#111}
+.gcar-win > .f{position:absolute;inset:0;border-radius:inherit}
+.gcar-it .cap{margin-top:12px;font-size:12px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.55)}
+.gcar-it.on .cap{color:#fff}
+.gcar.cols .gcar-hl{padding:0;display:block}
+.gcar.cols .gcar-win{display:none}
+.gcar.cols .gcar-hl{box-shadow:0 16px 36px rgba(0,0,0,.3)}
+.gcar.cols .gcar-it.on .gcar-hl{box-shadow:0 0 0 3px #fff,0 16px 36px rgba(0,0,0,.3)}
+
+
+/* Picker mounted on the switcher host during customize */
+
+.pk{position:absolute;inset:0;z-index:28;display:flex;flex-direction:column;background:#000;color:#fff;font-family:inherit;font-size:16px;line-height:1.25;pointer-events:auto}
+.pk .phd{position:relative;display:flex;align-items:center;justify-content:space-between;padding:12px 16px 8px;min-height:52px;flex:none}
+.pk .phd .ttl{font-size:17px;font-weight:500;position:absolute;left:50%;transform:translateX(-50%);color:#fff;white-space:nowrap}
+.pk .px{width:36px;height:36px;border-radius:50%;border:0;background:rgba(60,60,64,.85);color:#fff;display:grid;place-items:center;cursor:pointer;padding:0}
+.pk .px svg{width:16px;height:16px;display:block}
+.pk .sbar{display:flex;align-items:center;gap:8px;margin:0 16px 10px;background:rgba(48,48,52,.72);border-radius:12px;padding:0 12px;height:36px;flex:none;-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px)}
+.pk .sbar svg{width:16px;height:16px;flex:none;opacity:.55}
+.pk .sbar input,.pk .q{flex:1;min-width:0;border:0;background:transparent;color:#fff;font:400 15px/1.2 system-ui,-apple-system,sans-serif;outline:none;height:36px}
+.pk .sbar input::placeholder{color:rgba(255,255,255,.45)}
+.pk .body{flex:1;overflow:auto;padding:0 0 40px;-webkit-overflow-scrolling:touch}
+.pk .sec{margin:0 0 10px}
+.pk .sh{font-size:22px;font-weight:650;margin:0 16px 10px;letter-spacing:-.02em}
+.pk .ok{display:none}
+.pk .row{display:flex;gap:14px;overflow-x:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x;padding:4px 16px 18px;scrollbar-width:none}
+.pk .row::-webkit-scrollbar{display:none}
+.pk .wi{flex:none;width:88px;display:flex;flex-direction:column;align-items:center;gap:7px;background:transparent;border:0;color:#fff;padding:0;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.pk .wi .tile{width:88px;height:88px;border-radius:16px;background:rgba(44,44,48,.78);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);overflow:hidden;position:relative;box-shadow:inset 0 0 0 .5px rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center}
+.pk .wi.w2{width:184px}
+.pk .wi.w2 .tile{width:184px}
+.pk .wi.w22{width:184px}
+.pk .wi.w22 .tile{width:184px;height:184px}
+.pk .wi .lab{font-size:11px;font-weight:500;opacity:.86;text-align:center;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pk .wi .tile .icn{width:46%;height:46%;display:grid;place-items:center;color:#fff}
+.pk .wi .tile .icn svg,.pk .wi .tile .icn ha-icon{width:100%;height:100%;--mdc-icon-size:100%}
+.pk .wi .tile .onlab{position:absolute;left:8px;right:8px;bottom:8px;text-align:center;font-size:9px;font-weight:600;line-height:1.15;color:#fff}
+.pk .wi .tile .hv{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.pk .wi .tile .hv > *{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.pk .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:0 16px}
+.pk .it{position:relative;aspect-ratio:1;border:0;border-radius:18px;background:#1c1c1e;color:#fff;padding:0;overflow:hidden;cursor:pointer;display:flex;flex-direction:column;justify-content:flex-end;text-align:left;font:inherit;font-size:13px;line-height:1.2}
+.pk .it img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none}
+.pk .it .cap{position:relative;z-index:1;padding:8px 10px;background:linear-gradient(transparent,rgba(0,0,0,.55));font-size:13px;font-weight:600;width:100%;box-sizing:border-box}
+.pk .it .cap small{display:block;font-weight:500;opacity:.8;font-size:11px}
+.pk .it .icn{position:absolute;inset:0 0 36px;display:grid;place-items:center;pointer-events:none;opacity:.95}
+.pk .it .icn svg{width:42%;height:42%}`;
 
 const hvSsFaces = {
   key() { return `hvSsFaces:${ssDash() || 'lovelace'}`; },
@@ -11923,11 +12238,12 @@ const hvSsSwitch = {
     this._iv = setInterval(() => {
       if (this._dragging) return;
       const hass = hvSsOv.hass(), d = new Date();
-      if (this._faces) for (const x of this._faces) { try { x.face.update(hass, d); this._paintSlots(x.face.el, x.faceData, this.mode === 'customize' && this.tab === 'widgets', x.faceData === this.draft.faces[this.i]); } catch (e) {} }
+      if (this._faces) for (const x of this._faces) { try { x.face.update(hass, d); if ((x.faceData || {}).style !== 'glass') this._paintSlots(x.face.el, x.faceData, this.mode === 'customize' && this.tab === 'widgets', x.faceData === this.draft.faces[this.i]); } catch (e) {} }
     }, 1000);
   },
   _cardSize(mode) {
     const W = innerWidth || 800, H = innerHeight || 800, short = Math.min(W, H);
+    if (mode === 'customize' && this.tab === 'widgets' && this.draft && this.draft.faces[this.i] && this.draft.faces[this.i].style === 'glass') return Math.round(short * 0.76);
     if (mode === 'customize') return Math.round(short * 0.62);
     if (mode === 'switch' || mode === 'peek') return Math.round(short * 0.72);
     return short;
@@ -11955,7 +12271,15 @@ const hvSsSwitch = {
       card.style.marginRight = gap + 'px';
       const win = card.querySelector('.win'); win.style.width = size + 'px'; win.style.height = size + 'px';
       const f = this._mkFace(face, false); win.appendChild(f.el); this._applyFaceLook(f, face);
-      this._paintSlots(f.el, face, mode === 'customize' && this.tab === 'widgets', true);
+      if (face.style !== 'glass') this._paintSlots(f.el, face, mode === 'customize' && this.tab === 'widgets', true);
+      if (mode === 'customize' && face.style === 'glass') {
+        if (this.tab === 'widgets') {
+          card.classList.add('g-wid');
+          try { if (f._gp) f._gp.style.pointerEvents = 'auto'; f.el.style.pointerEvents = 'auto'; } catch (e) {}
+        } else if (this.tab === 'style' || this.tab === 'color') {
+          card.classList.add('g-hide');
+        }
+      }
       this._faces.push({ el: card, face: f, faceData: face, n });
       if (mode !== 'peek') {
         const cz = card.querySelector('.cz');
@@ -12144,7 +12468,8 @@ const hvSsSwitch = {
   },
   _clearChrome() {
     const sr = this.host && this.host.shadowRoot; if (!sr) return;
-    sr.querySelectorAll('.tabs,.rail,.auto,.x,.ck,.sheet,.plus').forEach(n => n.remove());
+    try { this.host.classList.remove('gled', 'pkopen'); } catch (e) {}
+    sr.querySelectorAll('.tabs,.rail,.auto,.x,.ck,.sheet,.plus,.gcar').forEach(n => n.remove());
   },
   _snapScroll() {
     const sr = this.host && this.host.shadowRoot; if (!sr) return [];
@@ -12186,8 +12511,145 @@ const hvSsSwitch = {
     const ck = document.createElement('button'); ck.className = 'ck'; ck.setAttribute('aria-label', 'Save'); ck.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l5 5 9-11"/></svg>';
     ck.addEventListener('click', () => this._save());
     sr.appendChild(x); sr.appendChild(ck);
-    if (this.tab === 'style' || this.tab === 'color' || this.tab === 'font' || this.tab === 'background') this._paintRail(face);
-    if (this.tab === 'color') this._paintAuto(face);
+    try { this.host.classList.toggle('gled', face.style === 'glass'); } catch (e) {}
+    if (face.style === 'glass' && this.tab === 'style') this._paintLayoutCar(face);
+    else if (face.style === 'glass' && this.tab === 'color') this._paintColorCar(face);
+    else {
+      if (this.tab === 'style' || this.tab === 'color' || this.tab === 'font' || this.tab === 'background') this._paintRail(face);
+      if (this.tab === 'color') this._paintAuto(face);
+    }
+  },
+_snapGlass() {
+    try { this._glassOrig = Object.assign({}, (typeof hvGlassCfg !== 'undefined' && hvGlassCfg.raw) ? (hvGlassCfg.raw() || {}) : {}); } catch (e) { this._glassOrig = {}; }
+  },
+  _restoreGlass() {
+    if (!this._glassOrig || typeof hvGlassCfg === 'undefined') { this._glassOrig = null; return; }
+    const orig = this._glassOrig, patch = {};
+    try {
+      for (const k of HVG_OVERRIDE_KEYS) patch[k] = Object.prototype.hasOwnProperty.call(orig, k) ? orig[k] : null;
+      hvGlassCfg.set(patch);
+    } catch (e) {}
+    this._glassOrig = null;
+  },
+  _paintLayoutCar(face) {
+    const sr = this.host.shadowRoot, wrap = document.createElement('div'); wrap.className = 'gcar';
+    const track = document.createElement('div'); track.className = 'gcar-tr';
+    const opts = [{ v: 'mixed', l: 'Mixed' }, { v: 'grid3', l: '3×3' }];
+    const accent = hvGlassAccent();
+    wrap.style.setProperty('--gcar-accent', accent);
+    const cur = (face && face.layout) || (typeof hvGlassCfg !== 'undefined' && hvGlassCfg.get && hvGlassCfg.get().layout) || 'mixed';
+    let i = Math.max(0, opts.findIndex(o => o.v === cur)); if (i < 0) i = 0;
+    opts.forEach(o => {
+      const item = document.createElement('div'); item.className = 'gcar-it' + (o.v === cur ? ' on' : ''); item.dataset.v = o.v;
+      const hl = document.createElement('div'); hl.className = 'gcar-hl'; hl.style.background = accent;
+      const win = document.createElement('div'); win.className = 'gcar-win';
+      const thumb = this._mkFace(Object.assign({}, face, { layout: o.v }), true);
+      try {
+        if (thumb._gp) {
+          thumb._gp._pin = { layout: o.v };
+          const cfg = Object.assign({}, (typeof hvGlassCfg !== 'undefined' && hvGlassCfg.get) ? (hvGlassCfg.get() || {}) : {}, { layout: o.v });
+          thumb._gp.setConfig(cfg);
+          thumb._gp.style.pointerEvents = 'none';
+        }
+      } catch (e) {}
+      win.appendChild(thumb.el);
+      hl.appendChild(win);
+      item.appendChild(hl);
+      const cap = document.createElement('div'); cap.className = 'cap'; cap.textContent = o.l;
+      item.appendChild(cap);
+      track.appendChild(item);
+    });
+    wrap.appendChild(track);
+    sr.appendChild(wrap);
+    this._wireHorzCar(wrap, track, i, ni => {
+      const v = opts[ni].v;
+      if (face) face.layout = v;
+      try { hvGlassCfg.set({ layout: v }); } catch (e) {}
+    });
+  },
+  _paintColorCar(face) {
+    const sr = this.host.shadowRoot, wrap = document.createElement('div'); wrap.className = 'gcar cols';
+    const track = document.createElement('div'); track.className = 'gcar-tr';
+    const cols = HV_GLASS_COLORS;
+    const cfg = (typeof hvGlassCfg !== 'undefined' && hvGlassCfg.get) ? (hvGlassCfg.get() || {}) : {};
+    const cur = cfg.color || cfg.theme || 'indigo';
+    let i = cols.findIndex(c => c.id === cur);
+    if (i < 0) i = cols.findIndex(c => (c.accent || '').toLowerCase() === String(cfg.accent || '').toLowerCase());
+    if (i < 0) i = Math.max(0, cols.findIndex(c => c.theme === (cfg.theme || 'indigo')));
+    cols.forEach(o => {
+      const item = document.createElement('div'); item.className = 'gcar-it' + (o.id === (cols[i] && cols[i].id) ? ' on' : ''); item.dataset.v = o.id;
+      const hl = document.createElement('div'); hl.className = 'gcar-hl'; hl.style.background = o.accent;
+      const win = document.createElement('div'); win.className = 'gcar-win';
+      hl.appendChild(win);
+      item.appendChild(hl);
+      const cap = document.createElement('div'); cap.className = 'cap'; cap.textContent = o.l;
+      item.appendChild(cap);
+      track.appendChild(item);
+    });
+    wrap.appendChild(track);
+    sr.appendChild(wrap);
+    this._wireHorzCar(wrap, track, Math.max(0, i), ni => {
+      const o = cols[ni]; if (!o) return;
+      try { hvGlassCfg.set({ theme: o.theme, accent: o.accent, color: o.id }); } catch (e) {}
+    });
+  },
+  _wireHorzCar(wrap, track, i, onSnap) {
+    const items = () => Array.from(track.children);
+    const layout = () => {
+      const W = wrap.clientWidth || innerWidth || 800;
+      const first = items()[0];
+      const itemW = first ? first.offsetWidth : Math.round(Math.min(W, innerHeight || 800) * 0.62);
+      const gap = parseFloat(getComputedStyle(track).gap) || 28;
+      return { W, itemW, gap };
+    };
+    const apply = (x, anim) => {
+      track.style.willChange = 'transform';
+      track.style.transition = anim ? 'transform .34s cubic-bezier(0.22, 1, 0.32, 1)' : 'none';
+      track.style.transform = 'translate3d(' + x + 'px,0,0)';
+    };
+    const pos = (idx, L) => (L.W - L.itemW) / 2 - idx * (L.itemW + L.gap);
+    const mark = () => { items().forEach((el, n) => el.classList.toggle('on', n === i)); };
+    const snap = (anim, notify) => {
+      const n = items().length; i = Math.max(0, Math.min(n - 1, i));
+      apply(pos(i, layout()), anim);
+      mark();
+      if (notify && onSnap) onSnap(i);
+    };
+    snap(false, false);
+    wrap.style.touchAction = 'none';
+    track.style.touchAction = 'none';
+    let g = null, raf = 0, pending = null;
+    const down = ev => {
+      if (ev.button > 0) return;
+      ev.preventDefault();
+      const L = layout(), x0 = ev.clientX, base = pos(i, L);
+      g = { id: ev.pointerId, x0, base, last: x0, t: Date.now(), moved: false };
+      try { wrap.setPointerCapture(ev.pointerId); } catch (e) {}
+      apply(base, false);
+    };
+    const move = ev => {
+      if (!g || (ev.pointerId != null && ev.pointerId !== g.id)) return;
+      ev.preventDefault();
+      const x = ev.clientX, dx = x - g.x0;
+      if (!g.moved && Math.abs(dx) > 6) g.moved = true;
+      g.last = x;
+      pending = g.base + dx;
+      if (!raf) raf = requestAnimationFrame(() => { raf = 0; if (pending != null) apply(pending, false); });
+    };
+    const up = ev => {
+      if (!g || (ev.pointerId != null && ev.pointerId !== g.id)) return;
+      const dx = (ev.clientX || g.last) - g.x0, dt = Math.max(1, Date.now() - g.t), vx = dx / dt;
+      const L = layout();
+      let ni = i;
+      if (Math.abs(dx) > Math.max(24, L.itemW * 0.18) || Math.abs(vx) > 0.45) ni = i + (dx < 0 ? 1 : -1);
+      i = ni; g = null; pending = null;
+      snap(true, true);
+    };
+    wrap.addEventListener('pointerdown', down);
+    wrap.addEventListener('pointermove', move);
+    wrap.addEventListener('pointerup', up);
+    wrap.addEventListener('pointercancel', up);
+    try { new ResizeObserver(() => snap(false, false)).observe(wrap); } catch (e) {}
   },
   _paintRail(face) {
     const sr = this.host.shadowRoot, rail = document.createElement('div'); rail.className = 'rail';
@@ -12218,7 +12680,7 @@ const hvSsSwitch = {
       ];
       for (const o of themes) {
         const b = document.createElement('button'); b.className = 'sw' + (cur === o.v ? ' on' : ''); b.style.background = o.c; b.title = o.l;
-        b.addEventListener('click', () => { try { hvGlassCfg.set({ theme: o.v }); } catch (e) {} this._refreshCustomize(); });
+        b.addEventListener('click', () => { const col = (typeof HV_GLASS_COLORS !== 'undefined' && HV_GLASS_COLORS.find(c => c.id === o.v)) || null; try { hvGlassCfg.set({ theme: o.v, accent: col ? col.accent : undefined, color: o.v }); } catch (e) {} this._refreshCustomize(); });
         rail.appendChild(b);
       }
     } else if (this.tab === 'color') {
@@ -12390,6 +12852,7 @@ const hvSsSwitch = {
     sr.appendChild(root);
   },
   async _save() {
+    this._glassOrig = null;
     const data = this.draft; data.i = this.i;
     await hvSsFaces.commit(data, hvSsOv.hass());
     try { hvSsEatTap(600); } catch (e) {}
@@ -12397,6 +12860,7 @@ const hvSsSwitch = {
     this._backToSwitch();
   },
   _cancel() {
+    try { this._restoreGlass(); } catch (e) {}
     try { hvSsEatTap(600); } catch (e) {}
     if (this.fromSettings) { this.hide(); try { hvSsOv.tick(true); } catch (e) {} return; }
     this.draft = null;
@@ -12417,6 +12881,7 @@ const hvSsSwitch = {
     try { hvSsEatTap._at = 0; } catch (e) {}
     this.i = n; if (this.draft) this.draft.i = n;
     this.mode = 'customize'; this.tab = 'style'; this.slotId = null;
+    try { if ((this.draft && this.draft.faces && this.draft.faces[this.i] && this.draft.faces[this.i].style === 'glass') || (hvSsFaces.active && (hvSsFaces.active() || {}).style === 'glass')) this._snapGlass(); } catch (e) { try { this._snapGlass(); } catch (x) {} }
     try { hvSsKeep.on('ssswitch'); } catch (e) {}
     try { this._coverLive(true); } catch (e) {}
     this._paintCards(this.draft, this.i, 'customize');
