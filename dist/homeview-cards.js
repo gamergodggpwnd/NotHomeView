@@ -11034,7 +11034,7 @@ const HV_SS_FACE_CSS = `
 .photo .pclk{position:absolute;left:0;right:0;top:16%;text-align:center;font:200 22cqh/1 ${FONT};color:var(--hv-ss-text,#fff);text-shadow:0 2px 14px rgba(0,0,0,.4);letter-spacing:-.04em;z-index:2}
 /* glass: thumbnail + the parked Home Screen face (not the live screensaver; that mounts homeview-glass-page) */
 .f.glass{background:linear-gradient(160deg,#3a38c0 0%,#2c2ab0 45%,#24218c 100%)}
-.glass .stg{position:absolute;inset:0;display:block;padding:0;box-sizing:border-box}
+.glass .stg{position:absolute;inset:0;display:block;padding:0;box-sizing:border-box;width:auto;height:auto;transform:none}
 .glass homeview-glass-page{display:block;width:100%;height:100%;min-height:0;pointer-events:none;--hvg-h:100%}
 ` + HV_HOMIE_CSS;
 const hvSsSvgNS = 'http://www.w3.org/2000/svg';
@@ -12597,6 +12597,29 @@ function hvSsColorPanel(card, getStyle, onFacePaint) {
     const style = getStyle(), defs = HV_SS_COLS[style] || [], cols = hvSsColors.get(style);
     const name = (HV_SSS.find(x => x.v === style) || {}).l || style;
     box.innerHTML = `<div class="cl">Colors · ${name}</div>`;
+    if (style === 'glass') {
+      const cur = (typeof hvGlassCfg !== 'undefined' && hvGlassCfg.get && (hvGlassCfg.get().theme || 'indigo')) || 'indigo';
+      const themes = [
+        { v: 'indigo', l: 'Indigo', c: 'linear-gradient(160deg,#6461e6,#4c49d0)' },
+        { v: 'blue', l: 'Blue', c: 'linear-gradient(160deg,#49d2ff,#2aa0ff 50%,#3c8bff)' },
+        { v: 'orange', l: 'Orange', c: 'linear-gradient(145deg,#f3b36a,#e2853a 50%,#c35c1f)' },
+        { v: 'light', l: 'Light', c: 'linear-gradient(160deg,#f3f4f1,#c5cec8)' }
+      ];
+      const sw = document.createElement('div'); sw.className = 'sw'; sw.style.cssText = 'flex-basis:100%;margin-top:8px;gap:10px';
+      for (const o of themes) {
+        const b = document.createElement('button'); b.type = 'button'; b.className = 'swatch'; b.title = o.l; b.setAttribute('aria-label', o.l);
+        b.style.cssText = 'all:unset;cursor:pointer;width:36px;height:36px;border-radius:50%;box-sizing:border-box;background:' + o.c + ';border:2px solid rgba(255,255,255,.35);box-shadow:inset 0 0 0 1px rgba(0,0,0,.25)';
+        if (o.v === cur) { b.setAttribute('aria-current', 'true'); b.style.borderColor = '#fff'; b.style.boxShadow = '0 0 0 2px #0a84ff'; }
+        b.addEventListener('click', () => {
+          if (typeof hvGlassCfg !== 'undefined') { try { hvGlassCfg.set({ theme: o.v }); } catch (e) {} }
+          paint(); onFacePaint && onFacePaint();
+        });
+        sw.appendChild(b);
+      }
+      box.appendChild(sw);
+      box.insertAdjacentHTML('beforeend', '<div class="hint">Indigo, Blue, Orange or Light. The same themes live under Customize → Background.</div>');
+      return;
+    }
     if (!defs.length) { box.innerHTML += '<div class="hint">No colour options for this style.</div>'; return; }
     for (const d of defs) {
       const row = document.createElement('div'); row.className = 'row'; row.dataset.k = d.k;
