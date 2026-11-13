@@ -9069,7 +9069,63 @@ const HVG_CSS = `
 .ed .act button{all:unset;box-sizing:border-box;cursor:pointer;flex:1;text-align:center;padding:11px 8px;border-radius:14px;font-weight:700;font-size:15px;background:rgba(255,255,255,.12)}
 .ed .act button.pri{background:#fff;color:#1e1c45}
 .ed .act button:focus-visible{outline:2px solid #fff;outline-offset:2px}
-@media (prefers-reduced-motion:reduce){.t,.t.dn,.pc,.in,.num,.cv,.sh,.gl,.ed .box{transition-duration:.01s!important}.bl{display:none}.t.tw *,.t.talk .w,.t.pd .ic{animation:none!important}}`;
+@media (prefers-reduced-motion:reduce){.t,.t.dn,.pc,.in,.num,.cv,.sh,.gl,.ed .box{transition-duration:.01s!important}.bl{display:none}.t.tw *,.t.talk .w,.t.pd .ic{animation:none!important}}
+.gr[data-hero=light]{grid-template-areas:"li li ck" "li li sc" "ic lk xx"}
+.gr[data-hero=light] .th{display:none}
+.gr[data-hero=light] > [data-s=light]{grid-area:li}
+.gr[data-hero=light] > [data-s=extra]{grid-area:xx;display:flex}
+.t[data-s=light] .lv,.t[data-s=light2] .lv{background:linear-gradient(180deg,#ffe566 0%,#ffd60a 55%,#f0c000 100%);transform:translate3d(0,0,0) scaleY(var(--bri,0))}
+.t[data-s=light].on .lv,.t[data-s=light2].on .lv{opacity:1}
+.t[data-s=light].on .pc,.t[data-s=light2].on .pc{opacity:1;transform:none}
+@container (min-width: 36cqmin){
+  .t[data-s=light].on .pc,.t[data-s=light2].on .pc{font-size:42cqmin;color:#1c1c1e;text-shadow:none;align-items:flex-end;padding-bottom:8cqmin;font-weight:700}
+}
+.ck[data-style=ii] .wx{display:none}
+.lm{position:absolute;inset:0;z-index:30;color:#fff;font-family:inherit;background:#111214}
+.lm[hidden],.lm .cw[hidden],.cw .wh[hidden],.cw .ring[hidden]{display:none !important}
+.ls{position:absolute;inset:0;touch-action:none;overscroll-behavior:none;user-select:none;-webkit-user-select:none}
+.lf{position:absolute;left:0;right:0;bottom:0;height:100%;pointer-events:none;transform-origin:50% 100%;transform:translate3d(0,0,0) scaleY(var(--bri,.45));will-change:transform;background:repeating-linear-gradient(-18deg,rgba(255,255,255,.14) 0 10px,rgba(255,255,255,0) 10px 28px),linear-gradient(180deg,#ffe566 0%,#ffd60a 60%,#e8b800 100%);backface-visibility:hidden}
+.lm .bar{position:absolute;top:0;left:0;right:0;z-index:3;display:flex;align-items:center;justify-content:space-between;padding:14px 16px;pointer-events:none}
+.lm .bar > *{pointer-events:auto}
+.lm .lx,.lm .lbk{width:36px;height:36px;border-radius:50%;border:0;background:rgba(60,60,64,.55);color:#fff;display:grid;place-items:center;cursor:pointer;padding:0;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.lm .ltn{font-size:17px;font-weight:600;letter-spacing:-.01em;position:absolute;left:50%;top:18px;transform:translateX(-50%);z-index:3;pointer-events:none;color:#fff;text-shadow:0 1px 4px rgba(0,0,0,.25);max-width:55%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lm .ltime{font-size:16px;font-weight:600;font-variant-numeric:tabular-nums}
+.lm:not(.lo) .ltn,.lm:not(.lo) .ltime{color:#1c1c1e;text-shadow:none}
+.lm:not(.lo) .lx,.lm:not(.lo) .lbk{background:rgba(255,255,255,.4);color:#1c1c1e}
+.lico{position:absolute;top:20%;left:50%;transform:translateX(-50%);z-index:2;pointer-events:none;width:68px;height:68px}
+.lp{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);z-index:2;text-align:center;pointer-events:none;font-variant-numeric:tabular-nums;line-height:.85}
+.lp .ln{font-size:22vmin;font-weight:700;letter-spacing:-.04em}
+.lp small{font-size:7vmin;font-weight:600;margin-left:.06em;vertical-align:super}
+.lm:not(.lo) .lp,.lm:not(.lo) .lico{color:#1c1c1e}
+.lm.lo .lp,.lm.lo .lico{color:#fff}
+.lcb{position:absolute;right:22px;bottom:22px;z-index:3;width:58px;height:58px;border-radius:50%;border:0;padding:0;cursor:pointer;background:radial-gradient(circle at 50% 50%,var(--cc,#ffd60a) 0 54%,transparent 55%),conic-gradient(#ff3b30,#ffcc00,#34c759,#00c7be,#007aff,#af52de,#ff3b30);box-shadow:0 4px 16px rgba(0,0,0,.25)}
+.cw{position:absolute;inset:0;z-index:5;background:#111214;touch-action:none}
+.ring{position:absolute;left:50%;top:52%;width:min(72vmin,520px);height:min(72vmin,520px);transform:translate(-50%,-50%)}
+.ring .dot{position:absolute;width:16%;height:16%;border-radius:50%;border:3px solid rgba(255,255,255,.9);left:50%;top:50%;margin:-8%;cursor:pointer;padding:0;box-shadow:0 4px 14px rgba(0,0,0,.35)}
+.ring .dot[data-k=rainbow]{background:conic-gradient(#ff3b30,#ffcc00,#34c759,#00c7be,#007aff,#af52de,#ff3b30);border-color:#fff}
+.wh{position:absolute;left:50%;top:54%;width:min(64vmin,440px);height:min(64vmin,440px);transform:translate(-50%,-50%);border-radius:50%;background:radial-gradient(circle,#fff 0 10%,transparent 58%),conic-gradient(#ff3b30,#ffcc00,#34c759,#00c7be,#007aff,#af52de,#ff3b30);box-shadow:0 10px 40px rgba(0,0,0,.4);touch-action:none}
+.wh .kn{position:absolute;width:22px;height:22px;margin:-11px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.3);pointer-events:none}
+.pk{position:absolute;inset:0;z-index:28;display:flex;flex-direction:column;background:#000;color:#fff;font-family:inherit;font-size:16px;line-height:1.25}
+.pk .phd{position:relative;display:flex;align-items:center;justify-content:space-between;padding:12px 16px 8px;min-height:52px}
+.pk .phd .ttl{font-size:17px;font-weight:600;position:absolute;left:50%;transform:translateX(-50%)}
+.pk .px{width:36px;height:36px;border-radius:50%;border:0;background:rgba(60,60,64,.85);color:#fff;display:grid;place-items:center;cursor:pointer;padding:0}
+.pk .qs{position:relative;margin:4px 16px 16px}
+.pk .q{height:38px;border:0;border-radius:12px;background:#1c1c1e;color:#fff;padding:0 12px 0 36px;font-size:16px;width:100%;outline:none;box-sizing:border-box}
+.pk .qs::after{content:"";position:absolute;left:14px;top:50%;width:14px;height:14px;margin-top:-8px;border:2px solid #8e8e93;border-radius:50%;pointer-events:none;box-sizing:border-box}
+.pk .body{flex:1;overflow:auto;padding:0 16px 96px;-webkit-overflow-scrolling:touch}
+.pk .sec{margin:0 0 22px}
+.pk .sh{font-size:22px;font-weight:700;margin:0 0 10px;letter-spacing:-.02em}
+.pk .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.pk .it{position:relative;aspect-ratio:1;border:0;border-radius:18px;background:#1c1c1e;color:#fff;padding:0;overflow:hidden;cursor:pointer;display:flex;flex-direction:column;justify-content:flex-end;text-align:left;font:inherit;font-size:13px;line-height:1.2}
+.pk .it img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none}
+.pk .it .cap{position:relative;z-index:1;padding:8px 10px;background:linear-gradient(transparent,rgba(0,0,0,.55));font-size:13px;font-weight:600;width:100%;box-sizing:border-box}
+.pk .it .cap small{display:block;font-weight:500;opacity:.8;font-size:11px}
+.pk .it .icn{position:absolute;inset:0 0 36px;display:grid;place-items:center;pointer-events:none;opacity:.95}
+.pk .it .icn svg{width:42%;height:42%}
+.pk .it[aria-current=true]{box-shadow:inset 0 0 0 2px #0a84ff}
+.pk .ok{position:absolute;right:18px;bottom:18px;width:58px;height:58px;border-radius:50%;border:0;background:#0a84ff;color:#fff;display:grid;place-items:center;cursor:pointer;padding:0;box-shadow:0 6px 20px rgba(10,132,255,.45);z-index:2}
+.pk .it.clr{aspect-ratio:auto;min-height:44px;justify-content:center;padding:8px 12px;grid-column:1/-1}
+`;
 const HVG_CLOCK = (() => {
   const nums = Array.from({ length: 12 }, (_, i) => {
     const n = i + 1, a = n * Math.PI / 6, x = 50 + 33.5 * Math.sin(a), y = 50 - 33.5 * Math.cos(a) + 2.7;
@@ -9108,7 +9164,7 @@ class HVGlassPage extends HTMLElement {
     const o = { thermostat_entity: f(/^climate\./), scene_entity: f(/^(scene|script)\./, /night|sleep|bed/i), lock_entity: f(/^lock\./, /front/i), light_entity: f(/^light\./, /entry|hall|porch/i) };
     for (const k of Object.keys(o)) if (!o[k]) delete o[k]; return o; }
   static getConfigElement() { const e = document.createElement('homeview-card-editor'); e.cardClass = this; return e; }
-  connectedCallback() { if (!this.shadowRoot) this.attachShadow({ mode: 'open' }); if (!this._built) this._build(); this._onCfg = () => { this._sig = null; this._render(); };
+  connectedCallback() { if (!this.shadowRoot) this.attachShadow({ mode: 'open' }); if (!this._built) this._build(); this._onCfg = () => { this._sig = null; this._head(); this._render(); };
     addEventListener('hv-glass-cfg', this._onCfg); this._tick(); this._render(); }
   disconnectedCallback() { clearTimeout(this._ct); this._ct = 0; for (const k of Object.keys(this._t || {})) clearTimeout(this._t[k]); if (this._onCfg) removeEventListener('hv-glass-cfg', this._onCfg); }
   // --- config helpers
@@ -9135,21 +9191,23 @@ class HVGlassPage extends HTMLElement {
   _head() { const bg = this._c('background'); this.setAttribute('bg', bg === 'none' ? 'none' : 'indigo');
     const theme = this._c('theme') || 'indigo'; this.setAttribute('theme', ['blue','orange','light'].includes(theme) ? theme : 'indigo');
     const layout = this._c('layout') === 'grid3' ? 'grid3' : 'mixed';
-    const gr = this.shadowRoot && this.shadowRoot.querySelector('.gr'); if (gr) gr.setAttribute('data-layout', layout);
+    const gr = this.shadowRoot && this.shadowRoot.querySelector('.gr');
+    if (gr) { gr.setAttribute('data-layout', layout); const hero = this._c('hero'); if (layout === 'mixed' && hero === 'light') gr.setAttribute('data-hero', 'light'); else gr.removeAttribute('data-hero'); }
+    const ck = this.shadowRoot && this.shadowRoot.querySelector('.ck'); if (ck) ck.setAttribute('data-style', this._c('clock_style') === 'ii' ? 'ii' : 'i');
     const h = this._c('height'); if (h && /^[\w.%() +*/-]+$/.test(String(h))) this.style.setProperty('--hvg-h', String(h)); else this.style.removeProperty('--hvg-h'); }
   // --- clock (transform only; ticks once a second)
   _tick() { const r = this.shadowRoot; if (!r || !this.isConnected) return; if (hvLdBusy()) { this._ct = setTimeout(() => this._tick(), 1000); return; } const d = new Date(), s = d.getSeconds(), m = d.getMinutes() + s / 60, h = (d.getHours() % 12) + m / 60;
     const set = (c, a) => { const g = r.querySelector('.' + c); if (!g) return; if (!g._hvH) { g._hvH = 1; g.removeAttribute('transform'); g.style.transformOrigin = '50px 50px'; g.style.transformBox = 'view-box'; g.style.willChange = 'transform'; } g.style.transform = 'rotate(' + a + 'deg)'; };
-    set('hh', h * 30); set('hm', m * 6); set('hs', s * 6); clearTimeout(this._ct); this._ct = setTimeout(() => this._tick(), 1000 - d.getMilliseconds() + 5); }
+    set('hh', h * 30); set('hm', m * 6); set('hs', s * 6); if (this._lm && !this._lm.hidden) { const tm = this._fmtTime(); this._lm.querySelectorAll('.ltime').forEach(n => { n.textContent = tm; }); } clearTimeout(this._ct); this._ct = setTimeout(() => this._tick(), 1000 - d.getMilliseconds() + 5); }
   // --- live state
   _render() { const r = this.shadowRoot; if (!r || !this._built || !this._hass || !this._config) return; if (hvLdLocked(this) || hvLdBusy()) return;
     const sig = JSON.stringify(['thermostat'].concat(HVG_ALL_SLOTS).map(s => { const st = this._st(s); return [this._ent(s), st && st.state, st && st.attributes, this._name(s), this._sub(s), this._pend[s] || 0]; }).concat([this._tmp, this._c('show_current_temp'), this._c('intercom_action')]));
     if (sig === this._sig) return; this._sig = sig; this._paintTh(); for (const s of HVG_ALL_SLOTS) this._paint(s); this._paintWx(); }
-  _paint(s) { const el = this.shadowRoot.querySelector(`.t[data-s="${s}"]`); if (!el) return; const st = this._st(s), id = this._ent(s), d = id.split('.')[0];
-    const set = this._c('intercom_action') && s === 'intercom'; const un = !id && !set, gone = id && !st;
+  _paint(s) { const el = this.shadowRoot.querySelector(`.t[data-s="${s}"]`); if (!el) return; const st = this._st(s), id = this._ent(s), d = id.split('.')[0], builtin = id && id.indexOf('builtin.') === 0;
+    const set = this._c('intercom_action') && s === 'intercom'; const un = !id && !set, gone = id && !st && !builtin;
     el.querySelector('.tt').textContent = this._name(s); el.querySelector('.sb .a').textContent = un ? (s === 'intercom' ? 'Set action' : 'Set entity') : gone ? 'Not found' : this._sub(s);
     el.classList.toggle('un', !!(un || gone));
-    if (s === 'light' && (el.classList.contains('drag') || (hvLdLocked(this, id) && !hvLdMatch(this, st)))) return;
+    if ((s === 'light' || s === 'light2') && (el.classList.contains('drag') || (hvLdLocked(this, id) && !hvLdMatch(this, st)))) return;
     const state = st ? st.state : '';
     let on = false, txt = '';
     if (st) { if (d === 'lock') { on = state !== 'locked'; txt = { locked: 'Locked', unlocked: 'Unlocked', locking: 'Locking…', unlocking: 'Unlocking…', jammed: 'Jammed', open: 'Open', opening: 'Opening…' }[state] || state; }
@@ -9167,7 +9225,9 @@ class HVGlassPage extends HTMLElement {
     if (d === 'lock' && /ing$/.test(state)) { b.textContent = txt; el.classList.add('flash'); }
     const lab = this._name(s) + ', ' + (un ? (s === 'intercom' ? 'no action set' : 'no entity set') : gone ? 'entity not found' : (txt || this._sub(s)));
     el.setAttribute('aria-label', lab); if (d === 'lock' || d === 'light' || d === 'switch' || d === 'fan' || d === 'input_boolean') el.setAttribute('aria-pressed', String(!!on)); else el.removeAttribute('aria-pressed');
-    if (s === 'light' && st && this._dim(st)) { el.style.touchAction = 'none'; el.setAttribute('aria-valuetext', on ? this._pct(st) + '%' : 'Off'); } else { el.style.touchAction = ''; el.removeAttribute('aria-valuetext'); } }
+    if ((s === 'light' || s === 'light2') && st && this._dim(st)) { el.style.touchAction = 'none'; el.setAttribute('aria-valuetext', on ? this._pct(st) + '%' : 'Off'); } else if (!(s === 'light' || s === 'light2')) { el.style.touchAction = ''; el.removeAttribute('aria-valuetext'); }
+    if ((s === 'light' || s === 'light2') && !(this._lmOpen && this._ls === s)) { const bri = (st && on) ? this._pct(st) / 100 : 0; el.style.setProperty('--bri', String(bri)); const pc = el.querySelector('.pc'); if (pc) pc.textContent = (st && on) ? this._pct(st) + '%' : ''; }
+    if (builtin) { const lab = { 'builtin.clock': 'Clock I', 'builtin.clock2': 'Clock II', 'builtin.intercom': 'Intercom', 'builtin.home': 'Home' }[id] || 'Home'; if (!this._c(s + '_name')) el.querySelector('.tt').textContent = lab; const sub = el.querySelector('.sb .a'); if (sub && !this._c(s + '_subtitle')) sub.textContent = id === 'builtin.home' ? 'Home App' : 'Clock'; } }
   _flash(el, txt, ms) { const b = el.querySelector('.sb .b'); b.textContent = txt; el.classList.add('flash'); const s = el.dataset.s; clearTimeout(this._t['f' + s]);
     this._t['f' + s] = setTimeout(() => el.classList.remove('flash'), ms || 1700); }
   _tgt(st) { const a = st.attributes; return a.temperature != null ? Number(a.temperature) : a.target_temp_low != null ? Number(a.target_temp_low) : null; }
@@ -9197,9 +9257,10 @@ class HVGlassPage extends HTMLElement {
     return Promise.resolve(this._hass.callService(d, sv, data)).then(() => { if (s && this._pend[s]) clr(1200); }).catch(e => { if (s) { this._pend[s] = 0; this._sig = null; this._render(); const el = this.shadowRoot.querySelector(`.t[data-s="${s}"]`); if (el) this._flash(el, 'Couldn’t reach it', 2500); }
       console.warn('homeview-glass-page:', d + '.' + sv, e && e.message); }); }
   _more(id) { if (id) fire(this, 'hass-more-info', { entityId: id }); }
-  _tap(s, el) { const id = this._ent(s), st = this._st(s), d = id.split('.')[0];
+  _tap(s, el) { const id = this._ent(s), st = this._st(s), d = id.split('.')[0], builtin = id && id.indexOf('builtin.') === 0;
     if (s === 'intercom') { const a = this._c('intercom_action'); el.classList.add('talk', 'on'); clearTimeout(this._t.talk); this._t.talk = setTimeout(() => { el.classList.remove('talk'); this._sig = null; this._render(); }, 3000);
       if (a && a.action && a.action !== 'none') fire(this, 'hass-action', { config: { entity: id || undefined, tap_action: a }, action: 'tap' }); else if (id) this._more(id); return; }
+    if (builtin) { if (id === 'builtin.home') { try { const ov = window.hvSsAPI && window.hvSsAPI.ov; if (ov && typeof ov._home === 'function') ov._home(); else if (ov && typeof ov.close === 'function') ov.close(); } catch (e) {} } else if (id === 'builtin.intercom') { const a = this._c('intercom_action'); if (a && a.action && a.action !== 'none') fire(this, 'hass-action', { config: { tap_action: a }, action: 'tap' }); } return; }
     if (!st) return;
     if (d === 'lock') { const lk = st.state === 'locked' || st.state === 'locking';
       if (lk && this._c('unlock_confirm') && !el._arm) { el._arm = true; this._flash(el, 'Tap again to unlock', 3000); clearTimeout(this._t.arm); this._t.arm = setTimeout(() => { el._arm = false; }, 3000); return; }
@@ -9207,7 +9268,7 @@ class HVGlassPage extends HTMLElement {
     if (d === 'scene' || d === 'script') { el._hold = true; el.classList.add('on', 'tw'); this._flash(el, 'Activated', 1600); clearTimeout(this._t.sc);
       this._t.sc = setTimeout(() => { el._hold = false; el.classList.remove('tw'); this._sig = null; this._render(); }, 1600); this._call(d, 'turn_on', { entity_id: id }); return; }
     if (d === 'button' || d === 'input_button') { this._flash(el, 'Pressed'); this._call(d, 'press', { entity_id: id }); return; }
-    if (d === 'light') { if (hvLdLocked(this, id)) return; this._call('light', st.state === 'on' ? 'turn_off' : 'turn_on', { entity_id: id }, s); return; }
+    if (d === 'light') { if (hvLdLocked(this, id)) return; if (this._dim(st)) { this._lightOpen(s); return; } this._call('light', st.state === 'on' ? 'turn_off' : 'turn_on', { entity_id: id }, s); return; }
     if (['switch', 'fan', 'input_boolean', 'media_player', 'humidifier'].includes(d)) { this._call(d === 'media_player' ? 'media_player' : d, 'toggle', { entity_id: id }, s); return; }
     this._more(id); }
   _step(dir) { const st = this._st('thermostat'); if (!st) return; const a = st.attributes, step = Number(this._c('temp_step')) || Number(a.target_temp_step) || (this._hass.config && this._hass.config.unit_system && /F/.test(this._hass.config.unit_system.temperature) ? 1 : 0.5);
@@ -9218,67 +9279,100 @@ class HVGlassPage extends HTMLElement {
       const data = { entity_id: id }; if (s2.attributes.temperature == null && s2.attributes.target_temp_low != null) { const w = Number(s2.attributes.target_temp_high) - Number(s2.attributes.target_temp_low); data.target_temp_low = t; data.target_temp_high = Math.round((t + (isFinite(w) ? w : 2)) * 10) / 10; } else data.temperature = t;
       this._call('climate', 'set_temperature', data).then(() => { clearTimeout(this._t.th2); this._t.th2 = setTimeout(() => { this._tmp = null; this._sig = null; this._render(); }, 2500); }); }, 700); }
   _domains(s) { const k = s === 'light2' ? 'light' : s === 'scene2' ? 'scene' : s; return { thermostat: ['climate'], scene: ['scene', 'script'], lock: ['lock'], light: ['light'], intercom: ['script', 'button', 'input_button'], camera: ['camera'], extra: ['light', 'scene', 'lock', 'script', 'switch', 'camera'] }[k] || []; }
-  _closeEdit() { const ed = this.shadowRoot && this.shadowRoot.querySelector('.ed'); if (ed) ed.remove(); }
-  _edit(s) { if (!this.shadowRoot) return; this._closeEdit(); const domains = this._domains(s), title = this._name(s);
-    const cur = this._ent(s), S = (this._hass && this._hass.states) || {};
-    const rows = Object.keys(S).filter(id => domains.includes(id.split('.')[0])).map(id => ({ id, name: (S[id].attributes && S[id].attributes.friendly_name) || id }))
-      .sort((a, b) => (a.id === cur ? -1 : b.id === cur ? 1 : a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })));
-    const ed = document.createElement('div'); ed.className = 'ed'; ed.setAttribute('role', 'dialog'); ed.setAttribute('aria-label', 'Choose Scene or Accessory');
-    ed.innerHTML = `<div class="box"><div class="hd"><div class="ttl">Choose Scene or Accessory</div><div class="sub">${title.replace(/[<>&]/g, '')}</div></div>
-      <input class="q" type="search" placeholder="Scenes or Accessories" autocomplete="off" spellcheck="false"/>
-      <div class="lst" role="listbox"></div>
-      <div class="flds"><label>Name<input class="fn" maxlength="40" placeholder="${(HVG_DEF[s] || ['', ''])[0]}"/></label>
-        <label>Subtitle<input class="fs" maxlength="40" placeholder="${(HVG_DEF[s] || ['', ''])[1]}"/></label></div>
-      <div class="act"><button type="button" data-act="more">More info</button><button type="button" data-act="cancel">Cancel</button><button type="button" class="pri" data-act="done">Done</button></div></div>`;
-    const lst = ed.querySelector('.lst'), q = ed.querySelector('.q'), nm = ed.querySelector('.fn'), sb = ed.querySelector('.fs');
+  _closeEdit() { const r = this.shadowRoot; if (!r) return; r.querySelectorAll('.ed,.pk').forEach(n => n.remove()); }
+  _fmtTime() { const d = new Date(), h = d.getHours() % 12 || 12, m = String(d.getMinutes()).padStart(2, '0'); return h + ':' + m; }
+  _media(p) { if (!p) return ''; if (/^(https?:|data:|blob:)/i.test(String(p))) return String(p); try { return (this._hass && this._hass.hassUrl) ? this._hass.hassUrl(p) : p; } catch (e) { return p; } }
+  _camSrc(st) { if (!st) return ''; const a = st.attributes || {}; const pic = a.entity_picture_local || a.entity_picture; if (pic) return this._media(pic); if (st.entity_id && String(st.entity_id).indexOf('camera.') === 0) return this._media('/api/camera_proxy/' + st.entity_id); return ''; }
+  _ago(st) { const t0 = st && (st.last_changed || st.last_updated); if (!t0) return ''; const ms = Date.now() - new Date(t0).getTime(); if (!isFinite(ms) || ms < 0) return ''; const m = Math.round(ms / 60000); if (m < 1) return 'now'; if (m < 60) return m + 'm ago'; const h = Math.round(m / 60); if (h < 24) return h + 'h ago'; return Math.round(h / 24) + 'd ago'; }
+  _lightEnsure() {
+    if (this._lm && this._lm.isConnected) return this._lm;
+    const lm = document.createElement('div'); lm.className = 'lm'; lm.hidden = true; lm.setAttribute('role', 'dialog'); lm.setAttribute('aria-label', 'Brightness');
+    lm.innerHTML = '<div class="ls"><div class="lf"></div><div class="bar"><button type="button" class="lx" aria-label="Close"><svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"/></svg></button><span></span><span class="ltime"></span></div><div class="ltn"></div><div class="lico"><svg viewBox="0 0 64 64" width="68" height="68" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M32 8c-9 0-16 7.4-16 16.5 0 6.2 3.2 11.2 8 14.1V44c0 2 1.6 3.5 3.5 3.5h9c1.9 0 3.5-1.5 3.5-3.5v-5.4c4.8-2.9 8-7.9 8-14.1C48 15.4 41 8 32 8z"/><path d="M26 52h12M28 57h8"/></svg></div><div class="lp"><span class="ln">0</span><small>%</small></div><button type="button" class="lcb" aria-label="Colour"></button></div><div class="cw" hidden><div class="bar"><button type="button" class="lbk" aria-label="Back"><svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" stroke-width="2.4" stroke-linecap="round"><path d="M14 6l-6 6 6 6"/></svg></button><span></span><span class="ltime"></span></div><div class="ring"></div><div class="wh" hidden><span class="kn"></span></div></div>';
+    const ls = lm.querySelector('.ls'); ls.style.touchAction = 'none';
+    const y2v = y => { const r = ls.getBoundingClientRect(); return Math.max(0, Math.min(100, Math.round((1 - (y - r.top) / Math.max(1, r.height)) * 100))); };
+    const move = y => { this._ly = y; if (this._lraf) return; this._lraf = requestAnimationFrame(() => { this._lraf = 0; if (this._ly == null) return; this._lightVis(y2v(this._ly)); }); };
+    ls.addEventListener('pointerdown', e => { if (e.button > 0 || e.target.closest('.lx,.lcb')) return; this._ldrag = true; try { ls.setPointerCapture(e.pointerId); } catch (x) {} e.preventDefault(); move(e.clientY); });
+    ls.addEventListener('pointermove', e => { if (!this._ldrag) return; e.preventDefault(); move(e.clientY); });
+    const up = () => { if (!this._ldrag) return; this._ldrag = false; if (this._lraf) { cancelAnimationFrame(this._lraf); this._lraf = 0; } if (this._ly != null) this._lightVis(y2v(this._ly)); this._ly = null; this._lightCommit(); };
+    ls.addEventListener('pointerup', up); ls.addEventListener('pointercancel', up);
+    ls.addEventListener('touchmove', e => { if (this._ldrag) { e.preventDefault(); e.stopPropagation(); } }, { passive: false });
+    lm.querySelector('.lx').addEventListener('click', e => { e.stopPropagation(); this._lightClose(); });
+    lm.querySelector('.lcb').addEventListener('click', e => { e.stopPropagation(); this._colorShow(); });
+    lm.querySelector('.lbk').addEventListener('click', e => { e.stopPropagation(); this._colorBack(); });
+    const wh = lm.querySelector('.wh');
+    const hueAt = (x, y, r) => { const cx = r.left + r.width / 2, cy = r.top + r.height / 2, dx = x - cx, dy = y - cy, max = r.width / 2, sat = Math.max(0, Math.min(100, Math.round(Math.hypot(dx, dy) / Math.max(1, max) * 100))); let hue = Math.atan2(dx, -dy) * 180 / Math.PI; if (hue < 0) hue += 360; return [Math.round(hue), sat]; };
+    const knAt = (h, s) => { const kn = wh.querySelector('.kn'), rad = (h * Math.PI / 180), rr = (s / 100) * 50; kn.style.left = (50 + rr * Math.sin(rad)) + '%'; kn.style.top = (50 - rr * Math.cos(rad)) + '%'; };
+    const colMove = ev => { if (!this._cdrag) return; ev.preventDefault(); this._cxy = [ev.clientX, ev.clientY]; if (this._craf) return; this._craf = requestAnimationFrame(() => { this._craf = 0; if (!this._cxy) return; const hs = hueAt(this._cxy[0], this._cxy[1], wh.getBoundingClientRect()); this._lhs = hs; knAt(hs[0], hs[1]); this._lm.style.setProperty('--cc', 'hsl(' + hs[0] + ' ' + hs[1] + '% 50%)'); }); };
+    wh.addEventListener('pointerdown', e => { if (e.button > 0) return; this._cdrag = true; try { wh.setPointerCapture(e.pointerId); } catch (x) {} e.preventDefault(); colMove(e); });
+    wh.addEventListener('pointermove', colMove);
+    const cup = () => { if (!this._cdrag) return; this._cdrag = false; if (this._craf) { cancelAnimationFrame(this._craf); this._craf = 0; } this._cxy = null; this._colorCommit(); };
+    wh.addEventListener('pointerup', cup); wh.addEventListener('pointercancel', cup);
+    wh.addEventListener('touchmove', e => { if (this._cdrag) e.preventDefault(); }, { passive: false });
+    this.shadowRoot.appendChild(lm); this._lm = lm; return lm;
+  }
+  _lightVis(v) { v = Math.max(0, Math.min(100, Math.round(v))); this._lv = v; const lm = this._lm; if (lm) { lm.style.setProperty('--bri', String(v / 100)); const n = lm.querySelector('.ln'); if (n) n.textContent = String(v); lm.classList.toggle('lo', v < 40); } const el = this.shadowRoot && this.shadowRoot.querySelector('.t[data-s="' + this._ls + '"]'); if (el) { el.style.setProperty('--bri', String(v / 100)); const pc = el.querySelector('.pc'); if (pc) pc.textContent = v + '%'; el.classList.toggle('on', v > 0); } }
+  _lightCommit() { const id = this._ent(this._ls); if (!id || id.indexOf('builtin.') === 0 || !this._hass) return; const v = this._lv; if (v <= 0) this._call('light', 'turn_off', { entity_id: id }, this._ls); else this._call('light', 'turn_on', { entity_id: id, brightness_pct: v }, this._ls); }
+  _lightOpen(s) { const lm = this._lightEnsure(); this._ls = s; this._lmOpen = true; const st = this._st(s); const v = st && st.state === 'on' ? this._pct(st) : 0; this._lightVis(v); lm.querySelector('.ltn').textContent = this._name(s) || 'Light'; const tm = this._fmtTime(); lm.querySelectorAll('.ltime').forEach(n => { n.textContent = tm; }); const a = (st && st.attributes) || {}; let cc = '#ffd60a'; if (Array.isArray(a.hs_color) && a.hs_color.length >= 2) { cc = 'hsl(' + a.hs_color[0] + ' ' + a.hs_color[1] + '% 50%)'; this._lhs = [a.hs_color[0], a.hs_color[1]]; } lm.style.setProperty('--cc', cc); lm.querySelector('.cw').hidden = true; lm.querySelector('.wh').hidden = true; lm.querySelector('.ring').hidden = false; lm.hidden = false; }
+  _lightClose() { this._lmOpen = false; this._ldrag = false; this._ly = null; if (this._lraf) { cancelAnimationFrame(this._lraf); this._lraf = 0; } if (this._lm) this._lm.hidden = true; }
+  _colorShow() { const lm = this._lightEnsure(); const cw = lm.querySelector('.cw'), ring = lm.querySelector('.ring'); cw.hidden = false; ring.hidden = false; lm.querySelector('.wh').hidden = true; if (!ring.childElementCount) { const presets = [{ k: 'warm', c: '#f8e0b0', kelvin: 2700 }, { k: 'cool', c: '#e8f0ff', kelvin: 4500 }, { k: 'orange', c: '#ff9f0a', h: 30, s: 85 }, { k: 'blue', c: '#0a84ff', h: 220, s: 85 }, { k: 'red', c: '#ff3b30', h: 0, s: 85 }, { k: 'rainbow' }]; presets.forEach((pr, i) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'dot'; b.dataset.k = pr.k; b.setAttribute('aria-label', pr.k); const ang = (i / presets.length) * Math.PI * 2 - Math.PI / 2, rad = 34; b.style.left = (50 + rad * Math.cos(ang)) + '%'; b.style.top = (50 + rad * Math.sin(ang)) + '%'; if (pr.c) b.style.background = pr.c; b.addEventListener('click', ev => { ev.stopPropagation(); if (pr.k === 'rainbow') { ring.hidden = true; const whe = lm.querySelector('.wh'); whe.hidden = false; const hs = this._lhs || [45, 90]; const kn = whe.querySelector('.kn'), rads = hs[0] * Math.PI / 180, rr = (hs[1] / 100) * 50; kn.style.left = (50 + rr * Math.sin(rads)) + '%'; kn.style.top = (50 - rr * Math.cos(rads)) + '%'; return; } if (pr.h != null) this._lhs = [pr.h, pr.s]; if (pr.c) lm.style.setProperty('--cc', pr.c); this._colorCommit(pr); }); ring.appendChild(b); }); } }
+  _colorBack() { const lm = this._lm; if (!lm) return; const cw = lm.querySelector('.cw'), whe = lm.querySelector('.wh'); if (whe && !whe.hidden) { whe.hidden = true; lm.querySelector('.ring').hidden = false; return; } cw.hidden = true; }
+  _colorCommit(preset) { const id = this._ent(this._ls); if (!id || id.indexOf('builtin.') === 0 || !this._hass) return; const data = { entity_id: id, brightness_pct: Math.max(1, this._lv || 100) }; if (preset && preset.kelvin) data.color_temp_kelvin = preset.kelvin; else if (preset && preset.h != null) data.hs_color = [preset.h, preset.s]; else if (this._lhs) data.hs_color = this._lhs; this._call('light', 'turn_on', data, this._ls); }
+  _pkIcon(kind) { return { clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>', intercom: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="7" y="3" width="10" height="18" rx="2"/><circle cx="12" cy="16" r="1.4"/></svg>', home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 11l8-7 8 7v9a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1z"/></svg>', light: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 1 4 10c0 2-1 3-1 3H9s-1-1-1-3a6 6 0 0 1 4-10z"/></svg>', climate: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v18M8 7c2 2 6 2 8 0M8 17c2-2 6-2 8 0"/></svg>', lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="6" y="11" width="12" height="9" rx="1.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>', scene: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l2.2 6.5H21l-5.4 4 2.1 6.5L12 16.5 6.3 20l2.1-6.5L3 9.5h6.8z"/></svg>' }[kind] || ''; }
+  _edit(s) { if (!this.shadowRoot) return; this._closeEdit(); const cur = this._ent(s), S = (this._hass && this._hass.states) || {};
+    const pk = document.createElement('div'); pk.className = 'pk'; pk.setAttribute('role', 'dialog'); pk.setAttribute('aria-label', 'Choose Scene or Accessory');
+    pk.innerHTML = '<div class="phd"><button type="button" class="px" aria-label="Close"><svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"/></svg></button><div class="ttl">Choose Accessory</div><span></span></div><div class="qs"><input class="q" type="search" placeholder="Scenes or Accessories" autocomplete="off" spellcheck="false"/></div><div class="body"></div><button type="button" class="ok" aria-label="Save"><svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l5 5 9-10"/></svg></button>';
+    const body = pk.querySelector('.body'), q = pk.querySelector('.q');
     let pick = cur || '';
-    const nameVal = this._c(s + '_name'); nm.value = nameVal != null && nameVal !== '' ? String(nameVal) : '';
-    const subVal = this._c(s + '_subtitle'); sb.value = subVal != null && subVal !== '' ? String(subVal) : '';
-    const paint = () => { const term = q.value.trim().toLowerCase(); lst.innerHTML = '';
-      const add = (id, name, cls) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'it' + (cls ? ' ' + cls : ''); b.setAttribute('role', 'option');
-        if (id === pick) b.setAttribute('aria-current', 'true'); b.innerHTML = `<span class="nm"></span><span class="id"></span>`;
-        b.querySelector('.nm').textContent = name; b.querySelector('.id').textContent = id ? id : '';
-        b.addEventListener('click', () => { pick = id; paint(); }); lst.appendChild(b); };
-      add('', 'Clear — show “Set entity”', 'clr');
-      for (const r of rows) { if (term && !r.name.toLowerCase().includes(term) && !r.id.toLowerCase().includes(term)) continue; add(r.id, r.name); }
-      if (lst.children.length === 1 && term) { const e = document.createElement('div'); e.className = 'it'; e.style.cursor = 'default'; e.innerHTML = '<span class="nm">No matches</span>'; lst.appendChild(e); } };
+    const other = [{ id: 'builtin.clock', name: 'Clock I', kind: 'clock' }, { id: 'builtin.clock2', name: 'Clock II', kind: 'clock' }, { id: 'builtin.intercom', name: 'Intercom', kind: 'intercom' }, { id: 'builtin.home', name: 'Home App', kind: 'home' }];
+    const collect = (doms) => Object.keys(S).filter(id => doms.includes((id.split('.')[0] || '')) && !(S[id] && S[id].state === 'unavailable') && !/browser_mod|adaptive_lighting/i.test(id)).map(id => ({ id, st: S[id], name: (S[id].attributes && S[id].attributes.friendly_name) || id })).sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+    const self = this;
+    const addTile = function (grid, item, kind) { const b = document.createElement('button'); b.type = 'button'; b.className = 'it'; b.setAttribute('role', 'option'); if (item.id === pick) b.setAttribute('aria-current', 'true'); const cap = document.createElement('span'); cap.className = 'cap'; cap.appendChild(document.createTextNode(item.name || '')); if (kind === 'camera' && item.st) { const src = self._camSrc(item.st); if (src) { const img = document.createElement('img'); img.alt = ''; img.decoding = 'async'; img.referrerPolicy = 'no-referrer'; img.src = src; img.addEventListener('error', function () { img.remove(); }); b.appendChild(img); } const ago = self._ago(item.st); if (ago) { const sm = document.createElement('small'); sm.textContent = ago; cap.appendChild(sm); } } else { const ic = document.createElement('span'); ic.className = 'icn'; ic.innerHTML = self._pkIcon(kind || item.kind || 'scene'); b.appendChild(ic); } b.appendChild(cap); b.addEventListener('click', function () { pick = item.id; paint(); }); grid.appendChild(b); };
+    const section = function (title, items, kind) { if (!items.length) return; const sec = document.createElement('div'); sec.className = 'sec'; const h = document.createElement('div'); h.className = 'sh'; h.textContent = title; sec.appendChild(h); const grid = document.createElement('div'); grid.className = 'grid'; for (let i = 0; i < items.length; i++) addTile(grid, items[i], kind || items[i].kind); sec.appendChild(grid); body.appendChild(sec); };
+    const paint = function () { const term = q.value.trim().toLowerCase(); body.innerHTML = ''; const match = function (name, id) { return !term || String(name).toLowerCase().indexOf(term) >= 0 || (id && String(id).toLowerCase().indexOf(term) >= 0); };
+      if (!term) { const sec = document.createElement('div'); sec.className = 'sec'; const grid = document.createElement('div'); grid.className = 'grid'; const b = document.createElement('button'); b.type = 'button'; b.className = 'it clr'; b.textContent = 'Clear — no accessory'; if (!pick) b.setAttribute('aria-current', 'true'); b.addEventListener('click', function () { pick = ''; paint(); }); grid.appendChild(b); sec.appendChild(grid); body.appendChild(sec); }
+      section('Other', other.filter(function (o) { return match(o.name, o.id); }));
+      section('Scenes', collect(['scene', 'script']).filter(function (o) { return match(o.name, o.id); }), 'scene');
+      section('Cameras', collect(['camera']).filter(function (o) { return match(o.name, o.id); }), 'camera');
+      section('Lights', collect(['light']).filter(function (o) { return match(o.name, o.id); }), 'light');
+      section('Climate', collect(['climate']).filter(function (o) { return match(o.name, o.id); }), 'climate');
+      section('Locks', collect(['lock']).filter(function (o) { return match(o.name, o.id); }), 'lock');
+      if (!body.querySelector('.it')) { const e = document.createElement('div'); e.className = 'sh'; e.style.fontWeight = '500'; e.style.opacity = '.7'; e.textContent = 'No matches'; body.appendChild(e); }
+    };
     paint(); q.addEventListener('input', paint);
-    const finish = act => {
-      if (act === 'cancel') { this._closeEdit(); return; }
-      if (act === 'more') { if (pick) this._more(pick); return; }
-      if (act === 'done') { const patch = {}; patch[s + '_entity'] = pick;
-        const n = nm.value.trim(), u = sb.value.trim(); patch[s + '_name'] = n || null; patch[s + '_subtitle'] = u || null;
-        if (typeof hvGlassCfg !== 'undefined') hvGlassCfg.set(patch); this._closeEdit(); } };
-    ed.querySelector('.act').addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (b) finish(b.dataset.act); });
-    ed.addEventListener('click', e => { if (e.target === ed) this._closeEdit(); });
-    ed.addEventListener('keydown', e => { if (e.key === 'Escape') { e.stopPropagation(); this._closeEdit(); } });
-    this.shadowRoot.appendChild(ed); setTimeout(() => q.focus(), 30); }
+    const finish = function (save) { if (!save) { self._closeEdit(); return; } const patch = {}; patch[s + '_entity'] = pick;
+      if (pick === 'builtin.clock') patch.clock_style = 'i'; if (pick === 'builtin.clock2') patch.clock_style = 'ii';
+      if (pick && pick.indexOf('builtin.') === 0) { const labels = { 'builtin.clock': ['Clock I', 'Clock'], 'builtin.clock2': ['Clock II', 'Clock'], 'builtin.intercom': ['Intercom', 'Intercom'], 'builtin.home': ['Home', 'Home App'] }[pick]; if (labels) { patch[s + '_name'] = labels[0]; patch[s + '_subtitle'] = labels[1]; } }
+      else if (pick && S[pick]) { patch[s + '_name'] = (S[pick].attributes && S[pick].attributes.friendly_name) || pick; const dom = pick.split('.')[0]; patch[s + '_subtitle'] = ({ light: 'Lights', scene: 'Scene', script: 'Scene', climate: 'Climate', lock: 'Lock', camera: 'Camera' })[dom] || ''; }
+      else { patch[s + '_name'] = null; patch[s + '_subtitle'] = null; }
+      if (typeof hvGlassCfg !== 'undefined') hvGlassCfg.set(patch); self._closeEdit(); };
+    pk.querySelector('.px').addEventListener('click', function () { finish(false); });
+    pk.querySelector('.ok').addEventListener('click', function () { finish(true); });
+    pk.addEventListener('keydown', function (e) { if (e.key === 'Escape') { e.stopPropagation(); finish(false); } });
+    this.shadowRoot.appendChild(pk); setTimeout(function () { q.focus(); }, 30); }
+
   _bloom(el, x, y) { if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return; const r = el.getBoundingClientRect(), b = document.createElement('span'); b.className = 'bl';
     const d = Math.hypot(r.width, r.height) * 1.4; b.style.cssText = `--d:${d}px;--x:${x - r.left}px;--y:${y - r.top}px`; el.appendChild(b); b.addEventListener('animationend', () => b.remove()); setTimeout(() => b.remove(), 900); }
   // --- pointer handling: tap / hold / drag (light brightness)
-  _wire(el) { const s = el.dataset.s;
+  _wire(el) { const s = el.dataset.s, isLt = s === 'light' || s === 'light2';
     if (s === 'thermostat') { el.addEventListener('click', e => { const b = e.target.closest('.cv'); if (b) { e.stopPropagation(); if (!b.disabled) this._step(Number(b.dataset.dir)); return; } });
       let ht = 0; el.addEventListener('pointerdown', e => { if (e.target.closest('.cv')) return; clearTimeout(ht); ht = setTimeout(() => { if (typeof hvSsGuard === 'function' && hvSsGuard()) return; this._edit('thermostat'); }, 500); });
       ['pointerup', 'pointercancel', 'pointerleave'].forEach(t => el.addEventListener(t, () => clearTimeout(ht))); return; }
     let p = null; const end = () => { el.classList.remove('dn'); };
-    if (s === 'light') el.style.touchAction = 'none';
-    el.addEventListener('pointerdown', e => { if (e.button > 0) return; const st = this._st(s), dim = s === 'light' && this._dim(st) && st.state !== 'unavailable';
-      const r = el.getBoundingClientRect();
-      p = { id: e.pointerId, x: e.clientX, y: e.clientY, t: Date.now(), dim, moved: false, drag: false, held: false, top: r.top, h: r.height, start: st && st.state === 'on' ? this._pct(st) : 0 };
-      el.classList.add('dn'); if (dim) try { el.setPointerCapture(e.pointerId); } catch (x) {}
+    if (isLt) el.style.touchAction = 'none';
+    el.addEventListener('pointerdown', e => { if (e.button > 0) return; const st = this._st(s);
+      p = { id: e.pointerId, x: e.clientX, y: e.clientY, t: Date.now(), moved: false, held: false };
+      el.classList.add('dn');
       clearTimeout(this._t.h); this._t.h = setTimeout(() => { if (!p || p.moved) return; if (typeof hvSsGuard === 'function' && hvSsGuard()) return; p.held = true; end(); this._edit(s); }, 500); });
-    el.addEventListener('pointermove', e => { if (!p || e.pointerId !== p.id) return; p.yNow = e.clientY; const dx = e.clientX - p.x, dy = e.clientY - p.y;
-      if (!p.moved && Math.hypot(dx, dy) > HV_LD.dead) { p.moved = true; if (p.dim && Math.abs(dy) >= Math.abs(dx) * 0.7) this._dragStart(el, p); else if (!p.drag) { clearTimeout(this._t.h); end(); } }
-      if (p.drag) { e.preventDefault(); e.stopPropagation(); this._dragMove(el, p, e.clientY); } });
+    el.addEventListener('pointermove', e => { if (!p || e.pointerId !== p.id) return; const dx = e.clientX - p.x, dy = e.clientY - p.y;
+      if (!p.moved && Math.hypot(dx, dy) > HV_LD.dead) { p.moved = true; clearTimeout(this._t.h); end(); } });
     const up = e => { if (!p || (e.pointerId != null && e.pointerId !== p.id)) return; clearTimeout(this._t.h); const q = p; p = null; end();
-      if (q.drag) { e.preventDefault(); e.stopPropagation(); this._dragEnd(el, q); return; }
       if (hvLdLocked(this, this._ent(s))) return;
-      if (e.type !== 'pointerup' || q.moved || q.held) return; this._bloom(el, e.clientX, e.clientY); this._tap(s, el); };
-    el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up); el.addEventListener('lostpointercapture', e => { if (p && p.drag) up(Object.assign({ type: 'pointercancel', pointerId: e.pointerId })); });
-    el.addEventListener('click', e => { if (el.classList.contains('drag') || hvLdLocked(this, this._ent(s))) { e.preventDefault(); e.stopPropagation(); return; } if (e.detail === 0) this._tap(s, el); }, true);
-    if (s === 'light') el.addEventListener('touchmove', e => { if (p && p.drag) { e.preventDefault(); e.stopPropagation(); } }, { passive: false });
-    el.addEventListener('keydown', e => { if (s !== 'light') return; const st = this._st(s); if (!this._dim(st) || !['ArrowUp', 'ArrowDown'].includes(e.key)) return; e.preventDefault();
-      const v = Math.max(1, Math.min(100, (st.state === 'on' ? this._pct(st) : 0) + (e.key === 'ArrowUp' ? 10 : -10))); this._call('light', 'turn_on', { entity_id: this._ent(s), brightness_pct: v }, s); });
+      if (e.type !== 'pointerup' || q.held) return;
+      const short = Date.now() - q.t < 400, tiny = Math.hypot((e.clientX || q.x) - q.x, (e.clientY || q.y) - q.y) < 32;
+      if (q.moved && !short && !tiny) return; this._bloom(el, e.clientX, e.clientY); this._tap(s, el); };
+    el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+    el.addEventListener('click', e => { if (hvLdLocked(this, this._ent(s))) { e.preventDefault(); e.stopPropagation(); return; } if (e.detail === 0) this._tap(s, el); }, true);
+    el.addEventListener('keydown', e => { if (!isLt) return; const st = this._st(s); if (!this._dim(st) || !['ArrowUp', 'ArrowDown'].includes(e.key)) return; e.preventDefault(); this._lightOpen(s); });
     el.addEventListener('contextmenu', e => e.preventDefault()); }
   _dragStart(el, p) { if (p.drag) return; p.drag = true; p.last = null; p.sent = 0; p.tm = 0; clearTimeout(this._t.h); el.classList.remove('dn'); el.classList.add('drag');
     hvLdBegin(); const v = hvLdAbs(p, p.yNow != null ? p.yNow : p.y); p.v = v; hvLdLock(this, this._ent('light'), v, el); }
@@ -10302,7 +10396,7 @@ window.NotHomeView = Object.assign(window.NotHomeView || {}, { doorbell: {
 const HVG_OVERRIDE_KEYS = ['thermostat_entity', 'thermostat_name', 'thermostat_subtitle', 'scene_entity', 'scene_name', 'scene_subtitle',
   'intercom_entity', 'intercom_action', 'intercom_name', 'intercom_subtitle', 'lock_entity', 'lock_name', 'lock_subtitle', 'light_entity', 'light_name', 'light_subtitle',
   'light2_entity', 'light2_name', 'light2_subtitle', 'scene2_entity', 'scene2_name', 'scene2_subtitle', 'camera_entity', 'camera_name', 'camera_subtitle',
-  'extra_entity', 'extra_name', 'extra_subtitle', 'layout', 'theme', 'background'];
+  'extra_entity', 'extra_name', 'extra_subtitle', 'layout', 'theme', 'background', 'hero', 'clock_style'];
 const hvGlassCfg = {
   key() { return `hvGlassCfg:${ssDash() || 'lovelace'}`; },
   raw() { const o = mhLs.get(this.key()); return o && typeof o === 'object' ? o : {}; },
