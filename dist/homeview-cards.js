@@ -9147,7 +9147,56 @@ const HVG_CSS = `
 .pk .wi .tile .hv{position:absolute;inset:0;pointer-events:none;overflow:hidden}
 .pk .wi .tile .hv > *{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 .t .vis{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:2;border-radius:inherit;overflow:hidden}
-.t.has-vis .in,.t.has-vis .lv,.t.has-vis .pc,.t.has-vis .fl{opacity:0;pointer-events:none}
+.t.has-vis .in, .t.has-vis .lv, .t.has-vis .pc, .t.has-vis .fl,
+.t.has-vis.on .in, .t.has-vis.on .lv, .t.has-vis.on .pc, .t.has-vis.on .fl,
+.t[data-s=light].has-vis .lv, .t[data-s=light].has-vis.on .lv,
+.t[data-s=light2].has-vis .lv, .t[data-s=light2].has-vis.on .lv,
+.t[data-s=light].has-vis .pc, .t[data-s=light].has-vis.on .pc,
+.t[data-s=light2].has-vis .pc, .t[data-s=light2].has-vis.on .pc,
+.t.has-vis.drag .lv, .t.has-vis.drag .pc, .t.has-vis.drag .fl{
+  opacity:0!important;pointer-events:none!important;visibility:hidden}
+.t.has-vis, .t.has-vis.on{color:inherit}
+
+
+.vis.gw, .pk .wi .tile.gw{flex-direction:column;justify-content:flex-end;align-items:center;padding:10cqmin 8cqmin 8cqmin;gap:1.5cqmin;text-align:center;background:transparent;color:inherit;overflow:hidden;box-sizing:border-box;display:flex}
+.vis.gw .gico, .pk .wi .tile.gw .gico{flex:1;min-height:0;width:40%;max-height:44%;display:flex;align-items:center;justify-content:center}
+.vis.gw .gico ha-icon, .vis.gw .gico svg, .pk .wi .tile.gw .gico ha-icon, .pk .wi .tile.gw .gico svg{width:100%;height:100%;--mdc-icon-size:100%;fill:currentColor;color:inherit}
+.vis.gw .gval, .pk .wi .tile.gw .gval{font-weight:700;font-size:22cqmin;line-height:1.05;letter-spacing:-.03em;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vis.gw .glab, .pk .wi .tile.gw .glab{font-weight:700;font-size:10.4cqmin;line-height:1.2;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vis.gw .gsub, .pk .wi .tile.gw .gsub{font-size:9.8cqmin;line-height:1.2;opacity:.62;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vis.gw .gcopy, .pk .wi .tile.gw .gcopy{min-width:0;max-width:100%;display:flex;flex-direction:column;align-items:center;gap:1cqmin}
+.vis.gw .gart, .pk .wi .tile.gw .gart{display:block;width:100%;height:100%;border-radius:18%;background-size:cover;background-position:center}
+.vis.gw.sz-2x1, .pk .wi .tile.gw.sz-2x1{flex-direction:row;justify-content:flex-start;align-items:center;padding:8cqmin 10cqmin;gap:8cqmin;text-align:left}
+.vis.gw.sz-2x1 .gico, .pk .wi .tile.gw.sz-2x1 .gico{width:30cqmin;height:30cqmin;flex:none;max-height:none}
+.vis.gw.sz-2x1 .gcopy, .pk .wi .tile.gw.sz-2x1 .gcopy{flex:1;align-items:flex-start}
+.vis.gw.sz-2x2, .pk .wi .tile.gw.sz-2x2{padding:12cqmin;justify-content:center}
+.vis.gw.sz-2x2 .gval, .pk .wi .tile.gw.sz-2x2 .gval{font-size:36cqmin}
+.vis.gw.sz-2x2 .gico, .pk .wi .tile.gw.sz-2x2 .gico{width:26%;max-height:28%}
+.vis.gw.cam, .pk .wi .tile.gw.cam{background-size:cover;background-position:center}
+.vis.gw.cam .gico, .pk .wi .tile.gw.cam .gico{display:none}
+.vis.gw.cam .glab, .vis.gw.cam .gsub, .pk .wi .tile.gw.cam .glab, .pk .wi .tile.gw.cam .gsub{text-shadow:0 1px 4px rgba(0,0,0,.55)}
+.vis.gw.homie, .pk .wi .tile.gw.homie{justify-content:flex-end;padding:0 8cqmin 8cqmin}
+.vis.gw.homie .ghmo, .pk .wi .tile.gw.homie .ghmo{position:absolute;inset:4% 6% 24%;overflow:hidden;background:transparent}
+.vis.gw.homie .ghmo, .vis.gw.homie .ghmo .hms, .vis.gw.homie .ghmo .hwx, .vis.gw.homie .ghmo .hglow,
+.pk .wi .tile.gw.homie .ghmo, .pk .wi .tile.gw.homie .ghmo .hms, .pk .wi .tile.gw.homie .ghmo .hwx, .pk .wi .tile.gw.homie .ghmo .hglow{background:transparent!important;box-shadow:none!important}
+.vis.gw.homie .glab, .pk .wi .tile.gw.homie .glab{position:relative;z-index:1}
+
+.pk .wi .tile.gw{position:relative;display:flex;container-type:size;flex-direction:column;justify-content:flex-end;align-items:center;padding:8px 6px 6px;gap:2px;background:rgba(44,44,48,.78);color:#fff;overflow:hidden;box-sizing:border-box}
+.pk .wi .tile.gw .gico{width:34%;max-height:38%;flex:1;min-height:0}
+.pk .wi .tile.gw .gval{font-size:15px;line-height:1.05;font-weight:700;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pk .wi .tile.gw .gsub{font-size:10px;opacity:.7;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pk .wi .tile.gw .glab{display:none}
+.pk .wi .tile.gw.sz-2x2 .gval{font-size:22px}
+.pk .wi .tile.gw.homie{padding:0 6px 8px}
+.pk .wi .tile.gw.homie .ghmo{inset:6% 8% 28%}
+
+.pk .wi .tile.gw.sz-2x1{padding:8px 10px;gap:8px;flex-direction:row;justify-content:flex-start;align-items:center;text-align:left}
+.pk .wi .tile.gw.sz-2x1 .gico{width:28px;height:28px;flex:none;max-height:none}
+.pk .wi .tile.gw.sz-2x1 .gcopy{flex:1;align-items:flex-start;min-width:0}
+.pk .wi .tile.gw.sz-2x2{padding:12px;justify-content:center}
+.pk .wi .tile.gw.sz-2x2 .gval{font-size:28px}
+.pk .wi .tile.gw.sz-2x2 .gico{width:22%;max-height:24%;flex:none}
+
 .t .vis.home svg{width:44%;height:44%;fill:#fff}
 .t .vis.icom{flex-direction:column;gap:4px;color:#fff}
 .t .vis.icom svg{width:36%;height:36%;fill:#fff}
@@ -9199,7 +9248,35 @@ class HVGlassPage extends HTMLElement {
   _c(k) { if (this._pin && Object.prototype.hasOwnProperty.call(this._pin, k)) return this._pin[k];
     try { if (typeof hvGlassCfg !== 'undefined') { const loc = hvGlassCfg.raw(); if (loc && Object.prototype.hasOwnProperty.call(loc, k)) return loc[k]; } } catch (e) {}
     const c = this._config || {}; return c[k]; }
-  _ent(s) { const id = this._c(s + '_entity'); return typeof id === 'string' && /^[a-z_]+\.[\w-]+$/i.test(id) ? id : ''; }
+  _ent(s) {
+    const pick = (id) => (typeof id === 'string' && /^[a-z_]+\.[\w-]+$/i.test(id) ? id : '');
+    const loc = (() => { try { const o = hvGlassCfg.raw && hvGlassCfg.raw(); return o ? o[s + '_entity'] : undefined; } catch (e) { return undefined; } })();
+    const cfg = (this._config || {})[s + '_entity'];
+    const view = (() => { try { const o = hvGlassCfg.viewCfg && hvGlassCfg.viewCfg(); return o ? o[s + '_entity'] : undefined; } catch (e) { return undefined; } })();
+    const resolve = (id) => {
+      id = pick(id);
+      if (!id) return '';
+      if (id.indexOf('hvcard.') === 0) {
+        const w = (this._c('widgets') || {})[s];
+        if (w && pick(w.entity)) return pick(w.entity);
+        const ev = (typeof hvGlassNhvEntity === 'function') ? hvGlassNhvEntity(this._hass, id.slice(7)) : '';
+        return pick(ev) || id;
+      }
+      return id;
+    };
+    const ok = (id) => {
+      if (!id) return false;
+      if (id.indexOf('builtin.') === 0) return true;
+      if (id.indexOf('hvcard.') === 0) return false;
+      return !!(this._hass && this._hass.states && this._hass.states[id]);
+    };
+    for (const cand of [loc, cfg, view]) {
+      const id = resolve(cand);
+      if (ok(id)) return id;
+    }
+    const first = resolve(loc) || resolve(cfg) || resolve(view);
+    return first && first.indexOf('hvcard.') !== 0 ? first : (first || '');
+  }
   _st(s) { const id = this._ent(s); return id && this._hass ? this._hass.states[id] : undefined; }
   _name(s) { const v = this._c(s + '_name'); return v != null && v !== '' ? String(v) : HVG_DEF[s][0]; }
   _sub(s) { const v = this._c(s + '_subtitle'); return v != null && v !== '' ? String(v) : HVG_DEF[s][1]; }
@@ -9392,14 +9469,83 @@ _inWidEdit() { try { return !!(typeof hvSsSwitch !== 'undefined' && hvSsSwitch.m
       return true;
     } catch (e) { return false; }
   }
+  _slotShape(el, s) {
+    const layout = this._c('layout') === 'grid3' ? 'grid3' : 'mixed';
+    if (s === 'thermostat' && layout !== 'grid3') return '2x2';
+    const w = (el && (el.clientWidth || el.offsetWidth)) || 0, h = (el && (el.clientHeight || el.offsetHeight)) || 0;
+    if (w && h) { if (w > h * 1.35) return '2x1'; if (h > w * 1.35) return '2x2'; }
+    return '1x1';
+  }
+  _widInfo(kind, entity) {
+    const st = entity && this._hass && this._hass.states[entity];
+    const g = (typeof HV_GAL !== 'undefined' && HV_GAL[kind]) || ({ homie: { name: 'Homey', ico: 'mdi:home-assistant' }, weather: { name: 'Weather', ico: 'mdi:weather-partly-cloudy' }, vehicle: { name: 'Vehicle', ico: 'mdi:car' }, photos: { name: 'Photos', ico: 'mdi:image' }, security: { name: 'Security', ico: 'mdi:shield-home' } }[kind]) || { name: kind, ico: 'mdi:view-dashboard' };
+    const a = (st && st.attributes) || {};
+    const name = (g && g.name) || kind;
+    let val = '', sub = (st && st.state && st.state !== 'unknown') ? String(st.state) : '', ico = (g && g.ico) || 'mdi:view-dashboard', art = '';
+    if (kind === 'thermostat' && st) {
+      val = a.temperature != null ? String(Math.round(a.temperature)) + '°' : '';
+      sub = a.current_temperature != null ? 'Now ' + Math.round(a.current_temperature) + '°' : (st.state || '');
+    } else if ((kind === 'light' || kind === 'scene') && st) {
+      val = '';
+      sub = kind === 'light' ? (st.state === 'on' ? (a.brightness != null ? Math.round(a.brightness / 2.55) + '%' : 'On') : 'Off') : 'Scene';
+    } else if ((kind === 'music' || kind === 'nowplaying' || kind === 'tv' || kind === 'tvplayer') && st) {
+      val = a.media_title || a.app_name || (st.state === 'playing' ? 'Playing' : (st.state || ''));
+      sub = a.media_artist || a.source || name;
+      art = a.entity_picture || a.entity_picture_local || '';
+    } else if (kind === 'camera' && st) {
+      sub = st.state || 'Camera';
+      try { art = this._camSrc(st) || ''; } catch (e) { art = a.entity_picture || ''; }
+    } else if (kind === 'garage' && st) {
+      sub = st.state || '';
+    } else if (kind === 'battery' && st) {
+      val = (st.state != null && st.state !== '') ? (String(st.state) + (a.unit_of_measurement || '%')) : '';
+      sub = name;
+    } else if (kind === 'person' && st) {
+      sub = st.state || '';
+    } else if ((kind === 'events' || kind === 'calendar') && st) {
+      val = a.message || a.friendly_name || 'Calendar';
+      sub = a.description || '';
+    } else if (kind === 'weather' && st) {
+      val = a.temperature != null ? String(Math.round(a.temperature)) + (a.temperature_unit || '°') : '';
+      sub = (st.state || '').replace(/_/g, ' ');
+    } else if (kind === 'entity' && st) {
+      val = st.state || '';
+      sub = a.unit_of_measurement || name;
+    } else if (kind === 'homie') { val = ''; sub = ''; ico = 'mdi:home-assistant'; }
+    else if (kind === 'house' || kind === 'myhome' || kind === 'nav') { ico = 'mdi:home'; sub = ''; }
+    else if (st && a.friendly_name) sub = sub || '';
+    const label = (kind === 'homie') ? 'Homey' : (kind === 'house' || kind === 'myhome') ? (g.name || 'Home') : name;
+    return { name: label, val, sub, ico, art };
+  }
+  _paintGlassWid(box, kind, entity, shape) {
+    const info = this._widInfo(kind, entity);
+    const esc = (typeof window.esc === 'function') ? window.esc : (s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])));
+    const keep = box.classList.contains('tile') ? 'tile' : 'vis';
+    box.className = keep + ' gw sz-' + shape + (kind === 'homie' ? ' homie' : '') + (kind === 'camera' && info.art ? ' cam' : '');
+    box.style.backgroundImage = (info.art && kind === 'camera') ? ('url("' + String(info.art).replace(/"/g, '') + '")') : '';
+    const ico = (info.ico && info.ico.indexOf('mdi:') === 0) ? '<ha-icon icon="' + info.ico + '"></ha-icon>' : (info.ico || '');
+    const copy = (info.val ? '<div class="gval">' + esc(info.val) + '</div>' : '') + '<div class="glab">' + esc(info.name) + '</div>' + (info.sub ? '<div class="gsub">' + esc(info.sub) + '</div>' : '');
+    if (kind === 'homie') {
+      box.innerHTML = '<div class="ghmo"></div><div class="glab">Homey</div>';
+      const stg = box.querySelector('.ghmo');
+      try { if (typeof HVHomie === 'function') new HVHomie(stg, 'thumb', { pause: () => !stg.isConnected }); } catch (e) {}
+      return;
+    }
+    if (shape === '2x1') box.innerHTML = '<div class="gico">' + ico + '</div><div class="gcopy">' + copy + '</div>';
+    else box.innerHTML = '<div class="gico">' + ico + '</div>' + copy;
+    if (info.art && (kind === 'music' || kind === 'nowplaying' || kind === 'tv' || kind === 'tvplayer')) {
+      const ic = box.querySelector('.gico');
+      if (ic) ic.innerHTML = '<span class="gart" style="background-image:url(&quot;' + String(info.art).replace(/"/g, '') + '&quot;)"></span>';
+    }
+  }
   _paintVis(el, s, id) {
     if (!el) return;
     const w = (this._c('widgets') || {})[s];
     const kind = (id && id.indexOf('hvcard.') === 0) ? id.slice(7) : (w && w.kind);
     if (kind) {
-      const box = this._ensureVis(el, 'hv');
-      const ent = (w && w.entity) || (typeof hvGlassNhvEntity === 'function' ? hvGlassNhvEntity(this._hass, kind) : '');
-      if (!this._mountHvCard(box, kind, ent)) { this._clearVis(el); }
+      const ent = (w && w.entity) || (typeof hvGlassNhvEntity === 'function' ? hvGlassNhvEntity(this._hass, kind) : '') || (id && id.indexOf('hvcard.') !== 0 ? id : this._ent(s));
+      const box = this._ensureVis(el, 'gw');
+      this._paintGlassWid(box, kind, ent, this._slotShape(el, s));
       return;
     }
     if (id === 'builtin.clock' || id === 'builtin.clock2') {
@@ -9528,20 +9674,22 @@ _inWidEdit() { try { return !!(typeof hvSsSwitch !== 'undefined' && hvSsSwitch.m
       addSec('Other', other.map(it => mkWi(it.name, otherTile(it), it.id)));
       const nhv = [];
       const kinds = (typeof HV_GAL !== 'undefined') ? Object.keys(HV_GAL) : [];
-      if (customElements.get('homeview-homie-card')) kinds.push('homie');
+      if (typeof HVHomie === 'function' || customElements.get('homeview-homie-card')) kinds.push('homie');
+      if (this._hass && this._hass.states && Object.keys(this._hass.states).some(k => k.startsWith('weather.'))) kinds.push('weather');
       for (const kind of kinds) {
-        const g = (kind === 'homie') ? { name: 'Homey', ico: 'mdi:home-assistant', need: '' } : HV_GAL[kind];
+        const g = (kind === 'homie') ? { name: 'Homey', ico: 'mdi:home-assistant', need: '' } : (kind === 'weather') ? { name: 'Weather', ico: 'mdi:weather-partly-cloudy', need: 'weather.' } : HV_GAL[kind];
         if (!g) continue;
-        const ent = g.need ? (typeof hvGlassNhvEntity === 'function' ? hvGlassNhvEntity(this._hass, kind) : '') : '';
-        if (g.need && !ent) continue;
-        if (!match(g.name, 'hvcard.' + kind) && !match(ent, kind)) continue;
+        const ent = (g.need || kind === 'weather') ? (typeof hvGlassNhvEntity === 'function' ? hvGlassNhvEntity(this._hass, kind === 'weather' ? 'entity' : kind) : '') : '';
+        const wx = kind === 'weather' && this._hass ? Object.keys(this._hass.states).find(k => k.startsWith('weather.')) : '';
+        const bound = ent || wx || '';
+        if (g.need && !bound) continue;
+        if (!match(g.name, 'hvcard.' + kind) && !match(bound, kind)) continue;
         const size = (kind === 'nowplaying' || kind === 'tvplayer' || kind === 'events' || kind === 'music') ? '2x1' : (kind === 'thermostat' || kind === 'house' || kind === 'myhome' || kind === 'glass' || kind === 'homie') ? '2x2' : '1x1';
-        const host = document.createElement('div'); host.className = 'tile';
-        const b = mkWi(g.name, '<div class="hv"></div>', 'hvcard.' + kind, ent, size);
-        const box = b.querySelector('.hv');
-        if (!this._mountHvCard(box, kind, ent)) {
-          b.querySelector('.tile').innerHTML = '<div class="icn"><ha-icon icon="' + (g.ico || 'mdi:view-dashboard') + '"></ha-icon></div>';
-        }
+        const shape = size === '2x1' ? '2x1' : size === '2x2' ? '2x2' : '1x1';
+        const b = mkWi(g.name, '', 'hvcard.' + kind, bound, size);
+        const tile = b.querySelector('.tile');
+        this._paintGlassWid(tile, kind, bound, shape);
+        tile.classList.add('gw');
         nhv.push(b);
       }
       addSec('NotHomeView', nhv);
@@ -10660,6 +10808,7 @@ function hvGlassNhvEntity(hass, kind) {
   if (kind === 'events') return first('calendar');
   if (kind === 'battery') return first('sensor', (k, ev) => attr('device_class', ev) === 'battery');
   if (kind === 'entity') return first('weather') || first('sensor');
+  if (kind === 'weather') return first('weather');
   return '';
 }
 
@@ -11795,7 +11944,46 @@ const HV_SS_SW_CSS = `
 .pk .it .cap{position:relative;z-index:1;padding:8px 10px;background:linear-gradient(transparent,rgba(0,0,0,.55));font-size:13px;font-weight:600;width:100%;box-sizing:border-box}
 .pk .it .cap small{display:block;font-weight:500;opacity:.8;font-size:11px}
 .pk .it .icn{position:absolute;inset:0 0 36px;display:grid;place-items:center;pointer-events:none;opacity:.95}
-.pk .it .icn svg{width:42%;height:42%}`;
+.pk .it .icn svg{width:42%;height:42%}
+.vis.gw, .pk .wi .tile.gw{flex-direction:column;justify-content:flex-end;align-items:center;padding:10cqmin 8cqmin 8cqmin;gap:1.5cqmin;text-align:center;background:transparent;color:inherit;overflow:hidden;box-sizing:border-box;display:flex}
+.vis.gw .gico, .pk .wi .tile.gw .gico{flex:1;min-height:0;width:40%;max-height:44%;display:flex;align-items:center;justify-content:center}
+.vis.gw .gico ha-icon, .vis.gw .gico svg, .pk .wi .tile.gw .gico ha-icon, .pk .wi .tile.gw .gico svg{width:100%;height:100%;--mdc-icon-size:100%;fill:currentColor;color:inherit}
+.vis.gw .gval, .pk .wi .tile.gw .gval{font-weight:700;font-size:22cqmin;line-height:1.05;letter-spacing:-.03em;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vis.gw .glab, .pk .wi .tile.gw .glab{font-weight:700;font-size:10.4cqmin;line-height:1.2;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vis.gw .gsub, .pk .wi .tile.gw .gsub{font-size:9.8cqmin;line-height:1.2;opacity:.62;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vis.gw .gcopy, .pk .wi .tile.gw .gcopy{min-width:0;max-width:100%;display:flex;flex-direction:column;align-items:center;gap:1cqmin}
+.vis.gw .gart, .pk .wi .tile.gw .gart{display:block;width:100%;height:100%;border-radius:18%;background-size:cover;background-position:center}
+.vis.gw.sz-2x1, .pk .wi .tile.gw.sz-2x1{flex-direction:row;justify-content:flex-start;align-items:center;padding:8cqmin 10cqmin;gap:8cqmin;text-align:left}
+.vis.gw.sz-2x1 .gico, .pk .wi .tile.gw.sz-2x1 .gico{width:30cqmin;height:30cqmin;flex:none;max-height:none}
+.vis.gw.sz-2x1 .gcopy, .pk .wi .tile.gw.sz-2x1 .gcopy{flex:1;align-items:flex-start}
+.vis.gw.sz-2x2, .pk .wi .tile.gw.sz-2x2{padding:12cqmin;justify-content:center}
+.vis.gw.sz-2x2 .gval, .pk .wi .tile.gw.sz-2x2 .gval{font-size:36cqmin}
+.vis.gw.sz-2x2 .gico, .pk .wi .tile.gw.sz-2x2 .gico{width:26%;max-height:28%}
+.vis.gw.cam, .pk .wi .tile.gw.cam{background-size:cover;background-position:center}
+.vis.gw.cam .gico, .pk .wi .tile.gw.cam .gico{display:none}
+.vis.gw.cam .glab, .vis.gw.cam .gsub, .pk .wi .tile.gw.cam .glab, .pk .wi .tile.gw.cam .gsub{text-shadow:0 1px 4px rgba(0,0,0,.55)}
+.vis.gw.homie, .pk .wi .tile.gw.homie{justify-content:flex-end;padding:0 8cqmin 8cqmin}
+.vis.gw.homie .ghmo, .pk .wi .tile.gw.homie .ghmo{position:absolute;inset:4% 6% 24%;overflow:hidden;background:transparent}
+.vis.gw.homie .ghmo, .vis.gw.homie .ghmo .hms, .vis.gw.homie .ghmo .hwx, .vis.gw.homie .ghmo .hglow,
+.pk .wi .tile.gw.homie .ghmo, .pk .wi .tile.gw.homie .ghmo .hms, .pk .wi .tile.gw.homie .ghmo .hwx, .pk .wi .tile.gw.homie .ghmo .hglow{background:transparent!important;box-shadow:none!important}
+.vis.gw.homie .glab, .pk .wi .tile.gw.homie .glab{position:relative;z-index:1}
+
+.pk .wi .tile.gw{position:relative;display:flex;container-type:size;flex-direction:column;justify-content:flex-end;align-items:center;padding:8px 6px 6px;gap:2px;background:rgba(44,44,48,.78);color:#fff;overflow:hidden;box-sizing:border-box}
+.pk .wi .tile.gw .gico{width:34%;max-height:38%;flex:1;min-height:0}
+.pk .wi .tile.gw .gval{font-size:15px;line-height:1.05;font-weight:700;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pk .wi .tile.gw .gsub{font-size:10px;opacity:.7;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pk .wi .tile.gw .glab{display:none}
+.pk .wi .tile.gw.sz-2x2 .gval{font-size:22px}
+.pk .wi .tile.gw.homie{padding:0 6px 8px}
+.pk .wi .tile.gw.homie .ghmo{inset:6% 8% 28%}
+
+.pk .wi .tile.gw.sz-2x1{padding:8px 10px;gap:8px;flex-direction:row;justify-content:flex-start;align-items:center;text-align:left}
+.pk .wi .tile.gw.sz-2x1 .gico{width:28px;height:28px;flex:none;max-height:none}
+.pk .wi .tile.gw.sz-2x1 .gcopy{flex:1;align-items:flex-start;min-width:0}
+.pk .wi .tile.gw.sz-2x2{padding:12px;justify-content:center}
+.pk .wi .tile.gw.sz-2x2 .gval{font-size:28px}
+.pk .wi .tile.gw.sz-2x2 .gico{width:22%;max-height:24%;flex:none}
+`;
 
 const hvSsFaces = {
   key() { return `hvSsFaces:${ssDash() || 'lovelace'}`; },
@@ -12302,7 +12490,7 @@ const hvSsSwitch = {
         if (this.tab === 'widgets') {
           card.classList.add('g-wid');
           try { if (f._gp) f._gp.style.pointerEvents = 'auto'; f.el.style.pointerEvents = 'auto'; } catch (e) {}
-        } else if (this.tab === 'style' || this.tab === 'color') {
+        } else if (this.tab === 'style' || this.tab === 'background' || this.tab === 'color') {
           card.classList.add('g-hide');
         }
       }
@@ -12558,9 +12746,10 @@ const hvSsSwitch = {
     const sr = this.host.shadowRoot; this._clearChrome();
     const face = this.draft.faces[this.i];
     const hasFont = face.style === 'typo' || face.style === 'digital' || face.style === 'photo' || face.style === 'fluid' || face.style === 'whimsy';
+    if (face.style === 'glass' && this.tab === 'color') this.tab = 'background';
     const tabs = document.createElement('div'); tabs.className = 'tabs';
     const names = face.style === 'glass'
-      ? [['style', 'STYLE'], ['widgets', 'WIDGETS'], ['color', 'COLOR'], ['background', 'BACKGROUND']]
+      ? [['style', 'STYLE'], ['widgets', 'WIDGETS'], ['background', 'BACKGROUND']]
       : [['style', 'STYLE']].concat([['color', 'COLOR']], hasFont ? [['font', 'FONT']] : [], [['widgets', 'WIDGETS']]);
     for (const [k, l] of names) { const b = document.createElement('b'); b.textContent = l; if (k === this.tab) b.className = 'on'; b.addEventListener('click', () => { this.tab = k; this._paintCards(this.draft, this.i, 'customize'); }); tabs.appendChild(b); }
     sr.appendChild(tabs);
@@ -12571,7 +12760,7 @@ const hvSsSwitch = {
     sr.appendChild(x); sr.appendChild(ck);
     try { this.host.classList.toggle('gled', face.style === 'glass'); } catch (e) {}
     if (face.style === 'glass' && this.tab === 'style') this._paintLayoutCar(face);
-    else if (face.style === 'glass' && this.tab === 'color') this._paintColorCar(face);
+    else if (face.style === 'glass' && this.tab === 'background') this._paintColorCar(face);
     else {
       if (this.tab === 'style' || this.tab === 'color' || this.tab === 'font' || this.tab === 'background') this._paintRail(face);
       if (this.tab === 'color') this._paintAuto(face);
