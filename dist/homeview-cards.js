@@ -11031,8 +11031,32 @@ const hvSsOv = {
   _running(w) { try { return !!(w && w.screensaverRunning && w.screensaverRunning()); } catch (e) { return false; } },
   _hookStart() { const w = ssWallpanel(); if (!w || w.__hvSsHooked || typeof w.startScreensaver !== 'function') return;
     w.__hvSsHooked = true; const orig = w.startScreensaver;
+    const origHI = typeof w.handleInteractionEvent === 'function' ? w.handleInteractionEvent : null;
+    const opening = () => {
+      try {
+        if (!(w.screensaverRunning && w.screensaverRunning())) return false;
+        // Still on the first-photo load: the host stays visibility:hidden until switchActiveMedia finishes.
+        if (w.style && w.style.visibility !== 'visible') {
+          const t0 = w.screensaverStartedAt || 0;
+          return !t0 || (Date.now() - t0 < 20000);
+        }
+        return !!(w.__hvSsOpenUntil && Date.now() < w.__hvSsOpenUntil);
+      } catch (e) { return false; }
+    };
     // Show the chosen style in the same turn Wallpanel starts, so its photo clock never paints first.
-    w.startScreensaver = function () { const r = orig.apply(this, arguments); try { hvSsOv.tick(true); } catch (e) {} return r; }; },
+    // Wallpanel 4.68 bumps screensaverSessionId on every start with no re-entry guard, and a window-level
+    // click / mousemove / touchend (including the iPad's delayed click after the opening gesture) can
+    // stopScreensaver while that first photo is still loading. releaseMediaElement then fires a synthetic
+    // IMG error and toasts "Failed to update media from null".
+    w.startScreensaver = function () {
+      try { if (w.screensaverRunning && w.screensaverRunning()) { try { hvSsOv.tick(true); } catch (e) {} return; } } catch (e) {}
+      w.__hvSsOpenUntil = Date.now() + 20000;
+      const r = orig.apply(this, arguments);
+      Promise.resolve(r).then(function () { w.__hvSsOpenUntil = Date.now() + 1200; }, function () { w.__hvSsOpenUntil = Date.now() + 400; });
+      try { hvSsOv.tick(true); } catch (e) {}
+      return r;
+    };
+    if (origHI) w.handleInteractionEvent = function (e) { if (opening()) return; return origHI.apply(this, arguments); }; },
   tick(force) { const w = ssWallpanel(); this._hookStart();
     let run = this._running(w), cs = null; try { cs = w && getComputedStyle(w); } catch (e) { cs = null; }
     const vis = !!(cs && cs.visibility !== 'hidden' && cs.display !== 'none');
