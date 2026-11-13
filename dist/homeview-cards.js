@@ -11580,8 +11580,8 @@ const HV_SS_FONTS = [
 ];
 const HV_SS_SLOT = {
   photo: [{ id: 'bl', x: 3, y: 78, w: 28, h: 18 }, { id: 'br', x: 69, y: 78, w: 28, h: 18 }],
-  typo: [{ id: 'bl', x: 6, y: 82, w: 30, h: 14 }, { id: 'br', x: 64, y: 82, w: 30, h: 14 }],
-  digital: [{ id: 'tl', x: 3.5, y: 5, w: 36, h: 28 }, { id: 'bl', x: 3.5, y: 70, w: 36, h: 24 }],
+  typo: [{ id: 'bl', x: 6, y: 80, w: 30, h: 14 }, { id: 'br', x: 64, y: 80, w: 30, h: 14 }],
+  digital: [{ id: 'tl', x: 5, y: 6, w: 36, h: 26 }, { id: 'bl', x: 5, y: 68, w: 38, h: 24 }],
   info: [{ id: 'media', x: 3, y: 70, w: 28, h: 26 }, { id: 'wx', x: 69, y: 70, w: 28, h: 26 }, { id: 'bc', x: 37, y: 88, w: 26, h: 10 }],
   glass: [],
   homie: [{ id: 'br', x: 22, y: 21, w: 56, h: 10 }],
@@ -11594,14 +11594,14 @@ const HV_SS_MOD = {
   asymmetric: [
     { id: 'tall', x: 3.2, y: 3.5, w: 46, h: 52 },
     { id: 'r1', x: 51.2, y: 3.5, w: 45.6, h: 52 },
-    { id: 'r2', x: 3.2, y: 57.5, w: 46, h: 39 },
-    { id: 'r3', x: 51.2, y: 57.5, w: 45.6, h: 39 }
+    { id: 'r2', x: 3.2, y: 57.5, w: 46, h: 36 },
+    { id: 'r3', x: 51.2, y: 57.5, w: 45.6, h: 36 }
   ],
   grid: [
     { id: 'q1', x: 3.2, y: 3.5, w: 45.6, h: 46 },
     { id: 'q2', x: 51.2, y: 3.5, w: 45.6, h: 46 },
-    { id: 'q3', x: 3.2, y: 51.5, w: 45.6, h: 45 },
-    { id: 'q4', x: 51.2, y: 51.5, w: 45.6, h: 45 }
+    { id: 'q3', x: 3.2, y: 51.5, w: 45.6, h: 42 },
+    { id: 'q4', x: 51.2, y: 51.5, w: 45.6, h: 42 }
   ],
   stack: [
     { id: 'tall', x: 3.2, y: 3.5, w: 44, h: 93 },
@@ -11671,6 +11671,10 @@ const HV_SS_SW_CSS = `
 .auto .wand{width:16px;height:16px;display:block;flex:none}
 .plus{position:absolute;right:calc(18px + env(safe-area-inset-right,0px));bottom:22%;width:36px;height:36px;border-radius:50%;border:0;background:rgba(48,48,52,.9);color:#fff;cursor:pointer;z-index:6;pointer-events:auto;display:flex;align-items:center;justify-content:center;-webkit-backdrop-filter:blur(12px)}
 .plus svg{width:18px;height:18px;display:block}
+.card .face{position:relative;width:100%;flex:none}
+.card .rm{position:absolute;top:18px;right:10px;width:28px;height:28px;border-radius:50%;border:0;background:rgba(48,48,52,.86);color:#fff;cursor:pointer;z-index:6;pointer-events:auto;display:flex;align-items:center;justify-content:center;-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);box-shadow:0 1px 6px rgba(0,0,0,.35);padding:0;-webkit-tap-highlight-color:transparent}
+.card .rm svg{width:14px;height:14px;display:block;pointer-events:none}
+.card .rm[hidden]{display:none}
 .x,.ck{position:absolute;bottom:calc(16px + env(safe-area-inset-bottom,0px));width:46px;height:46px;border-radius:50%;border:0;cursor:pointer;z-index:6;pointer-events:auto;display:flex;align-items:center;justify-content:center}
 .x{left:calc(16px + env(safe-area-inset-left,0px));background:#3a3a3e;color:#fff}
 .ck{right:calc(16px + env(safe-area-inset-right,0px));background:#0a84ff;color:#fff}
@@ -11696,32 +11700,32 @@ const HV_SS_SW_CSS = `
 .comp.setup{align-items:center;justify-content:center;gap:8cqh;padding:10% 8%;text-align:center}
 .comp.setup .i{--mdc-icon-size:32cqh;width:32cqh;height:32cqh;opacity:.92}
 .comp.setup .v{font-size:22cqh;font-weight:650;letter-spacing:.01em;opacity:.92;white-space:normal;text-overflow:ellipsis;max-height:60cqh}
-.comp{width:100%;height:100%;display:flex;flex-direction:column;justify-content:center;padding:8% 10%;box-sizing:border-box;container-type:normal;color:inherit}
-.comp .k{font-size:18cqh;opacity:.72;font-weight:600;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.comp .v{font-size:42cqh;font-weight:700;line-height:1.05;letter-spacing:-.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.comp{width:100%;height:100%;display:flex;flex-direction:column;justify-content:center;padding:8% 12% 12%;box-sizing:border-box;container-type:normal;color:inherit;overflow:hidden}
+ .comp .k{font-size:14cqh;opacity:.72;font-weight:600;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .comp .v{font-size:34cqh;font-weight:700;line-height:1.05;letter-spacing:-.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .comp.date{padding:10% 12%;justify-content:flex-end;color:inherit}
-.comp.date .k{font-size:16cqh;letter-spacing:.04em;opacity:.85;text-transform:none}
-.comp.date .v{font-size:62cqh;letter-spacing:-.06em;font-weight:700}
+ .comp.date .k{font-size:13cqh;letter-spacing:.04em;opacity:.85;text-transform:none}
+ .comp.date .v{font-size:50cqh;letter-spacing:-.06em;font-weight:700}
 .comp.date.compact{flex-direction:row;align-items:baseline;justify-content:flex-start;gap:8%;padding:2% 4%}
-.comp.date.compact .k,.comp.date.compact .v{font-size:36cqh;font-weight:650;letter-spacing:.02em}
+ .comp.date.compact .k,.comp.date.compact .v{font-size:28cqh;font-weight:650;letter-spacing:.02em}
 .comp.clock{align-items:center;padding:6%}
 .comp.clock svg{width:88%;height:88%}
-.comp.wxw{justify-content:flex-end;padding:10% 12%}
-.comp.wxw .v{font-size:52cqh}
-.comp.wxw .sub{text-transform:none;font-weight:500;opacity:.7;font-size:14cqh;margin-top:2cqh}
+ .comp.wxw{justify-content:flex-end;padding:8% 14% 14%}
+ .comp.wxw .v{font-size:40cqh}
+ .comp.wxw .sub{text-transform:none;font-weight:500;opacity:.7;font-size:13cqh;margin-top:1cqh;line-height:1.15}
 .slot.compact .comp.wxw,.pv-src.compact .comp.wxw{flex-direction:row;flex-wrap:nowrap;align-items:baseline;justify-content:center;gap:2.2cqw;padding:0 3%;}
-.slot.compact .comp.wxw .k,.pv-src.compact .comp.wxw .k{font-size:28cqh;letter-spacing:.08em;opacity:.8}
-.slot.compact .comp.wxw .v,.pv-src.compact .comp.wxw .v{font-size:36cqh;letter-spacing:-.03em}
-.slot.compact .comp.wxw .sub,.pv-src.compact .comp.wxw .sub{font-size:26cqh;margin-top:0;letter-spacing:.02em;text-transform:none;opacity:.88}
+ .slot.compact .comp.wxw .k,.pv-src.compact .comp.wxw .k{font-size:22cqh;letter-spacing:.08em;opacity:.8}
+ .slot.compact .comp.wxw .v,.pv-src.compact .comp.wxw .v{font-size:28cqh;letter-spacing:-.03em}
+ .slot.compact .comp.wxw .sub,.pv-src.compact .comp.wxw .sub{font-size:20cqh;margin-top:0;letter-spacing:.02em;text-transform:none;opacity:.88}
 .homie .slot{color:var(--hv-ss-text,#e6e6e6);overflow:visible}
-.comp.ev{justify-content:flex-start;padding:10% 10%;gap:6cqh}
+ .comp.ev{justify-content:flex-start;padding:8% 12% 12%;gap:4cqh}
 .comp.ev .er{display:flex;flex-direction:column;gap:1cqh}
-.comp.ev .ed{font-size:14cqh;font-weight:600;opacity:.7}
-.comp.ev .et{font-size:20cqh;font-weight:650;line-height:1.15;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+ .comp.ev .ed{font-size:12cqh;font-weight:600;opacity:.7}
+ .comp.ev .et{font-size:16cqh;font-weight:650;line-height:1.15;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 .comp.media{flex-direction:row;align-items:flex-end;gap:8%;padding:10%}
 .comp.media .art{width:38%;aspect-ratio:1;border-radius:14%;background:linear-gradient(160deg,#b9d7ee,#6f9ccc);background-size:cover;background-position:center;flex:none;box-shadow:0 4px 12px rgba(0,0,0,.25)}
 .comp.media .mv{flex:1;min-width:0}
-.comp.media .v{font-size:22cqh;text-transform:uppercase}
+ .comp.media .v{font-size:18cqh;text-transform:uppercase}
 
 /* Glass customize: large floating X/check, light-weight tabs */
 :host(.gled) .tabs b{font-weight:400;font-size:12px;letter-spacing:.14em;color:rgba(255,255,255,.42)}
@@ -11810,11 +11814,12 @@ const hvSsFaces = {
     const hub = this._cfg(), loc = mhLs.get(this.key());
     let data = null;
     if (loc && Array.isArray(loc.faces) && loc.faces.length) data = loc;
-    else if (hub && Array.isArray(hub.screensaver_faces) && hub.screensaver_faces.length) data = { faces: hub.screensaver_faces, i: hub.screensaver_face_index || 0 };
+    else if (hub && Array.isArray(hub.screensaver_faces) && hub.screensaver_faces.length) data = { faces: hub.screensaver_faces, i: hub.screensaver_face_index || 0, stash: hub.screensaver_faces_stash || [] };
     if (!data) data = this._defaults();
     data.faces = data.faces.filter(f => f && HV_SSS_V.includes(f.style));
     if (!data.faces.length) data = this._defaults();
     data.i = Math.max(0, Math.min(data.faces.length - 1, data.i | 0));
+    data.stash = Array.isArray(data.stash) ? data.stash.filter(f => f && HV_SSS_V.includes(f.style)) : [];
     return data;
   },
   list() { return this.raw().faces; },
@@ -11823,13 +11828,13 @@ const hvSsFaces = {
   async commit(data, hass) {
     data.i = Math.max(0, Math.min(data.faces.length - 1, data.i | 0));
     const face = data.faces[data.i];
-    mhLs.set(this.key(), { faces: data.faces, i: data.i });
+    mhLs.set(this.key(), { faces: data.faces, i: data.i, stash: data.stash || [] });
     if (face) {
       try { await hvSs.set(face.style, hass); } catch (e) {}
       if (face.colors) { try { await hvSsColors.setStyle(face.style, face.colors, hass); } catch (e) {} }
       else { try { await hvSsColors.setStyle(face.style, null, hass); } catch (e) {} }
     }
-    try { await hvSsSaveHub(hass, hub => { hub.screensaver_faces = data.faces; hub.screensaver_face_index = data.i; return true; }); } catch (e) {}
+    try { await hvSsSaveHub(hass, hub => { hub.screensaver_faces = data.faces; hub.screensaver_face_index = data.i; hub.screensaver_faces_stash = data.stash || []; return true; }); } catch (e) {}
     return data;
   }
 };
@@ -12267,10 +12272,18 @@ const hvSsSwitch = {
       const card = document.createElement('div'); card.className = 'card' + (mode === 'customize' ? ' editing' : '') + (isCur ? ' cur' : ''); card.style.width = size + 'px';
       const showLab = mode !== 'customize' && isCur;
       const showCz = mode !== 'customize' && isCur && admin;
-      card.innerHTML = `<div class="lab"${showLab ? '' : ' hidden'}>${HV_SS_LABEL[face.style] || face.style || ''}</div><div class="win"></div><button class="cz" type="button"${showCz ? '' : ' hidden'}>Customize</button>`;
+      const showRm = mode === 'switch' && (data.faces || []).length > 1;
+      card.innerHTML = `<div class="lab"${showLab ? '' : ' hidden'}>${HV_SS_LABEL[face.style] || face.style || ''}</div><div class="face"><div class="win"></div><button class="rm" type="button" aria-label="Remove face"${showRm ? '' : ' hidden'}><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M6 12h12"/></svg></button></div><button class="cz" type="button"${showCz ? '' : ' hidden'}>Customize</button>`;
       card.style.marginRight = gap + 'px';
       const win = card.querySelector('.win'); win.style.width = size + 'px'; win.style.height = size + 'px';
+      const faceWrap = card.querySelector('.face'); if (faceWrap) faceWrap.style.width = size + 'px';
       const f = this._mkFace(face, false); win.appendChild(f.el); this._applyFaceLook(f, face);
+      const rm = card.querySelector('.rm');
+      if (rm) {
+        const idx = n;
+        const stop = ev => { ev.preventDefault(); ev.stopPropagation(); try { ev.stopImmediatePropagation(); } catch (e) {} };
+        for (const typ of ['pointerdown', 'touchstart', 'click']) rm.addEventListener(typ, ev => { stop(ev); if (typ === 'click') this._removeFace(idx, ev); }, true);
+      }
       if (face.style !== 'glass') this._paintSlots(f.el, face, mode === 'customize' && this.tab === 'widgets', true);
       if (mode === 'customize' && face.style === 'glass') {
         if (this.tab === 'widgets') {
@@ -12313,9 +12326,29 @@ const hvSsSwitch = {
   },
   _addFace() {
     const data = this.draft || hvSsFaces.raw();
-    data.faces.push({ style: 'typo', colors: null, font: 'system', layout: 'editorial', complications: { bl: { entity: 'builtin.date' } } });
+    data.stash = Array.isArray(data.stash) ? data.stash : [];
+    if (data.stash.length) {
+      const face = data.stash.pop();
+      data.faces.push(face);
+    } else {
+      data.faces.push({ style: 'typo', colors: null, font: 'system', layout: 'editorial', complications: { bl: { entity: 'builtin.date' } } });
+    }
     this.draft = data; this.i = data.faces.length - 1; data.i = this.i;
     this._paintCards(data, this.i, 'switch');
+  },
+  _removeFace(n, ev) {
+    if (ev) { try { ev.preventDefault(); ev.stopPropagation(); ev.stopImmediatePropagation(); } catch (e) {} }
+    const data = this.draft || hvSsFaces.raw();
+    if (!data.faces || data.faces.length <= 1) return;
+    const i = Math.max(0, Math.min(data.faces.length - 1, n | 0));
+    const gone = data.faces.splice(i, 1)[0];
+    data.stash = Array.isArray(data.stash) ? data.stash : [];
+    if (gone) data.stash.push(gone);
+    data.i = Math.max(0, Math.min(data.faces.length - 1, i > 0 ? i - 1 : 0));
+    this.draft = data; this.i = data.i;
+    this._cardSig = '';
+    this._paintCards(data, this.i, 'switch');
+    try { hvSsEatTap(400); } catch (e) {}
   },
   _markCur(i) {
     const admin = hvSsIsAdmin(), sw = this.mode === 'switch';
