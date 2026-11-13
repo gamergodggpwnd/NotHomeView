@@ -2880,8 +2880,8 @@ function hvOpenScreensaverSettings(from) {
   hvOpenScreensaverSettings._at = now;
   // The style layer and a still-running Wallpanel sit over this dialog. Drop both before opening
   // so the menu is visible, including right after a styled screensaver closes.
+  try { if (typeof hvSsOv !== 'undefined') { hvSsOv._userDismiss = true; hvSsOv.hide(); } } catch (e) {}
   try { const w = ssWallpanel(); if (w && w.screensaverRunning && w.screensaverRunning() && typeof w.stopScreensaver === 'function') w.stopScreensaver(); } catch (e) {}
-  try { hvSsOv.hide(); } catch (e) {}
   const content = { type: 'custom:homeview-screensaver-card', dashboard: ssDash(), large: true, height: SS_POPUP_HEIGHT };
   if (window.browser_mod) { fire(from, 'll-custom', { action: 'fire-dom-event', browser_mod: { service: 'browser_mod.popup',
     data: { content, dismissable: true, initial_style: 'hvss', style_sequence: ['hvss'], popup_styles: [{ style: 'hvss', styles: SS_POPUP_CSS }] } } }); return; }
@@ -7926,7 +7926,7 @@ class HVHubCard extends HTMLElement {
   // never starts by itself behind the page and costs nothing), and only the Photos card changes its picture, on its own interval. Swiping the page away starts it again.
   _ssHoldSet() { const on = !!this._wpOn && this._config && this._config.ss_hold !== false && this.isConnected && !this._edit;
     if (on && !this._ssHoldIv) { this._ssHoldTick(); this._ssHoldIv = setInterval(() => this._ssHoldTick(), 2000); } else if (!on && this._ssHoldIv) { clearInterval(this._ssHoldIv); this._ssHoldIv = null; } }
-  _ssHeld() { const w = ssWallpanel(); return !!((w && w.screensaverRunning && w.screensaverRunning()) || this._ssBusy || (this._ssv && this._ssv.style.display === 'block')); } // screensaver up / being pulled in: the card's picture stays as it is
+  _ssHeld() { const w = ssWallpanel(); let styled = false; try { styled = !!(typeof hvSsOv !== 'undefined' && hvSsOv && hvSsOv._up && hvSsOv.style && hvSsOv.style !== 'photo'); } catch (e) {} return !!(styled || (w && w.screensaverRunning && w.screensaverRunning()) || this._ssBusy || (this._ssv && this._ssv.style.display === 'block')); } // screensaver up / being pulled in: the card's picture stays as it is
   _ssHoldTick() { if (!this._wpOn || this._edit || !this.isConnected || (this._config && this._config.ss_hold === false) || document.hidden || !this.getClientRects().length) return;
     const w = ssWallpanel(); if (w && !(w.screensaverRunning && w.screensaverRunning())) w.idleSince = Date.now(); }
   // start Wallpanel on the picture the Photos card shows now: Wallpanel keeps its list of photos (the same media-source ids as ours) and steps to the next entry on start,
@@ -11581,7 +11581,7 @@ const hvSsOv = {
   _sweep(root, d) { if (!root || d > 14 || !root.querySelectorAll) return;
     root.querySelectorAll('#hv-ss-style').forEach(n => { try { n.remove(); } catch (e) {} });
     for (const el of root.querySelectorAll('*')) if (el.shadowRoot) this._sweep(el.shadowRoot, d + 1); },
-  hide() { try { const w = typeof ssWallpanel === 'function' ? ssWallpanel() : null; const running = !!(w && typeof w.screensaverRunning === 'function' && w.screensaverRunning()); if (typeof hvSsSwitch !== 'undefined' && hvSsSwitch && !running) { hvSsSwitch.hide(); try { hvSsMarkGone(); hvSsEatTap(600); } catch (e) {} } } catch (e) {} try { hvSsKeep.off('glass'); } catch (e) {} const h = this.host; this.host = null; this.face = null; this.card = null; this._g = null; this._bornAt = 0; this.style = null; this.colKey = null; this._up = false;
+  hide() { try { const w = typeof ssWallpanel === 'function' ? ssWallpanel() : null; const running = !!(w && typeof w.screensaverRunning === 'function' && w.screensaverRunning()); if (typeof hvSsSwitch !== 'undefined' && hvSsSwitch && !running) { hvSsSwitch.hide(); try { hvSsMarkGone(); hvSsEatTap(600); } catch (e) {} } } catch (e) {} try { hvSsKeep.off('glass'); hvSsKeep.off('style'); } catch (e) {} const h = this.host; this.host = null; this.face = null; this.card = null; this._g = null; this._bornAt = 0; this.style = null; this.colKey = null; this._up = false;
     if (h) { try { h.remove(); } catch (e) {} } try { this._sweep(document, 0); } catch (e) {} },
   // Wallpanel can still report "running" after it has faded out (opacity 0 / visibility hidden / pointer-events none).
   // The style layer must not stay up then: it covers the screensaver settings dialog.
@@ -11618,7 +11618,20 @@ const hvSsOv = {
       try { hvSsOv.tick(true); } catch (e) {}
       return r;
     };
-    if (origHI) w.handleInteractionEvent = function (e) { if (opening()) return; return origHI.apply(this, arguments); }; },
+    if (origHI) w.handleInteractionEvent = function (e) {
+      if (opening()) return;
+      try {
+        const styled = !!(hvSsOv && hvSsOv._up && hvSsOv.style && hvSsOv.style !== 'photo');
+        if (styled && !hvSsOv._userDismiss) {
+          const typ = (e && e.type) || '';
+          const real = (e && e.isTrusted !== false) && /^(pointerdown|pointerup|touchstart|touchend|click)$/.test(typ);
+          if (!real) return;
+          hvSsOv._userDismiss = true;
+          try { hvSsKeep.off('style'); hvSsKeep.off('glass'); } catch (x) {}
+        }
+      } catch (x) {}
+      return origHI.apply(this, arguments);
+    }; },
   tick(force) { const w = ssWallpanel(); this._hookStart();
     let run = this._running(w), cs = null; try { cs = w && getComputedStyle(w); } catch (e) { cs = null; }
     const vis = !!(cs && cs.visibility !== 'hidden' && cs.display !== 'none');
@@ -11627,15 +11640,20 @@ const hvSsOv = {
     // loading stays visibility:hidden / pointer-events:none and must not be stopped.
     const stWant = (() => { try { return hvSs.get(); } catch (e) { return null; } })();
     const glassWant = stWant === 'glass' || this.style === 'glass' || !!(this._g && this.host);
+    // Any styled (non-photo) face: Wallpanel's photo-clock often drops to opacity 0 for ~1s on a
+    // media switch / session bump. Hiding our overlay then flashes the Home Screen underneath.
+    const styledWant = (stWant && stWant !== 'photo') || (this.style && this.style !== 'photo' && !!(this.host || this._up)) || glassWant;
     const ghost = !!(run && cs && vis && cs.pointerEvents !== 'none' && !faded);
-    if (ghost && !glassWant) { this._ghost = this._ghost || Date.now(); if (Date.now() - this._ghost > 1200 && typeof w.stopScreensaver === 'function') { try { w.stopScreensaver(); } catch (e) {} } }
+    if (ghost && !styledWant) { this._ghost = this._ghost || Date.now(); if (Date.now() - this._ghost > 1200 && typeof w.stopScreensaver === 'function') { try { w.stopScreensaver(); } catch (e) {} } }
     else this._ghost = 0;
-    // Keep the style up while Wallpanel is starting (often hidden / pointer-events:none) or fading out
-    // (pointer-events:none while still opaque). Drop it only when the screensaver is gone, or is a
-    // transparent ghost that would cover the Settings dialog. Glass is special: Wallpanel's photo-clock
-    // often fades in at opacity 0 (a "ghost") about a second after start — hiding our overlay then
-    // flashes the photos underneath, so we keep Glass up the whole time Wallpanel reports running.
-    if (!w || (ghost && !glassWant) || !(run || faded || (glassWant && run))) {
+    // Keep the style up while Wallpanel is starting, fading, or in a photo-clock ghost. Drop it only
+    // when the screensaver is truly gone after a user dismiss, or (photo-only) a transparent ghost
+    // that would cover the Settings dialog.
+    if (styledWant && (this.host || this._up) && !this._userDismiss) {
+      if (!run && w && typeof w.startScreensaver === 'function') {
+        try { w.startScreensaver(); } catch (e) {}
+      }
+    } else if (!w || (ghost && !styledWant) || !(run || faded || (styledWant && run))) {
       const was = !!(this.host || this._up);
       if (was) this.hide();
       hvSsPhotoTint.clear();
@@ -11644,7 +11662,7 @@ const hvSsOv = {
       return; }
     if (this._g) { if (this.card) try { this.card.hass = this.hass(); } catch (e) {} return; }
     const st = hvSs.get(), cols = hvSsColors.get(st), colKey = st + ':' + JSON.stringify(hvSsStrip(st, cols) || {});
-    if (st === 'photo') { const keepSw = typeof hvSsSwitch !== 'undefined' && hvSsSwitch && hvSsSwitch.mode; if (!keepSw) this.hide(); hvSsPhotoTint.apply(cols.text); try { if (typeof hvSsSwitch !== 'undefined') hvSsSwitch.arm(true); } catch (e) {} return; }
+    if (st === 'photo') { try { hvSsKeep.off('style'); } catch (e) {} const keepSw = typeof hvSsSwitch !== 'undefined' && hvSsSwitch && hvSsSwitch.mode; if (!keepSw) this.hide(); hvSsPhotoTint.apply(cols.text); try { if (typeof hvSsSwitch !== 'undefined') hvSsSwitch.arm(true); } catch (e) {} return; }
     hvSsPhotoTint.clear();
     let z = parseInt(cs && cs.zIndex, 10); if (!(z > 0)) z = 1000;
     const overlayOp = run ? 1 : (isFinite(op) ? op : 1);
@@ -11652,7 +11670,7 @@ const hvSsOv = {
     const born = !this.host || this.style !== st || this.colKey !== colKey || !this.host.isConnected || this.host.parentNode !== w.parentNode;
     if (born) { this.hide();
       const h = document.createElement('div'); h.id = 'hv-ss-style'; h.setAttribute('aria-hidden', 'true'); h.inert = true; const sr = h.attachShadow({ mode: 'open' }); sr.innerHTML = `<style>${HV_SS_FACE_CSS}</style>`;
-      this.face = new HVSsFace(st); this.face.applyColors(cols); sr.appendChild(this.face.el); this.style = st; this.colKey = colKey; this.host = h; this._up = true; w.parentNode.appendChild(h); }
+      this.face = new HVSsFace(st); this.face.applyColors(cols); sr.appendChild(this.face.el); this.style = st; this.colKey = colKey; this.host = h; this._up = true; this._userDismiss = false; w.parentNode.appendChild(h); try { hvSsKeep.on('style'); } catch (e) {} }
     else if (this.face) this.face.applyColors(cols);
     // Just above Wallpanel (page hints sit under it). A 2147482000 z-index painted over the settings dialog, so the button looked dead.
     // While Wallpanel is running/starting: stay fully opaque so its photo-clock never shows through a
@@ -11687,7 +11705,7 @@ const hvSsOv = {
       this.card = card; this.face = null; this.style = 'glass'; this.colKey = 'glass'; this.host = h; this._up = true; this._bornAt = Date.now(); this._g = null;
       const parent = (w && w.parentNode) || document.body; parent.appendChild(h);
       if (prev && prev !== h) { try { prev.remove(); } catch (e) {} }
-      this._wireGlass(); try { hvSsKeep.on('glass'); } catch (e) {} }
+      this._wireGlass(); try { hvSsKeep.on('glass'); hvSsKeep.on('style'); } catch (e) {} this._userDismiss = false; }
     else if (this.card) { try { this.card.hass = this.hass(); } catch (e) {} }
     this.host.style.cssText = `position:fixed;top:0;right:0;bottom:0;left:0;width:100%;height:100%;height:100dvh;z-index:${z + 1};pointer-events:auto;opacity:${overlayOp};transition:${born || run ? 'none' : 'opacity .4s linear'};transform:none;background:#4c49d0`; },
   _wireGlass() { const h = this.host; if (!h || h.__hvGlassWired) return; h.__hvGlassWired = true;
@@ -11709,7 +11727,7 @@ const hvSsOv = {
   _glassGo() { const h = this.host, H = innerHeight || 800; this._g = { leaving: true };
     if (h) { h.style.transition = 'transform 380ms cubic-bezier(.32,.72,0,1), opacity 320ms linear'; h.style.transform = `translate3d(0,${-H}px,0)`; h.style.opacity = '0'; }
     setTimeout(() => this._openHomeFromGlass(), 380); },
-  _openHomeFromGlass() { try { hvSsKeep.off('glass'); } catch (e) {} const w = ssWallpanel(); try { if (w && typeof w.stopScreensaver === 'function') w.stopScreensaver(); } catch (e) {}
+  _openHomeFromGlass() { try { if (typeof hvSsOv !== 'undefined') hvSsOv._userDismiss = true; hvSsKeep.off('glass'); hvSsKeep.off('style'); } catch (e) {} const w = ssWallpanel(); try { if (w && typeof w.stopScreensaver === 'function') w.stopScreensaver(); } catch (e) {}
     this.hide();
     try { const lv = hvSsLv(), views = (lv && lv.config && lv.config.views) || [];
       const hasHub = v => { try { return JSON.stringify(v).includes('homeview-hub-card'); } catch (e) { return false; } };
@@ -12304,7 +12322,7 @@ const hvSsSwitch = {
   },
   _dismiss() {
     try { hvSsEatTap(600); } catch (e) {}
-    try { hvSsKeep.off('ssswipe'); hvSsKeep.off('ssswitch'); } catch (e) {}
+    try { if (typeof hvSsOv !== 'undefined') hvSsOv._userDismiss = true; hvSsKeep.off('ssswipe'); hvSsKeep.off('ssswitch'); hvSsKeep.off('style'); } catch (e) {}
     this.hide();
     try { const w = ssWallpanel(); if (w && typeof w.stopScreensaver === 'function') w.stopScreensaver(); } catch (e) {}
     try { hvSsOv.tick(true); } catch (e) {}
@@ -13234,7 +13252,25 @@ const hvSsKeep = {
   _install() { const w = ssWallpanel(); if (!w || this.stop || typeof w.stopScreensaver !== 'function') return;
     this.w = w; this.stop = w.stopScreensaver; this.hint = typeof w.handleInteractionEvent === 'function' ? w.handleInteractionEvent : null;
     const self = this; w.stopScreensaver = function() { if (self.reasons.size) return; return self.stop.apply(this, arguments); };
-    if (this.hint) w.handleInteractionEvent = function(e) { if (self.reasons.size) return; return self.hint.apply(this, arguments); }; },
+    if (this.hint) w.handleInteractionEvent = function(e) {
+      if (self.reasons.size) {
+        // Glass has its own dismiss. Other styled faces must still close on a real user tap;
+        // mousemove / untrusted events stay ignored so Wallpanel cannot flicker the overlay off.
+        try {
+          const typ = (e && e.type) || '';
+          const real = (e && e.isTrusted !== false) && /^(pointerdown|pointerup|touchstart|touchend|click)$/.test(typ);
+          const st = (typeof hvSsOv !== 'undefined' && hvSsOv && hvSsOv.style) || '';
+          if (!real || st === 'glass') return;
+          if (hvSsOv) hvSsOv._userDismiss = true;
+          self.reasons.clear();
+          const hint = self.hint;
+          self._uninstall();
+          if (hint) return hint.apply(this, arguments);
+        } catch (x) {}
+        return;
+      }
+      return self.hint.apply(this, arguments);
+    }; },
   _uninstall() { if (this.w && this.stop) this.w.stopScreensaver = this.stop; if (this.w && this.hint) this.w.handleInteractionEvent = this.hint;
     this.w = null; this.stop = null; this.hint = null; }
 };
