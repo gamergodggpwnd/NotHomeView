@@ -11651,7 +11651,7 @@ const HV_SS_SW_CSS = `
 .dim.on{opacity:1}
 .stage{position:absolute;inset:0;overflow:hidden}
 .track{position:absolute;top:0;bottom:0;left:0;display:flex;align-items:center;will-change:transform;touch-action:none}
-.card{position:relative;flex:none;display:flex;flex-direction:column;align-items:center;pointer-events:auto}
+.card{position:relative;flex:none;display:flex;flex-direction:column;align-items:center;pointer-events:auto;overflow:visible}
 .card .lab{font-size:10px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#fff;margin:0 0 8px;text-shadow:0 1px 4px rgba(0,0,0,.45)}
 .card .win{position:relative;overflow:hidden;background:#111;border-radius:22%;box-shadow:0 18px 40px rgba(0,0,0,.45);isolation:isolate}
 .card .win > .f{position:absolute;inset:0;border-radius:inherit;overflow:hidden}
@@ -11671,10 +11671,12 @@ const HV_SS_SW_CSS = `
 .auto .wand{width:16px;height:16px;display:block;flex:none}
 .plus{position:absolute;right:calc(18px + env(safe-area-inset-right,0px));bottom:22%;width:36px;height:36px;border-radius:50%;border:0;background:rgba(48,48,52,.9);color:#fff;cursor:pointer;z-index:6;pointer-events:auto;display:flex;align-items:center;justify-content:center;-webkit-backdrop-filter:blur(12px)}
 .plus svg{width:18px;height:18px;display:block}
-.card .face{position:relative;width:100%;flex:none}
-.card .rm{position:absolute;top:18px;right:10px;width:28px;height:28px;border-radius:50%;border:0;background:rgba(48,48,52,.86);color:#fff;cursor:pointer;z-index:6;pointer-events:auto;display:flex;align-items:center;justify-content:center;-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);box-shadow:0 1px 6px rgba(0,0,0,.35);padding:0;-webkit-tap-highlight-color:transparent}
+.card .face{position:relative;width:100%;flex:none;overflow:visible;z-index:6;pointer-events:auto}
+.card .rm{position:absolute;top:4px;right:-6px;width:44px;height:44px;border:0;padding:0;margin:0;background:transparent;box-shadow:none;color:#fff;cursor:pointer;z-index:20;pointer-events:auto;display:flex;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent;touch-action:manipulation;-webkit-touch-callout:none}
+.card .rm i{width:28px;height:28px;border-radius:50%;background:rgba(48,48,52,.9);display:flex;align-items:center;justify-content:center;pointer-events:none;box-shadow:0 1px 6px rgba(0,0,0,.35);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);flex:none}
 .card .rm svg{width:14px;height:14px;display:block;pointer-events:none}
 .card .rm[hidden]{display:none}
+.card.leaving{transition:transform .28s cubic-bezier(.2,.8,.2,1),opacity .24s ease;transform:scale(.88);opacity:0;pointer-events:none}
 .x,.ck{position:absolute;bottom:calc(16px + env(safe-area-inset-bottom,0px));width:46px;height:46px;border-radius:50%;border:0;cursor:pointer;z-index:6;pointer-events:auto;display:flex;align-items:center;justify-content:center}
 .x{left:calc(16px + env(safe-area-inset-left,0px));background:#3a3a3e;color:#fff}
 .ck{right:calc(16px + env(safe-area-inset-right,0px));background:#0a84ff;color:#fff}
@@ -12273,7 +12275,7 @@ const hvSsSwitch = {
       const showLab = mode !== 'customize' && isCur;
       const showCz = mode !== 'customize' && isCur && admin;
       const showRm = mode === 'switch' && (data.faces || []).length > 1;
-      card.innerHTML = `<div class="lab"${showLab ? '' : ' hidden'}>${HV_SS_LABEL[face.style] || face.style || ''}</div><div class="face"><div class="win"></div><button class="rm" type="button" aria-label="Remove face"${showRm ? '' : ' hidden'}><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M6 12h12"/></svg></button></div><button class="cz" type="button"${showCz ? '' : ' hidden'}>Customize</button>`;
+      card.innerHTML = `<div class="lab"${showLab ? '' : ' hidden'}>${HV_SS_LABEL[face.style] || face.style || ''}</div><div class="face"><div class="win"></div><button class="rm" type="button" aria-label="Remove face"${showRm ? '' : ' hidden'}><i><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M6 12h12"/></svg></i></button></div><button class="cz" type="button"${showCz ? '' : ' hidden'}>Customize</button>`;
       card.style.marginRight = gap + 'px';
       const win = card.querySelector('.win'); win.style.width = size + 'px'; win.style.height = size + 'px';
       const faceWrap = card.querySelector('.face'); if (faceWrap) faceWrap.style.width = size + 'px';
@@ -12281,8 +12283,19 @@ const hvSsSwitch = {
       const rm = card.querySelector('.rm');
       if (rm) {
         const idx = n;
-        const stop = ev => { ev.preventDefault(); ev.stopPropagation(); try { ev.stopImmediatePropagation(); } catch (e) {} };
-        for (const typ of ['pointerdown', 'touchstart', 'click']) rm.addEventListener(typ, ev => { stop(ev); if (typ === 'click') this._removeFace(idx, ev); }, true);
+        const stop = ev => { try { ev.preventDefault(); ev.stopPropagation(); ev.stopImmediatePropagation(); } catch (e) {} };
+        const fire = ev => { stop(ev); if (rm._hvRmAt && Date.now() - rm._hvRmAt < 500) return; rm._hvRmAt = Date.now(); this._removeFace(idx, ev); };
+        rm.addEventListener('pointerdown', ev => { stop(ev); rm._hvArm = { t: Date.now(), x: ev.clientX, y: ev.clientY, id: ev.pointerId }; try { rm.setPointerCapture(ev.pointerId); } catch (e) {} }, true);
+        rm.addEventListener('touchstart', ev => { stop(ev); const tc = ev.changedTouches && ev.changedTouches[0]; rm._hvArm = { t: Date.now(), x: tc ? tc.clientX : 0, y: tc ? tc.clientY : 0, id: 't' }; }, { capture: true, passive: false });
+        const up = ev => {
+          stop(ev);
+          const arm = rm._hvArm; rm._hvArm = null;
+          if (ev.type === 'pointercancel' || ev.type === 'touchcancel') return;
+          if (!arm || Date.now() - arm.t > 700) return;
+          fire(ev);
+        };
+        for (const typ of ['pointerup', 'pointercancel', 'touchend', 'touchcancel']) rm.addEventListener(typ, up, typ.indexOf('touch') === 0 ? { capture: true, passive: false } : true);
+        rm.addEventListener('click', ev => { stop(ev); fire(ev); }, true);
       }
       if (face.style !== 'glass') this._paintSlots(f.el, face, mode === 'customize' && this.tab === 'widgets', true);
       if (mode === 'customize' && face.style === 'glass') {
@@ -12338,17 +12351,29 @@ const hvSsSwitch = {
   },
   _removeFace(n, ev) {
     if (ev) { try { ev.preventDefault(); ev.stopPropagation(); ev.stopImmediatePropagation(); } catch (e) {} }
+    if (this._rmBusy) return;
     const data = this.draft || hvSsFaces.raw();
     if (!data.faces || data.faces.length <= 1) return;
     const i = Math.max(0, Math.min(data.faces.length - 1, n | 0));
+    const rec = (this._faces || []).find(x => x.n === i);
     const gone = data.faces.splice(i, 1)[0];
     data.stash = Array.isArray(data.stash) ? data.stash : [];
     if (gone) data.stash.push(gone);
     data.i = Math.max(0, Math.min(data.faces.length - 1, i > 0 ? i - 1 : 0));
     this.draft = data; this.i = data.i;
     this._cardSig = '';
-    this._paintCards(data, this.i, 'switch');
-    try { hvSsEatTap(400); } catch (e) {}
+    try { hvSsEatTap(500); } catch (e) {}
+    const persist = () => { try { hvSsFaces.commit(data, typeof hvSsOv !== 'undefined' ? hvSsOv.hass() : null); } catch (e) {} };
+    persist();
+    const finish = () => { this._rmBusy = false; this._paintCards(this.draft, this.i, 'switch'); };
+    if (rec && rec.el && rec.el.isConnected && !this.reduced()) {
+      this._rmBusy = true;
+      rec.el.classList.add('leaving');
+      let done = false;
+      const end = () => { if (done) return; done = true; rec.el.removeEventListener('transitionend', end); finish(); };
+      rec.el.addEventListener('transitionend', end);
+      setTimeout(end, 360);
+    } else finish();
   },
   _markCur(i) {
     const admin = hvSsIsAdmin(), sw = this.mode === 'switch';
@@ -12387,7 +12412,7 @@ const hvSsSwitch = {
     };
     track.addEventListener('pointerdown', ev => {
       if (this.mode !== 'switch') return;
-      if (ev.target.closest && (ev.target.closest('.cz') || ev.target.closest('.slot') || ev.target.closest('.tabs') || ev.target.closest('.rail') || ev.target.closest('.plus'))) return;
+      if (ev.target.closest && ev.target.closest('.rm, .cz, .plus, .slot, .tabs, .rail, .x, .ck')) return;
       const card = ev.target.closest && ev.target.closest('.card');
       const rec = card && (this._faces || []).find(x => x.el === card);
       g = { x: ev.clientX, y: ev.clientY, t: Date.now(), x0: ev.clientX, y0: ev.clientY, id: ev.pointerId, locked: false, dead: false, n: rec ? rec.n : null };
