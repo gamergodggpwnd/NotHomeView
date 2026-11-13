@@ -3397,7 +3397,7 @@ class HVCalendarCard extends HVBase {
     const tt = e => e._all ? 'All day' : this._fmtT(e._s) + (e._e - e._s > 60000 ? ' – ' + this._fmtT(e._e) : '');
     this._narrowNow = this._nw();
     const col = cl => { const f = c.show_weather ? fc[cl.k] : null;
-      return `<div class="col${cl.i === 0 ? ' today' : ''}"><div class="ch"><div class="cn">${esc(rel(cl.i))}</div><div class="cd">${esc(cl.d.toLocaleDateString(lang, rows > 1 && !this._narrowNow ? { month: 'short', day: 'numeric' } : { weekday: 'short', month: 'short', day: 'numeric' }))}</div>
+      return `<div class="col${cl.i === 0 ? ' today' : ''}"><div class="ch"><div class="nr">${esc(rel(cl.i))}</div><div class="cd">${esc(cl.d.toLocaleDateString(lang, rows > 1 && !this._narrowNow ? { month: 'short', day: 'numeric' } : { weekday: 'short', month: 'short', day: 'numeric' }))}</div>
         ${f ? `<div class="cw"><ha-icon icon="${WX_ICON[f.condition] || 'mdi:weather-partly-cloudy'}"></ha-icon><span>${Math.round(f.temperature)}°${f.templow != null ? `<i>${Math.round(f.templow)}°</i>` : ''}</span></div>` : ''}</div>
         <div class="evs">${cl.ev.length ? cl.ev.map(e => `<div class="ev${e._all ? ' ad' : ''}" data-own data-i="${all.indexOf(e)}" role="button" tabindex="0"><div class="et">${esc(e.summary || '(No title)')}</div>
           <div class="em"><span>${esc(tt(e))}${c.show_location && e.location ? ' · ' + esc(e.location) : ''}</span></div></div>`).join('') : `<div class="none">${this._events == null ? 'Loading…' : 'Nothing planned'}</div>`}</div><div class="more"></div></div>`; };
@@ -8928,7 +8928,9 @@ for (const [tag, cls, name, description] of CARDS) {
    a tile without one shows "Set entity". Landscape: 3 × 3 (thermostat 2 × 2, clock and scene beside it, three tiles below); portrait: 2
    columns. Services are only called when a tile is tapped or dragged. */
 const HVG_SLOTS = ['scene', 'intercom', 'lock', 'light'];
-const HVG_DEF = { thermostat: ['Thermostat', 'Living Room'], scene: ['Good Night', 'Scene'], intercom: ['Intercom', 'Everywhere'], lock: ['Door Lock', 'Front Door'], light: ['Lights', 'Entryway'] };
+const HVG_SLOTS_X = ['light2', 'scene2', 'camera', 'extra'];
+const HVG_ALL_SLOTS = HVG_SLOTS.concat(HVG_SLOTS_X);
+const HVG_DEF = { thermostat: ['Thermostat', 'Living Room'], scene: ['Good Night', 'Scene'], intercom: ['Intercom', 'Everywhere'], lock: ['Door Lock', 'Front Door'], light: ['Lights', 'Basement'], light2: ['Lights', 'Living Room'], scene2: ['Scene', ''], camera: ['Camera', 'Live'], extra: ['Add', ''] };
 const HVG_ICON = {
   scene: '<svg viewBox="0 0 48 48" aria-hidden="true"><path class="mo" d="M27.6 9.4a15.6 15.6 0 1 0 12 23.8 13 13 0 0 1-12-23.8z"/><path class="s1" d="M34.5 6l1.3 3.6 3.6 1.3-3.6 1.3-1.3 3.6-1.3-3.6-3.6-1.3 3.6-1.3z"/><path class="s2" d="M41 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/></svg>',
   intercom: '<svg viewBox="0 0 48 48" aria-hidden="true">' + Array.from({ length: 11 }, (_, i) => { const x = (i - 5) * 3.4, h = Math.max(7, 2 * Math.sqrt(18.5 * 18.5 - x * x) * .9); return `<rect class="w" style="--i:${i}" x="${(23.1 + x).toFixed(2)}" y="${(24 - h / 2).toFixed(2)}" width="1.8" height="${h.toFixed(2)}" rx=".9"/>`; }).join('') + '</svg>',
@@ -8952,6 +8954,29 @@ const HVG_CSS = `
 .bg i:nth-child(8){--a:-48deg;--o:46cqmin;--h:24cqmin;--c:rgba(176,176,255,.5)}
 .bg i:nth-child(9){--a:45deg;--o:78cqmin;--h:18cqmin;--c:rgba(130,128,250,.4)}
 :host([bg=none]) .bg{display:none}
+.ck svg{width:100%;height:100%;display:block;overflow:visible}
+.ck .face{fill:#fff;color:#fff}.ck text.nr{font-weight:600;font-family:${FONT};fill:#fff;stroke:none}
+.ck .tk{fill:currentColor}.ck .hd rect{fill:#fff}.ck .hs rect{fill:var(--hvg-sec,#ff4d3a)}
+.ck .dot{fill:#fff}.ck .pin{fill:var(--hvg-sec,#ff4d3a)}.ck .wx{color:#fff}.ck .wi{transform:scale(1.05);transform-origin:12px 12px;color:#fff;filter:drop-shadow(0 0 1.2px rgba(0,0,0,.35))}
+:host([theme=blue]){--hvg-sec:#b8ffd4} :host([theme=blue]) .bg{background:linear-gradient(160deg,#49d2ff 0%,#2aa0ff 42%,#3c8bff 100%)}
+:host([theme=blue]) .bg i{display:none}
+:host([theme=orange]){--hvg-sec:#fff3c4;color:#fff} :host([theme=orange]) .bg{background:linear-gradient(145deg,#f3b36a 0%,#e2853a 48%,#c35c1f 100%)}
+:host([theme=orange]) .bg i{display:none}
+:host([theme=light]){--hvg-sec:#d9480f;color:#1c1c1e} :host([theme=light]) .bg{background:linear-gradient(160deg,#f3f4f1 0%,#dde3dc 48%,#c5cec8 100%)}
+:host([theme=light]) .bg i{display:none}
+:host([theme=light]) .t,:host([theme=light]) .ck{color:#1c1c1e}
+:host([theme=light]) .ck .face,:host([theme=light]) .ck .nr,:host([theme=light]) .ck .tk,:host([theme=light]) .ck .hd rect,:host([theme=light]) .ck .dot{fill:#1c1c1e;color:#1c1c1e}
+.gr[data-layout=grid3]{grid-template-areas:"s1 ck s2" "s3 ic s4" "s5 s6 s7"}
+.gr[data-layout=grid3] .th{display:none}
+.gr[data-layout=grid3] > [data-s=scene]{grid-area:s2}
+.gr[data-layout=grid3] > [data-s=light]{grid-area:s1}
+.gr[data-layout=grid3] > [data-s=intercom]{grid-area:ic}
+.gr[data-layout=grid3] > [data-s=lock]{grid-area:s5}
+.gr[data-layout=grid3] > [data-s=light2]{grid-area:s3}
+.gr[data-layout=grid3] > [data-s=scene2]{grid-area:s4}
+.gr[data-layout=grid3] > [data-s=camera]{grid-area:s6}
+.gr[data-layout=grid3] > [data-s=extra]{grid-area:s7}
+.gr:not([data-layout=grid3]) > [data-s=light2],.gr:not([data-layout=grid3]) > [data-s=scene2],.gr:not([data-layout=grid3]) > [data-s=camera],.gr:not([data-layout=grid3]) > [data-s=extra]{display:none}
 .st{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:1.6cqmin}
 .gr{--g:1.9cqmin;container-type:size;display:grid;gap:var(--g);grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(3,minmax(0,1fr));
  grid-template-areas:"th th ck" "th th sc" "ic lk li";--cell:calc((100cqh - 3.2cqmin - var(--g) * 2) / 3);width:min(100%,calc(100cqh - 3.2cqmin));height:min(100%,calc(100cqw - 3.2cqmin))}
@@ -9045,10 +9070,31 @@ const HVG_CSS = `
 .ed .act button.pri{background:#fff;color:#1e1c45}
 .ed .act button:focus-visible{outline:2px solid #fff;outline-offset:2px}
 @media (prefers-reduced-motion:reduce){.t,.t.dn,.pc,.in,.num,.cv,.sh,.gl,.ed .box{transition-duration:.01s!important}.bl{display:none}.t.tw *,.t.talk .w,.t.pd .ic{animation:none!important}}`;
-const HVG_CLOCK = `<svg viewBox="0 0 100 100" aria-hidden="true"><defs>${''}</defs>`
-  + Array.from({ length: 12 }, (_, i) => `<rect x="48.5" y="6" width="3" height="10.5" rx="1.5" fill="#fff" transform="rotate(${i * 30} 50 50)"/>`).join('')
-  + '<g class="hd hh"><rect x="47.4" y="24" width="5.2" height="29" rx="2.6" fill="#fff"/></g><g class="hd hm"><rect x="47.9" y="10" width="4.2" height="43" rx="2.1" fill="#fff"/></g>'
-  + '<g class="hd hs"><rect x="49.45" y="11" width="1.1" height="49" rx=".55" fill="#fff"/><rect x="48.6" y="57" width="2.8" height="12" rx="1.4" fill="#fff"/></g><circle cx="50" cy="50" r="2.4" fill="#fff"/><circle cx="50" cy="50" r="1" fill="#5d57e6"/></svg>';
+const HVG_CLOCK = (() => {
+  const nums = Array.from({ length: 12 }, (_, i) => {
+    const n = i + 1, a = n * Math.PI / 6, x = 50 + 33.5 * Math.sin(a), y = 50 - 33.5 * Math.cos(a) + 2.7;
+    return `<text class="nr" x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="middle" font-size="8.4" font-weight="600">${n}</text>`;
+  }).join('');
+  const ticks = Array.from({ length: 60 }, (_, i) => i % 5 === 0 ? '' : `<rect class="tk" x="49.4" y="7.4" width="1.2" height="4" rx=".6" transform="rotate(${i * 6} 50 50)"/>`).join('');
+  return `<svg viewBox="0 0 100 100" aria-hidden="true"><g class="face">${ticks}${nums}</g>`
+    + `<g class="wx" transform="translate(16.5,41)"><g class="wi"></g></g>`
+    + `<g class="hd hh"><rect x="47.6" y="26" width="4.8" height="26" rx="2.4"/></g>`
+    + `<g class="hd hm"><rect x="48.15" y="14" width="3.7" height="38" rx="1.85"/></g>`
+    + `<g class="hd hs"><rect x="49.45" y="12" width="1.1" height="48" rx=".55"/><rect x="48.7" y="56" width="2.6" height="11" rx="1.3"/></g>`
+    + `<circle class="dot" cx="50" cy="50" r="2.3"/><circle class="pin" cx="50" cy="50" r=".85"/></svg>`;
+})();
+const HVG_WX = {
+  sunny: '<path fill="currentColor" d="M12 4.2l.7 2.1h2.2l-1.8 1.3.7 2.1L12 8.4l-1.8 1.3.7-2.1-1.8-1.3h2.2zM12 7.2a4.8 4.8 0 1 1 0 9.6 4.8 4.8 0 0 1 0-9.6z"/>',
+  'clear-night': '<path fill="currentColor" d="M13.2 3.4a7.4 7.4 0 1 0 6.2 11.4A6.2 6.2 0 0 1 13.2 3.4z"/>',
+  partlycloudy: '<path fill="currentColor" d="M8.2 11.2a3.6 3.6 0 1 1 6.4-2.4 4.2 4.2 0 1 1-.4 8.2H9.1a3.5 3.5 0 0 1-.9-6z"/><path fill="currentColor" opacity=".85" d="M16.2 8.2a3 3 0 1 0-5.4-2.1"/>',
+  cloudy: '<path fill="currentColor" d="M7.5 14.2a3.6 3.6 0 0 1 .7-7.1 4.3 4.3 0 0 1 8.1 1.2 3.4 3.4 0 0 1-.3 6.7H8.1z"/>',
+  rainy: '<path fill="currentColor" d="M7.5 12.2a3.6 3.6 0 0 1 .7-7.1 4.3 4.3 0 0 1 8.1 1.2 3.4 3.4 0 0 1-.3 6.7H8.1z"/><path fill="currentColor" d="M9 17.2l.8 2.4M12 16.8l.8 2.4M15 17.2l.8 2.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>',
+  pouring: '<path fill="currentColor" d="M7.5 11.6a3.6 3.6 0 0 1 .7-7.1 4.3 4.3 0 0 1 8.1 1.2 3.4 3.4 0 0 1-.3 6.7H8.1z"/><path d="M8.6 16.2l.9 2.8M11.6 15.6l.9 2.8M14.6 16.2l.9 2.8M17.2 15.8l.9 2.8" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>',
+  snowy: '<path fill="currentColor" d="M7.5 12a3.6 3.6 0 0 1 .7-7.1 4.3 4.3 0 0 1 8.1 1.2 3.4 3.4 0 0 1-.3 6.7H8.1z"/><path d="M10 16.4v3.2M12.8 16.1v3.2M15.6 16.4v3.2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>',
+  fog: '<path fill="currentColor" d="M6.8 10.6h10.4M7.4 13.2h9.2M8 15.8h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
+  windy: '<path d="M6 11h9a2.2 2.2 0 1 0-1.6-3.6M6 14.4h11a2.2 2.2 0 1 1-1.4 3.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
+  lightning: '<path fill="currentColor" d="M7.5 11.4a3.6 3.6 0 0 1 .7-7.1 4.3 4.3 0 0 1 8.1 1.2 3.4 3.4 0 0 1-.3 6.7H8.1z"/><path fill="currentColor" d="M13.2 14.2l-3 4.4h2.2l-1 4 3.8-5.2h-2.1z"/>'
+};
 class HVGlassPage extends HTMLElement {
   setConfig(c) { if (!c || typeof c !== 'object') throw new Error('Invalid configuration'); this._config = Object.assign({}, c); this._sig = null;
     if (this.shadowRoot && this._built) { this._head(); this._render(); } }
@@ -9077,23 +9123,28 @@ class HVGlassPage extends HTMLElement {
   _pct(st) { const b = st && st.attributes.brightness; return b == null ? (st && st.state === 'on' ? 100 : 0) : Math.max(1, Math.min(100, Math.round(b / 2.55))); }
   // --- build once
   _build() { const r = this.shadowRoot; this._built = true; this._t = {}; this._prev = {}; this._pend = {};
-    const tile = s => `<button class="t" data-s="${s}" type="button"><span class="fl"></span>${s === 'light' ? '<span class="lv"></span><span class="pc"></span>' : ''}<span class="in"><span class="ic">${HVG_ICON[s]}</span><span class="tt"></span><span class="sb"><span class="a"></span><span class="b"></span></span></span></button>`;
+    const icn = s => HVG_ICON[s] || HVG_ICON[{light2:'light',scene2:'scene',camera:'scene',extra:'scene'}[s] || s] || '';
+    const tile = s => `<button class="t" data-s="${s}" type="button"><span class="fl"></span>${s === 'light' || s === 'light2' ? '<span class="lv"></span><span class="pc"></span>' : ''}<span class="in"><span class="ic">${icn(s)}</span><span class="tt"></span><span class="sb"><span class="a"></span><span class="b"></span></span></span></button>`;
     r.innerHTML = `<style>${HVG_CSS}</style><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><radialGradient id="hvgglow"><stop offset="0" stop-color="#ffe08a" stop-opacity=".95"/><stop offset=".55" stop-color="#ffcc4d" stop-opacity=".35"/><stop offset="1" stop-color="#ffcc4d" stop-opacity="0"/></radialGradient>`
       + `<linearGradient id="hvgcone" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffd76a" stop-opacity=".75"/><stop offset="1" stop-color="#ffd76a" stop-opacity="0"/></linearGradient></defs></svg>`
       + `<div class="bg" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="st"><div class="gr">`
       + `<div class="t th" data-s="thermostat" role="group"><span class="fl"></span><span class="num" aria-live="polite"></span><button class="cv d" type="button" data-dir="-1">${HVG_ICON.down}</button><button class="cv u" type="button" data-dir="1">${HVG_ICON.up}</button>`
       + `<span class="in"><span class="lab"><span class="tt"></span><span class="sb"><span class="a"></span><span class="b"></span></span></span></span></div>`
-      + `<div class="ck" aria-hidden="true"><div class="disc">${HVG_CLOCK}</div></div>${HVG_SLOTS.map(tile).join('')}</div></div>`;
+      + `<div class="ck" aria-hidden="true"><div class="disc">${HVG_CLOCK}</div></div>${HVG_ALL_SLOTS.map(tile).join('')}</div></div>`;
     r.querySelectorAll('.t').forEach(el => this._wire(el)); this._head(); }
-  _head() { this.setAttribute('bg', this._c('background') === 'none' ? 'none' : 'indigo'); const h = this._c('height'); if (h && /^[\w.%() +*/-]+$/.test(String(h))) this.style.setProperty('--hvg-h', String(h)); else this.style.removeProperty('--hvg-h'); }
+  _head() { const bg = this._c('background'); this.setAttribute('bg', bg === 'none' ? 'none' : 'indigo');
+    const theme = this._c('theme') || 'indigo'; this.setAttribute('theme', ['blue','orange','light'].includes(theme) ? theme : 'indigo');
+    const layout = this._c('layout') === 'grid3' ? 'grid3' : 'mixed';
+    const gr = this.shadowRoot && this.shadowRoot.querySelector('.gr'); if (gr) gr.setAttribute('data-layout', layout);
+    const h = this._c('height'); if (h && /^[\w.%() +*/-]+$/.test(String(h))) this.style.setProperty('--hvg-h', String(h)); else this.style.removeProperty('--hvg-h'); }
   // --- clock (transform only; ticks once a second)
   _tick() { const r = this.shadowRoot; if (!r || !this.isConnected) return; if (hvLdBusy()) { this._ct = setTimeout(() => this._tick(), 1000); return; } const d = new Date(), s = d.getSeconds(), m = d.getMinutes() + s / 60, h = (d.getHours() % 12) + m / 60;
     const set = (c, a) => { const g = r.querySelector('.' + c); if (!g) return; if (!g._hvH) { g._hvH = 1; g.removeAttribute('transform'); g.style.transformOrigin = '50px 50px'; g.style.transformBox = 'view-box'; g.style.willChange = 'transform'; } g.style.transform = 'rotate(' + a + 'deg)'; };
     set('hh', h * 30); set('hm', m * 6); set('hs', s * 6); clearTimeout(this._ct); this._ct = setTimeout(() => this._tick(), 1000 - d.getMilliseconds() + 5); }
   // --- live state
   _render() { const r = this.shadowRoot; if (!r || !this._built || !this._hass || !this._config) return; if (hvLdLocked(this) || hvLdBusy()) return;
-    const sig = JSON.stringify(['thermostat'].concat(HVG_SLOTS).map(s => { const st = this._st(s); return [this._ent(s), st && st.state, st && st.attributes, this._name(s), this._sub(s), this._pend[s] || 0]; }).concat([this._tmp, this._c('show_current_temp'), this._c('intercom_action')]));
-    if (sig === this._sig) return; this._sig = sig; this._paintTh(); for (const s of HVG_SLOTS) this._paint(s); }
+    const sig = JSON.stringify(['thermostat'].concat(HVG_ALL_SLOTS).map(s => { const st = this._st(s); return [this._ent(s), st && st.state, st && st.attributes, this._name(s), this._sub(s), this._pend[s] || 0]; }).concat([this._tmp, this._c('show_current_temp'), this._c('intercom_action')]));
+    if (sig === this._sig) return; this._sig = sig; this._paintTh(); for (const s of HVG_ALL_SLOTS) this._paint(s); this._paintWx(); }
   _paint(s) { const el = this.shadowRoot.querySelector(`.t[data-s="${s}"]`); if (!el) return; const st = this._st(s), id = this._ent(s), d = id.split('.')[0];
     const set = this._c('intercom_action') && s === 'intercom'; const un = !id && !set, gone = id && !st;
     el.querySelector('.tt').textContent = this._name(s); el.querySelector('.sb .a').textContent = un ? (s === 'intercom' ? 'Set action' : 'Set entity') : gone ? 'Not found' : this._sub(s);
@@ -9121,6 +9172,16 @@ class HVGlassPage extends HTMLElement {
     this._t['f' + s] = setTimeout(() => el.classList.remove('flash'), ms || 1700); }
   _tgt(st) { const a = st.attributes; return a.temperature != null ? Number(a.temperature) : a.target_temp_low != null ? Number(a.target_temp_low) : null; }
   _fmt(v) { if (v == null || !isFinite(v)) return '<span class="na">—</span>'; const r = Math.round(v * 10) / 10; return Number.isInteger(r) ? String(r) : `${Math.trunc(r)}<small>.${Math.round(Math.abs(r % 1) * 10)}</small>`; }
+  _paintWx() {
+    const g = this.shadowRoot && this.shadowRoot.querySelector('.ck .wi'); if (!g) return;
+    let we = null; try { const lv = typeof hvSsLv === 'function' ? hvSsLv() : null, hub = lv && lv.config && typeof hvHubCfgOf === 'function' ? hvHubCfgOf(lv.config) : null; we = (hub && hub.weather_entity) || null; } catch (e) {}
+    const S = (this._hass && this._hass.states) || {};
+    if (!we || !S[we]) we = 'weather.forecast_home';
+    if (!S[we]) we = Object.keys(S).find(k => k.startsWith('weather.')) || null;
+    const st = we && S[we] && !['unavailable','unknown'].includes(S[we].state) ? S[we].state : 'partlycloudy';
+    const svg = HVG_WX[st] || HVG_WX.partlycloudy;
+    g.innerHTML = `<svg viewBox="0 0 24 24" width="24" height="24">${svg}</svg>`;
+  }
   _paintTh() { const el = this.shadowRoot.querySelector('.th'), st = this._st('thermostat'), id = this._ent('thermostat'); el.querySelector('.tt').textContent = this._name('thermostat');
     let sub = this._sub('thermostat'); if (st && this._c('show_current_temp') && st.attributes.current_temperature != null) sub += ' · ' + Math.round(st.attributes.current_temperature) + '°';
     el.querySelector('.sb .a').textContent = !id ? 'Set entity' : !st ? 'Not found' : sub; el.classList.toggle('un', !st);
@@ -9156,15 +9217,15 @@ class HVGlassPage extends HTMLElement {
     clearTimeout(this._t.th); this._t.th = setTimeout(() => { const t = this._tmp, id = this._ent('thermostat'), s2 = this._st('thermostat'); if (t == null || !s2) return;
       const data = { entity_id: id }; if (s2.attributes.temperature == null && s2.attributes.target_temp_low != null) { const w = Number(s2.attributes.target_temp_high) - Number(s2.attributes.target_temp_low); data.target_temp_low = t; data.target_temp_high = Math.round((t + (isFinite(w) ? w : 2)) * 10) / 10; } else data.temperature = t;
       this._call('climate', 'set_temperature', data).then(() => { clearTimeout(this._t.th2); this._t.th2 = setTimeout(() => { this._tmp = null; this._sig = null; this._render(); }, 2500); }); }, 700); }
-  _domains(s) { return { thermostat: ['climate'], scene: ['scene', 'script'], lock: ['lock'], light: ['light'], intercom: ['script', 'button', 'input_button'] }[s] || []; }
+  _domains(s) { const k = s === 'light2' ? 'light' : s === 'scene2' ? 'scene' : s; return { thermostat: ['climate'], scene: ['scene', 'script'], lock: ['lock'], light: ['light'], intercom: ['script', 'button', 'input_button'], camera: ['camera'], extra: ['light', 'scene', 'lock', 'script', 'switch', 'camera'] }[k] || []; }
   _closeEdit() { const ed = this.shadowRoot && this.shadowRoot.querySelector('.ed'); if (ed) ed.remove(); }
   _edit(s) { if (!this.shadowRoot) return; this._closeEdit(); const domains = this._domains(s), title = this._name(s);
     const cur = this._ent(s), S = (this._hass && this._hass.states) || {};
     const rows = Object.keys(S).filter(id => domains.includes(id.split('.')[0])).map(id => ({ id, name: (S[id].attributes && S[id].attributes.friendly_name) || id }))
       .sort((a, b) => (a.id === cur ? -1 : b.id === cur ? 1 : a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })));
-    const ed = document.createElement('div'); ed.className = 'ed'; ed.setAttribute('role', 'dialog'); ed.setAttribute('aria-label', 'Edit ' + title);
-    ed.innerHTML = `<div class="box"><div class="hd"><div class="ttl">${title.replace(/[<>&]/g, '')}</div><div class="sub">Hold a tile to switch its entity</div></div>
-      <input class="q" type="search" placeholder="Search entities" autocomplete="off" spellcheck="false"/>
+    const ed = document.createElement('div'); ed.className = 'ed'; ed.setAttribute('role', 'dialog'); ed.setAttribute('aria-label', 'Choose Scene or Accessory');
+    ed.innerHTML = `<div class="box"><div class="hd"><div class="ttl">Choose Scene or Accessory</div><div class="sub">${title.replace(/[<>&]/g, '')}</div></div>
+      <input class="q" type="search" placeholder="Scenes or Accessories" autocomplete="off" spellcheck="false"/>
       <div class="lst" role="listbox"></div>
       <div class="flds"><label>Name<input class="fn" maxlength="40" placeholder="${(HVG_DEF[s] || ['', ''])[0]}"/></label>
         <label>Subtitle<input class="fs" maxlength="40" placeholder="${(HVG_DEF[s] || ['', ''])[1]}"/></label></div>
@@ -10239,7 +10300,9 @@ window.NotHomeView = Object.assign(window.NotHomeView || {}, { doorbell: {
    Hold a tile on the Glass page or the Glass screensaver to pick its entity / name / subtitle. Stored in
    localStorage like the screensaver style (no Home Assistant edit rights). Merged over the Glass view's card config. */
 const HVG_OVERRIDE_KEYS = ['thermostat_entity', 'thermostat_name', 'thermostat_subtitle', 'scene_entity', 'scene_name', 'scene_subtitle',
-  'intercom_entity', 'intercom_action', 'intercom_name', 'intercom_subtitle', 'lock_entity', 'lock_name', 'lock_subtitle', 'light_entity', 'light_name', 'light_subtitle'];
+  'intercom_entity', 'intercom_action', 'intercom_name', 'intercom_subtitle', 'lock_entity', 'lock_name', 'lock_subtitle', 'light_entity', 'light_name', 'light_subtitle',
+  'light2_entity', 'light2_name', 'light2_subtitle', 'scene2_entity', 'scene2_name', 'scene2_subtitle', 'camera_entity', 'camera_name', 'camera_subtitle',
+  'extra_entity', 'extra_name', 'extra_subtitle', 'layout', 'theme', 'background'];
 const hvGlassCfg = {
   key() { return `hvGlassCfg:${ssDash() || 'lovelace'}`; },
   raw() { const o = mhLs.get(this.key()); return o && typeof o === 'object' ? o : {}; },
@@ -11205,6 +11268,27 @@ const HV_SS_MOD = {
     { id: 'r3', x: 50.5, y: 66.8, w: 46.3, h: 29.5 }
   ]
 };
+const HV_SS_GLASS = {
+  mixed: [
+    { id: 'thermostat', x: 3.2, y: 3.5, w: 61, h: 62 },
+    { id: 'clock', x: 66.5, y: 3.5, w: 30, h: 30 },
+    { id: 'scene', x: 66.5, y: 35.5, w: 30, h: 30 },
+    { id: 'intercom', x: 3.2, y: 67.5, w: 30, h: 29 },
+    { id: 'lock', x: 34.8, y: 67.5, w: 30, h: 29 },
+    { id: 'light', x: 66.5, y: 67.5, w: 30, h: 29 }
+  ],
+  grid3: [
+    { id: 'light', x: 3.2, y: 3.5, w: 30, h: 30 },
+    { id: 'clock', x: 34.8, y: 3.5, w: 30, h: 30 },
+    { id: 'scene', x: 66.5, y: 3.5, w: 30, h: 30 },
+    { id: 'light2', x: 3.2, y: 35.5, w: 30, h: 30 },
+    { id: 'intercom', x: 34.8, y: 35.5, w: 30, h: 30 },
+    { id: 'scene2', x: 66.5, y: 35.5, w: 30, h: 30 },
+    { id: 'lock', x: 3.2, y: 67.5, w: 30, h: 29 },
+    { id: 'camera', x: 34.8, y: 67.5, w: 30, h: 29 },
+    { id: 'extra', x: 66.5, y: 67.5, w: 30, h: 29 }
+  ]
+};
 const hvSsSlotsFor = (face) => {
   const st = (face && face.style) || 'photo';
   if (st === 'modular') {
@@ -11213,6 +11297,7 @@ const hvSsSlotsFor = (face) => {
     if (l === 'stack') return HV_SS_MOD.stack;
     return HV_SS_MOD.asymmetric;
   }
+  if (st === 'glass') return HV_SS_GLASS[face.layout === 'grid3' ? 'grid3' : 'mixed'];
   return HV_SS_SLOT[st] || [];
 };
 const hvSsFontCss = (v) => ((HV_SS_FONTS.find(x => x.v === v) || HV_SS_FONTS[0]).f);
@@ -11997,7 +12082,9 @@ const hvSsSwitch = {
     const face = this.draft.faces[this.i];
     const hasFont = face.style === 'typo' || face.style === 'digital' || face.style === 'photo' || face.style === 'fluid' || face.style === 'whimsy';
     const tabs = document.createElement('div'); tabs.className = 'tabs';
-    const names = [['style', 'STYLE']].concat([['color', 'COLOR']], hasFont ? [['font', 'FONT']] : [], [['widgets', 'WIDGETS']]);
+    const names = face.style === 'glass'
+      ? [['style', 'STYLE'], ['widgets', 'WIDGETS'], ['color', 'COLOR'], ['background', 'BACKGROUND']]
+      : [['style', 'STYLE']].concat([['color', 'COLOR']], hasFont ? [['font', 'FONT']] : [], [['widgets', 'WIDGETS']]);
     for (const [k, l] of names) { const b = document.createElement('b'); b.textContent = l; if (k === this.tab) b.className = 'on'; b.addEventListener('click', () => { this.tab = k; this._paintCards(this.draft, this.i, 'customize'); }); tabs.appendChild(b); }
     sr.appendChild(tabs);
     const x = document.createElement('button'); x.className = 'x'; x.setAttribute('aria-label', 'Cancel'); x.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
@@ -12005,7 +12092,7 @@ const hvSsSwitch = {
     const ck = document.createElement('button'); ck.className = 'ck'; ck.setAttribute('aria-label', 'Save'); ck.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l5 5 9-11"/></svg>';
     ck.addEventListener('click', () => this._save());
     sr.appendChild(x); sr.appendChild(ck);
-    if (this.tab === 'style' || this.tab === 'color' || this.tab === 'font') this._paintRail(face);
+    if (this.tab === 'style' || this.tab === 'color' || this.tab === 'font' || this.tab === 'background') this._paintRail(face);
     if (this.tab === 'color') this._paintAuto(face);
   },
   _paintRail(face) {
@@ -12013,16 +12100,31 @@ const hvSsSwitch = {
     if (this.tab === 'style') {
       const opts = face.style === 'modular' ? [{ v: 'asymmetric', l: 'Split' }, { v: 'grid', l: '2×2' }, { v: 'stack', l: 'Stack' }]
         : face.style === 'typo' ? [{ v: 'editorial', l: 'Editorial' }, { v: 'classic', l: 'Classic' }]
+        : face.style === 'glass' ? [{ v: 'mixed', l: 'Mixed' }, { v: 'grid3', l: '3×3' }]
         : HV_SSS_V.map(s => ({ v: s, l: HV_SS_LABEL[s], asStyle: true }));
       for (const o of opts) {
-        const b = document.createElement('button'); b.className = 'th' + (((face.layout || (face.style === 'modular' ? 'asymmetric' : 'editorial')) === o.v) || (o.asStyle && face.style === o.v) ? ' on' : '');
+        const b = document.createElement('button'); b.className = 'th' + (((face.layout || (face.style === 'modular' ? 'asymmetric' : face.style === 'glass' ? 'mixed' : 'editorial')) === o.v) || (o.asStyle && face.style === o.v) ? ' on' : '');
         const thumb = this._mkFace(o.asStyle ? Object.assign({}, face, { style: o.v }) : Object.assign({}, face, { layout: o.v }), true);
         b.appendChild(thumb.el);
         b.addEventListener('click', () => {
           if (o.asStyle) { face.style = o.v; face.layout = o.v === 'modular' ? 'asymmetric' : (o.v === 'typo' ? 'editorial' : undefined); }
           else face.layout = o.v;
+          if (face.style === 'glass' && typeof hvGlassCfg !== 'undefined') { try { hvGlassCfg.set({ layout: o.v }); } catch (e) {} }
           this._refreshCustomize();
         });
+        rail.appendChild(b);
+      }
+    } else if (this.tab === 'background') {
+      const cur = (typeof hvGlassCfg !== 'undefined' && hvGlassCfg.get && (hvGlassCfg.get().theme || 'indigo')) || 'indigo';
+      const themes = [
+        { v: 'indigo', l: 'Indigo', c: 'linear-gradient(160deg,#6461e6,#4c49d0)' },
+        { v: 'blue', l: 'Blue', c: 'linear-gradient(160deg,#49d2ff,#2aa0ff 50%,#3c8bff)' },
+        { v: 'orange', l: 'Orange', c: 'linear-gradient(145deg,#f3b36a,#e2853a 50%,#c35c1f)' },
+        { v: 'light', l: 'Light', c: 'linear-gradient(160deg,#f3f4f1,#c5cec8)' }
+      ];
+      for (const o of themes) {
+        const b = document.createElement('button'); b.className = 'sw' + (cur === o.v ? ' on' : ''); b.style.background = o.c; b.title = o.l;
+        b.addEventListener('click', () => { try { hvGlassCfg.set({ theme: o.v }); } catch (e) {} this._refreshCustomize(); });
         rail.appendChild(b);
       }
     } else if (this.tab === 'color') {
