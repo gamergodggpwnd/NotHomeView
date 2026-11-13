@@ -10877,11 +10877,8 @@ const HV_SS_FACE_CSS = `
 .photo .pclk{position:absolute;left:0;right:0;top:16%;text-align:center;font:200 22cqh/1 ${FONT};color:var(--hv-ss-text,#fff);text-shadow:0 2px 14px rgba(0,0,0,.4);letter-spacing:-.04em;z-index:2}
 /* glass: thumbnail + the parked Home Screen face (not the live screensaver; that mounts homeview-glass-page) */
 .f.glass{background:linear-gradient(160deg,#3a38c0 0%,#2c2ab0 45%,#24218c 100%)}
-.glass .stg{display:grid;gap:1.6cqh;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(3,minmax(0,1fr));grid-template-areas:"th th ck" "th th sc" "ic lk li";padding:2.4cqh;box-sizing:border-box}
-.glass .gt{border-radius:1.8cqh;background:linear-gradient(150deg,rgba(255,255,255,.16),rgba(255,255,255,.06));box-shadow:inset 0 0 0 1px rgba(255,255,255,.35),0 .4cqh 1.2cqh rgba(10,8,50,.2);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:700;font-size:3.4cqh;letter-spacing:-.01em;text-align:center;padding:.4cqh}
-.glass .gth{grid-area:th;font-size:14cqh;font-weight:500}.glass .gth small{display:block;font-size:3.2cqh;font-weight:700;margin-top:1cqh;opacity:.85}
-.glass .gck{grid-area:ck;border-radius:50%;background:linear-gradient(150deg,rgba(255,255,255,.16),rgba(255,255,255,.06));box-shadow:inset 0 0 0 1px rgba(255,255,255,.35)}
-.glass .gsc{grid-area:sc}.glass .gic{grid-area:ic}.glass .glk{grid-area:lk}.glass .gli{grid-area:li}
+.glass .stg{position:absolute;inset:0;display:block;padding:0;box-sizing:border-box}
+.glass homeview-glass-page{display:block;width:100%;height:100%;min-height:0;pointer-events:none;--hvg-h:100%}
 ` + HV_HOMIE_CSS;
 const hvSsSvgNS = 'http://www.w3.org/2000/svg';
 // glassy digit shapes (box 100 x 140): [x, y, w, h, radius, rotate]
@@ -10970,8 +10967,19 @@ class HVSsFace {
       n.style.opacity = String(m <= 75 ? 1 : m <= 110 ? 0.45 : 0.08); }); }
   // ---- Homie: weekday, a small time, the huge day number and Homie (HVHomie) living around it
   _b_homie() { const f = this.el; f.innerHTML = '<div class="stg"><div class="hwd"></div><div class="htm"></div><div class="hdn"></div></div>'; this._hmo = new HVHomie(f.querySelector('.stg'), this.thumb ? 'thumb' : 'ss'); }
-  _b_glass() { this.el.innerHTML = '<div class="stg"><div class="gt gth">20<small>Thermostat</small></div><div class="gck"></div><div class="gt gsc">Good Night</div><div class="gt gic">Intercom</div><div class="gt glk">Lock</div><div class="gt gli">Lights</div></div>'; }
-  _u_glass() {}
+  _b_glass() {
+    this.el.style.position = this.el.style.position || 'absolute';
+    this.el.style.inset = this.el.style.inset || '0';
+    const stg = document.createElement('div'); stg.className = 'stg';
+    stg.style.cssText = 'position:absolute;inset:0;display:block;width:100%;height:100%;';
+    const card = document.createElement('homeview-glass-page');
+    card.style.cssText = 'display:block;width:100%;height:100%;min-height:0;pointer-events:none;';
+    card.style.setProperty('--hvg-h', '100%');
+    const cfg = Object.assign({}, (typeof hvGlassCfg !== 'undefined' && hvGlassCfg.get) ? (hvGlassCfg.get() || {}) : {});
+    try { card.setConfig(cfg); } catch (e) { try { card.setConfig({}); } catch (x) {} }
+    stg.appendChild(card); this.el.innerHTML = ''; this.el.appendChild(stg); this._gp = card;
+  }
+  _u_glass(d, hass) { if (this._gp) { try { this._gp.hass = hass; } catch (e) {} } }
   _u_homie(d, hass) { const f = this.el, L = (hass && hass.locale && hass.locale.language) || undefined, q = c => f.querySelector(c), set = (c, t) => { const e = q(c); if (e.textContent !== t) e.textContent = t; };
     set('.hwd', d.toLocaleDateString(L, { weekday: 'long' })); set('.htm', d.toLocaleTimeString(L, { hour: 'numeric', minute: '2-digit' })); set('.hdn', String(d.getDate()));
     this._hmo.update(hass); }
@@ -11699,7 +11707,10 @@ const hvSsSwitch = {
     const red = this.reduced();
     if (tr) { tr.style.transition = red ? 'none' : 'transform .32s cubic-bezier(.2,.8,.2,1)'; tr.style.transform = `translate3d(${-i * W}px,0,0)`; }
     data.i = i;
-    try { await hvSsFaces.commit(data, hvSsOv.hass()); } catch (e) {}
+    // Apply the new face locally and mount it under the live cover now. Do not wait for the
+    // Home Assistant config save — that lag left the unstyled glass placeholder on screen
+    // for about a second after the swipe landed.
+    try { hvSsFaces.commit(data, hvSsOv.hass()); } catch (e) {}
     try { hvSsEatTap(600); } catch (e) {}
     const finish = () => {
       try { hvSsKeep.off('ssswipe'); } catch (e) {}
