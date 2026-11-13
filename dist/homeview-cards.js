@@ -58,8 +58,9 @@ const fmtAttr = (hass, s, a) => !s ? '' : (hass.formatEntityAttributeValue ? has
  * The Home Screen card and everything on its view (photo backdrop, Photos card, its sheets and gallery) always keep the original look.
  * Dashboard-wide: "Device pages theme" = the `theme` option of the NotHomeView Home Screen card (visual editor, or the Edit Page menu).
  * A NotHomeView Page Grid can override it for its own page ("Same as all device pages" by default).
- * Nothing set (or Night) = the original dark glass look, unchanged. Day colours = the "HomeView Light" theme palette. */
+ * Nothing set (or Day) = the Apple-style daytime look (white tiles, dark text and icons, active tiles tinted purple). Night = the original dark glass look, unchanged. Auto follows the sun. No theme chip row. */
 const HV_THEMES = ['night', 'day', 'auto'];
+const HV_THEME_DEFAULT = 'day';
 const HV_DAY_VARS = '--hv-bg:#ffffff;--hv-bg-on:#cdc6ef;--hv-border:rgba(0,0,0,.05);--hv-border-on:rgba(110,90,210,.18);--hv-shadow:0 .4vh 1.4vh rgba(30,30,60,.07);' +
   '--hv-shadow-on:0 .3vh 1vh rgba(80,60,180,.08);--hv-blur:none;--hv-text:#3c3c43;--hv-text-strong:#1c1c1e;--hv-text2:rgba(60,60,67,.72);--hv-text-on:#3f3399;' +
   '--hv-text2-on:rgba(63,51,153,.85);--hv-icon:#3c3c43;--hv-icon-on:#5b3fc4;--hv-shade:none;--hv-icon-shade:none;--hv-accent:#7a6ae0;--hv-track:rgba(60,60,67,.12);' +
@@ -86,7 +87,7 @@ function hvCfgTheme(cfg) {
     if (Array.isArray(o)) return o.some(x => has(x, d + 1)); if (o.type === HUB) return true;
     return ['sections', 'cards', 'card', 'elements'].some(k => o[k] && has(o[k], d + 1)); };
   if (has(cfg.views[vi])) return '';
-  return find(cfg.views[vi], ['custom:homeview-grid-card']) || find(cfg.views, [HUB]) || '';
+  const fromHub = find(cfg.views, [HUB]); return find(cfg.views[vi], ['custom:homeview-grid-card']) || fromHub || (hvHubCfgOf(cfg) ? HV_THEME_DEFAULT : '');
 }
 // the dashboard-wide Device pages theme = `theme` of the first NotHomeView Home Screen card (returns that card's config object)
 function hvHubCfgOf(cfg) { const walk = (o, d = 0) => { if (!o || typeof o !== 'object' || d > 14) return null;
@@ -103,7 +104,7 @@ function hvViewTheme(cfg, v) {
     if (o.type === 'custom:homeview-myhome-card') return 'night'; // My Home is always the dark glass page
     for (const k of ['sections', 'cards', 'card', 'elements']) if (o[k]) { const r = find(o[k], d + 1); if (r) return r; } return ''; };
   const hub = cfg ? hvHubCfgOf(cfg) : null;
-  return find(v) || (hub && HV_THEMES.includes(hub.theme) ? hub.theme : '') || 'night'; }
+  return find(v) || (hub ? (HV_THEMES.includes(hub.theme) ? hub.theme : HV_THEME_DEFAULT) : 'night'); }
 // while the Home Screen shows a device page as a sheet, popups opened from it (garage chooser, room picker …) follow that page
 function hvThemeOver(mode) { if (HVT.over === mode) return; HVT.over = mode;
   const ha = document.querySelector('home-assistant'), hr = ha && ha.shadowRoot, day = mode === 'day' || HVT.cur === 'day';
@@ -434,9 +435,11 @@ const BASE_CSS = `
 :host([day]) ha-card.active{background:var(--hv-bg-on);border-color:var(--hv-border-on);box-shadow:var(--hv-shadow-on)}
 ${HV_DAY_HOST}
 /* Day: white tiles also where a glass HA theme (card-mod) makes every ha-card transparent */
-:host([hv-day]) ha-card{--frosted-glass-card-layer-content:none;background:var(--hv-bg) !important;border-color:var(--hv-border) !important;box-shadow:var(--hv-shadow) !important;backdrop-filter:none !important;-webkit-backdrop-filter:none !important}
-:host([hv-day]) ha-card.active{background:var(--hv-bg-on) !important;border-color:var(--hv-border-on) !important;box-shadow:var(--hv-shadow-on) !important}
+:host([hv-day]) ha-card{--frosted-glass-card-layer-content:none;background:var(--hv-bg,#ffffff) !important;border-color:var(--hv-border) !important;box-shadow:var(--hv-shadow) !important;backdrop-filter:none !important;-webkit-backdrop-filter:none !important;color:var(--hv-text,#3c3c43) !important}
+:host([hv-day]) ha-card.active{background:var(--hv-bg-on,#cdc6ef) !important;border-color:var(--hv-border-on) !important;box-shadow:var(--hv-shadow-on) !important;color:var(--hv-text-on,#3f3399) !important}
 :host([hv-day]) ha-card::before{content:none !important;display:none !important}
+:host([hv-day]) ha-icon,:host([hv-day]) ha-card ha-icon{color:var(--hv-icon,#3c3c43) !important;--mdc-icon-color:var(--hv-icon,#3c3c43);--iron-icon-fill-color:var(--hv-icon,#3c3c43)}
+:host([hv-day]) ha-card.active ha-icon{color:var(--hv-icon-on,#5b3fc4) !important;--mdc-icon-color:var(--hv-icon-on,#5b3fc4);--iron-icon-fill-color:var(--hv-icon-on,#5b3fc4)}
 ha-card{position:relative;height:100%;width:100%;box-sizing:border-box;overflow:hidden;font-family:${FONT};cursor:pointer;
  background:var(--hv-bg,linear-gradient(150deg,rgba(255,255,255,.15) 0%,rgba(255,255,255,.07) 100%));
  border:1px solid var(--hv-border,rgba(255,255,255,.25));border-radius:var(--hv-radius,min(5.6vh,3vw));
@@ -444,6 +447,7 @@ ha-card{position:relative;height:100%;width:100%;box-sizing:border-box;overflow:
  backdrop-filter:var(--hv-blur,blur(26px) saturate(180%));-webkit-backdrop-filter:var(--hv-blur,blur(26px) saturate(180%));
  --ha-card-border-radius:var(--hv-radius,min(5.6vh,3vw));color:var(--hv-text,#fff);
  transition:background .25s ease,box-shadow .25s ease;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;outline:none}:host([hv-home]){aspect-ratio:auto;height:100%;width:100%;overflow:hidden;border-radius:calc(var(--I,110px) * .26);--hv-radius:calc(var(--I,110px) * .26);--ha-card-border-radius:calc(var(--I,110px) * .26)}:host([hv-home]) ha-card{border-radius:inherit !important;border:0 !important;box-shadow:none !important;overflow:hidden;height:100%;width:100%;--ha-card-border-radius:inherit}
+:host([hv-home]) .th .n,:host([hv-home]) .th .l{display:none !important}
 ha-card.active{background:var(--hv-bg-on,linear-gradient(150deg,rgba(196,182,255,.46) 0%,rgba(160,140,250,.34) 100%));
  border-color:var(--hv-border-on,rgba(225,215,255,.42));box-shadow:var(--hv-shadow-on,inset 0 1px 0 rgba(255,255,255,.35),0 1.2vh 3.6vh rgba(50,30,160,.30))}
 ha-card:focus-visible{box-shadow:0 0 0 2px var(--hv-accent,#d4c9ff)}
@@ -3999,7 +4003,7 @@ class HVPageBreakCard extends HTMLElement {
 HVPageBreakCard.sizePresets = false; HVPageBreakCard.layoutSection = false;
 HVPageBreakCard.schema = [{ name: 'name', selector: { text: {} } }];
 Object.assign(LABELS, { first_page_name: 'First page name (tabs)' });
-const HV_THEME_OPTS = [{ value: 'night', label: 'Night (dark glass, default)' }, { value: 'day', label: 'Day (white)' }, { value: 'auto', label: 'Auto (follow sun)' }];
+const HV_THEME_OPTS = [{ value: 'day', label: 'Day (white, default)' }, { value: 'night', label: 'Night (dark glass)' }, { value: 'auto', label: 'Auto (follow sun)' }];
 const GRID_SCHEMA = [
   { name: 'theme', selector: { select: { mode: 'dropdown', options: [{ value: 'inherit', label: 'Same as all device pages (default)' }].concat(HV_THEME_OPTS.map(o => o.value === 'night' ? { value: 'night', label: 'Night (dark glass)' } : o)) } } },
   { name: 'look', selector: { select: { mode: 'dropdown', options: [{ value: '', label: 'Standard tiles' }, { value: 'glass', label: 'Liquid Glass' }] } } },
@@ -4557,8 +4561,9 @@ const HW_CSS = `
 .c-x .dh.td span{color:#ff453a}.c-x .dh.td b{color:#fff;background:#ff453a;border-radius:99px;padding:0 .35em}
 .c-x .hc{position:relative}.c-x .hc span{position:absolute;left:0;font-size:calc(var(--f) * 10.5);color:rgba(235,235,245,.55);transform:translateY(-.6em)}.c-x .dg{border-left:1px solid rgba(84,84,88,.35)}
 .apps.hg{position:relative;grid-template-columns:repeat(var(--gn,8),var(--gc,100px));grid-auto-rows:var(--gr,120px);column-gap:var(--gx,24px);row-gap:var(--gy,20px);grid-auto-flow:row dense;width:max-content;max-width:100%}
-.apps.hg > .app{justify-self:center;align-self:start}.apps.hg > .tile,.apps.hg > .phw{width:100%;height:100%;min-width:0;min-height:0}.tile.hv-hs{border-radius:calc(var(--I,110px) * .26);overflow:hidden;background:transparent;box-shadow:0 calc(var(--I,110px) * .06) calc(var(--I,110px) * .2) rgba(0,0,0,.3)}
-.apps.hg > .phw{gap:var(--lg,9px)}.apps.hg > .phw .pw{width:100%}
+.apps.hg > .app{justify-self:center;align-self:start}.apps.hg > .tile,.apps.hg > .phw{width:100%;height:100%;min-width:0;min-height:0}.tile.hv-hs{border-radius:0;overflow:visible;background:transparent;box-shadow:none}
+.apps.hg > .phw,.apps.hg > .tile{gap:var(--lg,9px)}.apps.hg > .phw .pw,.apps.hg > .tile > .tb{width:100%;flex:1 1 auto;min-height:0}
+.apps.hg > .tile > .tb{height:auto}
 .apps.hg > .hgp{border-radius:calc(var(--I,110px) * .26);background:rgba(255,255,255,.06);box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.14)}.apps.hg > .hgp.hga{background:none;box-shadow:none}
 .apps.hg{isolation:isolate}.apps.hg > .lift{position:absolute !important;z-index:1000;pointer-events:none;transition:none;filter:drop-shadow(0 18px 28px rgba(0,0,0,.35))}
 :host([hv-arr]) .apps.hg > .app:not(.lift) .ico{animation:hvjig .5s ease-in-out infinite alternate} @keyframes hvjig{from{transform:rotate(-1.4deg)}to{transform:rotate(1.4deg)}}
@@ -5034,6 +5039,8 @@ const HV_TILE_ICON = { clock: 'mdi:clock-outline', 'custom:homeview-nav-card': '
   'custom:homeview-music-card': 'mdi:music', 'custom:homeview-tv-card': 'mdi:television', 'custom:homeview-camera-card': 'mdi:cctv', 'custom:homeview-people-card': 'mdi:account-group-outline' };
 const hvTileTypeName = t => { t = String(t || ''); const c = (window.customCards || []).find(x => 'custom:' + x.type === t); if (c) return c.name.replace(/^NotHomeView /, '');
   return t.replace(/^custom:/, '').replace(/^homeview-|-card$/g, '').replace(/-/g, ' ').replace(/^./, m => m.toUpperCase()); };
+const hvHubSideLabel = (hub, i, cfg) => { const c = (hub && hub._config) || {}, s = cfg || ((c.side_cards || []).filter(x => x && x.type)[i]) || {}, st = s.entity && hub && hub._hass && hub._hass.states[s.entity];
+  return s.name || s.title || (st && st.attributes && st.attributes.friendly_name) || hvTileTypeName(s.type) || 'Card'; };
 const HV_GE_CSS = `.hv-ge .hd{margin:4px 0 2px;font-weight:600;font-size:15px}.hv-ge .note{margin:0 0 10px;opacity:.75;font-size:13px;line-height:1.35}
 .hv-ge .tiles{display:grid;grid-template-columns:repeat(var(--hv-ge-cols,4),minmax(0,1fr));gap:8px;margin-bottom:10px}
 .hv-ge .t{all:unset;box-sizing:border-box;cursor:pointer;min-height:64px;padding:8px 6px;border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;text-align:center;
@@ -5665,17 +5672,20 @@ const HUB_CSS = `:host{display:block;position:relative;font-family:${FONT};color
 .pi.on{opacity:1}
 .pw .ph0{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.75)} .pw .ph0 ha-icon{--mdc-icon-size:calc(var(--I) * .5)}
 .row{display:flex;gap:var(--cg2,40px);align-items:flex-start;flex:none;min-width:0}
-.tile{position:relative;flex:none;width:var(--tw,300px);height:var(--th,var(--ph,290px))}
-.tile > *{position:absolute;inset:0;width:100%;height:100%;aspect-ratio:auto;--hv-aspect:auto}
+.tile{position:relative;flex:none;width:var(--tw,300px);display:flex;flex-direction:column;align-items:center;gap:var(--lg,9px)}
+.tile > .tb{position:relative;width:100%;height:var(--th,var(--ph,290px));border-radius:calc(var(--I,110px) * .26);overflow:hidden;flex:none;
+ box-shadow:0 calc(var(--I,110px) * .06) calc(var(--I,110px) * .2) rgba(0,0,0,.3)}
+.tile > .tb > *{position:absolute;inset:0;width:100%;height:100%;aspect-ratio:auto;--hv-aspect:auto}
+.tile > .lb{font-size:var(--lfs,17px);line-height:var(--lh,22px);font-weight:500;color:#fff;text-shadow:0 1px 6px rgba(0,0,0,.35);white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis;text-align:center;flex:none}
 .below{display:flex;flex-wrap:wrap;gap:var(--cg2,40px);flex:none} .below[hidden]{display:none}
 .calw{flex:1 1 0;min-height:var(--calmin,240px);position:relative}
 .calw > *{position:absolute;inset:0;width:100%;height:100%;aspect-ratio:auto}
 .calw[hidden]{display:none} .calw.crow{flex:none;height:var(--calrow,200px);min-height:0}
-.tile.calt > *{position:absolute;inset:0;width:100%;height:100%}
+.tile.calt > .tb > *,.tile.calt > *{position:absolute;inset:0;width:100%;height:100%}
 .empty{opacity:.7;padding:12px}
 .ssp{position:fixed;left:50%;top:calc(var(--hv-safe-top, env(safe-area-inset-top, 0px)) + 5px);width:38px;height:5px;margin-left:-19px;border-radius:3px;background:rgba(255,255,255,.55);box-shadow:0 1px 4px rgba(0,0,30,.25);pointer-events:none;z-index:3}
 .ssp[hidden],:host([contained]) .ssp{display:none}
-.tile.fit > *{cursor:pointer}
+.tile.fit > *,.tile.fit > .tb > *{cursor:pointer}
 .ssv{position:fixed;inset:0;z-index:0;display:none;overflow:hidden;pointer-events:none;background:#000;will-change:transform;transform:translate3d(0,-100%,0)}
 .ssin{position:absolute;inset:0;will-change:transform}
 .ssb,.sss{position:absolute;inset:0;background:#111 center/cover no-repeat}
@@ -7173,7 +7183,17 @@ const HV_ABOUT_CSS = `
 .notes{padding:12px 16px;font-size:15px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere;-webkit-user-select:text;user-select:text}
 .ibtn{all:unset;box-sizing:border-box;cursor:pointer;display:flex;align-items:center;justify-content:center;width:100%;min-height:50px;border-radius:12px;background:var(--blue);color:#fff;font-size:17px;font-weight:600;margin:0 0 12px}
 .ibtn.sec{background:var(--card);color:var(--blue)}.ibtn:disabled{opacity:.5;cursor:default}
-.warn{margin:0 0 12px;padding:12px 16px;border-radius:12px;background:color-mix(in srgb,#ff9f0a 18%,var(--card));font-size:15px;line-height:1.38}`;
+.warn{margin:0 0 12px;padding:12px 16px;border-radius:12px;background:color-mix(in srgb,#ff9f0a 18%,var(--card));font-size:15px;line-height:1.38}
+.updall{margin:0 0 10px}.updall .ibtn{margin:0}
+.az{font-size:15px;font-weight:700;color:var(--fg2);padding:10px 16px 4px;letter-spacing:.02em}
+.r.appi .sq,.r.appi .ai{width:32px;height:32px;border-radius:8px;overflow:hidden;flex:none;display:flex;align-items:center;justify-content:center;background:var(--c,#8e8e93);color:#fff}
+.r.appi .ai img{width:100%;height:100%;object-fit:cover;display:block}
+.r.appi .tx small{color:var(--fg2)}
+.stpill{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600;background:color-mix(in srgb,#34c759 18%,var(--card));color:#248a3d}
+.stpill.off{background:color-mix(in srgb,#8e8e93 18%,var(--card));color:var(--fg2)}
+.stpill.bad{background:color-mix(in srgb,#ff3b30 18%,var(--card));color:#c41a1a}
+.apphead{display:flex;gap:16px;align-items:center;padding:8px 4px 18px}.apphead .ai{width:64px;height:64px;border-radius:16px;overflow:hidden;flex:none;display:flex;align-items:center;justify-content:center;color:#fff}
+.apphead .ai img{width:100%;height:100%;object-fit:cover}.apphead b{display:block;font-size:22px;font-weight:700}.apphead p{margin:4px 0 0;color:var(--fg2);font-size:15px;line-height:1.35}`;
 function hvOpenSettings(hub, app, from, goTo) {
   const live = () => { for (const h of HV_HUBS) if (h.isConnected && h._w && !hvInDialog(h)) return h; return null; };
   if (!hub || !hub.isConnected) hub = live();
@@ -7266,10 +7286,87 @@ function hvOpenSettings(hub, app, from, goTo) {
   const sideHtml = () => { const q = st.q.trim().toLowerCase(), sel = st.wide ? (st.page || 'general') : st.page, p0 = HV_SET_PAGES[0], P = personOf(), d = data();
     const nm = d.name || (P && P.attributes.friendly_name) || user.name || 'Home', pic = P && P.attributes.entity_picture, ini = String(nm).trim().split(/\s+/).map(w => w[0] || '').join('').slice(0, 2).toUpperCase();
     const un = hvUpdCount(H()), row = p => `<button class="sr${sel === p.id ? ' on' : ''}" data-go="${p.id}" aria-current="${sel === p.id}"><span class="sq" style="--c:${p.c}"><ha-icon icon="${p.i}"></ha-icon></span><span class="nm">${esc(p.t)}</span>${p.id === 'general' && un ? `<span class="bdg" aria-label="${un} updates">${un}</span>` : ''}<ha-icon class="ch" icon="mdi:chevron-right"></ha-icon></button>`;
-    const grp = g => { const ps = HV_SET_PAGES.filter(p => p.g === g && pageHit(p, q)); return ps.length ? `<div class="grp">${ps.map(row).join('')}</div>` : ''; };
+    const grp = g => { const ps = HV_SET_PAGES.filter(p => p.g === g && p.id !== 'customapps' && pageHit(p, q)); return ps.length ? `<div class="grp">${ps.map(row).join('')}</div>` : ''; };
     const out = (pageHit(p0, q) ? `<div class="grp"><button class="sr pr${sel === 'person' ? ' on' : ''}" data-go="person" aria-current="${sel === 'person'}"><span class="av"${pic ? ` style="background-image:url('${esc(pic)}')"` : ''}>${pic ? '' : esc(ini)}</span><span class="tx"><span class="nm">${esc(nm)}</span><small>Person & greeting</small></span><ha-icon class="ch" icon="mdi:chevron-right"></ha-icon></button></div>` : '') + grp(1) + grp(2);
     return out || `<div class="grp"><div class="empty">No results for “${esc(st.q.trim())}”</div></div>`; };
-  const paneHtml = () => { if (st.sub) return subHtml(); const p = pageOf(st.wide ? (st.page || 'general') : st.page), q = st.q.trim().toLowerCase(), all = !q || p.t.toLowerCase().includes(q), d = data(), F = fields(), dis = ro(), w = why();
+  const hvNhvApps = () => {
+    const map = { calendar: 'calendar', assistant: 'assistant', settings: 'general', weather: 'layout' };
+    const extra = [
+      { key: 'photos', name: 'Photos', icon: 'mdi:image-multiple', color: '#32ade6', page: 'photos', blurb: 'The pictures on the Home Screen and the Photos tile.' },
+      { key: 'homey', name: 'Homey', icon: 'mdi:home-variant', color: '#7c5cff', page: 'layout', blurb: 'The animated Homey tile on the Home Screen.' },
+      { key: 'wallpaper', name: 'Wallpaper', icon: 'mdi:wallpaper', color: '#5856d6', page: 'screensaver', blurb: 'The screensaver and the Home Screen background.' }
+    ];
+    const cat = HUB_APP_CATALOG.map(c => ({ key: c.key, name: c.name, icon: c.icon, color: c.color_from || '#8e8e93', page: map[c.key] || '', blurb: c.kind === 'navigate' ? 'Opens the ' + c.name + ' page.' : 'A NotHomeView app on the Home Screen.' }));
+    return extra.concat(cat);
+  };
+  const intState = e => { const s = String((e && e.state) || '').toLowerCase();
+    if (s === 'loaded' || s === 'setup') return { t: 'On', k: '' };
+    if (s === 'not_loaded' || s === 'disabled') return { t: 'Off', k: 'off' };
+    if (s) return { t: s.replace(/_/g, ' '), k: 'bad' }; return { t: 'Installed', k: '' }; };
+  const intIcon = domain => { const src = domain ? 'https://brands.home-assistant.io/' + encodeURIComponent(domain) + '/icon.png' : '';
+    return src ? `<span class="ai" style="background:#fff"><img src="${esc(src)}" alt="" onerror="this.style.display='none'"></span>` : `<span class="sq ai" style="--c:#44739e"><ha-icon icon="mdi:puzzle"></ha-icon></span>`; };
+  const appsListHtml = () => { const q = st.q.trim().toLowerCase();
+    const nhv = hvNhvApps().map(a => Object.assign({ src: 'nhv', sort: a.name }, a));
+    const ints = (st.ints || []).map(e => ({ src: 'int', name: e.title || e.domain || 'Integration', domain: e.domain, entry: e, sort: e.title || e.domain || 'Integration' }));
+    const all = nhv.concat(ints).filter(a => !q || (a.name + ' ' + (a.domain || '') + ' ' + (a.blurb || '')).toLowerCase().includes(q))
+      .sort((a, b) => a.sort.localeCompare(b.sort, undefined, { sensitivity: 'base' }));
+    const groups = {};
+    for (const a of all) { const ch = (a.sort[0] || '#').toUpperCase(), g = /[A-Z]/.test(ch) ? ch : '#'; (groups[g] || (groups[g] = [])).push(a); }
+    const letters = Object.keys(groups).sort((a, b) => a === '#' ? 1 : b === '#' ? -1 : a.localeCompare(b));
+    let h = '';
+    if (!q || 'custom apps'.includes(q)) h += `<div class="grp"><button class="r act nav appi" data-act="customapps" aria-label="Custom Apps"><span class="sq" style="--c:#5e5ce6"><ha-icon icon="mdi:apps-box"></ha-icon></span><span class="tx"><span class="l">Custom Apps</span><small>Buttons that open other apps on this device</small></span><ha-icon class="ch" icon="mdi:chevron-right"></ha-icon></button></div>`;
+    if (!letters.length && q) h += `<div class="grp"><div class="empty">No results for “${esc(st.q.trim())}”</div></div>`;
+    for (const g of letters) { h += `<div class="az">${g}</div><div class="grp">`;
+      for (const a of groups[g]) {
+        if (a.src === 'nhv') { const ic = a.icon && String(a.icon).startsWith('hv:') ? 'mdi:apps' : (a.icon || 'mdi:apps');
+          h += `<button class="r act nav appi" data-act="appnhv" data-id="${esc(a.key)}" aria-label="${esc(a.name)}"><span class="sq" style="--c:${esc(a.color || '#8e8e93')}"><ha-icon icon="${ic}"></ha-icon></span><span class="tx"><span class="l">${esc(a.name)}</span><small>NotHomeView</small></span><ha-icon class="ch" icon="mdi:chevron-right"></ha-icon></button>`; }
+        else h += `<button class="r act nav appi" data-act="appint" data-id="${esc(a.entry.entry_id || a.domain)}" aria-label="${esc(a.name)}">${intIcon(a.domain)}<span class="tx"><span class="l">${esc(a.name)}</span><small>${esc(a.domain || '')}</small></span><ha-icon class="ch" icon="mdi:chevron-right"></ha-icon></button>`; }
+      h += '</div>'; }
+    return h; };
+  const appsHtml = () => { let h = `<div class="ph">${st.wide ? '' : '<button class="bk" data-act="back" aria-label="Back to Settings"><ha-icon icon="mdi:chevron-left"></ha-icon>Settings</button>'}<span class="nt">Apps</span></div><h1 class="sbt">Apps</h1>`;
+    if (!st.intsReady && !st.intsErr) h += '<div class="grp"><div class="r"><span class="l">Loading integrations…</span><span class="spin" aria-hidden="true"></span></div></div>';
+    return h + appsListHtml(); };
+  const appsLoad = () => { if (st.intsP || st.intsReady) return;
+    const h0 = H(); if (!h0 || !h0.callWS) { st.intsReady = true; st.ints = st.ints || []; return; }
+    st.intsP = true;
+    const ws = typ => h0.callWS({ type: typ }).catch(() => null);
+    Promise.all([ws('config_entries/get'), ws('config/device_registry/list'), ws('config/entity_registry/list')]).then(async pack => {
+      let [entries, devices, entities] = pack;
+      if (!Array.isArray(entries)) entries = await ws('config_entries/list') || [];
+      if (!Array.isArray(devices)) devices = await ws('device_registry/list') || [];
+      if (!Array.isArray(entities)) entities = await ws('entity_registry/list') || [];
+      st.ints = Array.isArray(entries) ? entries.filter(e => e && !e.disabled_by) : [];
+      st.intDevs = Array.isArray(devices) ? devices : []; st.intEnts = Array.isArray(entities) ? entities : [];
+      st.intsReady = true; st.intsP = false;
+      if (root && root.isConnected && (st.page === 'apps' || (st.sub && String(st.sub).startsWith('nhv:')) || (st.sub && String(st.sub).startsWith('int:')))) paintPane();
+    }).catch(() => { st.intsReady = true; st.intsP = false; st.ints = st.ints || []; if (root && root.isConnected && st.page === 'apps') paintPane(); }); };
+  const secsHtml = p => { const d = data(), F = fields(), dis = ro(); let h = '', any = false;
+    for (const sc of p.sec) { const ks = sc.f.map(fname); if (!ks.length) continue; any = true;
+      h += (sc.h ? `<div class="gh">${esc(sc.h)}</div>` : '') + `<div class="grp${sc.lvl ? ' lvg' : ''}${sc.bare ? ' bare' : ''}">${ks.map(k => rowHtml(k, F[k], d, dis)).join('')}</div>`; }
+    return h || `<div class="grp"><div class="empty">No settings for this app.</div></div>`; };
+  const appNhvHtml = key => { const a = hvNhvApps().find(x => x.key === key); if (!a) { st.sub = null; return appsHtml(); }
+    const ic = a.icon && String(a.icon).startsWith('hv:') ? 'mdi:apps' : (a.icon || 'mdi:apps');
+    let h = `<div class="ph"><button class="bk" data-act="appsback" aria-label="Back to Apps"><ha-icon icon="mdi:chevron-left"></ha-icon>Apps</button><span class="nt">${esc(a.name)}</span></div>`;
+    h += `<div class="apphead"><span class="ai" style="background:${esc(a.color || '#8e8e93')}"><ha-icon icon="${ic}"></ha-icon></span><div><b>${esc(a.name)}</b><p>NotHomeView${a.blurb ? ' · ' + esc(a.blurb) : ''}</p></div></div>`;
+    const p = a.page && pageOf(a.page); if (p && p.id !== 'apps') h += secsHtml(p);
+    else h += `<div class="grp"><div class="r note"><small>${esc(a.blurb || 'A NotHomeView app.')}</small></div></div>`;
+    return h; };
+  const appIntHtml = id => { const e = (st.ints || []).find(x => x.entry_id === id || x.domain === id); if (!e) { st.sub = null; return appsHtml(); }
+    const devs = (st.intDevs || []).filter(d => Array.isArray(d.config_entries) ? d.config_entries.includes(e.entry_id) : d.config_entry_id === e.entry_id);
+    const ents = (st.intEnts || []).filter(n => n.config_entry_id === e.entry_id || (n.device_id && devs.some(d => d.id === n.device_id)));
+    const stt = intState(e), title = e.title || e.domain || 'Integration';
+    let h = `<div class="ph"><button class="bk" data-act="appsback" aria-label="Back to Apps"><ha-icon icon="mdi:chevron-left"></ha-icon>Apps</button><span class="nt">${esc(title)}</span></div>`;
+    h += `<div class="apphead">${intIcon(e.domain)}<div><b>${esc(title)}</b><p>${esc(e.domain || '')}</p><span class="stpill ${stt.k}">${esc(stt.t)}</span></div></div>`;
+    h += `<div class="gh">Devices</div><div class="grp">${devs.length ? devs.map(d => `<div class="r"><span class="l">${esc(d.name_by_user || d.name || d.id)}</span><span class="v">${esc(d.model || d.manufacturer || '')}</span></div>`).join('') : '<div class="empty">No devices.</div>'}</div>`;
+    h += `<div class="gh">Entities</div><div class="grp">${ents.length ? ents.slice(0, 80).map(n => `<div class="r"><span class="l">${esc(n.name || n.original_name || n.entity_id)}</span><span class="v">${esc(n.entity_id || '')}</span></div>`).join('') + (ents.length > 80 ? `<div class="r note"><small>${ents.length - 80} more in Home Assistant</small></div>` : '') : '<div class="empty">No entities.</div>'}</div>`;
+    const open = e.domain ? '/config/integrations/integration/' + encodeURIComponent(e.domain) : '/config/integrations';
+    h += `<div class="grp"><button class="r act" data-act="intopen" data-url="${esc(open)}"><span class="sq" style="--c:var(--blue)"><ha-icon icon="mdi:open-in-new"></ha-icon></span><span class="tx"><span class="l">Open in Home Assistant</span></span><ha-icon class="ch" icon="mdi:open-in-new"></ha-icon></button>`;
+    if (e.supports_options && e.entry_id) { const opt = '/config/integrations/config_entry/' + encodeURIComponent(e.entry_id);
+      h += `<button class="r act" data-act="intopen" data-url="${esc(opt)}"><span class="sq" style="--c:#5e5ce6"><ha-icon icon="mdi:cog"></ha-icon></span><span class="tx"><span class="l">Options</span><small>Opens the options flow in Home Assistant</small></span><ha-icon class="ch" icon="mdi:chevron-right"></ha-icon></button>`; }
+    h += '</div>'; return h; };
+  const customAppsSub = () => `<div class="ph"><button class="bk" data-act="appsback" aria-label="Back to Apps"><ha-icon icon="mdi:chevron-left"></ha-icon>Apps</button><span class="nt">Custom Apps</span></div><h1 class="sbt">Custom Apps</h1><div data-calist></div>`;
+
+  const paneHtml = () => { if (st.sub) return subHtml(); const cur = st.wide ? (st.page || 'general') : st.page; if (cur === 'apps') return appsHtml(); const p = pageOf(st.wide ? (st.page || 'general') : st.page), q = st.q.trim().toLowerCase(), all = !q || p.t.toLowerCase().includes(q), d = data(), F = fields(), dis = ro(), w = why();
     let h = `<div class="ph">${st.wide ? '' : '<button class="bk" data-act="back" aria-label="Back to Settings"><ha-icon icon="mdi:chevron-left"></ha-icon>Settings</button>'}<span class="nt">${esc(p.t)}</span></div>`;
     if (w) h += `<div class="ban" role="note">${esc(w)}</div>`;
     if (all) h += `<div class="intro"><span class="sq" style="--c:${p.c}"><ha-icon icon="${p.i}"></ha-icon></span><b>${esc(p.t)}</b><p>${esc(p.d)}</p></div>`;
@@ -7333,7 +7430,13 @@ function hvOpenSettings(hub, app, from, goTo) {
     if (!admin) h += '<div class="ban" role="note">An admin has to check for and install updates. You can see what\'s available.</div>';
     if (st.uchk) h += '<div class="grp"><div class="r"><span class="l">Checking for updates…</span><span class="spin" aria-hidden="true"></span></div></div>';
     if (!L.length && !gh) h += `<div class="grp"><div class="utd"><span class="okc"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span><b>Everything is up to date</b>${last ? `<small>Last checked ${esc(ago(last))}</small>` : ''}</div></div>`;
-    else { h += `<div class="gh">${L.length + (gh ? 1 : 0)} update${L.length + (gh ? 1 : 0) === 1 ? '' : 's'} available</div><div class="grp">`;
+    else { const nUp = L.length + (gh ? 1 : 0);
+      h += `<div class="gh">${nUp} update${nUp === 1 ? '' : 's'} available</div>`;
+      if (nUp >= 2) { if (!admin) h += '<div class="ban" role="note">An admin has to install updates.</div>';
+        else if (st.uins === 'all') h += '<div class="grp"><div class="r"><span class="l">Installing all updates…</span><span class="spin" aria-hidden="true"></span></div></div>';
+        else if (st.ucf === 'all') h += `<div class="warn" role="alert" data-upd-confirm="all">Install ${L.length || nUp} update${(L.length || nUp) === 1 ? '' : 's'} now? Home Assistant may restart, and the dashboard will reconnect by itself.</div><button class="ibtn" data-act="updallgo">Update All</button><button class="ibtn sec" data-act="updcancel">Cancel</button>`;
+        else h += `<div class="updall"><button class="ibtn" data-act="updall" ${st.uins ? 'disabled' : ''}>Update All</button></div>`; }
+      h += '<div class="grp">';
       if (gh) h += `<button class="ur" data-act="updgh"><span class="ui" style="background:#6e5ad2"><ha-icon icon="mdi:view-dashboard-variant"></ha-icon></span><span class="tx"><span class="l">NotHomeView ${esc(gh.tag)} available</span><small>${esc(HV_VERSION)} → ${esc(gh.tag.replace(/^v/i, ''))} · Release notes on GitHub</small></span><ha-icon class="ch" icon="mdi:open-in-new"></ha-icon></button>`;
       for (const x of L) { const a = x.attributes || {}; h += `<button class="ur" data-act="updopen" data-id="${esc(x.entity_id)}"><span>${uIcon(x)}</span><span class="tx"><span class="l">${esc(hvUpdName(x))}</span><small>${esc(a.installed_version || '?')} → ${esc(a.latest_version || '?')}${hvUpdBusy(x) ? ' · Installing…' : ''}</small>${pbar(x)}</span><ha-icon class="ch" icon="mdi:chevron-right"></ha-icon></button>`; }
       h += '</div>'; if (last) h += `<div class="gh" style="text-transform:none">Last checked ${esc(ago(last))}</div>`; }
@@ -7358,7 +7461,7 @@ function hvOpenSettings(hub, app, from, goTo) {
   const wpSub = () => { const t = wpT(st.sub); return `<div class="ph"><button class="bk" data-act="wpback" aria-label="Back to Wallpaper"><ha-icon icon="mdi:chevron-left"></ha-icon>Wallpaper</button><span class="nt">${esc(t)}</span></div><h1 class="sbt">${esc(t)}</h1><div data-wpsub="${esc(st.sub)}"></div>`; };
   const caSub = () => { const e = st.sub.startsWith('ca:') ? hvCaOf(st.cfg, st.sub.slice(3)) : null, t = e ? (e.name || 'App') : st.sub === 'ca-new' ? 'New Custom App' : 'Custom App';
     return `<div class="ph"><button class="bk" data-act="caback" aria-label="Back to Custom Apps"><ha-icon icon="mdi:chevron-left"></ha-icon>Custom Apps</button><span class="nt">${esc(t)}</span></div><h1 class="sbt">${esc(t)}</h1><div data-casub></div>`; };
-  const subHtml = () => st.sub === 'ca-new' || st.sub.startsWith('ca:') ? caSub() : st.sub.startsWith('wp-') ? wpSub() : st.sub === 'about' ? aboutHtml() : st.sub === 'update' ? updHtml() : st.sub.startsWith('upd:') ? updDetail(st.sub.slice(4)) : '';
+  const subHtml = () => st.sub === 'customapps' ? customAppsSub() : st.sub === 'ca-new' || (st.sub && st.sub.startsWith('ca:')) ? caSub() : st.sub && st.sub.startsWith('wp-') ? wpSub() : st.sub === 'about' ? aboutHtml() : st.sub === 'update' ? updHtml() : st.sub && st.sub.startsWith('upd:') ? updDetail(st.sub.slice(4)) : st.sub && st.sub.startsWith('nhv:') ? appNhvHtml(st.sub.slice(4)) : st.sub && st.sub.startsWith('int:') ? appIntHtml(st.sub.slice(4)) : '';
   const subGo = v => { st.sub = v; st.ucf = null; paintPane(); st.usig = subSig(); if (pane) pane.scrollTop = 0; const bd = root && root.parentNode; if (bd && !st.wide) bd.scrollTop = 0; };
   const uCheck = async () => { if (!admin || st.uchk) return; const ids = Object.keys(H().states || {}).filter(k => k.startsWith('update.')); st.uchk = true; if (st.sub === 'update') paintPane();
     try { if (ids.length) await H().callService('homeassistant', 'update_entity', { entity_id: ids }); } catch (e) { flash('Couldn\'t check: ' + ((e && (e.message || e.code)) || e), true); }
@@ -7366,12 +7469,23 @@ function hvOpenSettings(hub, app, from, goTo) {
   const uInstall = async id => { const x = H().states[id]; if (!x) return; const f = Number((x.attributes || {}).supported_features) || 0, data = { entity_id: id }; if ((f & 8) && st.ubk) data.backup = true;
     st.ucf = null; st.uins = id; paintPane(); flash('Installing ' + hvUpdName(x) + '…');
     try { await H().callService('update', 'install', data); } catch (e) { flash('Not installed: ' + ((e && (e.message || e.code)) || e), true); } finally { st.uins = null; if (root && root.isConnected) paintPane(); } };
+  const uInstallAll = async () => { if (!admin) return; const L = hvUpdList(H()); st.ucf = null; if (!L.length) { paintPane(); return; }
+    st.uins = 'all'; paintPane(); flash('Installing ' + L.length + ' update' + (L.length === 1 ? '' : 's') + '…');
+    try { for (const x of L) { const f = Number((x.attributes || {}).supported_features) || 0, data = { entity_id: x.entity_id }; if ((f & 8) && st.ubk) data.backup = true; await H().callService('update', 'install', data); } }
+    catch (e) { flash('Not installed: ' + ((e && (e.message || e.code)) || e), true); } finally { st.uins = null; if (root && root.isConnected) paintPane(); } };
   const subAct = (a, t) => { if (a === 'about') { subGo('about'); aboutLive(); return true; } if (a === 'update') { subGo('update'); hvGhRel.load(false).then(() => { if (st.sub === 'update') paintPane(); paintSide(); }); if (admin && !st.uchk0) { st.uchk0 = true; uCheck(); } return true; }
-    if (a === 'wpback' || a === 'caback') { subGo(null); return true; }
+    if (a === 'wpback') { subGo(null); return true; }
+    if (a === 'caback') { subGo(st.page === 'apps' ? 'customapps' : null); return true; }
+    if (a === 'appsback') { subGo(null); return true; }
+    if (a === 'customapps') { subGo('customapps'); return true; }
+    if (a === 'appnhv') { subGo('nhv:' + t.dataset.id); return true; }
+    if (a === 'appint') { subGo('int:' + t.dataset.id); appsLoad(); return true; }
+    if (a === 'intopen') { const u = t.dataset.url; if (u) { try { if (window.history && history.pushState) { history.pushState(null, '', u); window.dispatchEvent(new CustomEvent('location-changed', { detail: { replace: false }, bubbles: true, composed: true })); } else location.assign(u); } catch (e) {} } return true; }
     if (a === 'subback') { subGo(null); return true; } if (a === 'subupd') { subGo('update'); return true; }
     if (a === 'updopen') { subGo('upd:' + t.dataset.id); return true; } if (a === 'updcheck') { uCheck(); return true; }
     if (a === 'updbackup') { st.ubk = !st.ubk; t.setAttribute('aria-checked', String(st.ubk)); return true; }
     if (a === 'updinstall') { const id = st.sub.slice(4), x = H().states[id]; if (x && hvUpdRank(x) >= 1 && hvUpdRank(x) <= 3) { st.ucf = id; paintPane(); } else uInstall(id); return true; } // Core / OS / Supervisor restart HA: ask first
+    if (a === 'updall') { st.ucf = 'all'; paintPane(); return true; } if (a === 'updallgo') { uInstallAll(); return true; }
     if (a === 'updgo') { uInstall(st.sub.slice(4)); return true; } if (a === 'updcancel') { st.ucf = null; paintPane(); return true; }
     if (a === 'updurl') { window.open(t.dataset.url, '_blank', 'noopener'); return true; } if (a === 'updgh') { const g = hvGhRel.newer(); if (g && g.url) window.open(g.url, '_blank', 'noopener'); return true; }
     return false; };
@@ -7381,13 +7495,13 @@ function hvOpenSettings(hub, app, from, goTo) {
   const subSig = () => { const S = H().states || {}; let o = ''; for (const k in S) if (k.startsWith('update.')) { const x = S[k], a = x.attributes || {}; o += k + x.state + a.latest_version + a.in_progress + a.update_percentage + ';'; }
     if (st.sub === 'about') { const c = st.cfg || {}, W = hvAboutPick(H(), 'wifi', c), B = hvAboutPick(H(), 'batt', c); o += '|' + sv(S, W.id) + sv(S, B.id) + (B.id ? sv(S, B.id.replace(/_battery_level$/, '_battery_state')) : '') + W.cands.length + B.cands.length + (H().config || {}).version; } return o; };
   const paintSide = () => { if (list) list.innerHTML = sideHtml(); };
-  const paintPane = () => { if (!pane) return; const sy = pane.scrollTop; for (const f of forms.values()) f.remove(); if (ssPick) ssPick.remove(); if (fPick) fPick.remove(); pane.innerHTML = paneHtml(); ssMount(); fMount(); wpMount(); caMount(); pane.scrollTop = sy; formsMount(); pvPaint(hvBgLevel(st.cfg || {})); albCheck(); };
+  const paintPane = () => { if (!pane) return; const sy = pane.scrollTop; for (const f of forms.values()) f.remove(); if (ssPick) ssPick.remove(); if (fPick) fPick.remove(); pane.innerHTML = paneHtml(); ssMount(); fMount(); wpMount(); caMount(); pane.scrollTop = sy; formsMount(); if ((st.wide ? (st.page || 'general') : st.page) === 'apps') appsLoad(); pvPaint(hvBgLevel(st.cfg || {})); albCheck(); };
   const paint = () => { if (!root) return;
     if (!st.ready) { root.classList.remove('pg'); list.innerHTML = '<div class="grp"><div class="empty">Loading…</div></div>'; pane.innerHTML = ''; return; }
     if (st.nohub) { root.classList.add('nohub', 'pg'); root.classList.remove('wide'); side.style.display = 'none';
       pane.innerHTML = `<div class="ph"><span class="nt">Settings</span></div><div class="intro"><span class="sq" style="--c:#8e8e93"><ha-icon icon="mdi:cog"></ha-icon></span><b>No Home Screen here</b><p>There is no NotHomeView Home Screen card on this dashboard, so there are no Home Screen settings to change. Add one in edit mode (Add card › NotHomeView Hub).</p></div><div class="grp">${rowHtml('@edit', null, {}, false)}</div>`; return; }
     root.classList.toggle('pg', !!st.page); paintSide(); paintPane(); };
-  const go = id => { st.sub = null; st.page = id; root.classList.toggle('pg', !!id); paintSide(); paintPane(); if (pane && !st.wide) { pane.scrollTop = 0; const bd = root.parentNode; if (bd) bd.scrollTop = 0; } };
+  const go = id => { if (id === 'customapps') { st.page = 'apps'; st.sub = 'customapps'; } else { st.sub = null; st.page = id; } root.classList.toggle('pg', !!id); paintSide(); paintPane(); if (pane && !st.wide) { pane.scrollTop = 0; const bd = root.parentNode; if (bd) bd.scrollTop = 0; } };
   const albCheck = () => { const d = data(), au = String(d.photo_album_url || '').trim(); if (d.photo_source_mode !== 'album' || !au || !hvAlbumProv(au) || (st.alb && st.alb.url === au) || st.albQ === au) return;
     st.albQ = au; hvAlbumLoad(H(), au).then(r => { if (st.albQ !== au) return; st.alb = Object.assign({ url: au }, r); delete st.alb.ids; st.albQ = null; const sm = root && root.querySelector('[data-k="photo_album_url"] small'); if (sm) sm.textContent = help('photo_album_url'); }).catch(() => { st.albQ = null; }); };
   const close = () => s && s.close();
@@ -7859,7 +7973,7 @@ const hvBgLevel = c => { c = c || {}; const l = Number(c.bg_blur_level); if (c.b
 
 class HVHubCard extends HTMLElement {
   constructor() { super(); this.attachShadow({ mode: 'open' }); this._layer = 0; }
-  static get defaults() { return { theme: 'night', person: '', morning_start: 5, afternoon_start: 12, evening_start: 17, greeting_morning: 'Good morning', greeting_afternoon: 'Good afternoon',
+  static get defaults() { return { theme: HV_THEME_DEFAULT, person: '', morning_start: 5, afternoon_start: 12, evening_start: 17, greeting_morning: 'Good morning', greeting_afternoon: 'Good afternoon',
     greeting_evening: 'Good evening', photo_source_mode: 'media', photo_album_url: '', photo_source: '', photo_interval: 25, photo_order: 'random', blur: 32, dim: 0.32, bg_blur_level: 3, photo_backdrop: true, bg_freeze: true, photo_tap: 'viewer', photo_viewer_nav: true, photo_viewer_swipe: true, photo_viewer_add: true, photo_gallery_upload: true, photo_viewer_pause: true, photo_label: 'Photos', photo_max_aspect: 2.6,
     show_calendar: true, calendar_size: 'full', calendar_layout: 'wide', calendar_columns: 3, calendar_days: 7, calendar_title: 'Calendar', calendar_min_height: 240, max_icon: 140, edge_sidebar: true, ss_hold: true, weather_entity: '', photo_size: 'wide', side_portrait: 'below', side_sizes: '', row_units: 3, block_pull_refresh: true, calendar_rows: 'auto', swipe_screensaver: 'auto', swipe_open_home: false, show_homie: false, full_height_popups: true, popup_edit: true, assistant_enabled: false, assistant_pipeline: 'preferred', assistant_theme: 'same', assistant_button: true, assistant_speak: true, assistant_auto_listen: true, assistant_orb: true, assistant_face: 'orb', assistant_continue: true, assistant_silence_timeout: 5, assistant_end_of_speech_pause: 2, assistant_history_retention: 'forever', assistant_dismiss_phrases: "thank you, thanks, thanks jarvis, thank you jarvis, thanks homey, thank you homey, thanks homie, thank you homie, goodbye, bye, good bye, that's all, that's it, never mind, nevermind, stop, cancel, no thanks, I'm done", assistant_quiet_volume_below: 5, assistant_quiet_start: '23:30', assistant_quiet_end: '10:00', timer_sound: true }; }
   static getStubConfig(hass) { return { apps: HUB_APPS.map(a => Object.assign({}, a)), calendar_entities: Object.keys((hass && hass.states) || {}).filter(k => k.startsWith('calendar.')).slice(0, 3) }; }
@@ -7875,7 +7989,7 @@ class HVHubCard extends HTMLElement {
     this._config = nc;
     this._sig = null; if (old && (old.photo_source !== c.photo_source || old.photo_order !== c.photo_order || old.photo_source_mode !== c.photo_source_mode || old.photo_album_url !== c.photo_album_url)) { this._ids = null; this._idsExp = 0; this._loadPhotos(); }
     this._calSig = null; this._render(); this._restartTimer(); if (this.isConnected) this._gBind(); }
-  set hass(h) { const first = !this._hass; this._hass = h; this._render(); if (this._cal) this._cal.hass = h; (this._sideEls || []).forEach(e => { e._card.hass = this._simHass(h);
+  set hass(h) { const first = !this._hass; this._hass = h; this._render(); if (this._cal) this._cal.hass = h; (this._sideEls || []).forEach(e => { e._card.hass = this._simHass(h); if (e._setLab) e._setLab();
       if (e._fit) { const o = hubTileOpt(this._config, this._sideEls.indexOf(e)); if (o.sky === true && hvSky(h, o.sky_entity, window.__hvSimScene).sig !== e._skySig) requestAnimationFrame(() => this._fitTile(e)); } }); if (first) { this._loadPhotos(); this._loadCfg(); setTimeout(hvWwSync, 0); } if (this._sheetO) this._sheetO.hass = h; this._hwPaint(); }
   get hass() { return this._hass; }
   set editMode(v) { const was = !!this._edit; this._edit = v; this._layout(); this._ssPaint(); if (v) hvEditChromeSoon(this);
@@ -8172,7 +8286,11 @@ class HVHubCard extends HTMLElement {
         const wrap = document.createElement('div'); wrap.className = 'tile'; let el; try { el = helpers ? helpers.createCardElement(cfg) : document.createElement('div'); } catch (e) { el = document.createElement('div'); el.textContent = String(e); }
         if (this._hass) el.hass = this._hass; if (this._edit != null) el.editMode = this._edit; if (el.tagName && el.tagName.startsWith('HOMEVIEW-')) { el.setAttribute('floor', ''); if ((cfg.type || '') !== HV_HOMIE_T) { el.setAttribute('hv-home', ''); wrap.classList.add('hv-hs'); } }
         el._hvHub = this;
-        el.addEventListener('ll-rebuild', ev => { ev.stopPropagation(); wrap._dead = true; this._sideSig = null; this._makeSide(); }); wrap.appendChild(el); wrap._card = el; wrap._cfg = cfg;
+        el.addEventListener('ll-rebuild', ev => { ev.stopPropagation(); wrap._dead = true; this._sideSig = null; this._makeSide(); });
+        const tb = document.createElement('div'); tb.className = 'tb'; tb.appendChild(el);
+        const lb = document.createElement('span'); lb.className = 'lb';
+        wrap.appendChild(tb); wrap.appendChild(lb); wrap._card = el; wrap._cfg = cfg; wrap._tb = tb; wrap._lb = lb;
+        wrap._setLab = () => { const i = (this._sideEls || []).indexOf(wrap); lb.textContent = hvHubSideLabel(this, i, cfg); };
         wrap.addEventListener('click', ev => { const o = hubTileOpt(this._config, this._sideEls.indexOf(wrap));
           // 1.32.0: tapping the body of a Now Playing tile opens the Music sheet (like the Music app); its buttons, seek bar and volume / output popovers keep their own taps
           if (!o.enlarge && !this._edit && !this._sheetO && wrap._cfg.type === 'custom:homeview-now-playing-card' && o.tap !== 'none') { const p0 = ev.composedPath();
@@ -8184,7 +8302,7 @@ class HVHubCard extends HTMLElement {
           ev.stopPropagation(); this._openTileSheet(wrap._cfg, o); });
         if (window.ResizeObserver) { wrap._ro = new ResizeObserver(() => { if (wrap._fit) requestAnimationFrame(() => this._fitTile(wrap)); }); setTimeout(() => { const r = el.shadowRoot && el.shadowRoot.querySelector('#root'); if (r) wrap._ro.observe(r); }, 400); }
         return wrap; }); pool.forEach(x => x.w.remove()); }
-    (this._sideEls || []).forEach((w, i) => { const o = hubTileOpt(c, i), t = (w._cfg && w._cfg.type) || ''; w._fit = o.fit === 'contain' || (o.fit !== 'fill' && /^picture/.test(t)); });
+    (this._sideEls || []).forEach((w, i) => { const o = hubTileOpt(c, i), t = (w._cfg && w._cfg.type) || ''; w._fit = o.fit === 'contain' || (o.fit !== 'fill' && /^picture/.test(t)); if (w._setLab) w._setLab(); });
     if (this._rowEl) this._layout(); // placement (and order) is _layout's: only tiles that change place are moved
   }
   _tileFitOpt(o) { const sky = o.sky === true ? hvSky(this._hass, o.sky_entity, window.__hvSimScene) : null;
@@ -8192,14 +8310,16 @@ class HVHubCard extends HTMLElement {
   // test hook only: window.__hvSimScene = 'rainy' | 'night' | ... previews a house scene in the tiles (never set by the cards)
   _simHass(h) { const sim = window.__hvSimScene; if (!sim || !h) return h; const id = 'sensor.house_scene', s0 = h.states[id] || { entity_id: id, attributes: {} };
     return Object.assign({}, h, { states: Object.assign({}, h.states, { [id]: Object.assign({}, s0, { state: sim }) }) }); }
-  _fitTile(w) { if (this._sheetO || !w.isConnected) return; const W = w.offsetWidth, H = w.offsetHeight; if (!W || !H) return;
+  _fitTile(w) { if (this._sheetO || !w.isConnected) return; const box = w._tb || w.querySelector('.tb') || w, W = box.offsetWidth, H = box.offsetHeight; if (!W || !H) return;
     const o = hubTileOpt(this._config, (this._sideEls || []).indexOf(w)), fo = this._tileFitOpt(o); w._skySig = fo.sky ? fo.sky.sig : '';
     if (!hvFitCard(w._card, W, H, Math.round(Math.min(W, H) * 0.06), fo)) setTimeout(() => this._fitTile(w), 400); }
   // 1.32.0 calendar sizes: full (2 rows, classic) / row (1 row) below the tiles, or a tile in the tile row (wide = two wide, tile = Up next)
   _calMode() { const s = this._config.calendar_size; return s === 'row' || s === 'wide' || s === 'wide2' || s === 'tile' ? s : 'full'; }
   _calTiled() { const m = this._calMode(); return m === 'wide' || m === 'wide2' || m === 'tile'; }
   _placeCal() { const cw = this._w && this._w.querySelector('.calw'); if (!cw || !this._cal) return; const tiled = this._calTiled(), m = this._calMode();
-    if (tiled) { let t = this._calTile; if (!t) { t = this._calTile = document.createElement('div'); t.className = 'tile calt'; } if (this._cal.parentNode !== t) t.appendChild(this._cal); }
+    if (tiled) { let t = this._calTile; if (!t) { t = this._calTile = document.createElement('div'); t.className = 'tile calt'; const tb = document.createElement('div'); tb.className = 'tb'; const lb = document.createElement('span'); lb.className = 'lb'; t.appendChild(tb); t.appendChild(lb); t._tb = tb; t._lb = lb; }
+      if (t._lb) t._lb.textContent = (this._config && this._config.calendar_title) || 'Calendar';
+      const host = t._tb || t; if (this._cal.parentNode !== host) host.appendChild(this._cal); }
     else { if (this._calTile && this._calTile.parentNode) this._calTile.remove(); if (this._cal.parentNode !== cw) cw.appendChild(this._cal); }
     cw.hidden = tiled; cw.classList.toggle('crow', m === 'row'); }
   _calGeo() { const w = this._w; if (!w) return null; const S = w.style, n = k => parseFloat(S.getPropertyValue(k)) || 0, U = n('--ph'), tg = n('--cg2'), gap = n('--gap'), pb = n('--pb');
