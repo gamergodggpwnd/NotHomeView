@@ -8094,7 +8094,7 @@ const hvHomieBg = cols => { const bg = hvSsHex(cols && cols.bg) || '#1a1a1a', rf
 // what the Home Screen shows behind its apps: m 'photos' (the blurred Photos tile photo), 'face' (the parked screensaver face) or 'x' (css or a media picture)
 function hvInnerMode(c, style) { const I = hvInner(c), st = style || 'photo';
   if (I.match) { if (st === 'photo') return { m: 'photos' }; if (st === 'homie') return { m: 'x', css: hvHomieBg(hvSsColors.get('homie')) };
-    if (st === 'glass') return { m: 'x', css: 'linear-gradient(160deg,#6461e6 0%,#5856dd 45%,#4c49d0 100%)' }; return { m: 'face', style: st }; }
+    if (st === 'glass') return { m: 'x', css: 'linear-gradient(160deg,#6461e6 0%,#5856dd 45%,#4c49d0 100%)' }; if (st === 'cam2' || st === 'cam4') return { m: 'x', css: 'linear-gradient(180deg,#1c1c1e 0%,#000 100%)' }; return { m: 'face', style: st }; }
   if (I.type === 'photos') return { m: 'photos' }; if (I.type === 'gradient') return { m: 'x', css: hvGradCss(I.value) }; if (I.type === 'color') return { m: 'x', css: hvSsHex(I.value) || '#1c1c1e' };
   return { m: 'x', media: typeof I.value === 'string' ? I.value : '', css: '' }; }
 const HV_BG_LEVELS = [null,
@@ -11095,7 +11095,9 @@ const HV_SSS = [
   { v: 'homie', l: 'Homey', s: 'Homey waves, dances, and reacts to the weather' },
   { v: 'glass', l: 'Glass', s: 'Live glass tiles you can use; swipe up for Home' },
   { v: 'modular', l: 'Modular', s: 'Four widgets in a stacked or 2×2 layout' },
-  { v: 'nightstand', l: 'Nightstand', s: 'A big, dim clock on black for the bedside' }];
+  { v: 'nightstand', l: 'Nightstand', s: 'A big, dim clock on black for the bedside' },
+  { v: 'cam2', l: 'Two cameras', s: 'Two live cameras side by side, with the time' },
+  { v: 'cam4', l: 'Four cameras', s: 'Four live cameras in a 2×2 grid, with the time' }];
 const HV_SSS_V = HV_SSS.map(x => x.v);
 // Meaningful colours per style (defaults match the reference designs). Only non-defaults are persisted.
 const HV_SS_COLS = {
@@ -11130,7 +11132,8 @@ const HV_SS_COLS = {
     { k: 'body', l: 'Homey: house walls', d: '#fffbf2' },
     { k: 'roof', l: 'Homey: roof, chimney and shoes', d: '#6ebcf4' },
     { k: 'limb', l: 'Homey: arms and legs', d: '#363a3d' }],
-  nightstand: [{ k: 'text', l: 'Clock', d: '#d42d22' }] };
+  nightstand: [{ k: 'text', l: 'Clock', d: '#d42d22' }],
+  cam2: [], cam4: [] };
 const HV_SS_SWATCH = ['#ffffff', '#0b0b0c', '#97a9af', '#5c9a68', '#5ac8fa', '#1aa3b8', '#0a84ff', '#f06aa8', '#5b78f0', '#6c7cf2', '#dcbdba', '#6d3431', '#ea5ab4', '#ffd166', '#118ab2', '#073b4c', '#ef476f'];
 const hvSsDeep = (root, sel, d = 0) => { if (!root || d > 12) return null;
   if (root.shadowRoot) { const r = hvSsDeep(root.shadowRoot, sel, d + 1); if (r) return r; }
@@ -11712,6 +11715,72 @@ const HV_SS_FACE_CSS = `
 .nightstand .na svg{width:1em;height:1em}.nightstand .na[hidden],.nightstand .nd[hidden],.nightstand .s[hidden]{display:none}
 @container (max-aspect-ratio: 4/5){.nightstand .nt{flex-direction:column;font-size:42cqmin;line-height:.84}.nightstand .nt .c{display:none}.nightstand .nt .s{align-self:center;font-size:.24em;margin:.25em 0 0}
  .nightstand.mono .nt{font-size:36cqmin}}
+/* ---- two / four cameras: true 16:9 tiles (560×315 on an 11" landscape screen, 16 gap, 26 radius); --u is one design pixel */
+.f.cam{background:#000;color:#fff}
+.f.cam .cw{position:absolute;inset:0;--tw:min(46.9cqw,67.2cqh);--u:calc(var(--tw) / 560);--th:calc(var(--tw) * .5625);--g:calc(var(--u) * 16);--l:calc(50% - var(--tw) - var(--g) / 2)}
+.f.cam .cg{position:absolute;left:var(--l);display:grid;grid-template-columns:repeat(2,var(--tw));grid-auto-rows:var(--th);gap:var(--g)}
+.f.cam4 .cg{top:calc(var(--u) * 24)}
+.f.cam2 .cg{top:calc(50cqh - var(--th) / 2 + var(--u) * 30)}
+.f.cam .ct{position:relative;border-radius:calc(var(--u) * 26);overflow:hidden;background:linear-gradient(160deg,#2c2c2e,#161618);isolation:isolate;transform:translateZ(0)}
+.f.cam .cm,.f.cam .cm img,.f.cam .cm ha-camera-stream{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+.f.cam .cm img{opacity:0;transition:opacity .3s}.f.cam .cm img.ok{opacity:1}
+.f.cam .cm ha-camera-stream{opacity:0;transition:opacity .5s;--video-max-height:100%}.f.cam .cm ha-camera-stream.on{opacity:1}
+.f.cam .ct::after{content:'';position:absolute;inset:0;z-index:1;background:linear-gradient(180deg,rgba(0,0,0,.38) 0,rgba(0,0,0,0) 30%,rgba(0,0,0,0) 62%,rgba(0,0,0,.5) 100%)}
+.f.cam .cb{position:absolute;z-index:2;left:calc(var(--u) * 16);top:calc(var(--u) * 15);right:calc(var(--u) * 16);display:flex;align-items:center;gap:calc(var(--u) * 9);min-width:0}
+.f.cam .lv{flex:none;display:flex;align-items:center;gap:calc(var(--u) * 5);padding:calc(var(--u) * 4) calc(var(--u) * 8);border-radius:calc(var(--u) * 7);background:#ff3b30;font-size:calc(var(--u) * 12);font-weight:700;letter-spacing:.06em;line-height:1}
+.f.cam .lv::before{content:'';width:calc(var(--u) * 6);height:calc(var(--u) * 6);border-radius:50%;background:#fff}
+.f.cam .lv.wait{background:rgba(255,59,48,.55)}.f.cam .lv.off{background:rgba(120,120,128,.7)}.f.cam .lv[hidden]{display:none}
+.f.cam .cn{font-size:calc(var(--u) * 17);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 3px rgba(0,0,0,.45)}
+.f.cam .cs{position:absolute;z-index:2;left:calc(var(--u) * 16);bottom:calc(var(--u) * 18);max-width:calc(100% - var(--u) * 150);font-size:calc(var(--u) * 15);font-weight:500;color:rgba(255,255,255,.92);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 3px rgba(0,0,0,.45)}
+.f.cam .cx{position:absolute;z-index:2;right:calc(var(--u) * 14);bottom:calc(var(--u) * 14);display:flex;gap:calc(var(--u) * 10)}
+.f.cam button{all:unset;box-sizing:border-box;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.f.cam .cx button{width:calc(var(--u) * 44);height:calc(var(--u) * 44);border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;background:rgba(255,255,255,.14);
+ -webkit-backdrop-filter:blur(2.5px) saturate(1.15);backdrop-filter:blur(2.5px) saturate(1.15);box-shadow:inset 0 0 0 1px rgba(255,255,255,.3),inset 0 1px 0 rgba(255,255,255,.35);transition:background .2s,transform .12s}
+.f.cam .cx button[hidden]{display:none}.f.cam .cx button svg{width:48%;height:48%}
+.f.cam .cx button.on{background:rgba(255,255,255,.88);color:#1c1c1e}.f.cam .cx button.arm{background:#ff9f0a;color:#fff}
+.f.cam.live .cx button:active,.f.cam.live .home:active{transform:scale(.92)}
+.f.cam .cck{position:absolute;z-index:3;display:flex;flex-direction:column;line-height:1}
+.f.cam .cck .t{font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.01em}.f.cam .cck .d{font-weight:500;opacity:.8}
+.f.cam.noclk .cck{display:none}
+/* landscape 4: a clear glass clock in the top-right tile's corner */
+.f.cam4 .cck{top:calc(var(--u) * 38);right:calc(var(--l) + var(--u) * 14);align-items:flex-end;gap:calc(var(--u) * 4);padding:calc(var(--u) * 9) calc(var(--u) * 16) calc(var(--u) * 10);border-radius:calc(var(--u) * 20);
+ background:linear-gradient(160deg,rgba(255,255,255,.08),rgba(255,255,255,.02));-webkit-backdrop-filter:blur(2.5px) saturate(1.15);backdrop-filter:blur(2.5px) saturate(1.15);box-shadow:inset 0 0 0 1px rgba(255,255,255,.32),inset 0 1px 0 rgba(255,255,255,.4),0 4px 18px rgba(0,0,0,.18)}
+.f.cam4 .cck .t{font-size:calc(var(--u) * 34)}.f.cam4 .cck .d{font-size:calc(var(--u) * 13);order:-1}
+/* landscape 2: a big clock above the tiles */
+.f.cam2 .cck{left:var(--l);bottom:calc(50cqh + var(--th) / 2 - var(--u) * 6);gap:calc(var(--u) * 6)}
+.f.cam2 .cck .t{font-size:calc(var(--u) * 92)}.f.cam2 .cck .d{font-size:calc(var(--u) * 22);order:-1}
+/* Home, bottom-left in the black strip */
+.f.cam .home{position:absolute;z-index:3;left:var(--l);display:flex;align-items:center;gap:calc(var(--u) * 8);height:calc(var(--u) * 48);padding:0 calc(var(--u) * 20) 0 calc(var(--u) * 16);border-radius:calc(var(--u) * 14);
+ background:rgba(255,255,255,.12);box-shadow:inset 0 0 0 1px rgba(255,255,255,.2);font-size:calc(var(--u) * 17);font-weight:600;color:#fff;transition:transform .12s}
+.f.cam .home svg{width:calc(var(--u) * 22);height:calc(var(--u) * 22)}
+.f.cam4 .home{bottom:calc((100cqh - var(--u) * 670) / 2 - var(--u) * 24)}
+.f.cam2 .home{bottom:calc(25cqh - var(--th) / 4 - var(--u) * 39)}
+/* a square-ish preview card (Customize, the switcher): keep clear of its rounded corners */
+@container (min-aspect-ratio: 4/5) and (max-aspect-ratio: 6/5) {
+ .f.cam .cw{--tw:40cqw}
+ .f.cam4 .cg{top:calc(50cqh - var(--th) - var(--g) / 2 - 4cqh)}
+ .f.cam4 .cck{top:calc(50cqh - var(--th) - var(--g) / 2 - 4cqh + var(--u) * 14)}
+ .f.cam4 .home{bottom:calc(50cqh - var(--th) - var(--g) / 2 - 4cqh - var(--u) * 24)}
+}
+/* portrait: a large clock and Home on top, the tiles below */
+@container (max-aspect-ratio: 4/5) {
+ .f.cam4 .cw{--tw:min(46.45cqw,31cqh);--l:calc(50% - var(--tw) - var(--g) / 2)}
+ .f.cam2 .cw{--tw:min(94.25cqw,57cqh);--l:calc(50% - var(--tw) / 2)}
+ .f.cam2 .cg{grid-template-columns:var(--tw)}
+ .f.cam .cg{top:auto;bottom:calc(var(--u) * 24)}
+ .f.cam .cck,.f.cam4 .cck,.f.cam2 .cck{left:50%;right:auto;bottom:auto;top:calc((100cqh - var(--u) * 24 - var(--th) * var(--rows,2) - var(--g) * (var(--rows,2) - 1)) / 2 + var(--u) * 20);transform:translate(-50%,-50%);align-items:center;padding:0;background:none;box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none;gap:calc(var(--u) * 8)}
+ .f.cam .cck .t,.f.cam4 .cck .t,.f.cam2 .cck .t{font-size:min(calc(var(--u) * 190),24cqw)}.f.cam .cck .d,.f.cam4 .cck .d,.f.cam2 .cck .d{font-size:min(calc(var(--u) * 34),4.4cqw)}
+ .f.cam .home,.f.cam4 .home,.f.cam2 .home{bottom:auto;top:calc(var(--u) * 24);--u:max(calc(var(--tw) / 560), .105cqw)}
+}
+/* one camera full screen (its button or a tap on the picture) */
+.f.cam .cw.hasfull .cg{inset:0;left:0;top:0;bottom:0;display:block}
+.f.cam .cw.hasfull .ct{display:none}
+.f.cam .cw.hasfull .ct.full{display:block;position:absolute;inset:0;border-radius:0;background:#000}
+.f.cam .ct.full .cm img,.f.cam .ct.full .cm ha-camera-stream{object-fit:contain}
+.f.cam .cw.hasfull .cck,.f.cam .cw.hasfull .home{display:none}
+.f.cam .ct.full .cb{top:calc(var(--u) * 24 + env(safe-area-inset-top,0px));left:calc(var(--u) * 24)}.f.cam .ct.full .cs{left:calc(var(--u) * 24);bottom:calc(var(--u) * 28 + env(safe-area-inset-bottom,0px))}
+.f.cam .ct.full .cx{right:calc(var(--u) * 24);bottom:calc(var(--u) * 24 + env(safe-area-inset-bottom,0px))}
+.f.cam.live .hb,.f.cam.live .hb *,.f.cam.live .ct{pointer-events:auto !important}
 ` + HV_HOMIE_CSS;
 const hvSsSvgNS = 'http://www.w3.org/2000/svg';
 // glassy digit shapes (box 100 x 140): [x, y, w, h, radius, rotate]
@@ -11741,6 +11810,58 @@ class HVSsFace {
     const s = q('.s'); s.hidden = !c.seconds; s.textContent = String(d.getSeconds()).padStart(2, '0');
     const nd = q('.nd'); nd.hidden = !c.date; nd.textContent = `${d.toLocaleDateString(L, { weekday: 'short' })} ${d.toLocaleDateString(L, { month: 'short' })} ${d.getDate()}`.replace(/\./g, '');
     const al = c.alarm ? hvNsAlarm(hass, c.alarm_entity) : null, na = q('.na'); na.hidden = !al; if (al) na.lastChild.textContent = 'Alarm ' + al.toLocaleTimeString(L, { hour: 'numeric', minute: '2-digit', hour12: !h24 }); }
+  // ---- two / four cameras (settings: hvCamCfg). Live streams only on the screensaver itself (this.live); previews show snapshots.
+  _b_cam2() { this._bCams(2); }
+  _b_cam4() { this._bCams(4); }
+  _u_cam2(d, hass) { this._uCams(d, hass); }
+  _u_cam4(d, hass) { this._uCams(d, hass); }
+  _bCams(n) { this._n = n; this._cs = []; let t = '';
+    for (let i = 0; i < n; i++) { t += `<div class="ct" data-i="${i}"><div class="cm"><img alt="" draggable="false"></div><div class="cb"><span class="lv">LIVE</span><b class="cn"></b></div><div class="cs"></div><div class="cx"><button class="hb ca" data-a="ctx" aria-label="Action"></button><button class="hb cf" data-a="full" aria-label="Full screen">${hvCamSvg('full')}</button></div></div>`; this._cs.push({}); }
+    this.el.classList.add('cam');
+    this.el.innerHTML = `<div class="cw"><div class="cg">${t}</div><div class="cck"><span class="d"></span><b class="t"></b></div><button class="hb home" data-a="home" aria-label="Home">${hvCamSvg('home')}<span>Home</span></button></div>`;
+    this.el.querySelectorAll('.cm img').forEach(im => { im.addEventListener('load', () => im.classList.add('ok')); im.addEventListener('error', () => im.classList.remove('ok')); });
+    this.el.addEventListener('click', ev => this._camClick(ev)); }
+  _uCams(d, hass) { const c = hvCamCfg(this.face, hass, this.s), S = (hass && hass.states) || {}, L = (hass && hass.locale && hass.locale.language) || undefined, now = Date.now(), el = this.el;
+    const set = (n, s, v) => { if (n && n.textContent !== v) n.textContent = v; };
+    el.classList.toggle('noclk', !c.clock);
+    const h24 = !!(hass && hass.locale && hass.locale.time_format === '24');
+    set(el.querySelector('.cck .t'), 0, d.toLocaleTimeString(L, { hour: 'numeric', minute: '2-digit', hour12: !h24 }).replace(/\s?[AP]M$/i, ''));
+    set(el.querySelector('.cck .d'), 0, `${d.toLocaleDateString(L, { weekday: 'short' })} ${d.toLocaleDateString(L, { month: 'short' })} ${d.getDate()}`.replace(/\./g, ''));
+    el.querySelectorAll('.ct').forEach((tile, i) => { const cam = c.cams[i] || {}, st = cam.entity ? S[cam.entity] : null, s = this._cs[i] || (this._cs[i] = {}), off = !st || UNAVAILABLE.includes(st.state), q = x => tile.querySelector(x);
+      set(q('.cn'), 0, cam.name || (st && st.attributes && st.attributes.friendly_name) || (cam.entity ? cam.entity.split('.')[1].replace(/_/g, ' ') : 'No camera'));
+      const lv = q('.lv'), live = !!(this.live && c.live && !off), on = !!(s.v && s.v.classList.contains('on'));
+      lv.hidden = !c.live && !off; lv.classList.toggle('off', off); set(lv, 0, off ? 'OFFLINE' : 'LIVE'); lv.classList.toggle('wait', live && !on);
+      // snapshot under the stream (every `refresh` s; only once in a preview)
+      const im = q('.cm img');
+      if (st && (s.e !== cam.entity || (!this.thumb && now - (s.at || 0) > c.refresh * 1000))) { const u = hvCamSrc(hass, cam.entity); s.e = cam.entity; s.at = now; if (u) im.src = this.thumb || /^data:/.test(u) ? u : u + (u.indexOf('?') < 0 ? '?' : '&') + '_hv=' + Math.floor(now / 1000); else im.removeAttribute('src'); }
+      if (!st && s.e) { s.e = null; im.removeAttribute('src'); im.classList.remove('ok'); }
+      if (live) this._camStream(i, tile, hass, cam, st); else if (s.v) { try { s.v.remove(); } catch (e) {} s.v = null; s.ve = null; }
+      const arm = this._arm && this._arm.i === i && now - this._arm.at < 3000 ? this._arm : null; if (this._arm && !arm && this._arm.i === i) this._arm = null;
+      set(q('.cs'), 0, arm ? arm.msg : hvCamStatus(hass, cam, st));
+      const a = hvCamAct(hass, cam, s.muted !== false), b = q('.ca'); b.hidden = !a;
+      if (a) { if (b.dataset.k !== a.svg) { b.dataset.k = a.svg; b.innerHTML = hvCamSvg(a.svg); } b.setAttribute('aria-label', a.l); b.classList.toggle('on', !!a.on); b.classList.toggle('arm', !!arm); }
+      const full = tile.classList.contains('full'), fb = q('.cf'), fk = full ? 'exit' : 'full'; if (fb.dataset.k !== fk) { fb.dataset.k = fk; fb.innerHTML = hvCamSvg(fk); fb.setAttribute('aria-label', full ? 'Exit full screen' : 'Full screen'); } }); }
+  _camStream(i, tile, hass, cam, st) { const s = this._cs[i];
+    if (s.v && s.ve === cam.entity) { s.v.hass = hass; return; }
+    if (s.v) { try { s.v.remove(); } catch (e) {} s.v = null; }
+    if (s.ve === cam.entity && s.pend) return; s.ve = cam.entity; s.pend = true;
+    const make = () => { s.pend = false; if (s.ve !== cam.entity || !this.el.isConnected || s.v) return;
+      const v = document.createElement('ha-camera-stream'); v.hass = hass; v.stateObj = st; v.muted = s.muted !== false; v.controls = false; v.allowExoPlayer = false; v.fitMode = tile.classList.contains('full') ? 'contain' : 'cover'; if (s.muted !== false) v.setAttribute('muted', '');
+      v.addEventListener('load', () => { v.classList.add('on'); try { hvCamMuteOutline(v); } catch (e) {} }, true);
+      tile.querySelector('.cm').appendChild(v); s.v = v; };
+    if (customElements.get('ha-camera-stream')) make(); else HVCameraCard._loadStream().then(ok => { if (ok) make(); else s.pend = false; }); }
+  _camClick(ev) { if (!this.live) return; const b = ev.target && ev.target.closest && ev.target.closest('button'), tile = ev.target && ev.target.closest && ev.target.closest('.ct'), hass = (typeof hvSsOv !== 'undefined' && hvSsOv.hass()) || null;
+    if (b && b.dataset.a === 'home') { ev.stopPropagation(); try { hvSsOv._openHomeFromGlass(); } catch (e) {} return; }
+    if (!tile) return; const i = Number(tile.dataset.i), c = hvCamCfg(this.face, hass, this.s), cam = c.cams[i] || {}, s = this._cs[i]; ev.stopPropagation();
+    if (b && b.dataset.a === 'ctx') { const a = hvCamAct(hass, cam, s.muted !== false); if (!a) return;
+      if (a.k === 'mute') { s.muted = !(s.muted !== false); if (s.v) { s.v.muted = s.muted; if (s.muted) s.v.setAttribute('muted', ''); else s.v.removeAttribute('muted'); } }
+      else if (a.confirm && !(this._arm && this._arm.i === i && Date.now() - this._arm.at < 3000)) this._arm = { i, at: Date.now(), msg: 'Tap again to ' + a.l.toLowerCase() };
+      else { this._arm = null; try { hass.callService(a.d, a.s, { entity_id: cam.action }); } catch (e) {} }
+      this.update(hass, new Date()); return; }
+    // the full-screen button, or a tap on the picture
+    const full = !tile.classList.contains('full'); this.el.querySelectorAll('.ct.full').forEach(t => t.classList.remove('full')); tile.classList.toggle('full', full); this.el.querySelector('.cw').classList.toggle('hasfull', full);
+    this._cs.forEach(x => { if (x.v) x.v.fitMode = 'cover'; }); if (full && s.v) s.v.fitMode = 'contain';
+    this.update(hass, new Date()); }
   // ---- info dashboard
   _b_info() { const f = this.el; f.innerHTML = `<div class="stg"><div class="lc"><div class="dd"><div class="dt"></div><div class="dn"></div></div>
     <div class="mu"><svg class="nt" viewBox="0 0 24 24"><path fill="var(--hv-ss-text,#fff)" d="M21 3v12.5a3.5 3.5 0 1 1-2-3.16V7H9v10.5A3.5 3.5 0 1 1 7 14.34V3h14z"/></svg><div class="art"></div><div class="tt"></div><div class="ar"></div><div class="pb"><i></i><span>Play</span></div></div></div>
@@ -11997,6 +12118,7 @@ const hvSsOv = {
     let z = parseInt(cs && cs.zIndex, 10); if (!(z > 0)) z = 1000;
     const overlayOp = run ? 1 : (isFinite(op) ? op : 1);
     if (st === 'glass') { this._mountGlass(w, z, overlayOp, run, force); return; }
+    if (HV_CAM_STYLES.includes(st)) { this._mountCams(w, z, overlayOp, run, st, cols, colKey); return; }
     const born = !this.host || this.style !== st || this.colKey !== colKey || !this.host.isConnected || this.host.parentNode !== w.parentNode;
     if (born) { this.hide();
       const h = document.createElement('div'); h.id = 'hv-ss-style'; h.setAttribute('aria-hidden', 'true'); h.inert = true; const sr = h.attachShadow({ mode: 'open' }); sr.innerHTML = `<style>${HV_SS_FACE_CSS}</style>`;
@@ -12040,6 +12162,18 @@ const hvSsOv = {
     else if (this.card) { try { this.card.hass = this.hass(); } catch (e) {} }
     this._wpHideMedia = true; try { this._parkWpMedia(w, true); } catch (e) {}
     this.host.style.cssText = `position:fixed;top:0;right:0;bottom:0;left:0;width:100%;height:100%;height:100dvh;z-index:${z + 1};pointer-events:auto;opacity:${overlayOp};transition:${born || run ? 'none' : 'opacity .4s linear'};transform:none;background:#4c49d0`; },
+  // Two / four cameras: an interactive layer like Glass (its buttons work, taps don't close it; Home does, long-press opens the switcher)
+  _mountCams(w, z, overlayOp, run, st, cols, colKey) { let fd = null; try { fd = hvSsFaces.active(); } catch (e) {} if (!fd || fd.style !== st) fd = { style: st };
+    const key = colKey + JSON.stringify([fd.cams, fd.live, fd.clock, fd.refresh]);
+    const born = !this.host || this.style !== st || this.colKey !== key || !this.host.isConnected || this.host.parentNode !== w.parentNode;
+    if (born) { this.hide();
+      const h = document.createElement('div'); h.id = 'hv-ss-style'; const sr = h.attachShadow({ mode: 'open' }); sr.innerHTML = `<style>${HV_SS_FACE_CSS}</style>`;
+      this.face = new HVSsFace(st); this.face.live = true; this.face.face = fd; this.face.el.classList.add('live'); this.face.applyColors(cols); sr.appendChild(this.face.el);
+      this.style = st; this.colKey = key; this.host = h; this._up = true; this._bornAt = Date.now(); this._userDismiss = false; (w.parentNode || document.body).appendChild(h);
+      try { if (typeof hvSsSwitch !== 'undefined') hvSsSwitch.hookGlass(h); } catch (e) {} try { hvSsKeep.on('glass'); hvSsKeep.on('style'); } catch (e) {} }
+    this._wpHideMedia = true; try { this._parkWpMedia(w, true); } catch (e) {}
+    this.host.style.cssText = `position:fixed;inset:0;z-index:${z + 1};pointer-events:auto;opacity:${overlayOp};transition:${born || run ? 'none' : 'opacity .4s linear'};-webkit-user-select:none;user-select:none`;
+    this.face.update(this.hass(), new Date()); },
   _wireGlass() { const h = this.host; if (!h || h.__hvGlassWired) return; h.__hvGlassWired = true;
     try { if (typeof hvSsSwitch !== 'undefined') hvSsSwitch.hookGlass(h); } catch (e) {}
     const onTile = ev => { const path = ev.composedPath ? ev.composedPath() : []; return path.some(n => n && n.classList && (n.classList.contains('t') || n.classList.contains('ed') || n.classList.contains('cv'))); };
@@ -12069,7 +12203,7 @@ const hvSsOv = {
     } catch (e) {} },
   start() { if (this.iv) return; this._hookStart(); this.iv = setInterval(() => { try { this._hookStart(); this.tick(); } catch (e) { /* next tick */ } try { hvSsHome.tick(); } catch (e) {} }, 250); } };
 
-const HV_SS_LABEL = { photo: 'PHOTO', info: 'INFO', fluid: 'FLUID', typo: 'ANALOG', digital: 'DIGITAL', whimsy: 'WHIMSY', homie: 'HOMEY', glass: 'GLASS', modular: 'MODULAR', nightstand: 'NIGHTSTAND' };
+const HV_SS_LABEL = { photo: 'PHOTO', info: 'INFO', fluid: 'FLUID', typo: 'ANALOG', digital: 'DIGITAL', whimsy: 'WHIMSY', homie: 'HOMEY', glass: 'GLASS', modular: 'MODULAR', nightstand: 'NIGHTSTAND', cam2: '2 CAMERAS', cam4: '4 CAMERAS' };
 const HV_SS_FONTS = [
   { v: 'system', l: 'System', f: 'system-ui,-apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif' },
   { v: 'rounded', l: 'Rounded', f: 'ui-rounded,"SF Pro Rounded","Hiragino Maru Gothic ProN",system-ui,sans-serif' },
@@ -12087,7 +12221,8 @@ const HV_SS_SLOT = {
   fluid: [{ id: 'bl', x: 3, y: 78, w: 28, h: 16 }, { id: 'br', x: 69, y: 78, w: 28, h: 16 }],
   whimsy: [{ id: 'bl', x: 3, y: 80, w: 26, h: 15 }, { id: 'br', x: 71, y: 80, w: 26, h: 15 }],
   modular: [],
-  nightstand: []
+  nightstand: [],
+  cam2: [], cam4: []
 };
 const HV_SS_MOD = {
   /* Video 17.5s: date (taller) + events left, clock + weather right — not a 1+3 stack. */
@@ -12569,7 +12704,7 @@ const hvSsSwitch = {
   },
   arm(photo) {
     if (this.mode === 'switch' || this.mode === 'customize') { this.layout(); return; }
-    if (!photo && typeof hvSsOv !== 'undefined' && hvSsOv.style === 'glass') return;
+    if (!photo && typeof hvSsOv !== 'undefined' && hvSsOwnTap(hvSsOv.style)) return;
     this.ensure(!!photo); this.layout(); this._paintLiveSlots();
     if (!this._liv) this._liv = setInterval(() => { if (!this.mode) this._paintLiveSlots(); }, 1000);
   },
@@ -12601,7 +12736,7 @@ const hvSsSwitch = {
   },
   _paintLiveSlots() {
     if (this._liveData || this._busy()) return;
-    const face = hvSsFaces.active(); if (!face || face.style === 'glass') return;
+    const face = hvSsFaces.active(); if (!face || hvSsOwnTap(face.style)) return;
     const live = (typeof hvSsOv !== 'undefined' && hvSsOv.face && hvSsOv.face.el) ? hvSsOv.face.el : null;
     if (live) {
       const comps = face.complications || {};
@@ -13102,7 +13237,8 @@ const hvSsSwitch = {
     if (face.style === 'glass' && this.tab === 'color') this.tab = 'background';
     const tabs = document.createElement('div'); tabs.className = 'tabs';
     if (face.style === 'nightstand' && (this.tab === 'widgets' || this.tab === 'font')) this.tab = 'style';
-    const names = face.style === 'nightstand' ? [['style', 'STYLE'], ['color', 'COLOUR']] : face.style === 'glass'
+    const camF = HV_CAM_STYLES.includes(face.style); if (camF) this.tab = 'cams'; else if (this.tab === 'cams') this.tab = 'style';
+    const names = camF ? [['cams', 'CAMERAS']] : face.style === 'nightstand' ? [['style', 'STYLE'], ['color', 'COLOUR']] : face.style === 'glass'
       ? [['style', 'STYLE'], ['widgets', 'WIDGETS'], ['background', 'BACKGROUND']]
       : [['style', 'STYLE']].concat([['color', 'COLOR']], hasFont ? [['font', 'FONT']] : [], [['widgets', 'WIDGETS']]);
     for (const [k, l] of names) { const b = document.createElement('b'); b.textContent = l; if (k === this.tab) b.className = 'on'; b.addEventListener('click', () => { this.tab = k; this._paintCards(this.draft, this.i, 'customize'); }); tabs.appendChild(b); }
@@ -13119,9 +13255,17 @@ const hvSsSwitch = {
       if (this.tab === 'style' || this.tab === 'color' || this.tab === 'font' || this.tab === 'background') this._paintRail(face);
       if (this.tab === 'color') this._paintAuto(face);
       if (face.style === 'nightstand' && this.tab === 'color') this._paintNs(face);
+      if (camF) this._paintCams(face);
     }
   },
   // Nightstand: brightness, turning on by itself and what it shows, beside the preview (left in landscape, under it in portrait)
+  // Two / four cameras: which cameras, their status and button, live video and the clock (left of the preview in landscape, under it in portrait)
+  _paintCams(face) { const sr = this.host.shadowRoot, W = innerWidth || 800, H = innerHeight || 800, size = this._cardSize('customize');
+    if (!sr.querySelector('style[data-ns]')) { const st = document.createElement('style'); st.dataset.ns = ''; st.textContent = HV_NS_PANEL_CSS; sr.appendChild(st); }
+    const p = hvCamPanel(face, hvSsOv.hass(), () => { sr.querySelectorAll('.f.cam').forEach(el => { try { el._hvFace.face = face; el._hvFace.update(hvSsOv.hass(), new Date()); } catch (e) {} }); });
+    if (W > H) { const w = Math.min(330, (W - size) / 2 - 36); Object.assign(p.style, { left: Math.max(12, (W - size) / 2 - w - 24) + 'px', top: Math.round((H - size) / 2) + 'px', width: w + 'px', maxHeight: size + 'px' }); }
+    else Object.assign(p.style, { left: '50%', transform: 'translateX(-50%)', top: Math.round((H + size) / 2 + 64) + 'px', bottom: '92px', width: Math.min(440, W - 32) + 'px' });
+    sr.appendChild(p); },
   _paintNs(face) { const sr = this.host.shadowRoot, W = innerWidth || 800, H = innerHeight || 800, size = this._cardSize('customize');
     if (!sr.querySelector('style[data-ns]')) { const st = document.createElement('style'); st.dataset.ns = ''; st.textContent = HV_NS_PANEL_CSS; sr.appendChild(st); }
     const p = hvNsPanel(face, hvSsOv.hass(), () => { sr.querySelectorAll('.f.nightstand').forEach(el => { try { el._hvFace.update(hvSsOv.hass(), new Date()); } catch (e) {} }); });
@@ -13560,7 +13704,7 @@ _snapGlass() {
     if (g.swiping || this.mode === 'switch' || this.mode === 'customize') return;
     if (Math.hypot(g.dx || 0, g.dy || 0) < 8 && Date.now() - g.t < 400) {
       let st = null; try { st = typeof hvSsOv !== 'undefined' && hvSsOv.style; } catch (e) {}
-      if (st !== 'glass') { try { hvSsEatTap(600); } catch (e) {} this._dismiss(); }
+      if (!hvSsOwnTap(st)) { try { hvSsEatTap(600); } catch (e) {} this._dismiss(); }
     }
   },
   _installDoc() {
@@ -13605,7 +13749,7 @@ const hvSsKeep = {
           const typ = (e && e.type) || '';
           const real = (e && e.isTrusted !== false) && /^(pointerdown|pointerup|touchstart|touchend|click)$/.test(typ);
           const st = (typeof hvSsOv !== 'undefined' && hvSsOv && hvSsOv.style) || '';
-          if (!real || st === 'glass') return;
+          if (!real || hvSsOwnTap(st)) return;
           if (hvSsOv) hvSsOv._userDismiss = true;
           self.reasons.clear();
           const hint = self.hint;
@@ -13661,6 +13805,78 @@ addEventListener('touchcancel', () => { hvSsHome.g = null; hvSsKeep.off('swipe')
    'dark' | 'sunset', time, sensor, below } }. Face Schedule (screensaver_schedule on the Home Screen card): Morning / Day / Evening / Night,
    each a face and a start (a time, sunrise or sunset); the face changes only when a slot starts, so a swipe by hand stays until the next one.
    The Nightstand can also come on by itself (bedtime, a dark room or sunset) and goes back at sunrise / when the room is light again. */
+/* ---- Two- and four-camera faces (V2). Each face entry may carry (YAML on the Home Screen card, screensaver_faces, or set in Customize › CAMERAS):
+     - style: cam4            # or cam2
+       live: true             # live video (false = snapshots every `refresh` seconds)
+       refresh: 10
+       clock: true
+       cams:                  # filled in order; empty slots take the next camera Home Assistant has
+         - entity: camera.front_door
+           name: Front Door                     # default: the camera's name
+           status: binary_sensor.porch_motion   # default: its motion sensor / event, else the camera state; 'none' hides it
+           action: lock.front_door              # the round button: '' = sound on/off, 'none', or a lock / cover / light / switch /
+                                                #   siren / button / script / scene (unlock and open ask for a second tap)
+   Taps never close these faces (like Glass): Home goes to the Home Screen, long-press opens the face switcher. */
+const HV_CAM_ICO = { full: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>', exit: '<path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/>', home: '<path d="M3.5 11.5 12 4.5l8.5 7"/><path d="M6 10v9.5h12V10"/>',
+  sound: '<path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path d="M15.5 9a4.2 4.2 0 0 1 0 6M18.2 6.5a8 8 0 0 1 0 11"/>', mute: '<path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/>',
+  lock: '<rect x="5" y="11" width="14" height="9.5" rx="2.2"/><path d="M8.2 11V7.8a3.8 3.8 0 0 1 7.6 0V11"/>', unlock: '<rect x="5" y="11" width="14" height="9.5" rx="2.2"/><path d="M8.2 11V7.8a3.8 3.8 0 0 1 7.2-1.7"/>',
+  light: '<path d="M9.5 18h5M10.5 21h3"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.7.6 1.1 1.3 1.1 2.2h5c0-.9.4-1.6 1.1-2.2A6 6 0 0 0 12 3z"/>', power: '<path d="M12 3.5v8"/><path d="M6.6 6.8a7.5 7.5 0 1 0 10.8 0"/>',
+  garage: '<path d="M3.5 20.5V9.2L12 4.5l8.5 4.7v11.3"/><path d="M7 20.5V12h10v8.5M7 15h10M7 18h10"/>', press: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/>',
+  siren: '<path d="M7 18v-5.5a5 5 0 0 1 10 0V18M5 20.5h14M12 3v2M4.5 6.5l1.4 1.4M19.5 6.5l-1.4 1.4"/>', run: '<path d="M8 5.5v13l10.5-6.5z"/>' };
+const hvCamSvg = k => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${HV_CAM_ICO[k] || ''}</svg>`;
+const HV_CAM_STYLES = ['cam2', 'cam4'];
+// faces that handle their own taps (no tap-to-close)
+const hvSsOwnTap = st => st === 'glass' || HV_CAM_STYLES.includes(st);
+const hvCamCfg = (face, hass, style) => { style = HV_CAM_STYLES.includes(style) ? style : ((face && face.style) || 'cam4'); const n = style === 'cam2' ? 2 : 4;
+  let f = face; if (!f || f.style !== style) { try { f = hvSsFaces.list().find(x => x && x.style === style); } catch (e) { f = null; } } f = f || {};
+  const S = (hass && hass.states) || {}, all = Object.keys(S).filter(k => /^camera\./.test(k)).sort(), src = Array.isArray(f.cams) ? f.cams : [];
+  const norm = x => typeof x === 'string' ? { entity: x } : Object.assign({}, x || {}), used = new Set(src.map(x => norm(x).entity).filter(Boolean)), cams = [];
+  for (let i = 0; i < n; i++) { const x = norm(src[i]); if (!x.entity) { const e = all.find(k => !used.has(k)); if (e) { x.entity = e; x.auto = true; used.add(e); } } cams.push(x); }
+  return { live: f.live !== false, clock: f.clock !== false, refresh: Math.max(2, Number(f.refresh) || 10), cams }; };
+const hvAgo = ms => { if (!isFinite(ms) || ms < 0) return ''; const m = Math.round(ms / 6e4); if (m < 1) return 'just now'; if (m < 60) return m + ' min ago'; const h = Math.round(m / 60); if (h < 24) return h + ' h ago'; return Math.round(h / 24) + ' d ago'; };
+// the camera's own motion sensor / event: camera.backyard_live_view → binary_sensor.backyard_motion, event.backyard_live_view_motion, …
+const hvCamMotionFor = (S, id) => { if (!id) return null; const o = id.split('.')[1] || '', bases = [o, o.replace(/_(live_view|live|camera|cam|stream|high|main|sub|hd|sd)$/, '')];
+  for (const b of bases) for (const k of ['motion', 'person', 'occupancy']) for (const d of ['binary_sensor', 'event']) { const e = `${d}.${b}_${k}`; if (S[e]) return e; } return null; };
+const hvCamStatus = (hass, cam, st) => { const S = (hass && hass.states) || {}; let id = cam.status; if (id === 'none') return ''; if (!id) id = hvCamMotionFor(S, cam.entity);
+  const x = id && S[id], cap = s => String(s || '').replace(/_/g, ' ').replace(/^./, c => c.toUpperCase());
+  if (x && !UNAVAILABLE.includes(x.state)) { const dm = id.split('.')[0], a = x.attributes || {}, ago = hvAgo(Date.now() - Date.parse(x.last_changed || ''));
+    if (dm === 'binary_sensor') { const dc = a.device_class, open = ['door', 'garage_door', 'window', 'opening', 'lock'].includes(dc);
+      if (x.state === 'on') return dc === 'motion' ? 'Motion now' : dc === 'occupancy' || dc === 'presence' ? 'Someone there' : dc === 'sound' ? 'Sound now' : open ? 'Open' : 'On';
+      return (dc === 'motion' ? 'No motion' : open ? 'Closed' : 'Clear') + (ago ? ' · ' + ago : ''); }
+    if (dm === 'event') { const t = Date.parse(x.state); return isFinite(t) ? cap(a.event_type || 'motion') + ' · ' + hvAgo(Date.now() - t) : 'No events'; }
+    if (dm === 'lock') return cap(x.state); if (dm === 'cover') return cap(x.state);
+    try { if (hass.formatEntityState) return hass.formatEntityState(x); } catch (e) {}
+    return x.state + (a.unit_of_measurement ? ' ' + a.unit_of_measurement : ''); }
+  if (!st || UNAVAILABLE.includes(st.state)) return 'Offline';
+  return st.state === 'recording' ? 'Recording' : st.state === 'streaming' ? 'Streaming' : 'Idle'; };
+// the round context button: sound on / off (default), or the action entity's service
+const hvCamAct = (hass, cam, muted) => { const id = cam.action; if (!id) return { k: 'mute', svg: muted ? 'mute' : 'sound', l: muted ? 'Sound on' : 'Mute', on: !muted }; if (id === 'none') return null;
+  const st = hass && hass.states && hass.states[id], dm = id.split('.')[0], s = st ? st.state : '', on = ['on', 'open', 'opening', 'unlocked'].includes(s);
+  if (dm === 'lock') return s === 'locked' ? { k: 'svc', svg: 'lock', l: 'Unlock', d: 'lock', s: 'unlock', confirm: true } : { k: 'svc', svg: 'unlock', l: 'Lock', d: 'lock', s: 'lock', on: true };
+  if (dm === 'cover') return on ? { k: 'svc', svg: 'garage', l: 'Close', d: 'cover', s: 'close_cover', on: true } : { k: 'svc', svg: 'garage', l: 'Open', d: 'cover', s: 'open_cover', confirm: true };
+  if (dm === 'light') return { k: 'svc', svg: 'light', l: on ? 'Turn off' : 'Turn on', d: 'light', s: 'toggle', on };
+  if (dm === 'siren') return { k: 'svc', svg: 'siren', l: on ? 'Turn off' : 'Sound siren', d: 'siren', s: 'toggle', on, confirm: !on };
+  if (['switch', 'fan', 'input_boolean'].includes(dm)) return { k: 'svc', svg: 'power', l: on ? 'Turn off' : 'Turn on', d: dm, s: 'toggle', on };
+  if (dm === 'button' || dm === 'input_button') return { k: 'svc', svg: 'press', l: 'Press', d: dm, s: 'press' };
+  if (dm === 'script' || dm === 'scene') return { k: 'svc', svg: 'run', l: 'Run', d: dm, s: 'turn_on' };
+  return null; };
+// ---- the CAMERAS panel inside Customize (uses the Nightstand panel look); it edits the face draft, so X discards it
+function hvCamPanel(face, hass, onChange) { const c = hvCamCfg(face, hass, face.style), S = (hass && hass.states) || {}, el = document.createElement('div'); el.className = 'nsp csp'; el.setAttribute('data-no-sheet-drag', '');
+  const put = () => { face.cams = c.cams.map(x => { const o = {}; if (x.entity && !x.auto) o.entity = x.entity; for (const k of ['name', 'status', 'action']) if (x[k]) o[k] = x[k]; return o; }); face.live = c.live; face.clock = c.clock; onChange(); };
+  const fn = id => (S[id] && S[id].attributes && S[id].attributes.friendly_name) || id;
+  const opts = (ids, cur, head) => head + ids.map(id => `<option value="${esc(id)}"${id === cur ? ' selected' : ''}>${esc(fn(id))}</option>`).join('');
+  const cams = Object.keys(S).filter(k => /^camera\./.test(k)).sort(), stat = Object.keys(S).filter(k => /^(binary_sensor|event|lock|cover)\./.test(k)).sort(),
+    acts = Object.keys(S).filter(k => /^(lock|cover|light|switch|siren|fan|input_boolean|button|input_button|script|scene)\./.test(k)).sort();
+  const tg = (k, l) => `<div class="r"><span class="l">${l}</span><button class="tg" role="switch" data-k="${k}" aria-checked="${!!c[k]}" aria-label="${l}"></button></div>`;
+  el.innerHTML = `<div class="h">Show</div><div class="g">${tg('live', 'Live video')}${tg('clock', 'Clock')}</div>` + c.cams.map((x, i) => `<div class="h">Camera ${i + 1}</div><div class="g">
+<div class="r"><span class="l">Camera</span><select data-i="${i}" data-f="entity" aria-label="Camera ${i + 1}">${opts(cams, x.entity, '<option value="">None</option>')}</select></div>
+<div class="r"><span class="l">Name</span><input type="text" data-i="${i}" data-f="name" value="${esc(x.name || '')}" placeholder="${esc(x.entity ? fn(x.entity) : 'Name')}" aria-label="Camera ${i + 1} name"></div>
+<div class="r"><span class="l">Status</span><select data-i="${i}" data-f="status" aria-label="Camera ${i + 1} status">${opts(stat, x.status, `<option value="">Automatic</option><option value="none"${x.status === 'none' ? ' selected' : ''}>None</option>`)}</select></div>
+<div class="r"><span class="l">Button</span><select data-i="${i}" data-f="action" aria-label="Camera ${i + 1} button">${opts(acts, x.action, `<option value="">Sound on / off</option><option value="none"${x.action === 'none' ? ' selected' : ''}>None</option>`)}</select></div></div>`).join('');
+  el.addEventListener('change', ev => { const t = ev.target, f = t.dataset && t.dataset.f, i = Number(t.dataset && t.dataset.i); if (!f || !c.cams[i]) return; const x = c.cams[i];
+    if (f === 'entity') { x.entity = t.value; x.auto = false; const n = el.querySelector(`input[data-i="${i}"]`); if (n) n.placeholder = t.value ? fn(t.value) : 'Name'; } else x[f] = t.value.trim(); put(); });
+  el.addEventListener('click', ev => { const b = ev.target.closest('button.tg'); if (!b) return; c[b.dataset.k] = !c[b.dataset.k]; b.setAttribute('aria-checked', String(!!c[b.dataset.k])); put(); });
+  return el; }
 const HV_NS_DEF = { brightness: 45, date: true, alarm: true, seconds: false, alarm_entity: '', auto: { mode: 'off', time: '22:30', sensor: '', below: 5 } };
 const HV_NS_COLS = ['#d42d22', '#ff7a1a', '#ffb340', '#7f6cf2', '#30b0c7', '#8e8e93'];
 const hvNsCfg = face => { const f = face || (hvSsFaces.list().find(x => x && x.style === 'nightstand')) || {}, n = f.ns || {};
@@ -13726,6 +13942,8 @@ const HV_NS_PANEL_CSS = `
 .nsp .seg button{all:unset;cursor:pointer;flex:1;text-align:center;padding:6px 4px;border-radius:7px;font-size:13px;font-weight:600}.nsp .seg button[aria-pressed=true]{background:#636366}
 .nsp select,.nsp input[type=number],.nsp input[type=time]{all:unset;max-width:58%;text-align:right;color:rgba(235,235,245,.75);font-size:14px;cursor:pointer}
 .nsp input[type=number]{width:4.5em}
+.nsp > *{flex:none}
+.nsp input[type=text]{all:unset;flex:1;min-width:0;text-align:right;color:rgba(235,235,245,.75);font-size:14px;cursor:text}.nsp input[type=text]::placeholder{color:rgba(235,235,245,.35)}
 .nsp .tg{all:unset;cursor:pointer;flex:none;position:relative;width:51px;height:31px;border-radius:99px;background:rgba(120,120,128,.32);transition:background .2s}
 .nsp .tg::after{content:'';position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;transition:transform .2s}
 .nsp .tg[aria-checked=true]{background:#7f6cf2}.nsp .tg[aria-checked=true]::after{transform:translateX(20px)}
