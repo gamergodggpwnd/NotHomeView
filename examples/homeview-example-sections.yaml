@@ -1,4 +1,4 @@
-# NotHomeView example dashboard (v1.30.7) - SECTIONS layout, the same build as the NotHomeView test dashboard, made generic.
+# Homey example dashboard (v1.30.7) - SECTIONS layout, the same build as the Homey test dashboard, made generic.
 # Views: Home Screen (main), Home (device page), Security, nine room pages, Lights On and Climate.
 # Every entity is a placeholder (light.example_..., climate.example_..., person.example_alex, ...). Replace them with yours:
 # click a tile in edit mode and pick your entity in the visual editor - no YAML needed.
@@ -7,7 +7,7 @@
 # Uses: card-mod (sky background, clock size), browser_mod (popups), button-card (homeview_styles helper card in each view),
 # auto-entities (Lights / Climate popups), kiosk-mode (optional) and Wallpanel (screensaver; enabled: false until you turn it on).
 # The Device pages theme (Night / Day / Auto) is the `theme:` option of the Home Screen card (here: day). Remove it for Night.
-title: NotHomeView
+title: Homey
 kiosk_mode:
   hide_header: true
   hide_sidebar: true

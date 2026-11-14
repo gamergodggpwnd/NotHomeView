@@ -1,10 +1,12 @@
-# NotHomeView
+# Homey
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=gamergodggpwnd&repository=NotHomeView&category=plugin)
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=gamergodggpwnd&repository=Homey&category=plugin)
+
+> **Homey was called NotHomeView.** If you installed it before the rename, remove it in HACS and add `gamergodggpwnd/Homey` again. Until the next release, the cards still show as "NotHomeView …" in the card picker.
 
 **Apple‑HomePad‑style frosted‑glass dashboards for Home Assistant – no YAML needed.**
 
-NotHomeView gives you 22 good‑looking cards (thermostat, lights, scenes, music with a full "Now Playing" screen, cameras,
+Homey gives you 22 good‑looking cards (thermostat, lights, scenes, music with a full "Now Playing" screen, cameras,
 batteries, people, a Home Screen, TV, calendar, a screensaver settings popup and more), two themes (**HomeView Glass** and **HomeView Light**) and two
 ready‑made example dashboards. Every card has a visual editor and a simple **Size** dropdown, so you build and change the
 dashboard with clicks instead of code.
@@ -24,13 +26,13 @@ dashboard with clicks instead of code.
 |---|---|
 | ![Light theme](docs/images/banner_light.png) | ![Camera, people and battery cards](docs/images/banner_page2_camera_people_battery.png) |
 
-> In the card picker the cards are called **"NotHomeView …"**. In YAML their types are `custom:homeview-*`
+> In the card picker the cards are called **"Homey …"**. In YAML their types are `custom:homeview-*`
 > (for example `custom:homeview-light-card`).
 
 ## Requirements
 
 Install these through **[HACS](https://hacs.xyz/)**. Restart Home Assistant after installing the browser_mod integration, and
-refresh the browser (clear its cache on phones and tablets) after installing frontend plugins. The NotHomeView cards themselves
+refresh the browser (clear its cache on phones and tablets) after installing frontend plugins. The Homey cards themselves
 (`dist/homeview-cards.js`) load without any other plugin; when a plugin is missing the cards fall back gracefully (for example a
 tap opens Home Assistant's own more‑info dialog instead of a popup), and the Home Screen shows a small hint when the dashboard
 asks for the screensaver but Wallpanel is missing.
@@ -59,7 +61,7 @@ and Wallpanel 4.67.2.
 
 New Home Screen apps and Assistant updates since v1.6.1.
 
-> **HACS users:** HACS compares version numbers, and v1.7 counts as *lower* than v1.31.x, so HACS may not show it as an update. To install it, open NotHomeView in HACS → ⋮ → **Redownload** → pick **v1.7**, then reload your browser.
+> **HACS users:** HACS compares version numbers, and v1.7 counts as *lower* than v1.31.x, so HACS may not show it as an update. To install it, open Homey in HACS → ⋮ → **Redownload** → pick **v1.7**, then reload your browser.
 
 ### Added
 * **Calendar app** on the Home Screen: an iPad-style popup with Day, Week, Month and Year views. Day and Week show an event’s address in the description when there is one. Adding an event lets you choose which calendar to save it to; read-only calendars are marked so you can’t add to them.
@@ -80,12 +82,12 @@ They can use one of three looks; the Home Screen and its photo sheets always kee
 
 Two ways to choose it (admins only; the dashboard must be in storage mode, not YAML):
 
-1. **Pencil menu**: tap the ✏️ pencil (NotHomeView Edit Button) → under *Device pages theme* pick **Night (dark glass)**,
+1. **Pencil menu**: tap the ✏️ pencil (Homey Edit Button) → under *Device pages theme* pick **Night (dark glass)**,
    **Day (white)** or **Auto (follow sun)**. It's saved at once for everyone using the dashboard.
-2. **Home Screen card editor**: edit the NotHomeView Home Screen (Hub) card and set **Theme**. In YAML this is the `theme:`
+2. **Home Screen card editor**: edit the Homey Home Screen (Hub) card and set **Theme**. In YAML this is the `theme:`
    option of the `custom:homeview-hub-card` (`day` or `auto`; no key = Night).
 
-A single NotHomeView Page Grid can override it for its own page; by default it uses *Same as all device pages*.
+A single Homey Page Grid can override it for its own page; by default it uses *Same as all device pages*.
 The dashboard needs a Home Screen card for the pencil menu to save the theme.
 
 ## Contents
@@ -107,28 +109,28 @@ The dashboard needs a Home Screen card for the pencil menu to save the theme.
 
 | Card (picker name) | Type | What it does | Sizes |
 |---|---|---|---|
-| NotHomeView Thermostat | `custom:homeview-thermostat-card` | big set‑point, ± chevrons (0.5° steps), mode and current temperature | 2×3, 2×6, 4×6 (compact layout at 2 rows) |
-| NotHomeView Light | `custom:homeview-light-card` | tap toggles, shows brightness %, hold for more‑info | 2×3, 2×6, 4×6 |
-| NotHomeView Entity | `custom:homeview-entity-card` | any entity as a tile: icon, name, state or attribute | 2×3, 2×6, 4×6 |
-| NotHomeView Group | `custom:homeview-group-card` | several lights/switches: "3 on", tap toggles all | 2×3, 2×6, 4×6 |
-| NotHomeView Scene | `custom:homeview-scene-card` | scene / script button with optional confirmation | 2×3, 2×6, 4×6 |
-| NotHomeView Garage | `custom:homeview-garage-card` | garage door / cover: open or close, with confirmation | 2×3, 2×6, 4×6 |
-| NotHomeView Music | `custom:homeview-music-card` | shows what's playing; tap opens the Now Playing popup | 2×3, 2×6, 4×6 |
-| NotHomeView Now Playing | `custom:homeview-now-playing-card` | Apple‑style player: artwork, progress, controls, volume, speaker picker | 2×3 up to full width (compact under ~260 px) |
-| NotHomeView Navigation | `custom:homeview-nav-card` | go to another view, or switch between two views | 2×3, 2×6, 4×6 |
-| NotHomeView Camera | `custom:homeview-camera-card` | live or snapshot camera tile; tap = large view | 2×3, 2×6, 4×6, **4×3 Tall** |
-| NotHomeView Battery | `custom:homeview-battery-card` | glass bar with a big %, green / yellow / red, bolt while charging | 2×3, 2×6, 4×6 |
-| NotHomeView People | `custom:homeview-person-card` | Find‑My‑style avatar, zone or street + city; tap = map | 2×3, 4×6 |
-| NotHomeView Edit Button | `custom:homeview-edit-button-card` | small glass pencil in a corner (opens edit mode) + screensaver button | no grid space |
-| NotHomeView Hub (Home Screen) | `custom:homeview-hub-card` | launch page: greeting, app icons, Photos widget (viewer + gallery), Now Playing, calendar, weather, blurred photo background; holds the Device pages theme | full width |
-| NotHomeView Chips | `custom:homeview-chips-card` | scrollable row of glass pills: light groups, thermostats, navigation, Rooms picker | full width |
-| NotHomeView Page Grid | `custom:homeview-grid-card` | big tiles in swipeable pages sized to the screen (3 × 3 portrait, 3 × 4 landscape) | full width |
-| NotHomeView Page Break | `custom:homeview-page-break` | inside a Page Grid: the next tile starts a new page | – |
-| NotHomeView TV | `custom:homeview-tv-card` | TV tile; tap opens a TV popup with power, apps, TV switcher and remote | 2×3, 2×6, 4×6 |
-| NotHomeView TV Player | `custom:homeview-tv-player-card` | the TV popup on its own: picture, transport, volume, D‑pad | any |
-| NotHomeView Calendar | `custom:homeview-calendar-card` | upcoming events from your calendars with optional weather | any |
-| NotHomeView Garage Chooser | `custom:homeview-garage-chooser-card` | popup content: two garage doors with Open door 1 / door 2 / both | popup |
-| NotHomeView Screensaver Settings | `custom:homeview-screensaver-card` | friendly form for the Wallpanel screensaver (usually opened from the button) | popup |
+| Homey Thermostat | `custom:homeview-thermostat-card` | big set‑point, ± chevrons (0.5° steps), mode and current temperature | 2×3, 2×6, 4×6 (compact layout at 2 rows) |
+| Homey Light | `custom:homeview-light-card` | tap toggles, shows brightness %, hold for more‑info | 2×3, 2×6, 4×6 |
+| Homey Entity | `custom:homeview-entity-card` | any entity as a tile: icon, name, state or attribute | 2×3, 2×6, 4×6 |
+| Homey Group | `custom:homeview-group-card` | several lights/switches: "3 on", tap toggles all | 2×3, 2×6, 4×6 |
+| Homey Scene | `custom:homeview-scene-card` | scene / script button with optional confirmation | 2×3, 2×6, 4×6 |
+| Homey Garage | `custom:homeview-garage-card` | garage door / cover: open or close, with confirmation | 2×3, 2×6, 4×6 |
+| Homey Music | `custom:homeview-music-card` | shows what's playing; tap opens the Now Playing popup | 2×3, 2×6, 4×6 |
+| Homey Now Playing | `custom:homeview-now-playing-card` | Apple‑style player: artwork, progress, controls, volume, speaker picker | 2×3 up to full width (compact under ~260 px) |
+| Homey Navigation | `custom:homeview-nav-card` | go to another view, or switch between two views | 2×3, 2×6, 4×6 |
+| Homey Camera | `custom:homeview-camera-card` | live or snapshot camera tile; tap = large view | 2×3, 2×6, 4×6, **4×3 Tall** |
+| Homey Battery | `custom:homeview-battery-card` | glass bar with a big %, green / yellow / red, bolt while charging | 2×3, 2×6, 4×6 |
+| Homey People | `custom:homeview-person-card` | Find‑My‑style avatar, zone or street + city; tap = map | 2×3, 4×6 |
+| Homey Edit Button | `custom:homeview-edit-button-card` | small glass pencil in a corner (opens edit mode) + screensaver button | no grid space |
+| Homey Hub (Home Screen) | `custom:homeview-hub-card` | launch page: greeting, app icons, Photos widget (viewer + gallery), Now Playing, calendar, weather, blurred photo background; holds the Device pages theme | full width |
+| Homey Chips | `custom:homeview-chips-card` | scrollable row of glass pills: light groups, thermostats, navigation, Rooms picker | full width |
+| Homey Page Grid | `custom:homeview-grid-card` | big tiles in swipeable pages sized to the screen (3 × 3 portrait, 3 × 4 landscape) | full width |
+| Homey Page Break | `custom:homeview-page-break` | inside a Page Grid: the next tile starts a new page | – |
+| Homey TV | `custom:homeview-tv-card` | TV tile; tap opens a TV popup with power, apps, TV switcher and remote | 2×3, 2×6, 4×6 |
+| Homey TV Player | `custom:homeview-tv-player-card` | the TV popup on its own: picture, transport, volume, D‑pad | any |
+| Homey Calendar | `custom:homeview-calendar-card` | upcoming events from your calendars with optional weather | any |
+| Homey Garage Chooser | `custom:homeview-garage-chooser-card` | popup content: two garage doors with Open door 1 / door 2 / both | popup |
+| Homey Screensaver Settings | `custom:homeview-screensaver-card` | friendly form for the Wallpanel screensaver (usually opened from the button) | popup |
 
 ![Now Playing popup](docs/images/gallery_now_playing.png)
 
@@ -139,19 +141,19 @@ under *Settings → Devices & services → Add integration → Browser Mod*.
 
 ## Install (step by step)
 
-![NotHomeView one-tap setup: install, open Home Assistant, tap Add](docs/images/install_setup.png)
+![Homey one-tap setup: install, open Home Assistant, tap Add](docs/images/install_setup.png)
 
-### 1. Add NotHomeView to HACS
+### 1. Add Homey to HACS
 
 One click (opens this repository in HACS):
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=gamergodggpwnd&repository=NotHomeView&category=plugin)
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=gamergodggpwnd&repository=Homey&category=plugin)
 
 Or add it manually as a custom repository:
 
 1. Open **HACS**, click the **⋮** menu (top right) → **Custom repositories**.
 2. Paste this repository's GitHub URL, choose the type **Dashboard** (called *Lovelace* or *Plugin* in older HACS) and click **Add**.
-3. Search **NotHomeView** in HACS, open it and click **Download** (keep the latest version).
+3. Search **Homey** in HACS, open it and click **Download** (keep the latest version).
 4. **Refresh the browser** (or close and reopen the Home Assistant app). On a wall tablet, reload that too.
 5. Check the resource: *Settings → Dashboards → ⋮ → Resources*. You should see `/hacsfiles/…/homeview-cards.js`
    as a *JavaScript module*. If it's missing (or your dashboards are in YAML mode), click **Add resource** and add it yourself.
@@ -183,7 +185,7 @@ Can't copy files? See [Can't install theme files?](#cant-install-theme-files): t
 1. *Settings → Dashboards → **Add dashboard** → New dashboard from scratch*, give it a name (e.g. "Home") and open it.
 2. Click the **✏️ pencil** (top right) → **⋮** → **Raw configuration editor**.
 3. Delete everything, paste the content of `examples/homeview-example-sections.yaml` and click **Save**, then close the editor.
-   This is the full NotHomeView layout: a Home Screen, a Home device page, Security, nine room pages, Lights On and Climate,
+   This is the full Homey layout: a Home Screen, a Home device page, Security, nine room pages, Lights On and Climate,
    with the **style helper** (the `button_card_templates:` block and one hidden "HomeView styles" card per view), both themes,
    the edit button and a screensaver config (Wallpanel `enabled: false` until you turn it on with the screensaver button).
 4. Replace the example entities (`light.example_…`, `climate.example_…`, `person.example_alex`, …) with your own. No YAML
@@ -212,7 +214,7 @@ Can't copy files? See [Can't install theme files?](#cant-install-theme-files): t
 
 ## Walkthrough: add and edit cards
 
-1. **Open edit mode.** Tap the small glass **✏️ pencil** in the top‑right corner of the dashboard (the NotHomeView Edit Button,
+1. **Open edit mode.** Tap the small glass **✏️ pencil** in the top‑right corner of the dashboard (the Homey Edit Button,
    visible to admins), or open the dashboard with `?disable_km&edit=1` at the end of the URL.
 
    ![Edit mode](docs/images/editor_edit_mode.png)
@@ -221,13 +223,13 @@ Can't copy files? See [Can't install theme files?](#cant-install-theme-files): t
 
    ![The + button and the Create section box](docs/images/editor_page2_add_card.png)
 
-3. **Find the NotHomeView cards.** Switch to the **By card** tab and type **NotHomeView** in the search box.
+3. **Find the Homey cards.** Switch to the **By card** tab and type **Homey** in the search box.
 
-   | Add to dashboard | Search "NotHomeView" |
+   | Add to dashboard | Search "Homey" |
    |---|---|
-   | ![Add to dashboard dialog](docs/images/editor_add_dialog.png) | ![Card picker filtered to NotHomeView](docs/images/editor_card_picker.png) |
+   | ![Add to dashboard dialog](docs/images/editor_add_dialog.png) | ![Card picker filtered to Homey](docs/images/editor_card_picker.png) |
 
-4. **Pick a card**, e.g. *NotHomeView Light*. The visual editor opens with a live preview on the right.
+4. **Pick a card**, e.g. *Homey Light*. The visual editor opens with a live preview on the right.
 
    ![Light card editor](docs/images/editor_light_card.png)
 
@@ -251,7 +253,7 @@ then tap **Done** to save (or **Cancel**).
 
 ## Walkthrough: tile sizes and the Layout tab
 
-The sections grid has 12 small columns per section. **One NotHomeView tile is 3 columns × 2 rows** – four tiles side by side.
+The sections grid has 12 small columns per section. **One Homey tile is 3 columns × 2 rows** – four tiles side by side.
 Sizes in the dropdown are written *rows × columns*:
 
 | Size option | Rows × columns | Looks like |
@@ -333,35 +335,35 @@ Don't want the button? Edit the Edit Button card (click its thin row in edit mod
 
 ## Card reference
 
-One file, `dist/homeview-cards.js`, adds 14 cards. All of them are in the card picker (search "NotHomeView"), have a full
+One file, `dist/homeview-cards.js`, adds 14 cards. All of them are in the card picker (search "Homey"), have a full
 visual editor, fill their grid cell and scale with it, and follow the HomeView theme colours (`--hv-*` variables) or
 their own colour options.
 
 | Card | Picker name | What it does |
 |---|---|---|
-| `custom:homeview-thermostat-card` | NotHomeView Thermostat | climate set‑point, mode and current temperature; chevrons ± `step` |
-| `custom:homeview-entity-card` | NotHomeView Entity | any entity: icon, name, state / attribute / custom sub‑label |
-| `custom:homeview-light-card` | NotHomeView Light | tap toggles, sub‑label = brightness % (optional `room · `), hold more‑info |
-| `custom:homeview-garage-card` | NotHomeView Garage | cover: tap opens/closes, with optional confirmation; Open / Closed / Opening… |
-| `custom:homeview-group-card` | NotHomeView Group | a list of entities or a group: "3 on" / "All off"; tap toggles all (or any action, e.g. a popup) |
-| `custom:homeview-scene-card` | NotHomeView Scene | scene / script / automation button, optional confirmation; never shows as active |
-| `custom:homeview-music-card` | NotHomeView Music | media player(s): shows what's playing; tap opens the Now Playing popup for its own speakers (or any tap action) |
-| `custom:homeview-nav-card` | NotHomeView Navigation | navigate to a view, or toggle between two views; keeps `?kiosk&wp_enabled=true` |
-| `custom:homeview-now-playing-card` | NotHomeView Now Playing | Apple‑style Now Playing panel: blurred artwork background, big art, title/artist, live progress, prev/play/next, volume and a speaker picker. Use as a card or as popup content |
-| `custom:homeview-camera-card` | NotHomeView Camera | live camera tile (muted stream or snapshot) with name/status and optional glass state buttons; tap = large view (full screen or window, swipe down to close). Sizes 2×3, 2×6, 4×6 and 4×3 Tall |
-| `custom:homeview-battery-card` | NotHomeView Battery | battery level as a rounded glass bar filled to the %, big % number and name; green 51–100 %, yellow 21–50 %, red ≤ 20 %; bolt top‑right while charging; no times, dates or axis. Sizes 2×3, 2×6, 4×6 |
-| `custom:homeview-person-card` | NotHomeView People | Find My style person tile: round avatar (photo or initials) on a warm disc, optional status badge, bold name, location (zone, or street + city when away); tap = popup with a map. Sizes 2×3, 4×6 |
-| `custom:homeview-edit-button-card` | NotHomeView Edit Button | small glass pencil fixed in a corner (takes no grid space); tap opens the dashboard editor with kiosk‑mode off. Below it, a screensaver button opens the Wallpanel settings popup |
-| `custom:homeview-screensaver-card` | NotHomeView Screensaver Settings | friendly form for the dashboard's Wallpanel screensaver (normally opened from the edit button's screensaver button) |
+| `custom:homeview-thermostat-card` | Homey Thermostat | climate set‑point, mode and current temperature; chevrons ± `step` |
+| `custom:homeview-entity-card` | Homey Entity | any entity: icon, name, state / attribute / custom sub‑label |
+| `custom:homeview-light-card` | Homey Light | tap toggles, sub‑label = brightness % (optional `room · `), hold more‑info |
+| `custom:homeview-garage-card` | Homey Garage | cover: tap opens/closes, with optional confirmation; Open / Closed / Opening… |
+| `custom:homeview-group-card` | Homey Group | a list of entities or a group: "3 on" / "All off"; tap toggles all (or any action, e.g. a popup) |
+| `custom:homeview-scene-card` | Homey Scene | scene / script / automation button, optional confirmation; never shows as active |
+| `custom:homeview-music-card` | Homey Music | media player(s): shows what's playing; tap opens the Now Playing popup for its own speakers (or any tap action) |
+| `custom:homeview-nav-card` | Homey Navigation | navigate to a view, or toggle between two views; keeps `?kiosk&wp_enabled=true` |
+| `custom:homeview-now-playing-card` | Homey Now Playing | Apple‑style Now Playing panel: blurred artwork background, big art, title/artist, live progress, prev/play/next, volume and a speaker picker. Use as a card or as popup content |
+| `custom:homeview-camera-card` | Homey Camera | live camera tile (muted stream or snapshot) with name/status and optional glass state buttons; tap = large view (full screen or window, swipe down to close). Sizes 2×3, 2×6, 4×6 and 4×3 Tall |
+| `custom:homeview-battery-card` | Homey Battery | battery level as a rounded glass bar filled to the %, big % number and name; green 51–100 %, yellow 21–50 %, red ≤ 20 %; bolt top‑right while charging; no times, dates or axis. Sizes 2×3, 2×6, 4×6 |
+| `custom:homeview-person-card` | Homey People | Find My style person tile: round avatar (photo or initials) on a warm disc, optional status badge, bold name, location (zone, or street + city when away); tap = popup with a map. Sizes 2×3, 4×6 |
+| `custom:homeview-edit-button-card` | Homey Edit Button | small glass pencil fixed in a corner (takes no grid space); tap opens the dashboard editor with kiosk‑mode off. Below it, a screensaver button opens the Wallpanel settings popup |
+| `custom:homeview-screensaver-card` | Homey Screensaver Settings | friendly form for the dashboard's Wallpanel screensaver (normally opened from the edit button's screensaver button) |
 
 The analog clock is the native `clock` card (styled by the theme), so it has no HomeView version.
 
-**Card names.** In the card picker and editor the cards are called *NotHomeView …* (e.g. *NotHomeView Light*). Only the
+**Card names.** In the card picker and editor the cards are called *Homey …* (e.g. *Homey Light*). Only the
 display names changed: the types stay `custom:homeview-*`, so existing dashboards keep working.
 
 ### People card
 
-`custom:homeview-person-card` ("NotHomeView People", 1.11) is a Find My style tile for a `person.*` entity: a large round avatar
+`custom:homeview-person-card` ("Homey People", 1.11) is a Find My style tile for a `person.*` entity: a large round avatar
 (the person's picture, else their initials, else an icon) on a warm tan disc, a small badge on its top right, the name in bold and
 the location below in grey. Everything is in the visual editor:
 
@@ -377,7 +379,7 @@ name, location, "Here / Away since …" and Home Assistant's own map card centre
 
 ### Battery card
 
-`custom:homeview-battery-card` ("NotHomeView Battery", 1.9) shows a battery level the way a history graph shows a bar, without
+`custom:homeview-battery-card` ("Homey Battery", 1.9) shows a battery level the way a history graph shows a bar, without
 any times, dates or axis: the name on top, a big % number, and an inner glass box holding a rounded bar filled to the level.
 Colours: **green** 51–100 %, **yellow** 21–50 %, **red** 20 % and below. Unknown / unavailable shows "—" and an empty bar.
 Tap = more‑info. Everything is in the visual editor:
@@ -474,7 +476,7 @@ To go back to kiosk mode after editing, open your normal URL again (e.g. `?kiosk
 **Screensaver settings (1.12).** When [Wallpanel](https://github.com/j-a-n/lovelace-wallpanel) is installed, a second button of the
 same size and look (`mdi:monitor-shimmer`) sits just below the pencil (above it for bottom corners). It is admin-only like the pencil
 and can be turned off with `show_screensaver_button: false` (or the pencil alone with `show_edit_button: false`). A tap opens a
-NotHomeView popup (swipe down or ✕ to close) with the dashboard's Wallpanel settings as normal controls, read from the dashboard's
+Homey popup (swipe down or ✕ to close) with the dashboard's Wallpanel settings as normal controls, read from the dashboard's
 `wallpanel:` config:
 * **General**: screensaver on/off, start after (idle seconds), fade in, which views it runs on.
 * **Photos**: source (a Home Assistant media folder such as `media-source://media_source/local/`, one web image URL, random
@@ -568,7 +570,7 @@ is inside a browser_mod popup.
 
 ### Camera card
 
-`custom:homeview-camera-card` ("NotHomeView Camera", 1.7) shows a camera in the HomeView glass style. Everything is in the visual editor:
+`custom:homeview-camera-card` ("Homey Camera", 1.7) shows a camera in the HomeView glass style. Everything is in the visual editor:
 
 * **Camera** (only `camera.*` entities), **Name**, and **Live or snapshot**. *Live video* plays the muted stream with no controls
   (HA's own `ha-camera-stream`: WebRTC / HLS / MJPEG, whatever the camera offers) over a still that refreshes while it connects.
@@ -763,7 +765,7 @@ Remove it once the theme is installed.
 | `themes/homeview.yaml` | the **HomeView Glass** and **HomeView Light** themes |
 | `button_card_templates/homeview_styles.yaml` | the `homeview_styles` style helper (button‑card template) |
 | `button_card_templates/homeview_thermostat.yaml` | optional button‑card thermostat template |
-| `examples/homeview-example-sections.yaml` | the NotHomeView example dashboard, native sections (recommended) |
+| `examples/homeview-example-sections.yaml` | the Homey example dashboard, native sections (recommended) |
 | `examples/homeview-example.yaml` | example dashboard, layout‑card full‑height band |
 | `custom_components/nothomeview_albums/` | optional helper integration for album links ([docs/album-links.md](docs/album-links.md)) |
 | `docs/album-links.md` | album links: setup, how each provider is read, limits |

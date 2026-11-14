@@ -1,6 +1,6 @@
 # Doorbell & motion pop-up
 
-On the **Home - Pixel** dashboard only (`url_path` `home-vertical-tablet`), NotHomeView can show a doorbell camera live when someone rings, and (during the screensaver) when the camera sees motion. Every other dashboard ignores the event (no pop-up).
+On the **Home - Pixel** dashboard only (`url_path` `home-vertical-tablet`), Homey can show a doorbell camera live when someone rings, and (during the screensaver) when the camera sees motion. Every other dashboard ignores the event (no pop-up).
 
 | Situation | What appears |
 |---|---|
@@ -23,10 +23,10 @@ camera: camera.front_door
 event_type: ring      # optional: camera_person / camera_motion (shown as "Person" / "Motion")
 ```
 
-Home Assistant only lets **admin** users subscribe to custom events, so the automation also writes each event into a text helper that every user's dashboard can see. Create the helper first: *Settings → Devices & services → Helpers → Create helper → Text*, name **NotHomeView doorbell** (entity `input_text.nothomeview_doorbell`, max length 255).
+Home Assistant only lets **admin** users subscribe to custom events, so the automation also writes each event into a text helper that every user's dashboard can see. Create the helper first: *Settings → Devices & services → Helpers → Create helper → Text*, name **Homey doorbell** (entity `input_text.nothomeview_doorbell`, max length 255).
 
 ```yaml
-alias: "NotHomeView: doorbell & motion pop-up"
+alias: "Homey: doorbell & motion pop-up"
 mode: queued
 triggers:
   - trigger: state

@@ -30,7 +30,7 @@ The photo list is cached and refreshed every 6 hours (sooner if the provider's p
 is shuffled. If the album can't be read (link removed, album no longer shared, provider down), the tile falls back to the media folder
 and the editor says why.
 
-## The NotHomeView Album Links helper (optional custom integration)
+## The Homey Album Links helper (optional custom integration)
 
 Google Photos and iCloud don't allow a web page to read their albums (no CORS), so the album has to be read by Home Assistant itself.
 The small helper integration in `custom_components/nothomeview_albums` does that. It adds no entities and makes no device calls.
@@ -40,11 +40,11 @@ Install (once):
 1. Copy the folder `custom_components/nothomeview_albums` from this repository into your Home Assistant `config/custom_components/` folder
    (HACS installs only the card bundle from this repository, so this step is manual).
 2. Restart Home Assistant.
-3. *Settings → Devices & services → Add integration →* **NotHomeView Album Links** → Submit (no fields).
+3. *Settings → Devices & services → Add integration →* **Homey Album Links** → Submit (no fields).
 
 What it provides:
 
-* a media source **Album links (NotHomeView)** – each album is `media-source://nothomeview_albums/<id>`, which is what the screensaver uses
+* a media source **Album links (Homey)** – each album is `media-source://nothomeview_albums/<id>`, which is what the screensaver uses
   (Wallpanel reads it like any media folder);
 * a signed, login-protected photo address `/api/nothomeview_albums/photo/…` that redirects to a fresh photo link from the provider
   (iCloud's links last only about 20 minutes, so they are renewed when needed);

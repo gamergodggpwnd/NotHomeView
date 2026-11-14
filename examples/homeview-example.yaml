@@ -1,7 +1,7 @@
 # HomeView example dashboard. Needs the HomeView cards (dist/homeview-cards.js, see README) plus the plugins listed there.
 # Settings > Dashboards > Add dashboard > New dashboard from scratch, open it, pencil > three dots > Raw configuration editor,
 # paste this, then replace the example entities and <your-dashboard-url>.
-title: NotHomeView
+title: Homey
 button_card_templates:
   homeview_tile:
     show_icon: true
@@ -381,8 +381,8 @@ views:
           title: Lights
           dismissable: true
   # HomeView Camera (1.7): uncomment and pick your camera. Sizes 2x3 / 2x6 / 4x6; the editor sets grid_options.
-  # NotHomeView Battery: big %, rounded bar (green / yellow / red), bolt while charging (auto-detected on the same device)
-  # NotHomeView People: avatar, badge, name, zone or street; tap = map popup
+  # Homey Battery: big %, rounded bar (green / yellow / red), bolt while charging (auto-detected on the same device)
+  # Homey People: avatar, badge, name, zone or street; tap = map popup
   # - type: custom:homeview-person-card
   #   entity: person.jane
   # - type: custom:homeview-battery-card
