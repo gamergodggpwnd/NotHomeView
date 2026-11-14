@@ -4493,7 +4493,10 @@ function hwWxHtml(hub, cfg, cells) { const H = hub._hass, id = hwWxId(hub), s = 
   return `<div class="w-l">${top}${hourly}<div class="dys">${dl || '<div class="d ld">Loading…</div>'}</div></div>`; }
 function hwCalHtml(hub, cfg, cells) { const ids = hwCalIds(hub); if (!ids.length) return '<div class="hwe"><ha-icon icon="mdi:calendar-remove-outline"></ha-icon>No calendars in Home Assistant</div>';
   const E = hwEv(hub), L = hwLang(hub), now = new Date(), t0 = hwDay(now), t1 = new Date(t0.getTime() + 864e5), t2 = new Date(t0.getTime() + 2 * 864e5);
-  let sz = cfg.size || 'small'; if (sz === 'xl' && cells && cells[0] < 8) sz = 'large'; // a phone has 4 columns: the week card shows as the large one
+  let sz = cfg.size || 'small'; const cw = cells && Number(cells[0]), ch = cells && Number(cells[1]);
+  if (sz === 'xl' && cw && cw < 8) sz = (ch && ch >= 4) ? 'large' : 'medium'; // a phone has 4 columns: the week card becomes large, or medium if it's only 2 rows tall
+  if (sz === 'large' && ch && ch < 4) sz = (cw && cw >= 4) ? 'medium' : 'small'; // a short 4x2 slot uses the Up Next list, not a squashed hour grid
+  if (sz === 'medium' && ((cw && cw < 4) || (ch && ch < 2))) sz = 'small';
   const list = E && E.list, on = (d0, d1) => (list || []).filter(e => e.st < d1 && (e.en || e.st) > d0 && !(e.en && e.en <= d0));
   const wd = d => esc(d.toLocaleDateString(L, { weekday: 'long' }).toUpperCase()), day = now.getDate();
   const evRow = e => `<div class="ev" style="--c:${e.col}"><b>${esc(e.s)}</b><span>${e.ad ? 'All day' : esc(hwTime(hub, e.st))}</span></div>`;
@@ -4510,14 +4513,16 @@ function hwCalHtml(hub, cfg, cells) { const ids = hwCalIds(hub); if (!ids.length
     const evs = on(a, b).filter(e => !e.ad).map(e => { const s = Math.max(0, (e.st - a) / sp), en = Math.min(1, ((e.en || new Date(e.st.getTime() + 36e5)) - a) / sp);
       return `<div class="eb" style="--c:${e.col};top:${(s * 100).toFixed(2)}%;height:${Math.max(7, (en - s) * 100).toFixed(2)}%"><b>${esc(e.s)}</b><span>${esc(hwTime(hub, e.st))}</span></div>`; }).join('');
     const ad = on(d0, new Date(d0.getTime() + 864e5)).filter(e => e.ad).slice(0, 2).map(e => `<div class="ad" style="--c:${e.col}">${esc(e.s)}</div>`).join('');
-    const nowLine = d0.getTime() === t0.getTime() && now >= a && now <= b ? `<div class="nl" style="top:${((now - a) / sp * 100).toFixed(2)}%"></div>` : '';
+    const nowLine = hwDay(d0).getTime() === t0.getTime() && now >= a && now <= b ? `<div class="nl" style="top:${Math.max(0, Math.min(100, (now - a) / sp * 100)).toFixed(2)}%"></div>` : '';
     return `<div class="dg">${ad ? `<div class="ads">${ad}</div>` : ''}<div class="tl">${withLabels ? hours.map((hh, k) => `<div class="hr" style="top:${(k / nh * 100).toFixed(2)}%"><span>${esc(hwTime(hub, new Date(d0.getTime() + hh * 36e5), true))}</span></div>`).join('') : hours.map((hh, k) => `<div class="hr" style="top:${(k / nh * 100).toFixed(2)}%"></div>`).join('')}${evs}${nowLine}</div></div>`; };
   if (sz === 'large') return `<div class="c-l"><div class="hd"><span class="wd">${wd(now)}</span><span class="dt">${esc(now.toLocaleDateString(L, { month: 'long', day: 'numeric' }))}</span></div><div class="bd"><div class="lc">${grid(t0, true)}</div>${tmCol(6)}</div></div>`;
   const nd = 4, days = Array.from({ length: nd }, (_, k) => new Date(t0.getTime() + k * 864e5));
   return `<div class="c-x"><div class="wk" style="--n:${nd}"><div class="sp0"></div>${days.map((d, k) => `<div class="dh${k ? '' : ' td'}"><span>${esc(d.toLocaleDateString(L, { weekday: 'short' }))}</span><b>${d.getDate()}</b></div>`).join('')}</div>
 <div class="wb" style="--n:${nd}"><div class="hc">${hours.map((hh, k) => `<span style="top:${(k / nh * 100).toFixed(2)}%">${esc(hwTime(hub, new Date(t0.getTime() + hh * 36e5), true))}</span>`).join('')}</div>${days.map(d => grid(d, false)).join('')}</div></div>`; }
 const HW_CSS = `
-.hw{cursor:pointer}.hw .hwi{box-sizing:border-box;border-radius:calc(var(--I,110px) * .26);overflow:hidden;--f:calc(var(--hu,112px) / 100);padding:calc(var(--f) * 13);display:flex;flex-direction:column;font-family:${FONT};-webkit-font-smoothing:antialiased;
+.hw{cursor:pointer;align-items:stretch}.tile.hw > .hwi{width:100%;flex:1 1 auto;min-height:0;align-self:stretch;height:auto}
+.apps.hg > .tile.hw > .hwi{flex:1 1 auto;min-height:0}
+.hw .hwi{box-sizing:border-box;border-radius:calc(var(--I,110px) * .26);overflow:hidden;--f:calc(var(--hu,112px) / 100);padding:calc(var(--f) * 13);display:flex;flex-direction:column;font-family:${FONT};-webkit-font-smoothing:antialiased;
  box-shadow:0 10px 30px rgba(0,0,0,.18);transition:transform .15s;line-height:1.15;text-align:left;-webkit-user-select:none;user-select:none}
 .hw:active .hwi{transform:scale(.97)}
 .hw[data-ty="weather"] .hwi{background:linear-gradient(180deg,#f7fafd 0%,#e2ecf6 100%);color:#1c1c1e}.hw[data-ty="calendar"] .hwi{background:#1c1c1e;color:#fff}
@@ -4545,13 +4550,13 @@ const HW_CSS = `
 .hw .ev b{font-size:calc(var(--f) * 12.5);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.hw .ev span{font-size:calc(var(--f) * 11.5);color:rgba(235,235,245,.6);white-space:nowrap}
 .hw .no{font-size:calc(var(--f) * 12);color:rgba(235,235,245,.6)}
 .c-d{align-items:flex-start}.c-d .md{color:#ff453a;font-size:calc(var(--f) * 15);font-weight:700;letter-spacing:.02em}.c-d .dn2{font-size:calc(var(--f) * 92);font-weight:300;line-height:1;letter-spacing:-.04em;margin-top:auto}
-.c-m{flex-direction:row;gap:calc(var(--f) * 14)}.c-m .col{flex:1;min-width:0;display:flex;flex-direction:column;gap:calc(var(--f) * 5)}.c-m .col.tm{border-left:1px solid rgba(84,84,88,.5);padding-left:calc(var(--f) * 12)}
-.hw .th{font-size:calc(var(--f) * 11.5);font-weight:700;color:rgba(235,235,245,.6);letter-spacing:.04em;margin-bottom:calc(var(--f) * 2)}
+.c-m{flex-direction:row;gap:calc(var(--f) * 14);min-width:0}.c-m .col{flex:1;min-width:0;display:flex;flex-direction:column;gap:calc(var(--f) * 5);overflow:hidden}.c-m .col.tm{border-left:1px solid rgba(84,84,88,.5);padding-left:calc(var(--f) * 12);flex:1 1 42%}
+.hw .th{font-size:calc(var(--f) * 11.5);font-weight:700;color:rgba(235,235,245,.6);letter-spacing:.04em;margin-bottom:calc(var(--f) * 2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .c-l .hd{display:flex;align-items:baseline;gap:8px;margin-bottom:calc(var(--f) * 6)}.c-l .dt{font-size:calc(var(--f) * 15);font-weight:600}
-.c-l .bd{display:flex;gap:calc(var(--f) * 12);flex:1;min-height:0}.c-l .lc{flex:1.6;min-width:0;display:flex}.c-l .col.tm{flex:1;min-width:0;border-left:1px solid rgba(84,84,88,.5);padding-left:calc(var(--f) * 12);display:flex;flex-direction:column;gap:calc(var(--f) * 6)}
+.c-l .bd{display:flex;gap:calc(var(--f) * 12);flex:1;min-height:0;min-width:0}.c-l .lc{flex:1.45 1 0;min-width:0;display:flex}.c-l .col.tm{flex:1 1 36%;min-width:0;border-left:1px solid rgba(84,84,88,.5);padding-left:calc(var(--f) * 12);display:flex;flex-direction:column;gap:calc(var(--f) * 6);overflow:hidden}
 .dg{position:relative;flex:1;display:flex;flex-direction:column;min-height:0}.ads{display:flex;flex-direction:column;gap:2px;margin-bottom:4px}
 .hw .ad{font-size:calc(var(--f) * 11);font-weight:600;padding:2px 6px;border-radius:5px;background:color-mix(in srgb,var(--c) 34%,transparent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.tl{position:relative;flex:1;min-height:0}.tl .hr{position:absolute;left:0;right:0;border-top:1px solid rgba(84,84,88,.45)}.tl .hr span{position:absolute;left:0;top:-.6em;font-size:calc(var(--f) * 10.5);color:rgba(235,235,245,.55);background:#1c1c1e;padding-right:4px}
+.tl{position:relative;flex:1;min-height:0}.tl .hr{position:absolute;left:0;right:0;border-top:1px solid rgba(84,84,88,.45);pointer-events:none}.tl .hr span{position:absolute;left:0;top:-.55em;font-size:calc(var(--f) * 10);line-height:1;color:rgba(235,235,245,.55);background:#1c1c1e;padding:0 4px 0 0;white-space:nowrap;z-index:1}
 .c-l .tl .eb{left:calc(var(--f) * 38)}
 .hw .eb{position:absolute;left:2px;right:2px;border-radius:5px;padding:1px 5px;box-sizing:border-box;overflow:hidden;background:color-mix(in srgb,var(--c) 38%,#1c1c1e);border-left:3px solid var(--c);display:flex;flex-direction:column}
 .hw .eb b{font-size:calc(var(--f) * 11);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.hw .eb span{font-size:calc(var(--f) * 9.5);opacity:.75;white-space:nowrap}
@@ -7299,29 +7304,50 @@ function hvOpenSettings(hub, app, from, goTo) {
     const cat = HUB_APP_CATALOG.map(c => ({ key: c.key, name: c.name, icon: c.icon, color: c.color_from || '#8e8e93', page: map[c.key] || '', blurb: c.kind === 'navigate' ? 'Opens the ' + c.name + ' page.' : 'A NotHomeView app on the Home Screen.' }));
     return extra.concat(cat);
   };
+  const intPretty = domain => { const m = (st.intMan || []).find(x => x && x.domain === domain); if (m && m.name) return m.name;
+    return String(domain || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()); };
   const intState = e => { const s = String((e && e.state) || '').toLowerCase();
     if (s === 'loaded' || s === 'setup') return { t: 'On', k: '' };
     if (s === 'not_loaded' || s === 'disabled') return { t: 'Off', k: 'off' };
     if (s) return { t: s.replace(/_/g, ' '), k: 'bad' }; return { t: 'Installed', k: '' }; };
   const intIcon = domain => { const src = domain ? 'https://brands.home-assistant.io/' + encodeURIComponent(domain) + '/icon.png' : '';
     return src ? `<span class="ai" style="background:#fff"><img src="${esc(src)}" alt="" onerror="this.style.display='none'"></span>` : `<span class="sq ai" style="--c:#44739e"><ha-icon icon="mdi:puzzle"></ha-icon></span>`; };
+  const intEntries = () => (st.ints || []).filter(e => e && e.domain && !e.disabled_by);
+  const intDevsOf = (entries) => { const ids = new Set(entries.map(e => e.entry_id));
+    return (st.intDevs || []).filter(d => (Array.isArray(d.config_entries) && d.config_entries.some(id => ids.has(id))) || ids.has(d.config_entry_id)); };
+  const intEntsOf = (entries, devs) => { const ids = new Set(entries.map(e => e.entry_id)), did = new Set(devs.map(d => d.id));
+    return (st.intEnts || []).filter(n => ids.has(n.config_entry_id) || (n.device_id && did.has(n.device_id))); };
+  const intGroups = () => { const by = {};
+    for (const e of intEntries()) (by[e.domain] || (by[e.domain] = [])).push(e);
+    return Object.keys(by).map(domain => { const entries = by[domain], devices = intDevsOf(entries);
+      return { domain, name: intPretty(domain), entries, devices, nEnt: entries.length, nDev: devices.length }; })
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })); };
+  const entGroup = eid => { const d = String(eid || '').split('.')[0];
+    if (['sensor', 'binary_sensor', 'humidity_sensor'].includes(d)) return 'Sensors';
+    if (['light', 'switch', 'fan', 'climate', 'cover', 'lock', 'number', 'input_boolean', 'input_number', 'input_select', 'input_button', 'media_player', 'vacuum', 'water_heater', 'humidifier', 'remote', 'siren', 'valve', 'select', 'button', 'scene', 'script', 'alarm_control_panel'].includes(d)) return 'Controls';
+    return 'Other'; };
+  const entRow = n => { const S = (H().states || {})[n.entity_id], name = n.name || n.original_name || (S && S.attributes && S.attributes.friendly_name) || n.entity_id;
+    const stt = S ? S.state : 'unavailable';
+    return `<div class="r"><span class="tx"><span class="l">${esc(name)}</span><small>${esc(n.entity_id || '')}</small></span><span class="v">${esc(stt)}</span></div>`; };
   const appsListHtml = () => { const q = st.q.trim().toLowerCase();
-    const nhv = hvNhvApps().map(a => Object.assign({ src: 'nhv', sort: a.name }, a));
-    const ints = (st.ints || []).map(e => ({ src: 'int', name: e.title || e.domain || 'Integration', domain: e.domain, entry: e, sort: e.title || e.domain || 'Integration' }));
-    const all = nhv.concat(ints).filter(a => !q || (a.name + ' ' + (a.domain || '') + ' ' + (a.blurb || '')).toLowerCase().includes(q))
-      .sort((a, b) => a.sort.localeCompare(b.sort, undefined, { sensitivity: 'base' }));
-    const groups = {};
-    for (const a of all) { const ch = (a.sort[0] || '#').toUpperCase(), g = /[A-Z]/.test(ch) ? ch : '#'; (groups[g] || (groups[g] = [])).push(a); }
-    const letters = Object.keys(groups).sort((a, b) => a === '#' ? 1 : b === '#' ? -1 : a.localeCompare(b));
+    const nhv = hvNhvApps().filter(a => !q || (a.name + ' ' + (a.blurb || '')).toLowerCase().includes(q))
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+    const groups = intGroups().filter(g => !q || (g.name + ' ' + g.domain).toLowerCase().includes(q));
     let h = '';
     if (!q || 'custom apps'.includes(q)) h += `<div class="grp"><button class="r act nav appi" data-act="customapps" aria-label="Custom Apps"><span class="sq" style="--c:#5e5ce6"><ha-icon icon="mdi:apps-box"></ha-icon></span><span class="tx"><span class="l">Custom Apps</span><small>Buttons that open other apps on this device</small></span><ha-icon class="ch" icon="mdi:chevron-right"></ha-icon></button></div>`;
-    if (!letters.length && q) h += `<div class="grp"><div class="empty">No results for “${esc(st.q.trim())}”</div></div>`;
-    for (const g of letters) { h += `<div class="az">${g}</div><div class="grp">`;
-      for (const a of groups[g]) {
-        if (a.src === 'nhv') { const ic = a.icon && String(a.icon).startsWith('hv:') ? 'mdi:apps' : (a.icon || 'mdi:apps');
-          h += `<button class="r act nav appi" data-act="appnhv" data-id="${esc(a.key)}" aria-label="${esc(a.name)}"><span class="sq" style="--c:${esc(a.color || '#8e8e93')}"><ha-icon icon="${ic}"></ha-icon></span><span class="tx"><span class="l">${esc(a.name)}</span><small>NotHomeView</small></span><ha-icon class="ch" icon="mdi:chevron-right"></ha-icon></button>`; }
-        else h += `<button class="r act nav appi" data-act="appint" data-id="${esc(a.entry.entry_id || a.domain)}" aria-label="${esc(a.name)}">${intIcon(a.domain)}<span class="tx"><span class="l">${esc(a.name)}</span><small>${esc(a.domain || '')}</small></span><ha-icon class="ch" icon="mdi:chevron-right"></ha-icon></button>`; }
+    if (nhv.length) { h += '<div class="gh">NotHomeView</div><div class="grp">';
+      for (const a of nhv) { const ic = a.icon && String(a.icon).startsWith('hv:') ? 'mdi:apps' : (a.icon || 'mdi:apps');
+        h += `<button class="r act nav appi" data-act="appnhv" data-id="${esc(a.key)}" aria-label="${esc(a.name)}"><span class="sq" style="--c:${esc(a.color || '#8e8e93')}"><ha-icon icon="${ic}"></ha-icon></span><span class="tx"><span class="l">${esc(a.name)}</span><small>NotHomeView</small></span><ha-icon class="ch" icon="mdi:chevron-right"></ha-icon></button>`; }
       h += '</div>'; }
+    if (groups.length) { const letters = {};
+      for (const g of groups) { const ch = (g.name[0] || '#').toUpperCase(), k = /[A-Z]/.test(ch) ? ch : '#'; (letters[k] || (letters[k] = [])).push(g); }
+      const keys = Object.keys(letters).sort((a, b) => a === '#' ? 1 : b === '#' ? -1 : a.localeCompare(b));
+      h += '<div class="gh">Integrations</div>';
+      for (const k of keys) { h += `<div class="az">${k}</div><div class="grp">`;
+        for (const g of letters[k]) { const cnt = (g.nDev ? g.nDev + ' device' + (g.nDev === 1 ? '' : 's') : '') + (g.nEnt ? (g.nDev ? ' · ' : '') + g.nEnt + (g.nEnt === 1 ? ' entry' : ' entries') : '');
+          h += `<button class="r act nav appi" data-act="appint" data-id="${esc(g.domain)}" aria-label="${esc(g.name)}">${intIcon(g.domain)}<span class="tx"><span class="l">${esc(g.name)}</span><small>${esc(cnt || g.domain)}</small></span><ha-icon class="ch" icon="mdi:chevron-right"></ha-icon></button>`; }
+        h += '</div>'; } }
+    if (!nhv.length && !groups.length && q) h += `<div class="grp"><div class="empty">No results for “${esc(st.q.trim())}”</div></div>`;
     return h; };
   const appsHtml = () => { let h = `<div class="ph">${st.wide ? '' : '<button class="bk" data-act="back" aria-label="Back to Settings"><ha-icon icon="mdi:chevron-left"></ha-icon>Settings</button>'}<span class="nt">Apps</span></div><h1 class="sbt">Apps</h1>`;
     if (!st.intsReady && !st.intsErr) h += '<div class="grp"><div class="r"><span class="l">Loading integrations…</span><span class="spin" aria-hidden="true"></span></div></div>';
@@ -7330,15 +7356,17 @@ function hvOpenSettings(hub, app, from, goTo) {
     const h0 = H(); if (!h0 || !h0.callWS) { st.intsReady = true; st.ints = st.ints || []; return; }
     st.intsP = true;
     const ws = typ => h0.callWS({ type: typ }).catch(() => null);
-    Promise.all([ws('config_entries/get'), ws('config/device_registry/list'), ws('config/entity_registry/list')]).then(async pack => {
-      let [entries, devices, entities] = pack;
+    Promise.all([ws('config_entries/get'), ws('config/device_registry/list'), ws('config/entity_registry/list'), ws('manifest/list')]).then(async pack => {
+      let [entries, devices, entities, manifests] = pack;
       if (!Array.isArray(entries)) entries = await ws('config_entries/list') || [];
       if (!Array.isArray(devices)) devices = await ws('device_registry/list') || [];
       if (!Array.isArray(entities)) entities = await ws('entity_registry/list') || [];
+      if (!Array.isArray(manifests)) manifests = await ws('integration/manifest/list') || [];
       st.ints = Array.isArray(entries) ? entries.filter(e => e && !e.disabled_by) : [];
       st.intDevs = Array.isArray(devices) ? devices : []; st.intEnts = Array.isArray(entities) ? entities : [];
+      st.intMan = Array.isArray(manifests) ? manifests : [];
       st.intsReady = true; st.intsP = false;
-      if (root && root.isConnected && (st.page === 'apps' || (st.sub && String(st.sub).startsWith('nhv:')) || (st.sub && String(st.sub).startsWith('int:')))) paintPane();
+      if (root && root.isConnected && (st.page === 'apps' || (st.sub && /^(nhv:|int:|dev:)/.test(String(st.sub))))) paintPane();
     }).catch(() => { st.intsReady = true; st.intsP = false; st.ints = st.ints || []; if (root && root.isConnected && st.page === 'apps') paintPane(); }); };
   const secsHtml = p => { const d = data(), F = fields(), dis = ro(); let h = '', any = false;
     for (const sc of p.sec) { const ks = sc.f.map(fname); if (!ks.length) continue; any = true;
@@ -7351,19 +7379,32 @@ function hvOpenSettings(hub, app, from, goTo) {
     const p = a.page && pageOf(a.page); if (p && p.id !== 'apps') h += secsHtml(p);
     else h += `<div class="grp"><div class="r note"><small>${esc(a.blurb || 'A NotHomeView app.')}</small></div></div>`;
     return h; };
-  const appIntHtml = id => { const e = (st.ints || []).find(x => x.entry_id === id || x.domain === id); if (!e) { st.sub = null; return appsHtml(); }
-    const devs = (st.intDevs || []).filter(d => Array.isArray(d.config_entries) ? d.config_entries.includes(e.entry_id) : d.config_entry_id === e.entry_id);
-    const ents = (st.intEnts || []).filter(n => n.config_entry_id === e.entry_id || (n.device_id && devs.some(d => d.id === n.device_id)));
-    const stt = intState(e), title = e.title || e.domain || 'Integration';
-    let h = `<div class="ph"><button class="bk" data-act="appsback" aria-label="Back to Apps"><ha-icon icon="mdi:chevron-left"></ha-icon>Apps</button><span class="nt">${esc(title)}</span></div>`;
-    h += `<div class="apphead">${intIcon(e.domain)}<div><b>${esc(title)}</b><p>${esc(e.domain || '')}</p><span class="stpill ${stt.k}">${esc(stt.t)}</span></div></div>`;
-    h += `<div class="gh">Devices</div><div class="grp">${devs.length ? devs.map(d => `<div class="r"><span class="l">${esc(d.name_by_user || d.name || d.id)}</span><span class="v">${esc(d.model || d.manufacturer || '')}</span></div>`).join('') : '<div class="empty">No devices.</div>'}</div>`;
-    h += `<div class="gh">Entities</div><div class="grp">${ents.length ? ents.slice(0, 80).map(n => `<div class="r"><span class="l">${esc(n.name || n.original_name || n.entity_id)}</span><span class="v">${esc(n.entity_id || '')}</span></div>`).join('') + (ents.length > 80 ? `<div class="r note"><small>${ents.length - 80} more in Home Assistant</small></div>` : '') : '<div class="empty">No entities.</div>'}</div>`;
-    const open = e.domain ? '/config/integrations/integration/' + encodeURIComponent(e.domain) : '/config/integrations';
-    h += `<div class="grp"><button class="r act" data-act="intopen" data-url="${esc(open)}"><span class="sq" style="--c:var(--blue)"><ha-icon icon="mdi:open-in-new"></ha-icon></span><span class="tx"><span class="l">Open in Home Assistant</span></span><ha-icon class="ch" icon="mdi:open-in-new"></ha-icon></button>`;
-    if (e.supports_options && e.entry_id) { const opt = '/config/integrations/config_entry/' + encodeURIComponent(e.entry_id);
-      h += `<button class="r act" data-act="intopen" data-url="${esc(opt)}"><span class="sq" style="--c:#5e5ce6"><ha-icon icon="mdi:cog"></ha-icon></span><span class="tx"><span class="l">Options</span><small>Opens the options flow in Home Assistant</small></span><ha-icon class="ch" icon="mdi:chevron-right"></ha-icon></button>`; }
-    h += '</div>'; return h; };
+  const appIntHtml = domain => { const g = intGroups().find(x => x.domain === domain);
+    if (!g) { st.sub = null; return appsHtml(); }
+    const ents = intEntsOf(g.entries, g.devices);
+    const stt = g.entries.some(e => /loaded|setup/i.test(e.state || '')) ? { t: 'On', k: '' } : intState(g.entries[0]);
+    let h = `<div class="ph"><button class="bk" data-act="appsback" aria-label="Back to Apps"><ha-icon icon="mdi:chevron-left"></ha-icon>Apps</button><span class="nt">${esc(g.name)}</span></div>`;
+    h += `<div class="apphead">${intIcon(g.domain)}<div><b>${esc(g.name)}</b><p>${esc(g.domain)}</p><span class="stpill ${stt.k}">${esc(stt.t)}</span></div></div>`;
+    h += `<div class="gh">Config entries</div><div class="grp">${g.entries.length ? g.entries.map(e => `<div class="r"><span class="tx"><span class="l">${esc(e.title || e.domain)}</span><small>${esc(e.source || e.entry_id || '')}</small></span><span class="v">${esc(intState(e).t)}</span></div>`).join('') : '<div class="empty">None</div>'}</div>`;
+    h += `<div class="gh">Devices</div><div class="grp">${g.devices.length ? g.devices.map(d => `<button class="r act nav" data-act="appdev" data-dom="${esc(g.domain)}" data-id="${esc(d.id)}" aria-label="${esc(d.name_by_user || d.name || d.id)}"><span class="tx"><span class="l">${esc(d.name_by_user || d.name || d.id)}</span><small>${esc([d.manufacturer, d.model].filter(Boolean).join(' · '))}</small></span><ha-icon class="ch" icon="mdi:chevron-right"></ha-icon></button>`).join('') : '<div class="empty">No devices.</div>'}</div>`;
+    const buckets = { Sensors: [], Controls: [], Other: [] };
+    for (const n of ents) buckets[entGroup(n.entity_id)].push(n);
+    const order = ['Sensors', 'Controls', 'Other'];
+    for (const name of order) { const L = buckets[name]; if (!L.length) continue;
+      h += `<div class="gh">${name}</div><div class="grp">${L.slice(0, 80).map(entRow).join('')}${L.length > 80 ? `<div class="r note"><small>${L.length - 80} more in Home Assistant</small></div>` : ''}</div>`; }
+    const svcs = ((H().services || {})[g.domain]) || {}, sk = Object.keys(svcs);
+    h += `<div class="gh">Services</div><div class="grp">${sk.length ? sk.map(name => { const s0 = svcs[name] || {}; return `<div class="r"><span class="tx"><span class="l">${esc(name)}</span><small>${esc(s0.description || s0.name || g.domain + '.' + name)}</small></span></div>`; }).join('') : '<div class="empty">No services.</div>'}</div>`;
+    const open = '/config/integrations/integration/' + encodeURIComponent(g.domain);
+    h += `<div class="grp"><button class="r act" data-act="intopen" data-url="${esc(open)}"><span class="sq" style="--c:var(--blue)"><ha-icon icon="mdi:open-in-new"></ha-icon></span><span class="tx"><span class="l">Open in Home Assistant</span></span><ha-icon class="ch" icon="mdi:open-in-new"></ha-icon></button></div>`;
+    return h; };
+  const appDevHtml = (domain, id) => { const g = intGroups().find(x => x.domain === domain), d = (st.intDevs || []).find(x => x.id === id);
+    if (!d) { st.sub = domain ? 'int:' + domain : null; return domain ? appIntHtml(domain) : appsHtml(); }
+    const title = d.name_by_user || d.name || d.id;
+    const ents = (st.intEnts || []).filter(n => n.device_id === d.id);
+    let h = `<div class="ph"><button class="bk" data-act="appsback" aria-label="Back"><ha-icon icon="mdi:chevron-left"></ha-icon>${esc((g && g.name) || 'Apps')}</button><span class="nt">${esc(title)}</span></div>`;
+    h += `<div class="apphead">${intIcon(domain)}<div><b>${esc(title)}</b><p>${esc([d.manufacturer, d.model, d.area_id].filter(Boolean).join(' · ') || domain || '')}</p></div></div>`;
+    h += `<div class="gh">Entities</div><div class="grp">${ents.length ? ents.map(entRow).join('') : '<div class="empty">No entities.</div>'}</div>`;
+    return h; };
   const customAppsSub = () => `<div class="ph"><button class="bk" data-act="appsback" aria-label="Back to Apps"><ha-icon icon="mdi:chevron-left"></ha-icon>Apps</button><span class="nt">Custom Apps</span></div><h1 class="sbt">Custom Apps</h1><div data-calist></div>`;
 
   const paneHtml = () => { if (st.sub) return subHtml(); const cur = st.wide ? (st.page || 'general') : st.page; if (cur === 'apps') return appsHtml(); const p = pageOf(st.wide ? (st.page || 'general') : st.page), q = st.q.trim().toLowerCase(), all = !q || p.t.toLowerCase().includes(q), d = data(), F = fields(), dis = ro(), w = why();
@@ -7461,7 +7502,7 @@ function hvOpenSettings(hub, app, from, goTo) {
   const wpSub = () => { const t = wpT(st.sub); return `<div class="ph"><button class="bk" data-act="wpback" aria-label="Back to Wallpaper"><ha-icon icon="mdi:chevron-left"></ha-icon>Wallpaper</button><span class="nt">${esc(t)}</span></div><h1 class="sbt">${esc(t)}</h1><div data-wpsub="${esc(st.sub)}"></div>`; };
   const caSub = () => { const e = st.sub.startsWith('ca:') ? hvCaOf(st.cfg, st.sub.slice(3)) : null, t = e ? (e.name || 'App') : st.sub === 'ca-new' ? 'New Custom App' : 'Custom App';
     return `<div class="ph"><button class="bk" data-act="caback" aria-label="Back to Custom Apps"><ha-icon icon="mdi:chevron-left"></ha-icon>Custom Apps</button><span class="nt">${esc(t)}</span></div><h1 class="sbt">${esc(t)}</h1><div data-casub></div>`; };
-  const subHtml = () => st.sub === 'customapps' ? customAppsSub() : st.sub === 'ca-new' || (st.sub && st.sub.startsWith('ca:')) ? caSub() : st.sub && st.sub.startsWith('wp-') ? wpSub() : st.sub === 'about' ? aboutHtml() : st.sub === 'update' ? updHtml() : st.sub && st.sub.startsWith('upd:') ? updDetail(st.sub.slice(4)) : st.sub && st.sub.startsWith('nhv:') ? appNhvHtml(st.sub.slice(4)) : st.sub && st.sub.startsWith('int:') ? appIntHtml(st.sub.slice(4)) : '';
+  const subHtml = () => st.sub === 'customapps' ? customAppsSub() : st.sub === 'ca-new' || (st.sub && st.sub.startsWith('ca:')) ? caSub() : st.sub && st.sub.startsWith('wp-') ? wpSub() : st.sub === 'about' ? aboutHtml() : st.sub === 'update' ? updHtml() : st.sub && st.sub.startsWith('upd:') ? updDetail(st.sub.slice(4)) : st.sub && st.sub.startsWith('nhv:') ? appNhvHtml(st.sub.slice(4)) : st.sub && st.sub.startsWith('int:') ? appIntHtml(st.sub.slice(4)) : st.sub && st.sub.startsWith('dev:') ? appDevHtml((st.sub.slice(4).split(':')[0] || ''), st.sub.slice(4).split(':').slice(1).join(':')) : '';
   const subGo = v => { st.sub = v; st.ucf = null; paintPane(); st.usig = subSig(); if (pane) pane.scrollTop = 0; const bd = root && root.parentNode; if (bd && !st.wide) bd.scrollTop = 0; };
   const uCheck = async () => { if (!admin || st.uchk) return; const ids = Object.keys(H().states || {}).filter(k => k.startsWith('update.')); st.uchk = true; if (st.sub === 'update') paintPane();
     try { if (ids.length) await H().callService('homeassistant', 'update_entity', { entity_id: ids }); } catch (e) { flash('Couldn\'t check: ' + ((e && (e.message || e.code)) || e), true); }
@@ -7476,10 +7517,11 @@ function hvOpenSettings(hub, app, from, goTo) {
   const subAct = (a, t) => { if (a === 'about') { subGo('about'); aboutLive(); return true; } if (a === 'update') { subGo('update'); hvGhRel.load(false).then(() => { if (st.sub === 'update') paintPane(); paintSide(); }); if (admin && !st.uchk0) { st.uchk0 = true; uCheck(); } return true; }
     if (a === 'wpback') { subGo(null); return true; }
     if (a === 'caback') { subGo(st.page === 'apps' ? 'customapps' : null); return true; }
-    if (a === 'appsback') { subGo(null); return true; }
+    if (a === 'appsback') { if (st.sub && String(st.sub).startsWith('dev:')) { const dom = String(st.sub).slice(4).split(':')[0]; subGo(dom ? 'int:' + dom : null); } else subGo(null); return true; }
     if (a === 'customapps') { subGo('customapps'); return true; }
     if (a === 'appnhv') { subGo('nhv:' + t.dataset.id); return true; }
     if (a === 'appint') { subGo('int:' + t.dataset.id); appsLoad(); return true; }
+    if (a === 'appdev') { subGo('dev:' + t.dataset.dom + ':' + t.dataset.id); return true; }
     if (a === 'intopen') { const u = t.dataset.url; if (u) { try { if (window.history && history.pushState) { history.pushState(null, '', u); window.dispatchEvent(new CustomEvent('location-changed', { detail: { replace: false }, bubbles: true, composed: true })); } else location.assign(u); } catch (e) {} } return true; }
     if (a === 'subback') { subGo(null); return true; } if (a === 'subupd') { subGo('update'); return true; }
     if (a === 'updopen') { subGo('upd:' + t.dataset.id); return true; } if (a === 'updcheck') { uCheck(); return true; }
@@ -9295,8 +9337,8 @@ const HVG_CSS = `
 .vis.gw.cam, .pk .wi .tile.gw.cam{background-size:cover;background-position:center}
 .vis.gw.cam .gico, .pk .wi .tile.gw.cam .gico{display:none}
 .vis.gw.cam .glab, .vis.gw.cam .gsub, .pk .wi .tile.gw.cam .glab, .pk .wi .tile.gw.cam .gsub{text-shadow:0 1px 4px rgba(0,0,0,.55)}
-.vis.gw.homie, .pk .wi .tile.gw.homie{justify-content:flex-end;padding:0 8cqmin 8cqmin}
-.vis.gw.homie .ghmo, .pk .wi .tile.gw.homie .ghmo{position:absolute;inset:4% 6% 24%;overflow:hidden;background:transparent}
+.vis.gw.homie, .pk .wi .tile.gw.homie{justify-content:flex-end;padding:0 8cqmin 8cqmin;container-type:size}.vis.gw.homie.sz-2x1, .pk .wi .tile.gw.homie.sz-2x1{flex-direction:column;justify-content:flex-end;align-items:center;text-align:center}
+.vis.gw.homie .ghmo, .pk .wi .tile.gw.homie .ghmo{position:absolute;inset:4% 6% 26%;overflow:hidden;background:transparent;container-type:size;container-name:ghmo}
 .vis.gw.homie .ghmo, .vis.gw.homie .ghmo .hms, .vis.gw.homie .ghmo .hwx, .vis.gw.homie .ghmo .hglow,
 .pk .wi .tile.gw.homie .ghmo, .pk .wi .tile.gw.homie .ghmo .hms, .pk .wi .tile.gw.homie .ghmo .hwx, .pk .wi .tile.gw.homie .ghmo .hglow{background:transparent!important;box-shadow:none!important}
 .vis.gw.homie .glab, .pk .wi .tile.gw.homie .glab{position:relative;z-index:1}
@@ -9308,7 +9350,7 @@ const HVG_CSS = `
 .pk .wi .tile.gw .glab{display:none}
 .pk .wi .tile.gw.sz-2x2 .gval{font-size:22px}
 .pk .wi .tile.gw.homie{padding:0 6px 8px}
-.pk .wi .tile.gw.homie .ghmo{inset:6% 8% 28%}
+.pk .wi .tile.gw.homie .ghmo{inset:6% 8% 28%;container-type:size}
 
 .pk .wi .tile.gw.sz-2x1{padding:8px 10px;gap:8px;flex-direction:row;justify-content:flex-start;align-items:center;text-align:left}
 .pk .wi .tile.gw.sz-2x1 .gico{width:28px;height:28px;flex:none;max-height:none}
@@ -9407,7 +9449,7 @@ class HVGlassPage extends HTMLElement {
   _build() { const r = this.shadowRoot; this._built = true; this._t = {}; this._prev = {}; this._pend = {};
     const icn = s => HVG_ICON[s] || HVG_ICON[{light2:'light',scene2:'scene',camera:'scene',extra:'scene'}[s] || s] || '';
     const tile = s => `<button class="t" data-s="${s}" type="button"><span class="fl"></span>${s === 'light' || s === 'light2' ? '<span class="lv"></span><span class="pc"></span>' : ''}<span class="in"><span class="ic">${icn(s)}</span><span class="tt"></span><span class="sb"><span class="a"></span><span class="b"></span></span></span></button>`;
-    r.innerHTML = `<style>${HVG_CSS}</style><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><radialGradient id="hvgglow"><stop offset="0" stop-color="#ffe08a" stop-opacity=".95"/><stop offset=".55" stop-color="#ffcc4d" stop-opacity=".35"/><stop offset="1" stop-color="#ffcc4d" stop-opacity="0"/></radialGradient>`
+    r.innerHTML = `<style>${HVG_CSS}${HV_HOMIE_CSS}</style><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><radialGradient id="hvgglow"><stop offset="0" stop-color="#ffe08a" stop-opacity=".95"/><stop offset=".55" stop-color="#ffcc4d" stop-opacity=".35"/><stop offset="1" stop-color="#ffcc4d" stop-opacity="0"/></radialGradient>`
       + `<linearGradient id="hvgcone" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffd76a" stop-opacity=".75"/><stop offset="1" stop-color="#ffd76a" stop-opacity="0"/></linearGradient></defs></svg>`
       + `<div class="bg" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="st"><div class="gr">`
       + `<div class="t th" data-s="thermostat" role="group"><span class="fl"></span><span class="num" aria-live="polite"></span><button class="cv d" type="button" data-dir="-1">${HVG_ICON.down}</button><button class="cv u" type="button" data-dir="1">${HVG_ICON.up}</button>`
@@ -9646,9 +9688,12 @@ _inWidEdit() { try { return !!(typeof hvSsSwitch !== 'undefined' && hvSsSwitch.m
     const ico = (info.ico && info.ico.indexOf('mdi:') === 0) ? '<ha-icon icon="' + info.ico + '"></ha-icon>' : (info.ico || '');
     const copy = (info.val ? '<div class="gval">' + esc(info.val) + '</div>' : '') + '<div class="glab">' + esc(info.name) + '</div>' + (info.sub ? '<div class="gsub">' + esc(info.sub) + '</div>' : '');
     if (kind === 'homie') {
-      box.innerHTML = '<div class="ghmo"></div><div class="glab">Homey</div>';
-      const stg = box.querySelector('.ghmo');
-      try { if (typeof HVHomie === 'function') new HVHomie(stg, 'thumb', { pause: () => !stg.isConnected }); } catch (e) {}
+      let stg = box.querySelector('.ghmo');
+      if (!stg || !box._hm) {
+        box.innerHTML = '<div class="ghmo"></div><div class="glab">Homey</div>';
+        stg = box.querySelector('.ghmo');
+        try { if (typeof HVHomie === 'function') box._hm = new HVHomie(stg, 'card', { pause: () => !stg.isConnected }); } catch (e) {}
+      }
       return;
     }
     if (shape === '2x1') box.innerHTML = '<div class="gico">' + ico + '</div><div class="gcopy">' + copy + '</div>';
@@ -12100,8 +12145,8 @@ const HV_SS_SW_CSS = `
 .vis.gw.cam, .pk .wi .tile.gw.cam{background-size:cover;background-position:center}
 .vis.gw.cam .gico, .pk .wi .tile.gw.cam .gico{display:none}
 .vis.gw.cam .glab, .vis.gw.cam .gsub, .pk .wi .tile.gw.cam .glab, .pk .wi .tile.gw.cam .gsub{text-shadow:0 1px 4px rgba(0,0,0,.55)}
-.vis.gw.homie, .pk .wi .tile.gw.homie{justify-content:flex-end;padding:0 8cqmin 8cqmin}
-.vis.gw.homie .ghmo, .pk .wi .tile.gw.homie .ghmo{position:absolute;inset:4% 6% 24%;overflow:hidden;background:transparent}
+.vis.gw.homie, .pk .wi .tile.gw.homie{justify-content:flex-end;padding:0 8cqmin 8cqmin;container-type:size}.vis.gw.homie.sz-2x1, .pk .wi .tile.gw.homie.sz-2x1{flex-direction:column;justify-content:flex-end;align-items:center;text-align:center}
+.vis.gw.homie .ghmo, .pk .wi .tile.gw.homie .ghmo{position:absolute;inset:4% 6% 26%;overflow:hidden;background:transparent;container-type:size;container-name:ghmo}
 .vis.gw.homie .ghmo, .vis.gw.homie .ghmo .hms, .vis.gw.homie .ghmo .hwx, .vis.gw.homie .ghmo .hglow,
 .pk .wi .tile.gw.homie .ghmo, .pk .wi .tile.gw.homie .ghmo .hms, .pk .wi .tile.gw.homie .ghmo .hwx, .pk .wi .tile.gw.homie .ghmo .hglow{background:transparent!important;box-shadow:none!important}
 .vis.gw.homie .glab, .pk .wi .tile.gw.homie .glab{position:relative;z-index:1}
@@ -12113,7 +12158,7 @@ const HV_SS_SW_CSS = `
 .pk .wi .tile.gw .glab{display:none}
 .pk .wi .tile.gw.sz-2x2 .gval{font-size:22px}
 .pk .wi .tile.gw.homie{padding:0 6px 8px}
-.pk .wi .tile.gw.homie .ghmo{inset:6% 8% 28%}
+.pk .wi .tile.gw.homie .ghmo{inset:6% 8% 28%;container-type:size}
 
 .pk .wi .tile.gw.sz-2x1{padding:8px 10px;gap:8px;flex-direction:row;justify-content:flex-start;align-items:center;text-align:left}
 .pk .wi .tile.gw.sz-2x1 .gico{width:28px;height:28px;flex:none;max-height:none}
