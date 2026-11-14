@@ -3,13 +3,34 @@
  *         homeview-group-card, homeview-scene-card, homeview-music-card, homeview-nav-card, homeview-edit-button-card
  *  Every card has a visual editor (ha-form). Look = HomeView glass tiles; colours come from the
  *  HomeView CSS variables (--hv-*) set by the HomeView theme / style helper, with glass fall-backs. */
-const HV_VERSION = '1.7'; // the published release (tag v1.7); Settings › General › About shows it
+const HV_VERSION = '2.0'; // Settings › General › About shows this. This V2 branch reports 2.0 (the last published tag is still v1.7).
 // Registered colour properties so a scene background written as linear-gradient(var(--hv-bg-top), var(--hv-bg-bottom))
 // can fade smoothly between scenes (plain gradients can't transition). Unused unless a dashboard style sets them.
 try { if (window.CSS && CSS.registerProperty) for (const n of ['--hv-bg-top', '--hv-bg-bottom'])
   CSS.registerProperty({ name: n, syntax: '<color>', inherits: false, initialValue: '#0d0f0e' }); } catch (e) { /* already registered */ }
 const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", Roboto, sans-serif';
 const ROUND = 'ui-rounded, "SF Pro Rounded", "Nunito", -apple-system, BlinkMacSystemFont, sans-serif';
+// Visible dates always keep a space between the month and the day ("Fri Nov 13", never "Fri Nov13").
+function hvFmtDate(d, lang, opts) {
+  const o = opts || { weekday: 'short', month: 'short', day: 'numeric' };
+  let s = '';
+  try {
+    const parts = new Intl.DateTimeFormat(lang || undefined, o).formatToParts(d);
+    for (let i = 0; i < parts.length; i++) {
+      const p = parts[i], prev = parts[i - 1], next = parts[i + 1];
+      const pair = (a, b) => !!(a && b && ((a.type === 'month' && b.type === 'day') || (a.type === 'day' && b.type === 'month') || (a.type === 'weekday' && (b.type === 'month' || b.type === 'day'))));
+      if (p.type === 'literal') {
+        if (pair(prev, next) && !/\s/.test(p.value)) s += ((p.value.replace(/\s*,\s*/g, ', ') || '') + ' ').replace(/\s+/g, ' ');
+        else s += p.value;
+      } else {
+        if (prev && prev.type !== 'literal' && pair(prev, p)) s += ' ';
+        s += p.value;
+      }
+    }
+  } catch (e) { try { s = d.toLocaleDateString(lang, o); } catch (e2) { s = d.toLocaleDateString(); } }
+  return String(s || '').replace(/([A-Za-z.]{2,})(\d)/g, '$1 $2').replace(/\s{2,}/g, ' ').trim();
+}
+
 // --hv-vh = the real visible window height in px. Full-screen HomeView layouts use calc(var(--hv-vh, 100dvh) - ...) because
 // 100vh / 100dvh are not reliable inside app web views (HA iOS / Android app). Updated on resize and rotation.
 if (!window.__hvVh) { window.__hvVh = true;
@@ -2230,7 +2251,7 @@ function camWhen(h, v) { // event entity state (ISO time) -> "8:42 PM" today, "Y
   const day = x => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime(), dd = Math.round((day(new Date()) - day(d)) / 864e5);
   let t; try { t = d.toLocaleTimeString(lang, o); } catch (e) { t = d.toLocaleTimeString(); }
   if (dd <= 0) return t; if (dd === 1) return 'Yesterday ' + t;
-  try { return d.toLocaleDateString(lang, { month: 'short', day: 'numeric' }); } catch (e) { return d.toLocaleDateString(); }
+  try { return hvFmtDate(d, lang, { month: 'short', day: 'numeric' }); } catch (e) { return hvFmtDate(d, lang); }
 }
 
 const hvCamSrc = (hass, id) => { const st = hass && hass.states && hass.states[id]; if (!st) return ''; const a = st.attributes || {}; const pic = a.entity_picture_local || a.entity_picture; const path = pic || (String(id).indexOf('camera.') === 0 ? '/api/camera_proxy/' + id : ''); if (!path) return ''; try { return hass.hassUrl ? hass.hassUrl(path) : path; } catch (e) { return path; } };
@@ -3379,7 +3400,7 @@ class HVCalendarCard extends HVBase {
     return d.toLocaleTimeString(lang, o); }
   _timeText(e) { if (e._all) { const days = Math.round((startOfDay(e._e) - startOfDay(e._s)) / 864e5); return days > 1 ? `All day · ${days} days` : 'All day'; }
     const multi = dayKey(e._s) !== dayKey(new Date(e._e.getTime() - 1));
-    return `${this._fmtT(e._s)} – ${multi ? e._e.toLocaleDateString((this._hass.locale || {}).language, { month: 'short', day: 'numeric' }) + ' ' : ''}${this._fmtT(e._e)}`; }
+    return `${this._fmtT(e._s)} – ${multi ? hvFmtDate(e._e, (this._hass.locale || {}).language, { month: 'short', day: 'numeric' }) + ' ' : ''}${this._fmtT(e._e)}`; }
   _paint() {
     if (!this._built || !this._hass) return;
     if (this._config.layout === 'wide') { this._paintWide(); return; }
@@ -3419,7 +3440,7 @@ class HVCalendarCard extends HVBase {
     const tt = e => e._all ? 'All day' : this._fmtT(e._s) + (e._e - e._s > 60000 ? ' – ' + this._fmtT(e._e) : '');
     this._narrowNow = this._nw();
     const col = cl => { const f = c.show_weather ? fc[cl.k] : null;
-      return `<div class="col${cl.i === 0 ? ' today' : ''}"><div class="ch"><div class="nr">${esc(rel(cl.i))}</div><div class="cd">${esc(cl.d.toLocaleDateString(lang, rows > 1 && !this._narrowNow ? { month: 'short', day: 'numeric' } : { weekday: 'short', month: 'short', day: 'numeric' }))}</div>
+      return `<div class="col${cl.i === 0 ? ' today' : ''}"><div class="ch"><div class="nr">${esc(rel(cl.i))}</div><div class="cd">${esc(hvFmtDate(cl.d, lang, rows > 1 && !this._narrowNow ? { month: 'short', day: 'numeric' } : { weekday: 'short', month: 'short', day: 'numeric' }))}</div>
         ${f ? `<div class="cw"><ha-icon icon="${WX_ICON[f.condition] || 'mdi:weather-partly-cloudy'}"></ha-icon><span>${Math.round(f.temperature)}°${f.templow != null ? `<i>${Math.round(f.templow)}°</i>` : ''}</span></div>` : ''}</div>
         <div class="evs">${cl.ev.length ? cl.ev.map(e => `<div class="ev${e._all ? ' ad' : ''}" data-own data-i="${all.indexOf(e)}" role="button" tabindex="0"><div class="et">${esc(e.summary || '(No title)')}</div>
           <div class="em"><span>${esc(tt(e))}${c.show_location && e.location ? ' · ' + esc(e.location) : ''}</span></div></div>`).join('') : `<div class="none">${this._events == null ? 'Loading…' : 'Nothing planned'}</div>`}</div><div class="more"></div></div>`; };
@@ -3463,7 +3484,7 @@ class HVCalendarCard extends HVBase {
   _details(e) { // glass details sheet on top of the page; nothing is sent to Home Assistant
     if (!e) return; const h = this._hass, lang = (h.locale && h.locale.language) || navigator.language;
     const cal = h.states[e._cal], calName = cal ? cal.attributes.friendly_name || e._cal : e._cal;
-    const date = e._s.toLocaleDateString(lang, { weekday: 'long', month: 'long', day: 'numeric' });
+    const date = hvFmtDate(e._s, lang, { weekday: 'long', month: 'long', day: 'numeric' });
     const host = document.createElement('div'); host.className = 'hv-cal-sheet';
     const sr = host.attachShadow({ mode: 'open' }), dayStyle = this.hasAttribute('day');
     sr.innerHTML = `<style>
@@ -4533,7 +4554,7 @@ function hwCalHtml(hub, cfg, cells) { const ids = hwCalIds(hub); if (!ids.length
     const ad = on(d0, new Date(d0.getTime() + 864e5)).filter(e => e.ad).slice(0, 2).map(e => `<div class="ad" style="--c:${e.col}">${esc(e.s)}</div>`).join('');
     const nowLine = hwDay(d0).getTime() === t0.getTime() && now >= a && now <= b ? `<div class="nl" style="top:${Math.max(0, Math.min(100, (now - a) / sp * 100)).toFixed(2)}%"></div>` : '';
     return `<div class="dg">${ad ? `<div class="ads">${ad}</div>` : ''}<div class="tl">${withLabels ? hours.map((hh, k) => `<div class="hr" style="top:${(k / nh * 100).toFixed(2)}%"><span>${esc(hwTime(hub, new Date(d0.getTime() + hh * 36e5), true))}</span></div>`).join('') : hours.map((hh, k) => `<div class="hr" style="top:${(k / nh * 100).toFixed(2)}%"></div>`).join('')}${evs}${nowLine}</div></div>`; };
-  if (sz === 'large') return `<div class="c-l"><div class="hd"><span class="wd">${wd(now)}</span><span class="dt">${esc(now.toLocaleDateString(L, { month: 'long', day: 'numeric' }))}</span></div><div class="bd"><div class="lc">${grid(t0, true)}</div>${tmCol(6)}</div></div>`;
+  if (sz === 'large') return `<div class="c-l"><div class="hd"><span class="wd">${wd(now)}</span><span class="dt">${esc(hvFmtDate(now, L, { month: 'long', day: 'numeric' }))}</span></div><div class="bd"><div class="lc">${grid(t0, true)}</div>${tmCol(6)}</div></div>`;
   const nd = 4, days = Array.from({ length: nd }, (_, k) => new Date(t0.getTime() + k * 864e5));
   return `<div class="c-x"><div class="wk" style="--n:${nd}"><div class="sp0"></div>${days.map((d, k) => `<div class="dh${k ? '' : ' td'}"><span>${esc(d.toLocaleDateString(L, { weekday: 'short' }))}</span><b>${d.getDate()}</b></div>`).join('')}</div>
 <div class="wb" style="--n:${nd}"><div class="hc">${hours.map((hh, k) => `<span style="top:${(k / nh * 100).toFixed(2)}%">${esc(hwTime(hub, new Date(t0.getTime() + hh * 36e5), true))}</span>`).join('')}</div>${days.map(d => grid(d, false)).join('')}</div></div>`; }
@@ -4589,7 +4610,7 @@ const HW_CSS = `
 .apps.hg > .tile > .tb{height:auto}
 .apps.hg > .hgp{border-radius:calc(var(--I,110px) * .26);background:rgba(255,255,255,.06);box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.14)}.apps.hg > .hgp.hga{background:none;box-shadow:none}
 .apps.hg{isolation:isolate}.apps.hg > .lift{position:absolute !important;z-index:1000;pointer-events:none;transition:none;filter:drop-shadow(0 18px 28px rgba(0,0,0,.35))}
-:host([hv-arr]) .apps.hg > .app:not(.lift) .ico{animation:hvjig .5s ease-in-out infinite alternate} @keyframes hvjig{from{transform:rotate(-1.4deg)}to{transform:rotate(1.4deg)}}
+:host([hv-arr]) .w{padding-bottom:max(var(--pb,20px), calc(80px + env(safe-area-inset-bottom,0px)))}:host([hv-arr]) .apps.hg > .app:not(.lift) .ico{animation:hvjig .5s ease-in-out infinite alternate} @keyframes hvjig{from{transform:rotate(-1.4deg)}to{transform:rotate(1.4deg)}}
 :host([hgrid]) .mid{display:block}:host([hgrid]) .row,:host([hgrid]) .below,:host([hgrid]) .calw{display:none !important}`;
 /* Home Screen arrange: one grid (home_layout) for the apps, Photos, the extra tiles, the Calendar and the cards. Press and move (or hold) lifts an item
    and the others make room as it moves; drop to place it. Tap = its menu, the corner handle = its sizes. Add App / Add Card in the bar.
@@ -4654,11 +4675,11 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
   enter(h) { if (this.hub || !this.ok(h)) return; this.hub = h; this.orig = JSON.stringify(h._hvRaw || {}); this.dirty = false; this.pend = []; this.t0 = Date.now(); hvEcl.ensure(); h.toggleAttribute('hv-arr', true);
     this.conv = !Array.isArray((h._hvRaw || {}).home_layout); if (this.conv) { const raw = this.raw(); raw.home_layout = hvHomeOrder(h._config, hvSideN(h._config)); h._arrSet(raw); }
     this.blank(h, true); if (navigator.vibrate) try { navigator.vibrate(15); } catch (x) {} this.timer = setInterval(() => this.tick(), 150);
-    this._k = () => this.tick(); addEventListener('scroll', this._k, { capture: true, passive: true }); addEventListener('resize', this._k); this.tick(); },
+    this._k = () => this.tick(); addEventListener('scroll', this._k, { capture: true, passive: true }); addEventListener('resize', this._k); this.tick(); try { if (h._layout) h._layout(); } catch (e) {} },
   // save = false only when the Home Screen went away and saving failed: back to how it was
   exit(save) { const h = this.hub; if (!h) return Promise.resolve(true); hvEcl.closeMenu(); this.endDrag(); this.endResize();
     const fin = () => { clearInterval(this.timer); this.timer = null; removeEventListener('scroll', this._k, true); removeEventListener('resize', this._k); for (const c of this.ctl.values()) c.remove(); this.ctl.clear(); this.bar(false);
-      this.blank(h, false); h.toggleAttribute('hv-arr', false); this.hub = null; this.dirty = false; this.conv = false; this.pend = []; hvEcl.kick(); };
+      this.blank(h, false); h.toggleAttribute('hv-arr', false); this.hub = null; this.dirty = false; this.conv = false; this.pend = []; hvEcl.kick(); try { if (h._layout) h._layout(); } catch (e) {} };
     if (!this.dirty || !save) { if (this.dirty || this.conv) h._arrSet(JSON.parse(this.orig)); fin(); return Promise.resolve(true); }
     if (this.busy) return Promise.resolve(false); this.busy = true; const raw = this.raw(), now = (Array.isArray(raw.apps) && raw.apps.length ? raw.apps : HUB_APPS).map(hvHubAppKey);
     const pend = (this.pend || []).filter(p => now.includes(p.key)); // Add App: the Home / Security pages behind added icons (not ones deleted again)
@@ -6356,7 +6377,7 @@ async function hvAssistCalendar(hub, el, q, keep) {
   evs.sort((a, b) => a.st - b.st || (b.ad - a.ad)); const list = evs.filter(e => e.st < to); let html = `<div class="ct"><ha-icon icon="mdi:calendar-month-outline"></ha-icon>${title}</div>`, day = '';
   if (!list.length) html += `<div class="none">Nothing planned.</div>`;
   for (const e of list) { const dk = e.st.toDateString(); if (dk !== day) { day = dk; const dd = Math.round((new Date(e.st.getFullYear(), e.st.getMonth(), e.st.getDate()) - d0) / 864e5);
-      html += `<div class="day">${dd <= 0 ? 'Today' : esc(e.st.toLocaleDateString(lang, { weekday: 'long', month: 'long', day: 'numeric' }))}</div>`; } // 1.6.x: "Wednesday, April 1" (Today when it is)
+      html += `<div class="day">${dd <= 0 ? 'Today' : esc(hvFmtDate(e.st, lang, { weekday: 'long', month: 'long', day: 'numeric' }))}</div>`; } // 1.6.x: "Wednesday, April 1" (Today when it is)
     const tm = d => d.toLocaleTimeString(lang, { hour: 'numeric', minute: '2-digit', hour12: to12 });
     html += `<div class="ev ${e.ad ? 'ad' : 'tmd'}" style="--cc:${e.col}"><i></i><ha-icon icon="mdi:calendar"></ha-icon><span class="s">${esc(e.s)}</span><span class="tm">${e.ad ? 'all-day' : esc(tm(e.st) + (e.en && e.en > e.st ? '–' + tm(e.en) : ''))}</span></div>`; }
   card.innerHTML = html; keep(); return true; }
@@ -6618,7 +6639,7 @@ function hvAssist(hub, o) {
   const note = (m, msg) => { if (!msg) return; if (compact) { asked = true; showCap(null, msg, 'Tap orb for details', true); } const e = document.createElement('div'); e.className = 'err'; e.setAttribute('role', 'alert'); e.textContent = msg; (m || log.querySelector('.m.a.cur') || add('a', '')).appendChild(e); keep(); }; // under the answer on screen (the reading page shows only that one)
   // first message + suggestions (they go away with the first request)
   // earlier messages (this device's history), one line per day
-  { let day = ''; const fd = t => { const d = new Date(t), n = new Date(), y = new Date(Date.now() - 864e5); return d.toDateString() === n.toDateString() ? 'Today' : d.toDateString() === y.toDateString() ? 'Yesterday' : d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }); };
+  { let day = ''; const fd = t => { const d = new Date(t), n = new Date(), y = new Date(Date.now() - 864e5); return d.toDateString() === n.toDateString() ? 'Today' : d.toDateString() === y.toDateString() ? 'Yesterday' : hvFmtDate(d, undefined, { weekday: 'short', month: 'short', day: 'numeric' }); };
     for (const h of hvHistLoad(c)) { const dd = fd(h.t); if (dd !== day) { day = dd; const sep = document.createElement('div'); sep.className = 'hdv old'; sep.textContent = dd + ' · ' + new Date(h.t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); log.appendChild(sep); }
       if (h.r === 'u') add('u old', esc(h.x)); else add('a old', `<div class="re">${esc(h.x)}</div>`); } }
   const hello = say('How can I help?'); const sugEl = document.createElement('div'); sugEl.className = 'sug';
@@ -6985,9 +7006,9 @@ function hvOpenReminders(hub, app) {
   // a due value: 'YYYY-MM-DD' (date) or an ISO date-time; day key + label
   const dueAt = v => { if (!v) return null; const s = String(v); if (/^\d{4}-\d{2}-\d{2}$/.test(s)) { const [y, m, d] = s.split('-').map(Number); return { d: new Date(y, m - 1, d), t: false }; } const d = new Date(s); return isNaN(d) ? null : { d, t: true }; };
   const sod = d => new Date(d.getFullYear(), d.getMonth(), d.getDate()), today = () => sod(new Date());
-  const dayLabel = d => { const n = Math.round((sod(d) - today()) / 864e5); if (n < 0) return 'Overdue'; if (n === 0) return 'Today'; if (n === 1) return 'Tomorrow'; return d.toLocaleDateString(lang, { weekday: 'long', month: 'long', day: 'numeric' }); };
+  const dayLabel = d => { const n = Math.round((sod(d) - today()) / 864e5); if (n < 0) return 'Overdue'; if (n === 0) return 'Today'; if (n === 1) return 'Tomorrow'; return hvFmtDate(d, lang, { weekday: 'long', month: 'long', day: 'numeric' }); };
   const dueText = v => { const a = dueAt(v); if (!a) return ''; const n = Math.round((sod(a.d) - today()) / 864e5);
-    const ds = n === 0 ? 'Today' : n === 1 ? 'Tomorrow' : n === -1 ? 'Yesterday' : a.d.toLocaleDateString(lang, { month: 'short', day: 'numeric' }); return a.t ? ds + ', ' + a.d.toLocaleTimeString(lang, { hour: 'numeric', minute: '2-digit' }) : ds; };
+    const ds = n === 0 ? 'Today' : n === 1 ? 'Tomorrow' : n === -1 ? 'Yesterday' : hvFmtDate(a.d, lang, { month: 'short', day: 'numeric' }); return a.t ? ds + ', ' + a.d.toLocaleTimeString(lang, { hour: 'numeric', minute: '2-digit' }) : ds; };
   const overdue = v => { const a = dueAt(v); return !!a && (a.t ? a.d < new Date() : sod(a.d) < today()); };
   const sched = () => { const out = []; for (const id of idsOf()) { const L = st.lists.get(id); for (const it of (L && L.items) || []) if (it.status !== 'completed' && dueAt(it.due)) out.push({ it, id }); }
     return out.sort((x, y) => dueAt(x.it.due).d - dueAt(y.it.due).d); };
@@ -7527,7 +7548,7 @@ function hvOpenSettings(hub, app, from, goTo) {
     return phSub('subback', 'About') + `<div class="grp">${kv('Device', d.line, { k: 'dev', note: d.app ? 'Home Assistant Companion app' : '' })}${kv('Home Assistant', ha, { copy: ha })}${kv('NotHomeView', nv, { copy: nv })}</div>`
       + `<div class="grp">${kv('Wi-Fi network', wifi, { k: 'wifi', note: !W.id ? (W.cands.length ? 'Choose this device\'s Wi-Fi sensor below.' : 'Needs the Home Assistant Companion app\'s Wi-Fi connection sensor on this device.') : '' })}${pickRow('wifi', W, S)}`
       + `${kv('Battery', bat, { k: 'bat', note: bnote || (!st.bat && !B.id && B.cands.length ? 'Choose this device\'s battery sensor below.' : '') })}${st.bat ? '' : pickRow('batt', B, S)}</div>`; };
-  const ago = t => { if (!t) return ''; const d = new Date(t), now = new Date(), same = d.toDateString() === now.toDateString(); return (same ? 'Today' : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })) + ' at ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }); };
+  const ago = t => { if (!t) return ''; const d = new Date(t), now = new Date(), same = d.toDateString() === now.toDateString(); return (same ? 'Today' : hvFmtDate(d, undefined, { month: 'short', day: 'numeric' })) + ' at ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }); };
   const uIcon = (x, big) => { const a = x.attributes || {}, r = hvUpdRank(x), ic = r === 0 ? 'mdi:view-dashboard-variant' : r === 1 ? 'mdi:home-assistant' : r === 2 ? 'mdi:harddisk' : r === 3 ? 'mdi:lifebuoy' : 'mdi:package-up';
     return a.entity_picture ? `<span class="ui${big ? ' big' : ''}" style="background-image:url('${esc(a.entity_picture)}')"></span>` : `<span class="ui${big ? ' big' : ''}" style="background:${r <= 1 ? '#18bcf2' : '#8e8e93'}"><ha-icon icon="${ic}"></ha-icon></span>`; };
   const pbar = x => { if (!hvUpdBusy(x)) return ''; const p = hvUpdPct(x); return p == null ? '<div class="pbar ind"><i></i></div>' : `<div class="pbar" role="progressbar" aria-valuenow="${p}"><i style="width:${p}%"></i></div>`; };
@@ -7832,10 +7853,10 @@ function hvOpenCalApp(hub, app) {
     if (st.mode === 'list') return st.q.trim() ? 'Results' : 'Schedule';
     if (st.mode === 'year') return String(y);
     if (st.mode === 'month') return d.toLocaleDateString(lang, { month: 'long', year: 'numeric' });
-    if (st.mode === 'day') return d.toLocaleDateString(lang, sameY ? { weekday: 'long', month: 'long', day: 'numeric' } : { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+    if (st.mode === 'day') return hvFmtDate(d, lang, sameY ? { weekday: 'long', month: 'long', day: 'numeric' } : { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
     const s = hvCalStartOfWeek(d), e = hvCalAddDays(s, 6), o = { month: 'short', day: 'numeric' };
-    if (s.getMonth() === e.getMonth() && s.getFullYear() === e.getFullYear()) return s.toLocaleDateString(lang, { month: 'short' }) + ' ' + s.getDate() + ' – ' + e.getDate() + ', ' + e.getFullYear();
-    return s.toLocaleDateString(lang, o) + ' – ' + e.toLocaleDateString(lang, o) + ', ' + e.getFullYear(); };
+    if (s.getMonth() === e.getMonth() && s.getFullYear() === e.getFullYear()) return hvFmtDate(s, lang, { month: 'short', day: 'numeric' }) + ' – ' + e.getDate() + ', ' + e.getFullYear();
+    return hvFmtDate(s, lang, o) + ' – ' + hvFmtDate(e, lang, o) + ', ' + e.getFullYear(); };
   const hintFor = () => st.mode === 'day' ? 'Swipe for adjacent days' : st.mode === 'week' ? 'Swipe for adjacent weeks' : st.mode === 'month' ? 'Swipe for adjacent months' : st.mode === 'year' ? 'Swipe for adjacent years' : '';
   function overlaps(e, day) { const ds = startOfDay(day), de = hvCalAddDays(ds, 1); return e._s < de && e._e > ds; }
   function blkHtml(e, extra) { const desc = hvCalBlockDesc(e), c = colorOf(e._cal), fg = hvCalFg(c);
@@ -7879,7 +7900,7 @@ function hvOpenCalApp(hub, app) {
   function listPage() { const ev = shown().slice().sort((a, b) => a._s - b._s); if (!ev.length) return `<div class="empty">${st.events == null ? 'Loading…' : 'No events'}</div>`;
     const groups = []; ev.forEach(e => { const k = dayKey(e._s); let g = groups.find(x => x.k === k); if (!g) groups.push(g = { k, d: startOfDay(e._s), ev: [] }); g.ev.push(e); });
     const lang = hvCalLang(hub._hass);
-    return `<div class="list">${groups.map(g => `<div class="lg"><h3>${esc(g.d.toLocaleDateString(lang, { weekday: 'long', month: 'long', day: 'numeric' }))}</h3>${g.ev.map(e => { const desc = hvCalBlockDesc(e); return `<button type="button" class="li" data-ev="${idxOf(e)}" style="--c:${colorOf(e._cal)}"><i class="mk"></i><span><div class="tt">${esc(e.summary || '(No title)')}</div><div class="tm">${esc(e._all ? 'All day' : hvCalFmtRange(hub._hass, e))}</div>${desc ? `<div class="ds">${esc(desc)}</div>` : ''}</span></button>`; }).join('')}</div>`).join('')}</div>`; }
+    return `<div class="list">${groups.map(g => `<div class="lg"><h3>${esc(hvFmtDate(g.d, lang, { weekday: 'long', month: 'long', day: 'numeric' }))}</h3>${g.ev.map(e => { const desc = hvCalBlockDesc(e); return `<button type="button" class="li" data-ev="${idxOf(e)}" style="--c:${colorOf(e._cal)}"><i class="mk"></i><span><div class="tt">${esc(e.summary || '(No title)')}</div><div class="tm">${esc(e._all ? 'All day' : hvCalFmtRange(hub._hass, e))}</div>${desc ? `<div class="ds">${esc(desc)}</div>` : ''}</span></button>`; }).join('')}</div>`).join('')}</div>`; }
   function yearPage(year) { const lang = hvCalLang(hub._hass), today = dayKey(new Date()), letters = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
     let html = '';
     for (let m = 0; m < 12; m++) { const first = new Date(year, m, 1), dim = new Date(year, m + 1, 0).getDate(), pad = first.getDay();
@@ -7973,7 +7994,7 @@ ${reminder ? '<p class="warn">Reminders aren’t stored on a Home Assistant cale
     if (st.detailKey === key && !detEl.hidden) return;
     st.detailKey = key; detEl.hidden = false; const e = e0, lang = hvCalLang(hub._hass), c = colorOf(e._cal);
     const when = e._all ? 'All day' : hvCalFmtRange(hub._hass, e);
-    const date = e._s.toLocaleDateString(lang, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+    const date = hvFmtDate(e._s, lang, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
     detEl.innerHTML = `<div class="dbox"><button type="button" class="xx" data-act="detail-close" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button>
 <div class="calpick"><i style="background:${c}"></i><span>${esc(nameOf(e._cal))}</span></div><h2>${esc(e.summary || '(No title)')}</h2>
 <p>${esc(date)}</p><p>${esc(when)}</p>${e.location ? `<p>${esc(e.location)}</p>` : ''}${e.description ? `<p style="white-space:pre-wrap">${esc(String(e.description).replace(/<[^>]+>/g, ' ').trim())}</p>` : ''}</div>`;
@@ -8212,7 +8233,7 @@ class HVHubCard extends HTMLElement {
       for (const el of [ssb, sss, ssg, ssc]) el.style.display = '';
       const n = new Date(), lang = (this._hass && this._hass.locale && this._hass.locale.language) || navigator.language;
       v.querySelector('.sst').textContent = n.toLocaleTimeString(lang, { hour: 'numeric', minute: '2-digit' }).replace(/\s?[AP]M$/i, '');
-      v.querySelector('.ssd').textContent = n.toLocaleDateString(lang, { weekday: 'long', month: 'long', day: 'numeric' });
+      v.querySelector('.ssd').textContent = hvFmtDate(n, lang, { weekday: 'long', month: 'long', day: 'numeric' });
     } else {
       // Styled overlay selected: never flash Wallpanel's photo+clock in the swipe-down preview.
       ssb.style.backgroundImage = ''; sss.style.backgroundImage = '';
@@ -8513,7 +8534,7 @@ class HVHubCard extends HTMLElement {
     const S = this._w.style, set = (k, v) => S.setProperty(k, v);
     const safeT = this._px('var(--hv-safe-top, env(safe-area-inset-top, 0px))'), safeB = this._px('var(--hv-safe-bottom, env(safe-area-inset-bottom, 0px))');
     const W = r.width, px = Math.round(Math.max(8, Math.max(18, Math.min(64, vw * 0.05)) - (full ? r.left : 0)));
-    const top = full ? Math.max(0, r.top + scrollY) : 0, pt = Math.round(full ? Math.max(safeT + 12, Math.min(48, vh * 0.04)) - top : 20), pb = Math.round(full ? safeB + 16 : 20);
+    const top = full ? Math.max(0, r.top + scrollY) : 0, pt = Math.round(full ? Math.max(safeT + 12, Math.min(48, vh * 0.04)) - top : 20), arrBar = (this.hasAttribute('hv-arr') || (typeof hvHubArr !== 'undefined' && hvHubArr.hub === this)) ? 80 : 0, pb = Math.round((full ? safeB + 16 : 20) + arrBar);
     // fill the screen exactly: minus whatever the view puts below the card (section padding), so the page doesn't scroll
     // re-measured on every viewport size: first fill vh exactly (page overflows by the padding), then subtract that
     const vk = vw + 'x' + vh + (this._edit ? 'e' : ''); if (vk !== this._vk) { this._vk = vk; this._below = 0; setTimeout(() => this._layout(), 300); }
@@ -11738,7 +11759,7 @@ class HVSsFace {
     this._sh = this._ln(s, { x1: 64, y1: 92, x2: 64, y2: 10, stroke: 'var(--hv-ss-hands,#fff)', 'stroke-width': .45 }); this._ln(s, { t: 'circle', cx: 64, cy: 50, r: 1.4, fill: 'var(--hv-ss-hands,#fff)', stroke: 'var(--hv-ss-bg,#5c9a68)', 'stroke-width': .7 });
     f.querySelector('.stg').appendChild(s); }
   _u_typo(d, hass) { this._hands(d, 64, 50); const L = (hass && hass.locale && hass.locale.language) || undefined;
-    this.el.querySelector('.dc').textContent = (d.toLocaleDateString(L, { weekday: 'short' }).replace(/\./g, '') + ' ' + d.getDate()).toUpperCase(); }
+    this.el.querySelector('.dc').textContent = hvFmtDate(d, L, { weekday: 'short', day: 'numeric' }).replace(/\./g, '').toUpperCase(); }
   // ---- whimsical minimalist
   _b_whimsy() { const f = this.el; f.innerHTML = '<div class="stg"></div>'; const st = f.querySelector('.stg'); this._nums = [];
     const tilt = [0, 12, 26, 8, -12, 18, 0, -16, 6, -10, 0, -22];
@@ -11783,7 +11804,7 @@ class HVSsFace {
     if (pf && u && pf.dataset.src !== u) { pf.style.backgroundImage = 'url("'+String(u).replace(/"/g, '')+'")'; pf.dataset.src = u; }
     const L = (hass && hass.locale && hass.locale.language) || undefined;
     const pdt = this.el.querySelector('.pdt'), pclk = this.el.querySelector('.pclk');
-    if (pdt) pdt.textContent = d.toLocaleDateString(L, { weekday: 'short', month: 'short', day: 'numeric' });
+    if (pdt) pdt.textContent = hvFmtDate(d, L, { weekday: 'short', month: 'short', day: 'numeric' });
     if (pclk) pclk.textContent = d.toLocaleTimeString(L, { hour: 'numeric', minute: '2-digit' }).replace(/\s/g, '').replace(/([AP]M)$/i, '');
   }
   update(hass, d) { d = d || new Date(); try { this['_u_' + this.s](d, hass); } catch (e) { /* keep the last frame */ } }
@@ -11816,7 +11837,7 @@ const hvSsOv = {
   _sweep(root, d) { if (!root || d > 14 || !root.querySelectorAll) return;
     root.querySelectorAll('#hv-ss-style').forEach(n => { try { n.remove(); } catch (e) {} });
     for (const el of root.querySelectorAll('*')) if (el.shadowRoot) this._sweep(el.shadowRoot, d + 1); },
-  hide() { try { const w = typeof ssWallpanel === 'function' ? ssWallpanel() : null; try { this._parkWpMedia(w, true); } catch (e) {} const running = !!(w && typeof w.screensaverRunning === 'function' && w.screensaverRunning()); if (typeof hvSsSwitch !== 'undefined' && hvSsSwitch && !running) { hvSsSwitch.hide(); try { hvSsMarkGone(); hvSsEatTap(600); } catch (e) {} } } catch (e) {} try { hvSsKeep.off('glass'); hvSsKeep.off('style'); } catch (e) {} const h = this.host; this.host = null; this.face = null; this.card = null; this._g = null; this._bornAt = 0; this.style = null; this.colKey = null; this._up = false;
+  hide() { try { const w = typeof ssWallpanel === 'function' ? ssWallpanel() : null; try { this._parkWpMedia(w, true); } catch (e) {} const running = !!(w && typeof w.screensaverRunning === 'function' && w.screensaverRunning()); if (typeof hvSsSwitch !== 'undefined' && hvSsSwitch && !running) { hvSsSwitch.hide(); try { hvSsMarkGone(); hvSsEatTap(600); } catch (e) {} } } catch (e) {} try { hvSsKeep.off('glass'); hvSsKeep.off('style'); } catch (e) {} const h = this.host; this.host = null; this.face = null; this.card = null; this._g = null; this._bornAt = 0; this.style = null; this.colKey = null; this._up = false; try { this._ssToastClass(false); } catch (e) {}
     if (h) { try { h.remove(); } catch (e) {} } try { this._sweep(document, 0); } catch (e) {} },
   // Wallpanel can still report "running" after it has faded out (opacity 0 / visibility hidden / pointer-events none).
   // The style layer must not stay up then: it covers the screensaver settings dialog.
@@ -11826,8 +11847,11 @@ const hvSsOv = {
     if (cs.visibility === 'hidden' || cs.display === 'none' || cs.pointerEvents === 'none') return false;
     const op = Number(cs.opacity); return isFinite(op) && op >= 0.05; },
   _running(w) { try { return !!(w && w.screensaverRunning && w.screensaverRunning()); } catch (e) { return false; } },
+  _ssToastClass(on) { try { document.documentElement.classList.toggle('hv-ss-up', !!on); } catch (e) {} if (on) this._eatWpToasts(); },
   _wpToastEat(n) { if (!n || n.nodeType !== 1) return; const t = n.textContent || n.innerText || '';
-    if (!/Wallpanel error|Failed to update media from null|Failed to load IMG/i.test(t)) return;
+    const ss = !!(this._up || this.host || this._running(typeof ssWallpanel === 'function' ? ssWallpanel() : null));
+    if (!/Wallpanel error|Failed to update media from null|Failed to load IMG|Keep screen on|tap the screen for a moment|keep it awake/i.test(t)) return;
+    if (/Keep screen on|tap the screen for a moment|keep it awake/i.test(t) && !ss) return;
     const box = n.closest && (n.closest('#wallpanel-message-container') || n.closest('.wallpanel-message') || n);
     try { (box && box !== document.body && box !== document.documentElement) ? box.remove() : (n.style && (n.style.display = 'none')); } catch (e) {} },
   _eatWpToasts() { try { const box = document.getElementById('wallpanel-message-container'); if (box) this._wpToastEat(box); document.querySelectorAll && document.querySelectorAll('.wallpanel-message, ha-toast, notification-toast').forEach(el => this._wpToastEat(el)); } catch (e) {} },
@@ -11841,7 +11865,7 @@ const hvSsOv = {
     if (on) { try { if (w.style) { /* keep the host hit-testable while a styled face is up; hide only its media */ } } catch (e) {} this._watchWpToasts(); } },
   _hookMedia(w) { if (!w || w.__hvSsMediaHooked) return; w.__hvSsMediaHooked = true;
     if (!document.getElementById('hv-ss-wp-media')) { const s = document.createElement('style'); s.id = 'hv-ss-wp-media';
-      s.textContent = 'wallpanel-view.hv-ss-nomedia img,wallpanel-view.hv-ss-nomedia video,wallpanel-view.hv-ss-nomedia ha-camera-stream,wallpanel-view.hv-ss-nomedia canvas,wallpanel-view.hv-ss-nomedia [style*="background-image"]{opacity:0!important;visibility:hidden!important;background-image:none!important}#wallpanel-message-container .wallpanel-message{display:none!important}';
+      s.textContent = 'wallpanel-view.hv-ss-nomedia img,wallpanel-view.hv-ss-nomedia video,wallpanel-view.hv-ss-nomedia ha-camera-stream,wallpanel-view.hv-ss-nomedia canvas,wallpanel-view.hv-ss-nomedia [style*="background-image"]{opacity:0!important;visibility:hidden!important;background-image:none!important}html.hv-ss-up #wallpanel-message-container,html.hv-ss-up #wallpanel-message-container .wallpanel-message,html.hv-ss-up .wallpanel-message{display:none!important;visibility:hidden!important;opacity:0!important}';
       try { document.documentElement.appendChild(s); } catch (e) { document.head.appendChild(s); } }
     const self = this;
     const wantHide = () => { if (self._wpHideMedia) return true; try { const st = (typeof hvSs !== 'undefined' && hvSs.get()) || self.style; return !!(st && st !== 'photo'); } catch (e) { return !!self._wpHideMedia; } };
@@ -11944,7 +11968,7 @@ const hvSsOv = {
     const born = !this.host || this.style !== st || this.colKey !== colKey || !this.host.isConnected || this.host.parentNode !== w.parentNode;
     if (born) { this.hide();
       const h = document.createElement('div'); h.id = 'hv-ss-style'; h.setAttribute('aria-hidden', 'true'); h.inert = true; const sr = h.attachShadow({ mode: 'open' }); sr.innerHTML = `<style>${HV_SS_FACE_CSS}</style>`;
-      this.face = new HVSsFace(st); this.face.applyColors(cols); sr.appendChild(this.face.el); this.style = st; this.colKey = colKey; this.host = h; this._up = true; this._userDismiss = false; w.parentNode.appendChild(h); try { hvSsKeep.on('style'); } catch (e) {} }
+      this.face = new HVSsFace(st); this.face.applyColors(cols); sr.appendChild(this.face.el); this.style = st; this.colKey = colKey; this.host = h; this._up = true; this._userDismiss = false; try { this._ssToastClass(true); } catch (e) {} w.parentNode.appendChild(h); try { hvSsKeep.on('style'); } catch (e) {} }
     else if (this.face) this.face.applyColors(cols);
     // Just above Wallpanel (page hints sit under it). A 2147482000 z-index painted over the settings dialog, so the button looked dead.
     // While Wallpanel is running/starting: stay fully opaque so its photo-clock never shows through a
@@ -11977,7 +12001,7 @@ const hvSsOv = {
       try { card.setConfig(cfg); } catch (e) { try { card.setConfig({ background: 'none' }); } catch (x) {} }
       try { card.hass = this.hass(); } catch (e) {}
       sr.querySelector('.stage').appendChild(card);
-      this.card = card; this.face = null; this.style = 'glass'; this.colKey = 'glass'; this.host = h; this._up = true; this._bornAt = Date.now(); this._g = null;
+      this.card = card; this.face = null; this.style = 'glass'; this.colKey = 'glass'; this.host = h; this._up = true; try { this._ssToastClass(true); } catch (e) {} this._bornAt = Date.now(); this._g = null;
       const parent = (w && w.parentNode) || document.body; parent.appendChild(h);
       if (prev && prev !== h) { try { prev.remove(); } catch (e) {} }
       this._wireGlass(); try { hvSsKeep.on('glass'); hvSsKeep.on('style'); } catch (e) {} this._userDismiss = false; }
@@ -12151,7 +12175,7 @@ const HV_SS_SW_CSS = `
 .comp.date{padding:10% 12%;justify-content:flex-end;color:inherit}
  .comp.date .k{font-size:13cqh;letter-spacing:.04em;opacity:.85;text-transform:none}
  .comp.date .v{font-size:50cqh;letter-spacing:-.06em;font-weight:700}
-.comp.date.compact{flex-direction:row;align-items:baseline;justify-content:flex-start;gap:8%;padding:2% 4%}
+.comp.date.compact{flex-direction:row;align-items:baseline;justify-content:flex-start;gap:.35em;padding:2% 4%}
  .comp.date.compact .k,.comp.date.compact .v{font-size:28cqh;font-weight:650;letter-spacing:.02em}
 .comp.clock{align-items:center;padding:6%}
 .comp.clock svg{width:88%;height:88%}
@@ -12351,9 +12375,10 @@ const hvSsComp = {
     const S = (hass && hass.states) || {}, L = (hass && hass.locale && hass.locale.language) || undefined;
     if (entity === 'builtin.date') {
       const d = new Date();
-      const wd = d.toLocaleDateString(L, { weekday: 'short' }) + ' ' + d.toLocaleDateString(L, { month: 'short' });
       const day = String(d.getDate());
-      return { name: 'Date', icon: 'mdi:calendar', kind: 'date', value: day, label: wd, wd, day };
+      const wd = hvFmtDate(d, L, { weekday: 'short', month: 'short' });
+      const label = hvFmtDate(d, L, { weekday: 'short', month: 'short', day: 'numeric' });
+      return { name: 'Date', icon: 'mdi:calendar', kind: 'date', value: day, label, wd, day };
     }
     if (entity === 'builtin.weather' || (entity && entity.startsWith('weather.'))) {
       const w = (entity && S[entity]) || S[Object.keys(S).find(k => k.startsWith('weather.')) || ''] || null;
@@ -12410,7 +12435,7 @@ const hvSsComp = {
         + '<circle cx="50" cy="50" r="3.2" fill="currentColor"/></svg></div>';
     }
     if (st.kind === 'date') {
-      return `<div class="comp date"><div class="k">${esc(st.wd || st.label || '')}</div><div class="v">${esc(st.day || st.value || '')}</div></div>`;
+      return `<div class="comp date"><div class="k">${esc(st.wd || st.label || '')} </div><div class="v">${esc(st.day || st.value || '')}</div></div>`;
     }
     if (st.kind === 'weather') {
       return `<div class="comp wxw"><div class="k">${esc(st.loc || st.name || '')}</div><div class="v">${esc(String(st.value || '—'))}</div><div class="k sub">${esc(st.condition || st.hl || '')}</div></div>`;
@@ -13830,7 +13855,7 @@ function hvWallpaperUI(ctx) {
   const outer = (d, st, cols, still) => { const lay = document.createElement('div'); lay.className = 'lay'; d.appendChild(lay);
     if (st === 'photo') { const u = photoUrl(); lay.innerHTML = `<div class="pf"${u ? ` style="background-image:url('${String(u).replace(/'/g, '%27')}')"` : ''}></div><div class="pdt"></div><div class="pclk"></div>`;
       const c = cols || hvSsColors.get('photo'); if (c.text) lay.style.setProperty('--hv-ss-text', c.text);
-      lay.querySelector('.pclk').textContent = clock(); lay.querySelector('.pdt').textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }); return; }
+      lay.querySelector('.pclk').textContent = clock(); lay.querySelector('.pdt').textContent = hvFmtDate(new Date(), undefined, { weekday: 'long', month: 'long', day: 'numeric' }); return; }
     const f = new HVSsFace(st, true); f.applyColors(cols || hvSsColors.get(st)); lay.appendChild(f.el); if (still) { f.el.style.animationPlayState = 'paused'; lay.classList.add('off'); f.thumbOnly = true; }
     live(lay, f); try { f.update(ctx.H(), new Date()); } catch (e) {} if (!still) run(); };
   // the Inner background (mode, level) with the Home Screen's mock apps and cards over it; scale = preview width / screen width (the blur shrinks with it)
