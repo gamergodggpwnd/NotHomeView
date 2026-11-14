@@ -1764,6 +1764,10 @@ ha-card::before,ha-card::after{content:none !important;display:none !important}
 :host([large]) .media img{object-fit:contain}
 .media ha-camera-stream{opacity:0;transition:opacity .5s ease;--video-max-height:100%;display:block}
 .media ha-camera-stream.on{opacity:1}
+.media,.media>*{outline:none!important;-webkit-tap-highlight-color:transparent}
+.media ha-camera-stream,.media video,.media img,.media canvas{outline:none!important;box-shadow:none!important;-webkit-tap-highlight-color:transparent;border:none!important}
+:host([large]) .media,:host([fs]) .media{overflow:hidden;background:#05070a}
+
 .ph{position:absolute;inset:0;display:flex;flex-direction:column;gap:6px;text-align:center;padding:0 12px;box-sizing:border-box;align-items:center;justify-content:center;color:rgba(255,255,255,.55);font-size:13px;font-weight:600;
  background:linear-gradient(160deg,#2b3340,#151a22)} .ph ha-icon{--mdc-icon-size:min(34px,22cqh)} .has .ph{display:none}
 .media img.pv{object-fit:cover} .st.tap .dot{display:none}
@@ -2228,6 +2232,20 @@ function camWhen(h, v) { // event entity state (ISO time) -> "8:42 PM" today, "Y
   if (dd <= 0) return t; if (dd === 1) return 'Yesterday ' + t;
   try { return d.toLocaleDateString(lang, { month: 'short', day: 'numeric' }); } catch (e) { return d.toLocaleDateString(); }
 }
+
+const hvCamSrc = (hass, id) => { const st = hass && hass.states && hass.states[id]; if (!st) return ''; const a = st.attributes || {}; const pic = a.entity_picture_local || a.entity_picture; const path = pic || (String(id).indexOf('camera.') === 0 ? '/api/camera_proxy/' + id : ''); if (!path) return ''; try { return hass.hassUrl ? hass.hassUrl(path) : path; } catch (e) { return path; } };
+const hvCamMuteOutline = el => { if (!el) return;
+  const kill = n => { if (!n || !n.style) return; try { n.style.outline = 'none'; n.style.boxShadow = 'none'; n.style.webkitTapHighlightColor = 'transparent'; n.removeAttribute('tabindex'); } catch (e) {}
+    if (n.blur) try { n.blur(); } catch (e) {} };
+  const walk = (n, d) => { if (!n || d > 12) return; kill(n); if (n.shadowRoot && !n.shadowRoot.querySelector('style[data-hv-cam-ol]')) { const s = document.createElement('style'); s.setAttribute('data-hv-cam-ol', '');
+    s.textContent = '*,video,img,canvas{outline:none!important;box-shadow:none!important;-webkit-tap-highlight-color:transparent;border:none!important}video:focus,video:focus-visible{outline:none!important}';
+    try { n.shadowRoot.appendChild(s); } catch (e) {} }
+    if (n.shadowRoot) walk(n.shadowRoot, d + 1);
+    const kids = n.children || n.childNodes; if (kids) for (const c of kids) if (c && c.nodeType === 1) walk(c, d + 1); };
+  try { el.tabIndex = -1; } catch (e) {}
+  kill(el); walk(el, 0);
+  try { el.querySelectorAll && el.querySelectorAll('video,img,canvas').forEach(v => { kill(v); try { v.tabIndex = -1; v.blur && v.blur(); } catch (e) {} }); } catch (e) {}
+};
 class HVCameraCard extends HTMLElement {
   constructor() { super(); this.attachShadow({ mode: 'open' }); }
   static get defaults() { return { camera_view: 'live', size: '2x3', show_name: true, show_status: true, tap_opens: true, popup_style: 'fullscreen', swipe_to_close: true, show_history: true, show_sound: true, show_preview: true, live_pause: true, live_pause_min: 30, show_device_live: false, show_device_popup: true }; }
@@ -2434,7 +2452,7 @@ class HVCameraCard extends HTMLElement {
   _showErr(m) { this._err = m; this._stopStream(); const rate = CAM_RATE.test(m);
     this._$('.et').textContent = rate ? (this._vendor() === 'nest' ? 'Google is limiting live view. Try again in a minute.' : 'Live view is rate limited. Try again in a minute.') : 'Live view didn’t start. ' + m.replace(/\s+/g, ' ').slice(0, 120);
     this._$('.err').classList.add('on'); this._status(); }
-  _markLive() { if (!this._streamEl) return; this._streamEl.classList.add('on'); if (!this._live) { this._live = true; this._liveAt = Date.now(); this._sig = null; this._render(); this._status(); } }
+  _markLive() { if (!this._streamEl) return; try { hvCamMuteOutline(this._streamEl); } catch (e) {} this._streamEl.classList.add('on'); if (!this._live) { this._live = true; this._liveAt = Date.now(); this._sig = null; this._render(); this._status(); } }
   // ---- 1.32.0 Always live (live_tile: visible) ----
   _alReset() { this._alFails = 0; this._alGaveUp = false; this._alRetryAt = 0; this._alGaveUpAt = 0; }
   _alBind() { if (!this._alOn) { this._alOn = true;
@@ -4960,6 +4978,53 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
     if (Array.isArray(raw.home_layout)) raw.home_layout = this.remap(raw.home_layout, pre, before, after); },
   dup(it) { const pre = it.kind === 'side' ? 's' : 'w'; this.change(raw => { let n = -1; this.edit(raw, it.kind, a => { if (a[it.i]) { a.push(JSON.parse(JSON.stringify(a[it.i]))); n = a.length - 1; } });
     const L = raw.home_layout; if (n < 0 || !Array.isArray(L)) return; const t = pre + ':' + n, j = L.indexOf(t); if (j >= 0) L.splice(j, 1); const at = L.indexOf(it.tok); L.splice(at < 0 ? L.length : at + 1, 0, t); }); }, // right after the original
+  isCam(it) { if (!it || !this.hub) return false; if (it.kind && it.kind !== 'side' && it.kind !== 'card') return false;
+    const c = this.hub._config || {}, s = (c.side_cards || []).filter(x => x && x.type)[it.i] || ((this.hub._sideEls || [])[it.i] || {})._cfg || {};
+    const typ = String(s.type || ''), ent = String(s.entity || '');
+    return typ.indexOf('camera') >= 0 || ent.indexOf('camera.') === 0; },
+  async editItem(it) { const h = this.hub; if (!h || !it) return;
+    if (this.isCam(it)) { this.camPicker(it); return; }
+    const c = h._config || {}; let sub = null;
+    if (it.kind === 'app') { const a = (c.apps || [])[it.i];
+      if (a && (a.kind === 'external' || a.custom_app)) sub = a.custom_app ? ('ca:' + a.custom_app) : 'customapps';
+      else { const key = typeof hvHubAppKey === 'function' ? hvHubAppKey(a) : ''; if (key && String(key).indexOf('ext:') !== 0) sub = 'nhv:' + key; } }
+    else if (it.kind === 'photo') sub = 'nhv:photos';
+    else if (it.kind === 'cal') sub = 'nhv:calendar';
+    else if (it.kind === 'card') { const x = (c.home_cards || [])[it.i] || {}; sub = (x.type === 'weather') ? 'nhv:weather' : 'nhv:calendar'; }
+    else if (it.kind === 'side') { const s = (c.side_cards || []).filter(x => x && x.type)[it.i] || ((h._sideEls || [])[it.i] || {})._cfg || {}; if (s.type === HV_HOMIE_T) sub = 'nhv:homey'; }
+    if (sub) { if (!(await this.exit(true))) return; try { hvOpenSettings(h, { kind: 'settings' }, h, { page: 'apps', sub }); } catch (e) {} return; }
+    this.openEditor(); },
+  camPicker(it) { const h = this.hub, hass = h && h._hass; if (!h || !hass) return; hvEcl.closeMenu();
+    const cur = (() => { const c = h._config || {}, s = (c.side_cards || []).filter(x => x && x.type)[it.i] || ((h._sideEls || [])[it.i] || {})._cfg || {}; return s.entity || ''; })();
+    const ids = Object.keys(hass.states || {}).filter(k => k.indexOf('camera.') === 0);
+    const wrap = document.createElement('div'); wrap.className = 'hv-campick'; wrap.innerHTML = `<style>
+      .hv-campick{position:fixed;inset:0;z-index:100000;display:flex;align-items:flex-end;justify-content:center;font-family:system-ui,-apple-system,sans-serif}
+      .hv-campick .scrim{position:absolute;inset:0;background:rgba(0,0,0,.45)}
+      .hv-campick .sh{position:relative;width:min(560px,100%);max-height:min(78vh,760px);background:#1c1c1e;color:#fff;border-radius:16px 16px 0 0;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 -8px 40px rgba(0,0,0,.35)}
+      .hv-campick .grab{width:36px;height:5px;border-radius:99px;background:rgba(255,255,255,.28);margin:8px auto 0}
+      .hv-campick .hd{display:flex;align-items:center;justify-content:space-between;padding:10px 16px 12px;font-size:17px;font-weight:700}
+      .hv-campick .hd b{font-weight:700} .hv-campick .hd button{all:unset;color:#0a84ff;font-size:17px;padding:8px;cursor:pointer}
+      .hv-campick .list{overflow:auto;-webkit-overflow-scrolling:touch;padding:0 12px 24px;display:flex;flex-direction:column;gap:8px}
+      .hv-campick button.cam{all:unset;display:flex;align-items:center;gap:12px;padding:10px;border-radius:14px;background:#2c2c2e;cursor:pointer}
+      .hv-campick button.cam[aria-checked="true"]{box-shadow:inset 0 0 0 2px #0a84ff}
+      .hv-campick .th{width:72px;height:52px;border-radius:10px;overflow:hidden;background:#111;flex:none;display:flex;align-items:center;justify-content:center}
+      .hv-campick .th img{width:100%;height:100%;object-fit:cover;display:block} .hv-campick .th ha-icon{--mdc-icon-size:26px;opacity:.7}
+      .hv-campick .tx{min-width:0} .hv-campick .tx b{display:block;font-size:16px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .hv-campick .tx small{display:block;font-size:12px;color:rgba(255,255,255,.55);margin-top:2px}
+    </style><div class="scrim"></div><div class="sh" role="dialog" aria-label="Choose Camera"><div class="grab"></div><div class="hd"><b>Choose Camera</b><button type="button" data-act="close">Done</button></div><div class="list"></div></div>`;
+    const list = wrap.querySelector('.list');
+    const close = () => { try { wrap.remove(); } catch (e) {} };
+    wrap.querySelector('.scrim').addEventListener('click', close);
+    wrap.querySelector('[data-act="close"]').addEventListener('click', close);
+    const nameOf = id => { const st = hass.states[id]; return (st && st.attributes && st.attributes.friendly_name) || id.replace(/^camera\./, ''); };
+    if (!ids.length) { const empty = document.createElement('div'); empty.style.cssText = 'padding:24px 8px;color:rgba(255,255,255,.6);text-align:center'; empty.textContent = 'No cameras in Home Assistant'; list.appendChild(empty); }
+    ids.forEach(id => { const b = document.createElement('button'); b.type = 'button'; b.className = 'cam'; b.setAttribute('aria-checked', String(id === cur));
+      const src = hvCamSrc(hass, id); const st = hass.states[id] || {};
+      b.innerHTML = `<span class="th">${src ? '<img alt="" src="'+src.replace(/"/g,'')+'">' : '<ha-icon icon="mdi:cctv"></ha-icon>'}</span><span class="tx"><b></b><small></small></span>`;
+      b.querySelector('b').textContent = nameOf(id); b.querySelector('small').textContent = (st.state || '') + (id === cur ? ' · Current' : '');
+      b.addEventListener('click', () => { this.change(raw => { const rows = (raw.side_cards || []).filter(x => x && x.type); const s = rows[it.i]; if (s) { s.entity = id; if (s.camera_entity) s.camera_entity = id; } }); close(); });
+      list.appendChild(b); });
+    (hvEcl.lay || document.body).appendChild(wrap); },
   async openEditor() { const h = this.hub; if (!(await this.exit(true))) return; const root = hvFindRoot(h), lv = root && root.lovelace; if (!lv) return;
     // Same path as the popup pencil: open this Home Screen card's editor when we can find it; otherwise enter dashboard edit mode.
     const sig = JSON.stringify(h._hvRaw || {});
@@ -4973,7 +5038,7 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
       b.innerHTML = '<ha-icon></ha-icon><span></span>'; b.querySelector('ha-icon').setAttribute('icon', ic); b.querySelector('span').textContent = txt; b.addEventListener('click', e => { e.stopPropagation(); if (Date.now() - t0 < 400) return; fn(); }); m.appendChild(b); return b; };
     const sep = () => { const s = document.createElement('div'); s.className = 'sep'; m.appendChild(s); };
     const head = document.createElement('div'); head.className = 't'; head.textContent = this.label(it); m.appendChild(head);
-    if (it.kind !== 'card') item('mdi:pencil', it.kind === 'cal' ? 'Edit calendar' : 'Edit', () => { close(); this.openEditor(); });
+    if (it.kind !== 'card' || this.isCam(it)) item('mdi:pencil', it.kind === 'cal' ? 'Edit calendar' : 'Edit', () => { close(); this.editItem(it); });
     item('mdi:arrow-left', 'Move earlier', () => { close(); this.shift(it.tok, -1); }, '', at <= 0);
     item('mdi:arrow-right', 'Move later', () => { close(); this.shift(it.tok, 1); }, '', at < 0 || at >= L.length - 1);
     const ks = this.sizes(it); if (ks.length) { sep(); const cur = this.sizeOf(it);
@@ -10743,6 +10808,10 @@ const DB_CSS = `
 .media img{object-fit:cover;opacity:0;transition:opacity .4s ease} .media img.on{opacity:1}
 :host([mode=full]) .media img{object-fit:contain}
 .media ha-camera-stream{opacity:0;transition:opacity .5s ease;--video-max-height:100%;display:block} .media ha-camera-stream.on{opacity:1}
+.media,.media>*{outline:none!important;-webkit-tap-highlight-color:transparent}
+.media ha-camera-stream,.media video,.media img,.media canvas{outline:none!important;box-shadow:none!important;-webkit-tap-highlight-color:transparent;border:none!important}
+:host([mode=full]) .media{overflow:hidden;background:#07090d}
+
 .ph{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:rgba(255,255,255,.55);font-size:13px;font-weight:600;background:radial-gradient(120% 90% at 50% 40%,#1c2230,#07090d)}
 .ph ha-icon{--mdc-icon-size:40px;opacity:.7} :host([mode=corner]) .ph ha-icon{--mdc-icon-size:28px} :host([mode=corner]) .ph span{display:none}
 .shade{position:absolute;inset:0;pointer-events:none;background:linear-gradient(to bottom,rgba(0,0,0,.42),rgba(0,0,0,0) 26%,rgba(0,0,0,0) 64%,rgba(0,0,0,.5))}
@@ -10832,7 +10901,7 @@ class HVDoorbellPopup extends HTMLElement {
       this._media.appendChild(v); this._streamEl = v; this._streamAt = Date.now(); dbLog({ act: 'stream start', cam: this._cam }); };
     if (customElements.get('ha-camera-stream')) make(); else { this._streamAt = Date.now(); HVCameraCard._loadStream().then(ok => ok && make()); } }
   _stopStream() { if (this._streamEl) { try { this._streamEl.remove(); } catch (e) {} this._streamEl = null; } this._live = false; }
-  _markLive() { if (!this._streamEl) return; this._streamEl.classList.add('on'); if (!this._live) { this._live = true; this._liveAt = Date.now(); this._badge(); dbLog({ act: 'live', ms: Date.now() - this._at }); } }
+  _markLive() { if (!this._streamEl) return; try { hvCamMuteOutline(this._streamEl); } catch (e) {} this._streamEl.classList.add('on'); if (!this._live) { this._live = true; this._liveAt = Date.now(); this._badge(); dbLog({ act: 'live', ms: Date.now() - this._at }); } }
   _fail(m) { const rate = CAM_RATE.test(m || ''); dbLog({ act: 'stream failed', why: String(m || '').slice(0, 80), rate }); this._stopStream();
     if (!rate && this._retry < 1) { this._retry++; this._waitUntil = Date.now() + 4000; return; } // one quiet retry, then the still picture
     this._noLive = true; this._why = rate ? 'live view rate limited' : 'live view didn’t start'; this._badge(); this._snapLoad(); }
@@ -11747,7 +11816,7 @@ const hvSsOv = {
   _sweep(root, d) { if (!root || d > 14 || !root.querySelectorAll) return;
     root.querySelectorAll('#hv-ss-style').forEach(n => { try { n.remove(); } catch (e) {} });
     for (const el of root.querySelectorAll('*')) if (el.shadowRoot) this._sweep(el.shadowRoot, d + 1); },
-  hide() { try { const w = typeof ssWallpanel === 'function' ? ssWallpanel() : null; const running = !!(w && typeof w.screensaverRunning === 'function' && w.screensaverRunning()); if (typeof hvSsSwitch !== 'undefined' && hvSsSwitch && !running) { hvSsSwitch.hide(); try { hvSsMarkGone(); hvSsEatTap(600); } catch (e) {} } } catch (e) {} try { hvSsKeep.off('glass'); hvSsKeep.off('style'); } catch (e) {} const h = this.host; this.host = null; this.face = null; this.card = null; this._g = null; this._bornAt = 0; this.style = null; this.colKey = null; this._up = false;
+  hide() { try { const w = typeof ssWallpanel === 'function' ? ssWallpanel() : null; try { this._parkWpMedia(w, true); } catch (e) {} const running = !!(w && typeof w.screensaverRunning === 'function' && w.screensaverRunning()); if (typeof hvSsSwitch !== 'undefined' && hvSsSwitch && !running) { hvSsSwitch.hide(); try { hvSsMarkGone(); hvSsEatTap(600); } catch (e) {} } } catch (e) {} try { hvSsKeep.off('glass'); hvSsKeep.off('style'); } catch (e) {} const h = this.host; this.host = null; this.face = null; this.card = null; this._g = null; this._bornAt = 0; this.style = null; this.colKey = null; this._up = false;
     if (h) { try { h.remove(); } catch (e) {} } try { this._sweep(document, 0); } catch (e) {} },
   // Wallpanel can still report "running" after it has faded out (opacity 0 / visibility hidden / pointer-events none).
   // The style layer must not stay up then: it covers the screensaver settings dialog.
@@ -11757,7 +11826,46 @@ const hvSsOv = {
     if (cs.visibility === 'hidden' || cs.display === 'none' || cs.pointerEvents === 'none') return false;
     const op = Number(cs.opacity); return isFinite(op) && op >= 0.05; },
   _running(w) { try { return !!(w && w.screensaverRunning && w.screensaverRunning()); } catch (e) { return false; } },
-  _hookStart() { const w = ssWallpanel(); if (!w || w.__hvSsHooked || typeof w.startScreensaver !== 'function') return;
+  _wpToastEat(n) { if (!n || n.nodeType !== 1) return; const t = n.textContent || n.innerText || '';
+    if (!/Wallpanel error|Failed to update media from null|Failed to load IMG/i.test(t)) return;
+    const box = n.closest && (n.closest('#wallpanel-message-container') || n.closest('.wallpanel-message') || n);
+    try { (box && box !== document.body && box !== document.documentElement) ? box.remove() : (n.style && (n.style.display = 'none')); } catch (e) {} },
+  _eatWpToasts() { try { const box = document.getElementById('wallpanel-message-container'); if (box) this._wpToastEat(box); document.querySelectorAll && document.querySelectorAll('.wallpanel-message, ha-toast, notification-toast').forEach(el => this._wpToastEat(el)); } catch (e) {} },
+  _watchWpToasts() { this._eatWpToasts(); if (this._wpToastObs) return;
+    try { this._wpToastObs = new MutationObserver(() => this._eatWpToasts()); this._wpToastObs.observe(document.documentElement, { childList: true, subtree: true }); } catch (e) {} },
+  _parkWpMedia(w, on) { if (!w) return;
+    try { if (on) w.classList.add('hv-ss-nomedia'); else w.classList.remove('hv-ss-nomedia'); } catch (e) {}
+    const apply = el => { if (!el || !el.style) return; try { el.style.opacity = on ? '0' : ''; el.style.visibility = on ? 'hidden' : ''; } catch (e) {} };
+    try { for (const el of [w.imageOne, w.imageTwo, w.imageOneContainer, w.imageTwoContainer, w.imageOneBackground, w.imageTwoBackground]) apply(el); } catch (e) {}
+    try { w.querySelectorAll && w.querySelectorAll('img,video,ha-camera-stream,canvas').forEach(el => apply(el)); } catch (e) {}
+    if (on) { try { if (w.style) { /* keep the host hit-testable while a styled face is up; hide only its media */ } } catch (e) {} this._watchWpToasts(); } },
+  _hookMedia(w) { if (!w || w.__hvSsMediaHooked) return; w.__hvSsMediaHooked = true;
+    if (!document.getElementById('hv-ss-wp-media')) { const s = document.createElement('style'); s.id = 'hv-ss-wp-media';
+      s.textContent = 'wallpanel-view.hv-ss-nomedia img,wallpanel-view.hv-ss-nomedia video,wallpanel-view.hv-ss-nomedia ha-camera-stream,wallpanel-view.hv-ss-nomedia canvas,wallpanel-view.hv-ss-nomedia [style*="background-image"]{opacity:0!important;visibility:hidden!important;background-image:none!important}#wallpanel-message-container .wallpanel-message{display:none!important}';
+      try { document.documentElement.appendChild(s); } catch (e) { document.head.appendChild(s); } }
+    const self = this;
+    const wantHide = () => { if (self._wpHideMedia) return true; try { const st = (typeof hvSs !== 'undefined' && hvSs.get()) || self.style; return !!(st && st !== 'photo'); } catch (e) { return !!self._wpHideMedia; } };
+    const wrap = (name, ret) => { const orig = w[name]; if (typeof orig !== 'function' || orig.__hvWrap) return;
+      w[name] = function () { if (wantHide()) { try { self._parkWpMedia(w, true); } catch (e) {} return ret === 'arg0' ? arguments[0] : (ret === 'undef' ? undefined : orig ? undefined : undefined); }
+        const el = arguments[0];
+        if (name === 'updateMedia' && el && (el.mediaUrl == null || el.mediaUrl === 'null' || el.mediaUrl === '')) return el;
+        try { return orig.apply(this, arguments); } catch (e) { if (/media from null|Failed to load IMG/i.test(String((e && e.message) || e))) return name === 'updateMedia' ? el : undefined; throw e; } };
+      w[name].__hvWrap = true; };
+    wrap('updateMedia', 'arg0'); wrap('switchActiveMedia', 'undef'); wrap('updateMediaList', 'undef');
+    if (typeof w.releaseMediaElement === 'function' && !w.releaseMediaElement.__hvWrap) { const origR = w.releaseMediaElement;
+      w.releaseMediaElement = function (el) { if (!el) return; try { if (el.mediaUrl == null && !el.getAttribute('src') && !el.src) return; } catch (e) {}
+        try { return origR.apply(this, arguments); } catch (e) { if (/media from null|Failed to load IMG/i.test(String((e && e.message) || e))) return; throw e; } };
+      w.releaseMediaElement.__hvWrap = true; }
+    if (typeof w.stopScreensaver === 'function' && !w.stopScreensaver.__hvMedia) { const origS = w.stopScreensaver;
+      w.stopScreensaver = function () { if (wantHide() || self._userDismiss) { try { self._parkWpMedia(w, true); if (w.style) { w.style.opacity = '0'; } } catch (e) {} }
+        const r = origS.apply(this, arguments);
+        if (wantHide() || self._userDismiss) { try { self._parkWpMedia(w, true); if (w.style) { w.style.opacity = '0'; w.style.visibility = 'hidden'; } } catch (e) {} }
+        try { self._watchWpToasts(); self._eatWpToasts(); } catch (e) {}
+        return r; };
+      w.stopScreensaver.__hvMedia = true; }
+    this._watchWpToasts();
+    if (wantHide()) this._parkWpMedia(w, true); },
+  _hookStart() { const w = ssWallpanel(); if (w) try { this._hookMedia(w); } catch (e) {} if (!w || w.__hvSsHooked || typeof w.startScreensaver !== 'function') return;
     w.__hvSsHooked = true; const orig = w.startScreensaver;
     const origHI = typeof w.handleInteractionEvent === 'function' ? w.handleInteractionEvent : null;
     const opening = () => {
@@ -11828,7 +11936,7 @@ const hvSsOv = {
       return; }
     if (this._g) { if (this.card) try { this.card.hass = this.hass(); } catch (e) {} return; }
     const st = hvSs.get(), cols = hvSsColors.get(st), colKey = st + ':' + JSON.stringify(hvSsStrip(st, cols) || {});
-    if (st === 'photo') { try { hvSsKeep.off('style'); } catch (e) {} const keepSw = typeof hvSsSwitch !== 'undefined' && hvSsSwitch && hvSsSwitch.mode; if (!keepSw) this.hide(); hvSsPhotoTint.apply(cols.text); try { if (typeof hvSsSwitch !== 'undefined') hvSsSwitch.arm(true); } catch (e) {} return; }
+    if (st === 'photo') { this._wpHideMedia = false; try { this._parkWpMedia(w, false); } catch (e) {} try { hvSsKeep.off('style'); } catch (e) {} const keepSw = typeof hvSsSwitch !== 'undefined' && hvSsSwitch && hvSsSwitch.mode; if (!keepSw) this.hide(); hvSsPhotoTint.apply(cols.text); try { if (typeof hvSsSwitch !== 'undefined') hvSsSwitch.arm(true); } catch (e) {} return; }
     hvSsPhotoTint.clear();
     let z = parseInt(cs && cs.zIndex, 10); if (!(z > 0)) z = 1000;
     const overlayOp = run ? 1 : (isFinite(op) ? op : 1);
@@ -11841,6 +11949,7 @@ const hvSsOv = {
     // Just above Wallpanel (page hints sit under it). A 2147482000 z-index painted over the settings dialog, so the button looked dead.
     // While Wallpanel is running/starting: stay fully opaque so its photo-clock never shows through a
     // translucent overlay during fade-in. Only match Wallpanel opacity while it is fading OUT after dismiss.
+    this._wpHideMedia = true; try { this._parkWpMedia(w, true); } catch (e) {}
     this.host.style.cssText = `position:fixed;inset:0;z-index:${z + 1};pointer-events:none;opacity:${overlayOp};transition:${born || run ? 'none' : 'opacity .4s linear'}`;
     this.face.update(this.hass(), new Date()); try { if (typeof hvSsSwitch !== 'undefined') hvSsSwitch.arm(false); } catch (e) {} },
   _mountGlass(w, z, overlayOp, run, force) {
@@ -11873,6 +11982,7 @@ const hvSsOv = {
       if (prev && prev !== h) { try { prev.remove(); } catch (e) {} }
       this._wireGlass(); try { hvSsKeep.on('glass'); hvSsKeep.on('style'); } catch (e) {} this._userDismiss = false; }
     else if (this.card) { try { this.card.hass = this.hass(); } catch (e) {} }
+    this._wpHideMedia = true; try { this._parkWpMedia(w, true); } catch (e) {}
     this.host.style.cssText = `position:fixed;top:0;right:0;bottom:0;left:0;width:100%;height:100%;height:100dvh;z-index:${z + 1};pointer-events:auto;opacity:${overlayOp};transition:${born || run ? 'none' : 'opacity .4s linear'};transform:none;background:#4c49d0`; },
   _wireGlass() { const h = this.host; if (!h || h.__hvGlassWired) return; h.__hvGlassWired = true;
     try { if (typeof hvSsSwitch !== 'undefined') hvSsSwitch.hookGlass(h); } catch (e) {}
