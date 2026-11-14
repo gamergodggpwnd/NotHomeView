@@ -6997,7 +6997,7 @@ const HV_SET_PAGES = [
     sec: [{ bare: true, f: ['@wallpair'] }, { f: ['swipe_screensaver', 'ss_hold'] }, { f: ['@wallpanel'] }, { h: 'Home Screen background', f: ['photo_backdrop', 'bg_freeze', 'wallpaper', 'dim'] }] }, // the style carousel + its colours (screensaver_style / screensaver_colors)
   { id: 'gestures', t: 'Gestures', i: 'mdi:gesture-swipe', c: '#34c759', g: 1, d: 'Swipes on the Home Screen.',
     sec: [{ f: ['swipe_open_home', 'swipe_page'] }, { f: ['edge_sidebar', 'block_pull_refresh'] }] },
-  { id: 'apps', t: 'Apps', i: 'mdi:apps', c: '#007aff', g: 2, d: 'The app icons on the Home Screen and what each one opens.',
+  { id: 'apps', t: 'Apps & Integrations', i: 'mdi:apps', c: '#007aff', g: 2, d: 'The app icons on the Home Screen, NotHomeView apps, and Home Assistant integrations.',
     sec: [{ f: ['apps'] }, { f: ['@appsnote'] }] },
   { id: 'customapps', t: 'Custom Apps', i: 'mdi:apps-box', c: '#5e5ce6', g: 2, d: 'Buttons that open other apps on this device (Google Home, Spotify, …), with a confirm before leaving Home Assistant.',
     sec: [{ bare: true, f: ['@customapps'] }, { f: ['@canote'] }] },
@@ -7055,7 +7055,7 @@ const HV_SET_CSS = `
 .ph{position:relative;display:flex;align-items:center;min-height:44px;margin:0 52px 10px 0}
 .nt{position:absolute;left:50%;transform:translateX(-50%);font-size:17px;font-weight:600;white-space:nowrap;max-width:60%;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
 .se.wide .ph{margin-left:52px}.se:not(.wide) .nt{display:none}.se:not(.wide) .sv{max-width:46vw}
-.bk{all:unset;cursor:pointer;display:inline-flex;align-items:center;min-height:44px;padding-right:10px;font-size:17px;color:var(--blue);position:relative;z-index:1}.bk ha-icon{--mdc-icon-size:32px;display:flex;margin-left:-8px}
+.bk{all:unset;cursor:pointer;display:inline-flex;align-items:center;min-height:44px;padding-right:10px;font-size:17px;color:var(--blue);position:relative;z-index:1;max-width:46%;overflow:hidden;white-space:nowrap}.bk ha-icon{--mdc-icon-size:32px;display:flex;margin-left:-8px}
 .intro{display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px;padding:22px 20px 20px;border-radius:12px;background:var(--card);margin:0 0 24px}
 .intro .sq{width:64px;height:64px;border-radius:15px}.intro .sq ha-icon{--mdc-icon-size:40px}.intro b{font-size:22px;font-weight:700}.intro p{margin:0;font-size:15px;color:var(--fg2);line-height:1.35;max-width:520px}
 .gh{margin:0 16px 7px;font-size:13px;text-transform:uppercase;letter-spacing:.02em;color:var(--fg2)}
@@ -7349,7 +7349,7 @@ function hvOpenSettings(hub, app, from, goTo) {
         h += '</div>'; } }
     if (!nhv.length && !groups.length && q) h += `<div class="grp"><div class="empty">No results for “${esc(st.q.trim())}”</div></div>`;
     return h; };
-  const appsHtml = () => { let h = `<div class="ph">${st.wide ? '' : '<button class="bk" data-act="back" aria-label="Back to Settings"><ha-icon icon="mdi:chevron-left"></ha-icon>Settings</button>'}<span class="nt">Apps</span></div><h1 class="sbt">Apps</h1>`;
+  const appsHtml = () => { let h = `<div class="ph">${st.wide ? '' : '<button class="bk" data-act="back" aria-label="Back to Settings"><ha-icon icon="mdi:chevron-left"></ha-icon>Settings</button>'}<span class="nt">Apps & Integrations</span></div><h1 class="sbt">Apps & Integrations</h1>`;
     if (!st.intsReady && !st.intsErr) h += '<div class="grp"><div class="r"><span class="l">Loading integrations…</span><span class="spin" aria-hidden="true"></span></div></div>';
     return h + appsListHtml(); };
   const appsLoad = () => { if (st.intsP || st.intsReady) return;
@@ -7374,7 +7374,7 @@ function hvOpenSettings(hub, app, from, goTo) {
     return h || `<div class="grp"><div class="empty">No settings for this app.</div></div>`; };
   const appNhvHtml = key => { const a = hvNhvApps().find(x => x.key === key); if (!a) { st.sub = null; return appsHtml(); }
     const ic = a.icon && String(a.icon).startsWith('hv:') ? 'mdi:apps' : (a.icon || 'mdi:apps');
-    let h = `<div class="ph"><button class="bk" data-act="appsback" aria-label="Back to Apps"><ha-icon icon="mdi:chevron-left"></ha-icon>Apps</button><span class="nt">${esc(a.name)}</span></div>`;
+    let h = `<div class="ph"><button class="bk" data-act="appsback" aria-label="Back to Apps & Integrations"><ha-icon icon="mdi:chevron-left"></ha-icon>Apps & Integrations</button><span class="nt">${esc(a.name)}</span></div>`;
     h += `<div class="apphead"><span class="ai" style="background:${esc(a.color || '#8e8e93')}"><ha-icon icon="${ic}"></ha-icon></span><div><b>${esc(a.name)}</b><p>NotHomeView${a.blurb ? ' · ' + esc(a.blurb) : ''}</p></div></div>`;
     const p = a.page && pageOf(a.page); if (p && p.id !== 'apps') h += secsHtml(p);
     else h += `<div class="grp"><div class="r note"><small>${esc(a.blurb || 'A NotHomeView app.')}</small></div></div>`;
@@ -7383,7 +7383,7 @@ function hvOpenSettings(hub, app, from, goTo) {
     if (!g) { st.sub = null; return appsHtml(); }
     const ents = intEntsOf(g.entries, g.devices);
     const stt = g.entries.some(e => /loaded|setup/i.test(e.state || '')) ? { t: 'On', k: '' } : intState(g.entries[0]);
-    let h = `<div class="ph"><button class="bk" data-act="appsback" aria-label="Back to Apps"><ha-icon icon="mdi:chevron-left"></ha-icon>Apps</button><span class="nt">${esc(g.name)}</span></div>`;
+    let h = `<div class="ph"><button class="bk" data-act="appsback" aria-label="Back to Apps & Integrations"><ha-icon icon="mdi:chevron-left"></ha-icon>Apps & Integrations</button><span class="nt">${esc(g.name)}</span></div>`;
     h += `<div class="apphead">${intIcon(g.domain)}<div><b>${esc(g.name)}</b><p>${esc(g.domain)}</p><span class="stpill ${stt.k}">${esc(stt.t)}</span></div></div>`;
     h += `<div class="gh">Config entries</div><div class="grp">${g.entries.length ? g.entries.map(e => `<div class="r"><span class="tx"><span class="l">${esc(e.title || e.domain)}</span><small>${esc(e.source || e.entry_id || '')}</small></span><span class="v">${esc(intState(e).t)}</span></div>`).join('') : '<div class="empty">None</div>'}</div>`;
     h += `<div class="gh">Devices</div><div class="grp">${g.devices.length ? g.devices.map(d => `<button class="r act nav" data-act="appdev" data-dom="${esc(g.domain)}" data-id="${esc(d.id)}" aria-label="${esc(d.name_by_user || d.name || d.id)}"><span class="tx"><span class="l">${esc(d.name_by_user || d.name || d.id)}</span><small>${esc([d.manufacturer, d.model].filter(Boolean).join(' · '))}</small></span><ha-icon class="ch" icon="mdi:chevron-right"></ha-icon></button>`).join('') : '<div class="empty">No devices.</div>'}</div>`;
@@ -7401,11 +7401,11 @@ function hvOpenSettings(hub, app, from, goTo) {
     if (!d) { st.sub = domain ? 'int:' + domain : null; return domain ? appIntHtml(domain) : appsHtml(); }
     const title = d.name_by_user || d.name || d.id;
     const ents = (st.intEnts || []).filter(n => n.device_id === d.id);
-    let h = `<div class="ph"><button class="bk" data-act="appsback" aria-label="Back"><ha-icon icon="mdi:chevron-left"></ha-icon>${esc((g && g.name) || 'Apps')}</button><span class="nt">${esc(title)}</span></div>`;
+    let h = `<div class="ph"><button class="bk" data-act="appsback" aria-label="Back"><ha-icon icon="mdi:chevron-left"></ha-icon>${esc((g && g.name) || 'Apps & Integrations')}</button><span class="nt">${esc(title)}</span></div>`;
     h += `<div class="apphead">${intIcon(domain)}<div><b>${esc(title)}</b><p>${esc([d.manufacturer, d.model, d.area_id].filter(Boolean).join(' · ') || domain || '')}</p></div></div>`;
     h += `<div class="gh">Entities</div><div class="grp">${ents.length ? ents.map(entRow).join('') : '<div class="empty">No entities.</div>'}</div>`;
     return h; };
-  const customAppsSub = () => `<div class="ph"><button class="bk" data-act="appsback" aria-label="Back to Apps"><ha-icon icon="mdi:chevron-left"></ha-icon>Apps</button><span class="nt">Custom Apps</span></div><h1 class="sbt">Custom Apps</h1><div data-calist></div>`;
+  const customAppsSub = () => `<div class="ph"><button class="bk" data-act="appsback" aria-label="Back to Apps & Integrations"><ha-icon icon="mdi:chevron-left"></ha-icon>Apps & Integrations</button><span class="nt">Custom Apps</span></div><h1 class="sbt">Custom Apps</h1><div data-calist></div>`;
 
   const paneHtml = () => { if (st.sub) return subHtml(); const cur = st.wide ? (st.page || 'general') : st.page; if (cur === 'apps') return appsHtml(); const p = pageOf(st.wide ? (st.page || 'general') : st.page), q = st.q.trim().toLowerCase(), all = !q || p.t.toLowerCase().includes(q), d = data(), F = fields(), dis = ro(), w = why();
     let h = `<div class="ph">${st.wide ? '' : '<button class="bk" data-act="back" aria-label="Back to Settings"><ha-icon icon="mdi:chevron-left"></ha-icon>Settings</button>'}<span class="nt">${esc(p.t)}</span></div>`;
@@ -7537,7 +7537,8 @@ function hvOpenSettings(hub, app, from, goTo) {
   const subSig = () => { const S = H().states || {}; let o = ''; for (const k in S) if (k.startsWith('update.')) { const x = S[k], a = x.attributes || {}; o += k + x.state + a.latest_version + a.in_progress + a.update_percentage + ';'; }
     if (st.sub === 'about') { const c = st.cfg || {}, W = hvAboutPick(H(), 'wifi', c), B = hvAboutPick(H(), 'batt', c); o += '|' + sv(S, W.id) + sv(S, B.id) + (B.id ? sv(S, B.id.replace(/_battery_level$/, '_battery_state')) : '') + W.cands.length + B.cands.length + (H().config || {}).version; } return o; };
   const paintSide = () => { if (list) list.innerHTML = sideHtml(); };
-  const paintPane = () => { if (!pane) return; const sy = pane.scrollTop; for (const f of forms.values()) f.remove(); if (ssPick) ssPick.remove(); if (fPick) fPick.remove(); pane.innerHTML = paneHtml(); ssMount(); fMount(); wpMount(); caMount(); pane.scrollTop = sy; formsMount(); if ((st.wide ? (st.page || 'general') : st.page) === 'apps') appsLoad(); pvPaint(hvBgLevel(st.cfg || {})); albCheck(); };
+  const shrinkAppsBack = () => { const bk = pane && pane.querySelector('.ph .bk[data-act="appsback"]'); if (!bk) return; const label = [...bk.childNodes].reverse().find(n => n.nodeType === 3 && /Apps & Integrations/.test(n.textContent || '')); if (!label) return; if (bk.scrollWidth > bk.clientWidth + 1) { label.textContent = 'Apps'; if (bk.getAttribute('aria-label') === 'Back to Apps & Integrations') bk.setAttribute('aria-label', 'Back to Apps'); } };
+  const paintPane = () => { if (!pane) return; const sy = pane.scrollTop; for (const f of forms.values()) f.remove(); if (ssPick) ssPick.remove(); if (fPick) fPick.remove(); pane.innerHTML = paneHtml(); ssMount(); fMount(); wpMount(); caMount(); pane.scrollTop = sy; formsMount(); if ((st.wide ? (st.page || 'general') : st.page) === 'apps') appsLoad(); pvPaint(hvBgLevel(st.cfg || {})); albCheck(); shrinkAppsBack(); };
   const paint = () => { if (!root) return;
     if (!st.ready) { root.classList.remove('pg'); list.innerHTML = '<div class="grp"><div class="empty">Loading…</div></div>'; pane.innerHTML = ''; return; }
     if (st.nohub) { root.classList.add('nohub', 'pg'); root.classList.remove('wide'); side.style.display = 'none';
