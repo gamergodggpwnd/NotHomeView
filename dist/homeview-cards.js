@@ -7081,6 +7081,8 @@ const HV_SET_PAGES = [
       { h: 'Photos tile', f: ['photo_tap', 'photo_label', 'photo_viewer_nav', 'photo_viewer_swipe', 'photo_viewer_add', 'photo_gallery_upload', 'photo_viewer_pause'] }] },
   { id: 'screensaver', t: 'Wallpaper', i: 'mdi:wallpaper', c: '#5856d6', g: 1, d: 'The screensaver (Outer) and the Home Screen background behind the apps (Inner), and how the screensaver starts.', // id kept for links
     sec: [{ bare: true, f: ['@wallpair'] }, { f: ['swipe_screensaver', 'ss_hold'] }, { f: ['@wallpanel'] }, { h: 'Home Screen background', f: ['photo_backdrop', 'bg_freeze', 'wallpaper', 'dim'] }] }, // the style carousel + its colours (screensaver_style / screensaver_colors)
+  { id: 'faces', t: 'Faces', i: 'mdi:clock-time-four-outline', c: '#5e5ce6', g: 1, d: 'Face Schedule: which screensaver face shows in the morning, day, evening and night, and the Nightstand when the room is dark.',
+    sec: [{ bare: true, f: ['@facesched'] }] },
   { id: 'gestures', t: 'Gestures', i: 'mdi:gesture-swipe', c: '#34c759', g: 1, d: 'Swipes on the Home Screen.',
     sec: [{ f: ['swipe_open_home', 'swipe_page'] }, { f: ['edge_sidebar', 'block_pull_refresh'] }] },
   { id: 'apps', t: 'Apps & Integrations', i: 'mdi:apps', c: '#007aff', g: 2, d: 'The app icons on the Home Screen, NotHomeView apps, and Home Assistant integrations.',
@@ -7108,6 +7110,7 @@ const HV_SET_ACTS = {
   '@update': { l: 'Software Update', h: 'Home Assistant updates: Core, OS, Supervisor, add-ons, HACS, NotHomeView release. Check now, install.', i: 'mdi:cellphone-arrow-down', nav: true },
   '@sspick': { l: 'Screensaver style', h: 'Photo clock, Info dashboard, Abstract fluid, Modern typographic or Whimsical minimalist: swipe or tap to choose. Screensaver colors for the chosen style (colour pickers, swatches, reset to default colors) are underneath.', pick: true },
   '@wallpair': { l: 'Wallpaper', h: 'Screensaver (Outer) and Home Screen background (Inner): Customize each. Screensaver style and colours; Photos, a device or Home Assistant photo, gradients and colours behind the apps, background blur, Match Outer wallpaper.', wp: true },
+  '@facesched': { l: 'Face Schedule', h: 'Morning, Day, Evening and Night: a face each, starting at a time, sunrise or sunset. Change faces automatically. Nightstand when the room is dark (a light sensor).', fs: true },
   '@customapps': { l: 'Custom Apps', h: 'Your custom apps: add, edit, reorder or delete. App Store search for the name and icon, a preset or your own link (URL scheme), ask before opening.', ca: true },
   '@canote': { l: '', h: 'Add a custom app to the Home Screen with Add App (edit the Home Screen, then Add App).', note: true },
   '@wpnote': { l: '', h: 'The Home Screen background behind the apps is set in Wallpaper › Inner (Customize), with its blur.', note: true },
@@ -7320,6 +7323,7 @@ function hvOpenSettings(hub, app, from, goTo) {
     const ln = `<span class="l">${esc(lb)}</span>`, sm = hp ? `<small>${esc(hp)}</small>` : ''; // one-line rows: label | control, the helper underneath
     const a = HV_SET_ACTS[k]; if (a) { if (a.note) return `<div class="r note"><small>${esc(a.h)}</small></div>`;
       if (a.ca) return '<div class="r stk" data-k="@customapps"><div data-calist></div></div>';
+      if (a.fs) return '<div class="r stk" data-k="@facesched"><div data-fsched></div></div>';
       if (a.ww) { const ok = hvWwSupport(), miss = a.ww === 'homey' && HVWW.hmOk === false, on = ok && hvWwPh(a.ww);
         if (ok && a.ww === 'homey' && HVWW.hmOk == null) hvWwHmCheck().then(() => { if (root && root.isConnected) paintPane(); });
         const why = !ok ? 'Not available on this device (iPhone / iPad). Use the mic button instead.' : miss ? 'Needs its wake word model (wakeword/hey_homey.onnx, next to homeview-cards.js): see the wake word README.' : a.h;
@@ -7526,6 +7530,10 @@ function hvOpenSettings(hub, app, from, goTo) {
   // Custom Apps: the list and the add / edit page (hvCustomAppsUI), in their own shadow root; the open page is kept across repaints
   const caCtx = { H: () => H(), cfg: () => data(), save: (k, v) => save(k, v), hub: () => live(), go: v => subGo(v), flash: (m, e) => flash(m, e),
     day: () => hvMode((st.cfg || {}).theme, H()) === 'day', get ro() { return ro(); } };
+  let fsEl = null; const fsMount = () => { const box = pane && pane.querySelector('[data-fsched]'); if (!box) { fsEl = null; return; }
+    if (!fsEl) { fsEl = document.createElement('div'); fsEl.className = 'fsh'; const r = fsEl.attachShadow({ mode: 'open' }); r.innerHTML = `<style>${HV_FS_CSS}</style>`;
+      r.appendChild(hvFaceScheduleUI({ H: () => H(), save: (k, v) => save(k, v), flash: (m, e) => flash(m, e), get ro() { return ro(); } })); }
+    else { const u = fsEl.shadowRoot.lastElementChild; if (u && u._refresh) u._refresh(); } box.appendChild(fsEl); };
   let caEl = null, caKey = ''; const caMount = () => { if (!pane) return; const box = pane.querySelector('[data-calist]') || pane.querySelector('[data-casub]'); if (!box) { caEl = null; caKey = ''; return; }
     const key = box.hasAttribute('data-calist') ? 'list' : st.sub; if (!caEl || caKey !== key) { const ui = hvCustomAppsUI(caCtx); caEl = document.createElement('div'); caEl.className = 'cah';
       const r = caEl.attachShadow({ mode: 'open' }); r.innerHTML = `<style>${HV_CA_CSS}</style>`; r.appendChild(key === 'list' ? ui.list() : ui.editor(key.startsWith('ca:') ? key.slice(3) : null)); caKey = key; }
@@ -7624,7 +7632,7 @@ function hvOpenSettings(hub, app, from, goTo) {
     if (st.sub === 'about') { const c = st.cfg || {}, W = hvAboutPick(H(), 'wifi', c), B = hvAboutPick(H(), 'batt', c); o += '|' + sv(S, W.id) + sv(S, B.id) + (B.id ? sv(S, B.id.replace(/_battery_level$/, '_battery_state')) : '') + W.cands.length + B.cands.length + (H().config || {}).version; } return o; };
   const paintSide = () => { if (list) list.innerHTML = sideHtml(); };
   const shrinkAppsBack = () => { const bk = pane && pane.querySelector('.ph .bk[data-act="appsback"]'); if (!bk) return; const label = [...bk.childNodes].reverse().find(n => n.nodeType === 3 && /Apps & Integrations/.test(n.textContent || '')); if (!label) return; if (bk.scrollWidth > bk.clientWidth + 1) { label.textContent = 'Apps'; if (bk.getAttribute('aria-label') === 'Back to Apps & Integrations') bk.setAttribute('aria-label', 'Back to Apps'); } };
-  const paintPane = () => { if (!pane) return; const sy = pane.scrollTop; for (const f of forms.values()) f.remove(); if (ssPick) ssPick.remove(); if (fPick) fPick.remove(); pane.innerHTML = paneHtml(); ssMount(); fMount(); wpMount(); caMount(); pane.scrollTop = sy; formsMount(); if ((st.wide ? (st.page || 'general') : st.page) === 'apps') appsLoad(); pvPaint(hvBgLevel(st.cfg || {})); albCheck(); shrinkAppsBack(); };
+  const paintPane = () => { if (!pane) return; const sy = pane.scrollTop; for (const f of forms.values()) f.remove(); if (ssPick) ssPick.remove(); if (fPick) fPick.remove(); pane.innerHTML = paneHtml(); ssMount(); fMount(); wpMount(); caMount(); fsMount(); pane.scrollTop = sy; formsMount(); if ((st.wide ? (st.page || 'general') : st.page) === 'apps') appsLoad(); pvPaint(hvBgLevel(st.cfg || {})); albCheck(); shrinkAppsBack(); };
   const paint = () => { if (!root) return;
     if (!st.ready) { root.classList.remove('pg'); list.innerHTML = '<div class="grp"><div class="empty">Loading…</div></div>'; pane.innerHTML = ''; return; }
     if (st.nohub) { root.classList.add('nohub', 'pg'); root.classList.remove('wide'); side.style.display = 'none';
@@ -11086,7 +11094,8 @@ const HV_SSS = [
   { v: 'whimsy', l: 'Whimsical minimalist', s: 'Embossed numerals, dusty rose' },
   { v: 'homie', l: 'Homey', s: 'Homey waves, dances, and reacts to the weather' },
   { v: 'glass', l: 'Glass', s: 'Live glass tiles you can use; swipe up for Home' },
-  { v: 'modular', l: 'Modular', s: 'Four widgets in a stacked or 2×2 layout' }];
+  { v: 'modular', l: 'Modular', s: 'Four widgets in a stacked or 2×2 layout' },
+  { v: 'nightstand', l: 'Nightstand', s: 'A big, dim clock on black for the bedside' }];
 const HV_SSS_V = HV_SSS.map(x => x.v);
 // Meaningful colours per style (defaults match the reference designs). Only non-defaults are persisted.
 const HV_SS_COLS = {
@@ -11120,7 +11129,8 @@ const HV_SS_COLS = {
     { k: 'text', l: 'Weekday / date', d: '#e6e6e6' },
     { k: 'body', l: 'Homey: house walls', d: '#fffbf2' },
     { k: 'roof', l: 'Homey: roof, chimney and shoes', d: '#6ebcf4' },
-    { k: 'limb', l: 'Homey: arms and legs', d: '#363a3d' }] };
+    { k: 'limb', l: 'Homey: arms and legs', d: '#363a3d' }],
+  nightstand: [{ k: 'text', l: 'Clock', d: '#d42d22' }] };
 const HV_SS_SWATCH = ['#ffffff', '#0b0b0c', '#97a9af', '#5c9a68', '#5ac8fa', '#1aa3b8', '#0a84ff', '#f06aa8', '#5b78f0', '#6c7cf2', '#dcbdba', '#6d3431', '#ea5ab4', '#ffd166', '#118ab2', '#073b4c', '#ef476f'];
 const hvSsDeep = (root, sel, d = 0) => { if (!root || d > 12) return null;
   if (root.shadowRoot) { const r = hvSsDeep(root.shadowRoot, sel, d + 1); if (r) return r; }
@@ -11689,6 +11699,19 @@ const HV_SS_FACE_CSS = `
 .f.glass{background:linear-gradient(160deg,#3a38c0 0%,#2c2ab0 45%,#24218c 100%)}
 .glass .stg{position:absolute;inset:0;display:block;padding:0;box-sizing:border-box;width:auto;height:auto;transform:none}
 .glass homeview-glass-page{display:block;width:100%;height:100%;min-height:0;pointer-events:none;--hvg-h:100%}
+/* nightstand */
+.f.nightstand{background:#000;container-type:size}
+.nightstand .nw{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;opacity:var(--ns-b,.45);color:var(--hv-ss-text,#d42d22)}
+.nightstand .nd{font:700 3.6cqmin/1.2 ${FONT};letter-spacing:.08em;text-transform:uppercase;opacity:.62;margin-bottom:2cqmin}
+.nightstand .nt{display:flex;align-items:center;font:800 37cqmin/.86 ${FONT};letter-spacing:-.045em;font-variant-numeric:tabular-nums;white-space:nowrap}
+.nightstand .nt .c{margin:0 .02em;transform:translateY(-.04em)}
+.nightstand .nt .s{font-size:.28em;font-weight:700;letter-spacing:-.02em;margin-left:.18em;align-self:flex-end;margin-bottom:.12em;opacity:.8}
+.nightstand.thin .nt{font-weight:200;letter-spacing:-.02em}.nightstand.thin .nt .s{font-weight:300}
+.nightstand.mono .nt{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-weight:700;letter-spacing:-.06em;font-size:30cqmin}
+.nightstand .na{display:flex;align-items:center;gap:.4em;font:600 3.6cqmin/1.2 ${FONT};opacity:.62;margin-top:3cqmin}
+.nightstand .na svg{width:1em;height:1em}.nightstand .na[hidden],.nightstand .nd[hidden],.nightstand .s[hidden]{display:none}
+@container (max-aspect-ratio: 4/5){.nightstand .nt{flex-direction:column;font-size:42cqmin;line-height:.84}.nightstand .nt .c{display:none}.nightstand .nt .s{align-self:center;font-size:.24em;margin:.25em 0 0}
+ .nightstand.mono .nt{font-size:36cqmin}}
 ` + HV_HOMIE_CSS;
 const hvSsSvgNS = 'http://www.w3.org/2000/svg';
 // glassy digit shapes (box 100 x 140): [x, y, w, h, radius, rotate]
@@ -11704,11 +11727,20 @@ function hvSsForecast(hass, e) { // daily high / low (read-only subscription; no
 const HV_SS_COND = { 'clear-night': 'Clear', cloudy: 'Cloudy', exceptional: 'Exceptional', fog: 'Fog', hail: 'Hail', lightning: 'Lightning', 'lightning-rainy': 'Thunderstorms', partlycloudy: 'Partly Cloudy',
   pouring: 'Pouring', rainy: 'Rain', snowy: 'Snow', 'snowy-rainy': 'Sleet', sunny: 'Sunny', windy: 'Windy', 'windy-variant': 'Windy' };
 class HVSsFace {
-  constructor(style, thumb) { this.s = style; this.thumb = !!thumb; const f = document.createElement('div'); f.className = 'f ' + style; this.el = f; this['_b_' + style](); }
+  constructor(style, thumb) { this.s = style; this.thumb = !!thumb; const f = document.createElement('div'); f.className = 'f ' + style; this.el = f; f._hvFace = this; this['_b_' + style](); }
   applyColors(cols) { const defs = HV_SS_COLS[this.s] || []; for (const d of defs) {
     const v = hvSsHex(cols && cols[d.k]); if (v && v !== d.d) this.el.style.setProperty('--hv-ss-' + d.k, v); else this.el.style.removeProperty('--hv-ss-' + d.k); } }
   _svg(vb) { const s = document.createElementNS(hvSsSvgNS, 'svg'); s.setAttribute('viewBox', vb); s.setAttribute('class', 'h'); return s; }
   _ln(s, a) { const l = document.createElementNS(hvSsSvgNS, a.t || 'line'); for (const k of Object.keys(a)) if (k !== 't') l.setAttribute(k, a[k]); s.appendChild(l); return l; }
+  // ---- nightstand: date, a big heavy clock, the next alarm (settings: hvNsCfg; this.face is set while customizing)
+  _b_nightstand() { this.el.innerHTML = `<div class="nw"><div class="nd"></div><div class="nt"><span class="hh"></span><span class="c">:</span><span class="mm"></span><span class="s"></span></div><div class="na">${HV_NS_ALARM_SVG}<span></span></div></div>`; }
+  _u_nightstand(d, hass) { const c = hvNsCfg(this.face), q = s => this.el.querySelector(s), L = (hass && hass.locale && hass.locale.language) || undefined, h24 = !!(hass && hass.locale && hass.locale.time_format === '24');
+    for (const k of ['bold', 'thin', 'mono']) this.el.classList.toggle(k, c.layout === k);
+    this.el.style.setProperty('--ns-b', String(Math.max(0.1, Math.min(1, (Number(c.brightness) || 45) / 100))));
+    const h = d.getHours(); q('.hh').textContent = h24 ? String(h).padStart(2, '0') : String(h % 12 || 12); q('.mm').textContent = String(d.getMinutes()).padStart(2, '0');
+    const s = q('.s'); s.hidden = !c.seconds; s.textContent = String(d.getSeconds()).padStart(2, '0');
+    const nd = q('.nd'); nd.hidden = !c.date; nd.textContent = `${d.toLocaleDateString(L, { weekday: 'short' })} ${d.toLocaleDateString(L, { month: 'short' })} ${d.getDate()}`.replace(/\./g, '');
+    const al = c.alarm ? hvNsAlarm(hass, c.alarm_entity) : null, na = q('.na'); na.hidden = !al; if (al) na.lastChild.textContent = 'Alarm ' + al.toLocaleTimeString(L, { hour: 'numeric', minute: '2-digit', hour12: !h24 }); }
   // ---- info dashboard
   _b_info() { const f = this.el; f.innerHTML = `<div class="stg"><div class="lc"><div class="dd"><div class="dt"></div><div class="dn"></div></div>
     <div class="mu"><svg class="nt" viewBox="0 0 24 24"><path fill="var(--hv-ss-text,#fff)" d="M21 3v12.5a3.5 3.5 0 1 1-2-3.16V7H9v10.5A3.5 3.5 0 1 1 7 14.34V3h14z"/></svg><div class="art"></div><div class="tt"></div><div class="ar"></div><div class="pb"><i></i><span>Play</span></div></div></div>
@@ -12037,7 +12069,7 @@ const hvSsOv = {
     } catch (e) {} },
   start() { if (this.iv) return; this._hookStart(); this.iv = setInterval(() => { try { this._hookStart(); this.tick(); } catch (e) { /* next tick */ } try { hvSsHome.tick(); } catch (e) {} }, 250); } };
 
-const HV_SS_LABEL = { photo: 'PHOTO', info: 'INFO', fluid: 'FLUID', typo: 'ANALOG', digital: 'DIGITAL', whimsy: 'WHIMSY', homie: 'HOMEY', glass: 'GLASS', modular: 'MODULAR' };
+const HV_SS_LABEL = { photo: 'PHOTO', info: 'INFO', fluid: 'FLUID', typo: 'ANALOG', digital: 'DIGITAL', whimsy: 'WHIMSY', homie: 'HOMEY', glass: 'GLASS', modular: 'MODULAR', nightstand: 'NIGHTSTAND' };
 const HV_SS_FONTS = [
   { v: 'system', l: 'System', f: 'system-ui,-apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif' },
   { v: 'rounded', l: 'Rounded', f: 'ui-rounded,"SF Pro Rounded","Hiragino Maru Gothic ProN",system-ui,sans-serif' },
@@ -12054,7 +12086,8 @@ const HV_SS_SLOT = {
   homie: [{ id: 'br', x: 22, y: 21, w: 56, h: 10 }],
   fluid: [{ id: 'bl', x: 3, y: 78, w: 28, h: 16 }, { id: 'br', x: 69, y: 78, w: 28, h: 16 }],
   whimsy: [{ id: 'bl', x: 3, y: 80, w: 26, h: 15 }, { id: 'br', x: 71, y: 80, w: 26, h: 15 }],
-  modular: []
+  modular: [],
+  nightstand: []
 };
 const HV_SS_MOD = {
   /* Video 17.5s: date (taller) + events left, clock + weather right — not a 1+3 stack. */
@@ -12985,6 +13018,7 @@ const hvSsSwitch = {
     return f;
   },
   _applyFaceLook(f, face) {
+    f.face = face; // Nightstand reads its draft settings from here
     const cols = face.colors || hvSsColors.get(face.style);
     try { f.applyColors(cols); } catch (e) {}
     if (face.font) f.el.style.fontFamily = hvSsFontCss(face.font);
@@ -13067,7 +13101,8 @@ const hvSsSwitch = {
     const hasFont = face.style === 'typo' || face.style === 'digital' || face.style === 'photo' || face.style === 'fluid' || face.style === 'whimsy';
     if (face.style === 'glass' && this.tab === 'color') this.tab = 'background';
     const tabs = document.createElement('div'); tabs.className = 'tabs';
-    const names = face.style === 'glass'
+    if (face.style === 'nightstand' && (this.tab === 'widgets' || this.tab === 'font')) this.tab = 'style';
+    const names = face.style === 'nightstand' ? [['style', 'STYLE'], ['color', 'COLOUR']] : face.style === 'glass'
       ? [['style', 'STYLE'], ['widgets', 'WIDGETS'], ['background', 'BACKGROUND']]
       : [['style', 'STYLE']].concat([['color', 'COLOR']], hasFont ? [['font', 'FONT']] : [], [['widgets', 'WIDGETS']]);
     for (const [k, l] of names) { const b = document.createElement('b'); b.textContent = l; if (k === this.tab) b.className = 'on'; b.addEventListener('click', () => { this.tab = k; this._paintCards(this.draft, this.i, 'customize'); }); tabs.appendChild(b); }
@@ -13083,8 +13118,16 @@ const hvSsSwitch = {
     else {
       if (this.tab === 'style' || this.tab === 'color' || this.tab === 'font' || this.tab === 'background') this._paintRail(face);
       if (this.tab === 'color') this._paintAuto(face);
+      if (face.style === 'nightstand' && this.tab === 'color') this._paintNs(face);
     }
   },
+  // Nightstand: brightness, turning on by itself and what it shows, beside the preview (left in landscape, under it in portrait)
+  _paintNs(face) { const sr = this.host.shadowRoot, W = innerWidth || 800, H = innerHeight || 800, size = this._cardSize('customize');
+    if (!sr.querySelector('style[data-ns]')) { const st = document.createElement('style'); st.dataset.ns = ''; st.textContent = HV_NS_PANEL_CSS; sr.appendChild(st); }
+    const p = hvNsPanel(face, hvSsOv.hass(), () => { sr.querySelectorAll('.f.nightstand').forEach(el => { try { el._hvFace.update(hvSsOv.hass(), new Date()); } catch (e) {} }); });
+    if (W > H) { const w = Math.min(330, (W - size) / 2 - 36); Object.assign(p.style, { left: Math.max(12, (W - size) / 2 - w - 24) + 'px', top: Math.round((H - size) / 2) + 'px', width: w + 'px', maxHeight: size + 'px' }); }
+    else Object.assign(p.style, { left: '50%', transform: 'translateX(-50%)', top: Math.round((H + size) / 2 + 64) + 'px', bottom: '92px', width: Math.min(440, W - 32) + 'px' });
+    sr.appendChild(p); },
 _snapGlass() {
     try { this._glassOrig = Object.assign({}, (typeof hvGlassCfg !== 'undefined' && hvGlassCfg.raw) ? (hvGlassCfg.raw() || {}) : {}); } catch (e) { this._glassOrig = {}; }
   },
@@ -13220,12 +13263,13 @@ _snapGlass() {
   _paintRail(face) {
     const sr = this.host.shadowRoot, rail = document.createElement('div'); rail.className = 'rail';
     if (this.tab === 'style') {
-      const opts = face.style === 'modular' ? [{ v: 'asymmetric', l: 'Split' }, { v: 'grid', l: '2×2' }, { v: 'stack', l: 'Stack' }]
+      const opts = face.style === 'nightstand' ? [{ v: 'bold', l: 'Bold' }, { v: 'thin', l: 'Thin' }, { v: 'mono', l: 'Mono' }]
+        : face.style === 'modular' ? [{ v: 'asymmetric', l: 'Split' }, { v: 'grid', l: '2×2' }, { v: 'stack', l: 'Stack' }]
         : face.style === 'typo' ? [{ v: 'editorial', l: 'Editorial' }, { v: 'classic', l: 'Classic' }]
         : face.style === 'glass' ? [{ v: 'mixed', l: 'Mixed' }, { v: 'grid3', l: '3×3' }]
         : HV_SSS_V.map(s => ({ v: s, l: HV_SS_LABEL[s], asStyle: true }));
       for (const o of opts) {
-        const b = document.createElement('button'); b.className = 'th' + (((face.layout || (face.style === 'modular' ? 'asymmetric' : face.style === 'glass' ? 'mixed' : 'editorial')) === o.v) || (o.asStyle && face.style === o.v) ? ' on' : '');
+        const b = document.createElement('button'); b.className = 'th' + (((face.layout || (face.style === 'modular' ? 'asymmetric' : face.style === 'glass' ? 'mixed' : face.style === 'nightstand' ? 'bold' : 'editorial')) === o.v) || (o.asStyle && face.style === o.v) ? ' on' : '');
         const thumb = this._mkFace(o.asStyle ? Object.assign({}, face, { style: o.v }) : Object.assign({}, face, { layout: o.v }), true);
         b.appendChild(thumb.el);
         b.addEventListener('click', () => {
@@ -13252,7 +13296,7 @@ _snapGlass() {
     } else if (this.tab === 'color') {
       const defs = HV_SS_COLS[face.style] || [];
       const main = (defs[0] && defs[0].k) || 'bg';
-      const swatches = Array.from(new Set([...(defs.map(d => d.d)), ...HV_SS_SWATCH]));
+      const swatches = face.style === 'nightstand' ? HV_NS_COLS : Array.from(new Set([...(defs.map(d => d.d)), ...HV_SS_SWATCH]));
       for (const c of swatches) {
         const b = document.createElement('button'); b.className = 'sw'; b.style.background = c;
         const cur = (face.colors && face.colors[main]) || (defs[0] && defs[0].d);
@@ -13611,6 +13655,169 @@ addEventListener('touchend', e => { const s = hvSsHome.g; if (!s) return; setTim
   else if (s.btn) setTimeout(() => { if (!hvSsHome.over) hvSsKeep.off('btn'); }, 400);
   else { hvSsKeep.off('swipe'); hvSsKeep.off('btn'); } }, { capture: true, passive: true });
 addEventListener('touchcancel', () => { hvSsHome.g = null; hvSsKeep.off('swipe'); if (!hvSsHome.over) hvSsKeep.off('btn'); }, true);
+/* ---------------- Nightstand face + Face Schedule ----------------
+   Nightstand: a big, heavy, dim clock on pure black (red by default) for the bedside. Its settings live on its face entry (screensaver_faces):
+   face.layout 'bold' | 'thin' | 'mono', face.ns = { brightness 10–100, date, alarm, seconds, alarm_entity, auto: { mode 'off' | 'bedtime' |
+   'dark' | 'sunset', time, sensor, below } }. Face Schedule (screensaver_schedule on the Home Screen card): Morning / Day / Evening / Night,
+   each a face and a start (a time, sunrise or sunset); the face changes only when a slot starts, so a swipe by hand stays until the next one.
+   The Nightstand can also come on by itself (bedtime, a dark room or sunset) and goes back at sunrise / when the room is light again. */
+const HV_NS_DEF = { brightness: 45, date: true, alarm: true, seconds: false, alarm_entity: '', auto: { mode: 'off', time: '22:30', sensor: '', below: 5 } };
+const HV_NS_COLS = ['#d42d22', '#ff7a1a', '#ffb340', '#7f6cf2', '#30b0c7', '#8e8e93'];
+const hvNsCfg = face => { const f = face || (hvSsFaces.list().find(x => x && x.style === 'nightstand')) || {}, n = f.ns || {};
+  return Object.assign({}, HV_NS_DEF, n, { auto: Object.assign({}, HV_NS_DEF.auto, n.auto || {}), layout: ['bold', 'thin', 'mono'].includes(f.layout) ? f.layout : 'bold' }); };
+// (the Nightstand face CSS is part of HV_SS_FACE_CSS)
+const HV_NS_ALARM_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="13" r="7.5"/><path d="M12 9.5V13l2.3 1.6M4.5 4.8 7 2.8M19.5 4.8 17 2.8"/></svg>';
+// the next alarm: a timestamp sensor (e.g. the Companion app's next alarm) or an input_datetime; only one still ahead counts
+const hvNsAlarm = (hass, id) => { const st = id && hass && hass.states && hass.states[id]; if (!st) return null; let t = NaN; const a = st.attributes || {};
+  if (/^input_datetime\./.test(id)) { if (a.has_date && a.timestamp) t = a.timestamp * 1000; else if (a.has_time && !a.has_date) { const [h, m] = String(st.state).split(':').map(Number); const d = new Date(); d.setHours(h, m || 0, 0, 0); if (d < new Date()) d.setDate(d.getDate() + 1); t = +d; } }
+  else t = Date.parse(st.state); if (!isFinite(t) && a.timestamp) t = a.timestamp * 1000; return isFinite(t) && t > Date.now() && t - Date.now() < 7 * 864e5 ? new Date(t) : null; };
+// ---- Face Schedule
+const HV_FS_SLOTS = [{ id: 'morning', l: 'Morning', i: 'mdi:weather-sunset-up', c: '#ff9500' }, { id: 'day', l: 'Day', i: 'mdi:white-balance-sunny', c: '#ffcc00' },
+  { id: 'evening', l: 'Evening', i: 'mdi:weather-sunset-down', c: '#ff6b5b' }, { id: 'night', l: 'Night', i: 'mdi:weather-night', c: '#3f3399' }];
+const HV_FS_DEF = { on: false, slots: { morning: { face: 'info', at: 'sunrise', time: '07:00' }, day: { face: 'glass', at: 'time', time: '09:00' }, evening: { face: 'homie', at: 'sunset', time: '17:00' }, night: { face: 'nightstand', at: 'time', time: '22:30' } } };
+const hvFsNorm = v => { const o = { on: !!(v && v.on), slots: {} }; for (const s of HV_FS_SLOTS) { const x = (v && v.slots && v.slots[s.id]) || {}, d = HV_FS_DEF.slots[s.id];
+    o.slots[s.id] = { face: HV_SSS_V.includes(x.face) ? x.face : d.face, at: ['time', 'sunrise', 'sunset'].includes(x.at) ? x.at : d.at, time: /^\d{1,2}:\d{2}$/.test(x.time || '') ? x.time : d.time }; } return o; };
+const hvFs = {
+  key() { return `hvSsSched:${ssDash() || 'lovelace'}`; },
+  cfg() { try { const lv = hvSsLv(), hub = lv && lv.config && hvHubCfgOf(lv.config); return hvFsNorm(hub && hub.screensaver_schedule); } catch (e) { return hvFsNorm(null); } },
+  // today's sunrise / sunset from sun.sun (its next_* roll forward once passed, so step back a day), else 7:00 / 18:00
+  sun(hass, which, day) { const a = (hass && hass.states && hass.states['sun.sun'] && hass.states['sun.sun'].attributes) || {}, n = Date.parse(which === 'sunrise' ? a.next_rising : a.next_setting), d = new Date(day);
+    if (isFinite(n)) { const t = new Date(n); d.setHours(t.getHours(), t.getMinutes(), 0, 0); return d; } d.setHours(which === 'sunrise' ? 7 : 18, 0, 0, 0); return d; },
+  at(hass, x, day) { if (x.at === 'sunrise' || x.at === 'sunset') return this.sun(hass, x.at, day); const [h, m] = String(x.time || '0:0').split(':').map(Number), d = new Date(day); d.setHours(h || 0, m || 0, 0, 0); return d; },
+  // what should be up now: the latest event already started (today, else yesterday's last)
+  events(hass, day) { const c = this.cfg(), ns = hvNsCfg(), ev = [];
+    if (c.on) for (const s of HV_FS_SLOTS) { const x = c.slots[s.id]; ev.push({ id: s.id, t: this.at(hass, x, day), face: x.face }); }
+    if (ns.auto.mode === 'bedtime' || ns.auto.mode === 'sunset') { ev.push({ id: 'ns', t: ns.auto.mode === 'sunset' ? this.sun(hass, 'sunset', day) : this.at(hass, { at: 'time', time: ns.auto.time }, day), face: 'nightstand' });
+      if (!c.on) ev.push({ id: 'ns-end', t: this.sun(hass, 'sunrise', day), face: '@back' }); }
+    return ev.sort((a, b) => a.t - b.t); },
+  current(hass, now) { now = now || new Date(); const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()), y = new Date(+today - 864e5);
+    const ev = this.events(hass, today).filter(e => e.t <= now); if (ev.length) return Object.assign(ev[ev.length - 1], { day: today.toDateString() });
+    const yv = this.events(hass, y); return yv.length ? Object.assign(yv[yv.length - 1], { day: y.toDateString() }) : null; },
+  // switch this screen's face (this browser only: the schedule doesn't rewrite the dashboard several times a day)
+  apply(style) { if (!HV_SSS_V.includes(style) || hvSs.get() === style) return false; try { if (typeof hvSsSwitch !== 'undefined' && hvSsSwitch._busy && hvSsSwitch._busy()) return false; } catch (e) {}
+    try { const d = hvSsFaces.raw(); let i = d.faces.findIndex(f => f && f.style === style); if (i < 0) { d.faces.push({ style, colors: null, font: 'system', complications: {} }); i = d.faces.length - 1; }
+      mhLs.set(hvSsFaces.key(), { faces: d.faces, i, stash: d.stash || [] }); } catch (e) {}
+    mhLs.set(hvSs.key(), { v: style, cfg: hvSs.cfgVal() }); try { hvSsOv.tick(true); for (const h of HV_HUBS) if (h.isConnected && h._bgMode) h._bgMode(); } catch (e) {} return true; },
+  tick(hass, now) { if (!hass) return; const st = mhLs.get(this.key()) || {}; let dirty = false; now = now || new Date();
+    const cur = this.current(hass, now), k = cur ? cur.day + ':' + cur.id + ':' + cur.face : '';
+    if (cur && st.last !== k) { st.last = k; dirty = true;
+      if (cur.face === '@back') { if (st.prev && hvSs.get() === 'nightstand') this.apply(st.prev); }
+      else { if (cur.face === 'nightstand' && hvSs.get() !== 'nightstand') st.prev = hvSs.get(); this.apply(cur.face); } }
+    // a dark room: Nightstand while the light sensor reads below the threshold (a little hysteresis on the way back)
+    const ns = hvNsCfg(), lx = ns.auto.mode === 'dark' && ns.auto.sensor && hass.states[ns.auto.sensor] ? Number(hass.states[ns.auto.sensor].state) : NaN;
+    if (isFinite(lx)) { const below = Number(ns.auto.below) || 5;
+      if (lx < below && !st.dark) { st.dark = true; dirty = true; if (hvSs.get() !== 'nightstand') { st.prev = hvSs.get(); this.apply('nightstand'); } }
+      else if (lx > below * 1.5 + 1 && st.dark) { st.dark = false; dirty = true; if (hvSs.get() === 'nightstand' && st.prev) this.apply(st.prev); } }
+    if (dirty) mhLs.set(this.key(), st); },
+  async save(v, hass) { const n = hvFsNorm(v); try { await hvSsSaveHub(hass, hub => { hub.screensaver_schedule = n; return true; }); } catch (e) {} const st = mhLs.get(this.key()) || {}; delete st.last; mhLs.set(this.key(), st); this.tick(hass); return n; } };
+setInterval(() => { try { hvFs.tick(hvSsOv.hass()); } catch (e) {} }, 20000);
+setTimeout(() => { try { hvFs.tick(hvSsOv.hass()); } catch (e) {} }, 3000);
+// ---- the Nightstand panel inside Customize (brightness, turning on by itself, what it shows); it edits the face draft, so X discards it
+const HV_NS_PANEL_CSS = `
+.nsp{position:absolute;z-index:6;pointer-events:auto;color:#fff;font:15px/1.3 system-ui,-apple-system,"SF Pro Text",sans-serif;display:flex;flex-direction:column;gap:6px;overflow-y:auto;scrollbar-width:none;touch-action:pan-y}
+.nsp .h{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:rgba(235,235,245,.6);margin:6px 4px 0}
+.nsp .g{background:#1c1c1e;border-radius:12px;overflow:hidden}
+.nsp .r{display:flex;align-items:center;gap:10px;min-height:40px;padding:4px 14px;position:relative}
+.nsp .r + .r::before{content:'';position:absolute;left:14px;right:0;top:0;border-top:.5px solid rgba(84,84,88,.65)}
+.nsp .r .l{flex:1}.nsp .r .v{color:rgba(235,235,245,.6);font-size:14px}
+.nsp input[type=range]{flex:1;-webkit-appearance:none;appearance:none;height:30px;border-radius:9px;background:linear-gradient(90deg,var(--nc,#d42d22) 0 var(--nv,45%),#3a3a3c var(--nv,45%) 100%);outline:none}
+.nsp input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:4px;height:30px;background:transparent}.nsp input[type=range]::-moz-range-thumb{width:4px;height:30px;border:0;background:transparent}
+.nsp .seg{display:flex;padding:3px;margin:6px 10px;border-radius:9px;background:#2c2c2e}
+.nsp .seg button{all:unset;cursor:pointer;flex:1;text-align:center;padding:6px 4px;border-radius:7px;font-size:13px;font-weight:600}.nsp .seg button[aria-pressed=true]{background:#636366}
+.nsp select,.nsp input[type=number],.nsp input[type=time]{all:unset;max-width:58%;text-align:right;color:rgba(235,235,245,.75);font-size:14px;cursor:pointer}
+.nsp input[type=number]{width:4.5em}
+.nsp .tg{all:unset;cursor:pointer;flex:none;position:relative;width:51px;height:31px;border-radius:99px;background:rgba(120,120,128,.32);transition:background .2s}
+.nsp .tg::after{content:'';position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;transition:transform .2s}
+.nsp .tg[aria-checked=true]{background:#7f6cf2}.nsp .tg[aria-checked=true]::after{transform:translateX(20px)}
+.nsp button:focus-visible,.nsp select:focus-visible,.nsp input:focus-visible{outline:2px solid #0a84ff;outline-offset:2px}
+.nsp ha-icon,.nsp svg{flex:none;width:18px;height:18px;--mdc-icon-size:18px;color:rgba(235,235,245,.8)}`;
+function hvNsPanel(face, hass, onChange) { const ns = hvNsCfg(face), S = (hass && hass.states) || {}, el = document.createElement('div'); el.className = 'nsp'; el.setAttribute('data-no-sheet-drag', '');
+  const put = () => { face.ns = { brightness: ns.brightness, date: ns.date, alarm: ns.alarm, seconds: ns.seconds, alarm_entity: ns.alarm_entity, auto: Object.assign({}, ns.auto) }; onChange(); };
+  const opts = (ids, cur, none) => `<option value="">${none}</option>` + ids.map(id => `<option value="${esc(id)}"${id === cur ? ' selected' : ''}>${esc((S[id].attributes || {}).friendly_name || id)}</option>`).join('');
+  const lux = Object.keys(S).filter(id => /^sensor\./.test(id) && ((S[id].attributes || {}).device_class === 'illuminance' || /lx|lux/i.test((S[id].attributes || {}).unit_of_measurement || ''))).sort();
+  const alarms = Object.keys(S).filter(id => (/^sensor\./.test(id) && (S[id].attributes || {}).device_class === 'timestamp' && /alarm/i.test(id + ((S[id].attributes || {}).friendly_name || ''))) || /^input_datetime\./.test(id)).sort();
+  const col = (face.colors && face.colors.text) || HV_NS_COLS[0], tg = (k, l) => `<div class="r"><span class="l">${l}</span><button class="tg" role="switch" data-k="${k}" aria-checked="${!!ns[k]}" aria-label="${l}"></button></div>`;
+  const paint = () => { const m = ns.auto.mode;
+    el.innerHTML = `<div class="h">Brightness</div><div class="g"><div class="r"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>
+<input type="range" min="10" max="100" step="5" value="${ns.brightness}" aria-label="Brightness" style="--nc:${esc(col)};--nv:${(ns.brightness - 10) / 90 * 100}%">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></div></div>
+<div class="h">Turn on automatically</div><div class="g"><div class="seg" role="group" aria-label="Turn on automatically">${[['off', 'Off'], ['bedtime', 'Bedtime'], ['dark', 'Dark room'], ['sunset', 'Sunset']].map(([v, l]) => `<button data-m="${v}" aria-pressed="${m === v}">${l}</button>`).join('')}</div>
+${m === 'bedtime' ? `<div class="r"><span class="l">Bedtime</span><input type="time" data-f="time" value="${esc(ns.auto.time)}" aria-label="Bedtime"></div>` : ''}
+${m === 'dark' ? `<div class="r"><span class="l">Light sensor</span><select data-f="sensor" aria-label="Light sensor">${opts(lux, ns.auto.sensor, 'Choose…')}</select></div><div class="r"><span class="l">Below</span><input type="number" min="0" max="500" step="1" data-f="below" value="${esc(ns.auto.below)}" aria-label="Below (lux)"><span class="v">lx</span></div>` : ''}
+${m === 'sunset' ? '<div class="r"><span class="l v">From sunset until sunrise</span></div>' : ''}${m === 'off' ? '<div class="r"><span class="l v">Only when you pick it (or from Face Schedule)</span></div>' : ''}</div>
+<div class="h">Show</div><div class="g">${tg('date', 'Date')}${tg('alarm', 'Next alarm')}${ns.alarm ? `<div class="r"><span class="l">Alarm from</span><select data-f="alarm_entity" aria-label="Alarm from">${opts(alarms, ns.alarm_entity, 'None')}</select></div>` : ''}${tg('seconds', 'Seconds')}</div>`; };
+  el.addEventListener('input', ev => { const t = ev.target; if (t.type === 'range') { ns.brightness = Number(t.value); t.style.setProperty('--nv', (ns.brightness - 10) / 90 * 100 + '%'); put(); } });
+  el.addEventListener('change', ev => { const t = ev.target, f = t.dataset && t.dataset.f; if (!f) return; if (f === 'alarm_entity') ns.alarm_entity = t.value; else ns.auto[f] = f === 'below' ? Math.max(0, Number(t.value) || 0) : t.value; put(); });
+  el.addEventListener('click', ev => { const b = ev.target.closest('button'); if (!b) return; if (b.dataset.m) { ns.auto.mode = b.dataset.m; paint(); put(); } else if (b.dataset.k) { ns[b.dataset.k] = !ns[b.dataset.k]; paint(); put(); } });
+  paint(); return el; }
+// ---- Settings › Faces: Face Schedule (today's faces, a day bar, the four slots) and the dark-room Nightstand
+const HV_FS_CSS = `
+:host{display:block;font-family:${FONT};color:var(--fg,#000)}*{box-sizing:border-box}button{font:inherit;color:inherit}
+.grp{border-radius:12px;background:var(--card,#fff);overflow:hidden;margin:0 0 22px}
+.r{display:flex;align-items:center;gap:12px;min-height:52px;padding:8px 16px;position:relative}
+.r + .r::before{content:'';position:absolute;left:62px;right:0;top:0;border-top:.5px solid var(--sep,rgba(60,60,67,.29))}
+.td{padding:14px 16px 12px}.td .hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.td .hd b{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--fg2,rgba(60,60,67,.6));font-weight:600}
+.pvb{all:unset;cursor:pointer;color:var(--blue,#3f3399);font-size:14px;font-weight:600;display:flex;align-items:center;gap:4px}
+.fc{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.fc .t{position:relative;aspect-ratio:1.4;border-radius:12px;overflow:hidden;background:#000;container-type:size}.fc .t.on{box-shadow:0 0 0 3px var(--blue,#3f3399)}
+.fc .n{display:flex;justify-content:space-between;gap:6px;margin-top:6px;font-size:13px}.fc .n b{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.fc .n span{color:var(--fg2,rgba(60,60,67,.6));white-space:nowrap}
+.bar{position:relative;height:8px;border-radius:4px;margin:14px 0 4px;overflow:hidden;display:flex}.bar i{height:100%}.bar u{position:absolute;top:-2px;bottom:-2px;width:3px;border-radius:2px;background:var(--fg,#000);box-shadow:0 0 0 1.5px var(--card,#fff)}
+.ax{display:flex;justify-content:space-between;font-size:11px;color:var(--fg2,rgba(60,60,67,.6))}
+.l{flex:1;font-size:17px}.sm{font-size:13px;color:var(--fg2,rgba(60,60,67,.6))}
+.ic{flex:none;width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff}.ic ha-icon{--mdc-icon-size:20px;display:flex}
+.sl{display:grid;grid-template-columns:32px minmax(70px,.8fr) minmax(90px,1fr) auto minmax(120px,1.2fr);align-items:center;gap:12px}
+.sl .nm{font-size:17px;font-weight:600}.sl .wh b{display:block;font-size:15px;font-weight:500}
+.seg{display:flex;padding:2px;border-radius:9px;background:var(--fld,rgba(118,118,128,.12))}.seg button{all:unset;cursor:pointer;padding:5px 11px;border-radius:7px;font-size:13px;font-weight:500}
+.seg button[aria-pressed=true]{background:var(--card,#fff);box-shadow:0 1px 4px rgba(0,0,0,.12);font-weight:600}
+.fp{display:flex;align-items:center;gap:10px;min-width:0}.fp .th{flex:none;position:relative;width:52px;height:38px;border-radius:8px;overflow:hidden;background:#000;container-type:size}
+.fp select{all:unset;cursor:pointer;flex:1;min-width:0;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
+input[type=time]{all:unset;cursor:pointer;font-size:15px;font-weight:500}
+.tg{all:unset;cursor:pointer;flex:none;position:relative;width:51px;height:31px;border-radius:99px;background:var(--off,rgba(120,120,128,.16));transition:background .2s}
+.tg::after{content:'';position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:0 3px 8px rgba(0,0,0,.15);transition:transform .2s}
+.tg[aria-checked=true]{background:var(--acc,#3f3399)}.tg[aria-checked=true]::after{transform:translateX(20px)}
+.ft{font-size:13px;color:var(--fg2,rgba(60,60,67,.6));margin:-14px 16px 22px}
+.r select{all:unset;cursor:pointer;color:var(--fg2,rgba(60,60,67,.6));text-align:right;max-width:55%}.r input[type=number]{all:unset;width:4em;text-align:right;color:var(--fg2,rgba(60,60,67,.6))}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--blue,#0a84ff);outline-offset:2px}
+:host([ro]) button,:host([ro]) select,:host([ro]) input{pointer-events:none;opacity:.55}
+@media (max-width:760px){.sl{grid-template-columns:32px 1fr auto;row-gap:8px}.sl .seg{grid-column:2 / 4}.sl .fp{grid-column:2 / 4}.fc{grid-template-columns:repeat(2,minmax(0,1fr))}}`;
+function hvFaceScheduleUI(ctx) { const host = document.createElement('div'); let c = hvFs.cfg(); const hass = () => ctx.H();
+  // each thumbnail in its own shadow root with the face CSS (its class names would clash with this page's)
+  const faceEl = style => { const face = (hvSsFaces.list().find(f => f && f.style === style)) || { style }; const t = document.createElement('div'); t.style.cssText = 'position:absolute;inset:0';
+    if (style === 'photo') { t.style.background = 'linear-gradient(160deg,#6d8fb5,#11161f)'; return t; }
+    try { const r = t.attachShadow({ mode: 'open' }); r.innerHTML = `<style>:host{container-type:size}${HV_SS_FACE_CSS}</style>`; const f = new HVSsFace(style, true); f.applyColors(face.colors || hvSsColors.get(style)); f.face = face;
+      r.appendChild(f.el); f.update(hass(), new Date()); } catch (e) {} return t; };
+  const fmt = d => d.toLocaleTimeString((hass() && hass().locale && hass().locale.language) || undefined, { hour: 'numeric', minute: '2-digit' });
+  const paint = () => { const H = hass(), day = new Date(); day.setHours(0, 0, 0, 0); const cur = hvFs.current(H), on = c.on;
+    const times = HV_FS_SLOTS.map(s => ({ s, x: c.slots[s.id], t: hvFs.at(H, c.slots[s.id], day) })), sorted = times.slice().sort((a, b) => a.t - b.t);
+    const ns = hvNsCfg(), lux = Object.keys((H && H.states) || {}).filter(id => /^sensor\./.test(id) && ((H.states[id].attributes || {}).device_class === 'illuminance' || /lx|lux/i.test((H.states[id].attributes || {}).unit_of_measurement || ''))).sort();
+    const pct = d => Math.max(0, Math.min(100, (d.getHours() * 60 + d.getMinutes()) / 1440 * 100)), now = new Date();
+    let bar = '', prev = 0, pc = sorted[sorted.length - 1].s.c; // the day bar: before the first start, the night carries over; then each slot's colour from its start
+    for (const k of sorted) { const p = pct(k.t); bar += `<i style="width:${Math.max(0, p - prev)}%;background:${pc}"></i>`; prev = p; pc = k.s.c; }
+    bar += `<i style="width:${100 - prev}%;background:${pc}"></i>`;
+    host.innerHTML = `<div class="grp td"><div class="hd"><b>Today's faces</b><button class="pvb" data-a="pv" aria-label="Preview the face for now">Preview <ha-icon icon="mdi:play" style="--mdc-icon-size:16px"></ha-icon></button></div>
+<div class="fc">${sorted.map(k => `<div><div class="t${cur && cur.id === k.s.id && on ? ' on' : ''}" data-f="${k.x.face}"></div><div class="n"><b>${esc((HV_SSS.find(z => z.v === k.x.face) || {}).l || k.x.face)}</b><span>${esc(fmt(k.t))}</span></div></div>`).join('')}</div>
+<div class="bar" aria-hidden="true">${bar}<u style="left:calc(${pct(now)}% - 1.5px)"></u></div><div class="ax"><span>12 AM</span><span>6 AM</span><span>12 PM</span><span>6 PM</span><span>12 AM</span></div></div>
+<div class="grp"><div class="r"><span class="l">Change faces automatically</span><button class="tg" role="switch" data-a="on" aria-checked="${on}" aria-label="Change faces automatically"></button></div></div>
+<div class="grp">${times.map(({ s, x, t }) => `<div class="r sl" data-s="${s.id}"><span class="ic" style="background:${s.c}"><ha-icon icon="${s.i}"></ha-icon></span><span class="nm">${s.l}</span>
+<span class="wh">${x.at === 'time' ? `<input type="time" data-f="time" value="${esc(x.time)}" aria-label="${s.l} start"><span class="sm" style="display:block">Fixed time</span>` : `<b>${x.at === 'sunrise' ? 'Sunrise' : 'Sunset'}</b><span class="sm">${esc(fmt(t))} today</span>`}</span>
+<span class="seg" role="group" aria-label="${s.l} starts at">${['time', 'sunrise', 'sunset'].map(a => `<button data-at="${a}" aria-pressed="${x.at === a}">${a[0].toUpperCase() + a.slice(1)}</button>`).join('')}</span>
+<span class="fp"><span class="th" data-f="${x.face}"></span><select data-f="face" aria-label="${s.l} face">${HV_SSS.map(z => `<option value="${z.v}"${z.v === x.face ? ' selected' : ''}>${esc(z.l)}</option>`).join('')}</select></span></div>`).join('')}</div>
+<div class="ft">Swipe on any face to change it by hand. The schedule picks back up at the next slot.</div>
+<div class="grp"><div class="r"><span class="l">Nightstand when the room is dark</span><select data-a="lux" aria-label="Light sensor for the dark room">${'<option value="">Off</option>' + lux.map(id => `<option value="${esc(id)}"${ns.auto.mode === 'dark' && ns.auto.sensor === id ? ' selected' : ''}>${esc((H.states[id].attributes || {}).friendly_name || id)}</option>`).join('')}</select></div>
+${ns.auto.mode === 'dark' && ns.auto.sensor ? `<div class="r"><span class="l">Below</span><input type="number" min="0" max="500" data-a="below" value="${esc(ns.auto.below)}" aria-label="Below (lux)"><span class="sm">lx</span></div>` : ''}</div>`;
+    host.querySelectorAll('[data-f]').forEach(n => { if (n.tagName === 'DIV' || n.tagName === 'SPAN') n.appendChild(faceEl(n.dataset.f)); });
+    if (ctx.ro) host.setAttribute('ro', ''); else host.removeAttribute('ro'); };
+  const save = () => { if (ctx.ro) return; ctx.save('screensaver_schedule', c); paint(); };
+  const nsSave = patch => { if (ctx.ro) return; const d = hvSsFaces.raw(); let f = d.faces.find(x => x && x.style === 'nightstand'); if (!f) { f = { style: 'nightstand', colors: null, font: 'system', complications: {} }; d.faces.push(f); }
+    const cur = hvNsCfg(f); f.ns = Object.assign({}, f.ns || {}, { auto: Object.assign({}, cur.auto, patch) }); hvSsFaces.commit(d, hass()).then(() => paint()); paint(); };
+  host.addEventListener('click', ev => { const b = ev.target.closest('button'); if (!b) return; const row = b.closest('[data-s]');
+    if (b.dataset.a === 'on') { c.on = !c.on; save(); } else if (b.dataset.a === 'pv') { const cur = hvFs.current(hass()); if (cur && cur.face && cur.face !== '@back') { hvFs.apply(cur.face); ctx.flash('Now showing ' + ((HV_SSS.find(z => z.v === cur.face) || {}).l || cur.face)); } else ctx.flash('Turn on Change faces automatically first'); }
+    else if (row && b.dataset.at) { c.slots[row.dataset.s].at = b.dataset.at; save(); } });
+  host.addEventListener('change', ev => { const t = ev.target, row = t.closest('[data-s]');
+    if (row && t.dataset.f === 'face') { c.slots[row.dataset.s].face = t.value; save(); } else if (row && t.dataset.f === 'time') { c.slots[row.dataset.s].time = t.value; save(); }
+    else if (t.dataset.a === 'lux') nsSave(t.value ? { mode: 'dark', sensor: t.value } : { mode: 'off', sensor: '' }); else if (t.dataset.a === 'below') nsSave({ below: Math.max(0, Number(t.value) || 0) }); });
+  host._refresh = () => { c = hvFs.cfg(); paint(); }; paint(); return host; }
 if (!window.__hvSsStyles) { window.__hvSsStyles = true; hvSsOv.start(); }
 // ---- picker + colour controls in the screensaver settings popup
 const HV_SS_PICK_CSS = `
