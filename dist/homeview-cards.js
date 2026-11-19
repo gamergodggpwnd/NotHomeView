@@ -5792,6 +5792,41 @@ const HUB_CSS = `:host{display:block;position:relative;font-family:${FONT};color
 .ico .calico{display:flex;flex-direction:column;align-items:center;justify-content:center;width:86%;height:86%;line-height:.85;color:inherit;font-family:${ROUND}}
 .ico .calico b{font-size:calc(var(--I,110px) * .15);font-weight:700;letter-spacing:.08em}
 .ico .calico i{font-style:normal;font-size:calc(var(--I,110px) * .44);font-weight:560;letter-spacing:-.03em;margin-top:2%}`;
+/* ---------------- Home Screen 4 × 4 grid (V2): home_style: grid4 ----------------
+   The same Home Screen grid (hvHomeOrder / hvGridPack, arrange and drag), on Bill's strict grid: 4 columns of 150 px cells, 24 px gaps, a 2 × 2
+   tile exactly 324 × 324 with a 34.32 px radius (scaled down only when the screen is smaller than an 11" iPad). Landscape: the greeting, a big
+   clock, the date and the weather in a column on the left, the compact Now Playing pill at its bottom; portrait: all of it above the grid. A page
+   pill at the top centre (this page as a dash, the swipe page and any further grid pages as dots). Default (classic) = the layout as before. */
+const HV_G4_CSS = `
+:host([g4]) .w{display:block;position:relative;height:var(--h,100vh);min-height:0;overflow:hidden}
+:host([g4]) .top{position:relative;justify-content:flex-end;min-height:var(--av,58px)}
+:host([g4]) .gr{position:absolute;left:calc(var(--g4lx) - var(--px,32px));top:calc(var(--g4ly) - var(--pt,24px));width:var(--g4lw);font-size:calc(20px * var(--g4s,1));line-height:1.3;letter-spacing:.02em}
+:host([g4]) .apps.hg{position:absolute;left:var(--g4gl);top:var(--g4gt);width:max-content;margin:0;grid-auto-flow:row}
+:host([g4][g4sc]:not([hv-arr])) .apps.hg{max-height:var(--g4G);overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-width:none;padding:0 12px 12px;margin:0 -12px}
+:host([g4][g4sc]) .apps.hg::-webkit-scrollbar{display:none}
+:host([g4]) .apps.hg > .app{width:var(--gc);justify-self:stretch;align-self:stretch;justify-content:flex-start;padding-top:calc(8px * var(--g4s,1));box-sizing:border-box}
+:host([g4]) .apps.hg > .app .lb{max-width:var(--gc);font-size:var(--lfs);margin-top:0}
+:host([g4]) .apps.hg > .tile > .lb,:host([g4]) .apps.hg > .phw > .lb{display:none}
+:host([g4]) .apps.hg > .tile > .tb,:host([g4]) .apps.hg > .phw .pw,:host([g4]) .apps.hg > .tile.hw{border-radius:calc(34.32px * var(--g4s,1));height:100%}
+:host([g4]) .ico{border-radius:calc(24px * var(--g4s,1))}
+.g4l{position:absolute;left:var(--g4lx);top:calc(var(--g4ly) + 52px * var(--g4s,1));width:var(--g4lw);color:#fff;text-shadow:0 1px 8px rgba(0,0,0,.25);pointer-events:none}
+.g4t{font-size:calc(128px * var(--g4s,1));font-weight:700;line-height:1;letter-spacing:-.05em;margin-top:calc(36px * var(--g4s,1));font-variant-numeric:tabular-nums;white-space:nowrap}
+.g4d{font-size:calc(24px * var(--g4s,1));font-weight:600;margin-top:calc(10px * var(--g4s,1));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.g4w{display:flex;align-items:center;gap:6px;font-size:calc(18px * var(--g4s,1));color:rgba(255,255,255,.72);margin-top:calc(8px * var(--g4s,1))}.g4w ha-icon{--mdc-icon-size:calc(17px * var(--g4s,1));display:flex}.g4w:empty{display:none}
+:host([g4p]) .g4t{margin-top:calc(22px * var(--g4s,1))}
+.g4n{all:unset;box-sizing:border-box;position:absolute;left:var(--g4lx);top:calc(var(--g4gt) + var(--g4G) - 88px * var(--g4s,1));width:var(--g4lw);height:calc(88px * var(--g4s,1));border-radius:calc(26px * var(--g4s,1));display:flex;align-items:center;gap:14px;padding:0 calc(22px * var(--g4s,1)) 0 calc(14px * var(--g4s,1));cursor:pointer;color:#fff;
+ background:linear-gradient(135deg,rgba(255,255,255,.16),rgba(255,255,255,.07));border:1px solid rgba(255,255,255,.3);box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 10px 30px rgba(0,0,0,.18);-webkit-backdrop-filter:blur(3px) saturate(1.25);backdrop-filter:blur(3px) saturate(1.25)}
+.g4n[hidden],:host([g4p]) .g4n{display:none}
+.g4n .art{width:calc(60px * var(--g4s,1));height:calc(60px * var(--g4s,1));border-radius:14px;flex:none;background:radial-gradient(circle at 30% 30%,#ffe3a3,#ff8a65 45%,#8e5bd8 100%) center/cover no-repeat}
+.g4n .tx{flex:1;min-width:0}.g4n b{display:block;font-size:calc(17px * var(--g4s,1));font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.g4n small{display:block;font-size:calc(15px * var(--g4s,1));opacity:.72;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.g4n button{all:unset;cursor:pointer;width:40px;height:40px;display:flex;align-items:center;justify-content:center;border-radius:50%;flex:none}.g4n button svg{width:26px;height:26px}.g4n button:active{background:rgba(255,255,255,.14)}
+.g4pp{position:absolute;left:50%;top:calc(24px * var(--g4s,1));transform:translateX(-50%);display:flex;gap:6px;align-items:center;padding:7px 10px;border-radius:12px;background:rgba(255,255,255,.14);z-index:2}.g4pp[hidden]{display:none}
+.g4pp button{all:unset;display:block;width:7px;height:7px;border-radius:4px;background:rgba(255,255,255,.4);cursor:pointer;transition:width .2s,background .2s}.g4pp button.on{width:20px;background:#fff}
+:host([hv-arr]) .g4pp,:host([hv-arr]) .g4n{visibility:hidden}`;
+const HV_G4_SVG = { pause: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="4.5" width="4" height="15" rx="1.2" fill="currentColor"/><rect x="14" y="4.5" width="4" height="15" rx="1.2" fill="currentColor"/></svg>',
+  play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 5.2v13.6a1 1 0 0 0 1.5.86l11-6.8a1 1 0 0 0 0-1.72l-11-6.8A1 1 0 0 0 7 5.2z"/></svg>',
+  next: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 6.3v11.4a.8.8 0 0 0 1.25.66L12 13v4.7a.8.8 0 0 0 1.25.66l8.3-5.7a.8.8 0 0 0 0-1.32l-8.3-5.7A.8.8 0 0 0 12 6.3V11L4.25 5.64A.8.8 0 0 0 3 6.3z"/></svg>' };
+Object.assign(HELPERS, { home_style: 'Classic: the layout as before. 4 × 4 grid: 150 px cells and 24 px gaps (2 × 2 tiles 324 × 324), the greeting, a big clock, the date and the weather on the left (above the grid in portrait), the Now Playing pill and a page pill.' });
 const hubWeatherBg = (cond, night) => {
   const n = night, g = { sunny: ['#2f86e0', '#8cc8f5'], 'clear-night': ['#0b1736', '#2a3d75'], partlycloudy: n ? ['#141d3a', '#3a4a72'] : ['#3d7fd0', '#9cc3e8'],
     cloudy: n ? ['#1d2333', '#40485c'] : ['#5d7190', '#a9b7c9'], rainy: ['#33445c', '#6c7d93'], pouring: ['#2a3446', '#5b6a80'], lightning: ['#252a3d', '#555b78'], 'lightning-rainy': ['#252a3d', '#555b78'],
@@ -7307,7 +7342,7 @@ const HV_SET_PAGES = [
   { id: 'cooking', t: 'Cooking', i: 'mdi:fire', c: '#ff9500', g: 2, d: 'Recipes step by step with kitchen timers. The to-do list for Add to Reminders, and the screen staying on while you cook.',
     sec: [{ bare: true, f: ['@cooking'] }] },
   { id: 'layout', t: 'Layout & weather', i: 'mdi:view-dashboard', c: '#ff9500', g: 2, d: 'The Photos and extra tiles\' sizes, the app icons\' size, and the weather.',
-    sec: [{ h: 'Photos tile', f: ['photo_size', 'photo_max_aspect'] }, { h: 'Extra tiles', f: ['show_homie', 'side_sizes', 'row_units', 'side_tiles', 'side_portrait', 'max_icon', '@sidecards'] },
+    sec: [{ h: 'Home Screen', f: ['home_style'] }, { h: 'Photos tile', f: ['photo_size', 'photo_max_aspect'] }, { h: 'Extra tiles', f: ['show_homie', 'side_sizes', 'row_units', 'side_tiles', 'side_portrait', 'max_icon', '@sidecards'] },
       { h: 'Weather', f: ['weather_entity', 'location_name', 'weather_sky_header'] }] }];
 // rows that do something instead of changing an option
 const HV_SET_ACTS = {
@@ -8492,7 +8527,7 @@ class HVHubCard extends HTMLElement {
   constructor() { super(); this.attachShadow({ mode: 'open' }); this._layer = 0; }
   static get defaults() { return { theme: HV_THEME_DEFAULT, person: '', morning_start: 5, afternoon_start: 12, evening_start: 17, greeting_morning: 'Good morning', greeting_afternoon: 'Good afternoon',
     greeting_evening: 'Good evening', photo_source_mode: 'media', photo_album_url: '', photo_source: '', photo_interval: 25, photo_order: 'random', blur: 32, dim: 0.32, bg_blur_level: 3, photo_backdrop: true, bg_freeze: true, photo_tap: 'viewer', photo_viewer_nav: true, photo_viewer_swipe: true, photo_viewer_add: true, photo_gallery_upload: true, photo_viewer_pause: true, photo_label: 'Photos', photo_max_aspect: 2.6,
-    show_calendar: true, calendar_size: 'full', calendar_layout: 'wide', calendar_columns: 3, calendar_days: 7, calendar_title: 'Calendar', calendar_min_height: 240, max_icon: 140, edge_sidebar: true, ss_hold: true, weather_entity: '', photo_size: 'wide', side_portrait: 'below', side_sizes: '', row_units: 3, block_pull_refresh: true, calendar_rows: 'auto', swipe_screensaver: 'auto', swipe_open_home: false, show_homie: false, full_height_popups: true, popup_edit: true, assistant_enabled: false, assistant_pipeline: 'preferred', assistant_theme: 'same', assistant_button: true, assistant_speak: true, assistant_auto_listen: true, assistant_orb: true, assistant_face: 'orb', assistant_continue: true, assistant_silence_timeout: 5, assistant_end_of_speech_pause: 2, assistant_history_retention: 'forever', assistant_dismiss_phrases: "thank you, thanks, thanks jarvis, thank you jarvis, thanks homey, thank you homey, thanks homie, thank you homie, goodbye, bye, good bye, that's all, that's it, never mind, nevermind, stop, cancel, no thanks, I'm done", assistant_quiet_volume_below: 5, assistant_quiet_start: '23:30', assistant_quiet_end: '10:00', timer_sound: true }; }
+    home_style: 'classic', show_calendar: true, calendar_size: 'full', calendar_layout: 'wide', calendar_columns: 3, calendar_days: 7, calendar_title: 'Calendar', calendar_min_height: 240, max_icon: 140, edge_sidebar: true, ss_hold: true, weather_entity: '', photo_size: 'wide', side_portrait: 'below', side_sizes: '', row_units: 3, block_pull_refresh: true, calendar_rows: 'auto', swipe_screensaver: 'auto', swipe_open_home: false, show_homie: false, full_height_popups: true, popup_edit: true, assistant_enabled: false, assistant_pipeline: 'preferred', assistant_theme: 'same', assistant_button: true, assistant_speak: true, assistant_auto_listen: true, assistant_orb: true, assistant_face: 'orb', assistant_continue: true, assistant_silence_timeout: 5, assistant_end_of_speech_pause: 2, assistant_history_retention: 'forever', assistant_dismiss_phrases: "thank you, thanks, thanks jarvis, thank you jarvis, thanks homey, thank you homey, thanks homie, thank you homie, goodbye, bye, good bye, that's all, that's it, never mind, nevermind, stop, cancel, no thanks, I'm done", assistant_quiet_volume_below: 5, assistant_quiet_start: '23:30', assistant_quiet_end: '10:00', timer_sound: true }; }
   static getStubConfig(hass) { return { apps: HUB_APPS.map(a => Object.assign({}, a)), calendar_entities: Object.keys((hass && hass.states) || {}).filter(k => k.startsWith('calendar.')).slice(0, 3) }; }
   static getConfigElement() { return document.createElement('homeview-hub-card-editor'); }
   setConfig(c) { if (!c) throw new Error('Invalid configuration'); this._hvRaw = c; this._prof = hvProfCur(c); if (this._prof) c = hvProfEff(c, this._prof); const old = this._config, nc = Object.assign({}, HVHubCard.defaults, c);
@@ -8507,7 +8542,7 @@ class HVHubCard extends HTMLElement {
     this._sig = null; if (old && (old.photo_source !== c.photo_source || old.photo_order !== c.photo_order || old.photo_source_mode !== c.photo_source_mode || old.photo_album_url !== c.photo_album_url)) { this._ids = null; this._idsExp = 0; this._loadPhotos(); }
     this._calSig = null; this._render(); this._restartTimer(); if (this.isConnected) this._gBind(); }
   set hass(h) { const first = !this._hass; this._hass = h; this._profAuto(); this._render(); if (this._cal) this._cal.hass = h; (this._sideEls || []).forEach(e => { e._card.hass = this._simHass(h); if (e._setLab) e._setLab();
-      if (e._fit) { const o = hubTileOpt(this._config, this._sideEls.indexOf(e)); if (o.sky === true && hvSky(h, o.sky_entity, window.__hvSimScene).sig !== e._skySig) requestAnimationFrame(() => this._fitTile(e)); } }); if (first) { this._loadPhotos(); this._loadCfg(); setTimeout(hvWwSync, 0); } if (this._sheetO) this._sheetO.hass = h; this._hwPaint(); }
+      if (e._fit) { const o = hubTileOpt(this._config, this._sideEls.indexOf(e)); if (o.sky === true && hvSky(h, o.sky_entity, window.__hvSimScene).sig !== e._skySig) requestAnimationFrame(() => this._fitTile(e)); } }); if (first) { this._loadPhotos(); this._loadCfg(); setTimeout(hvWwSync, 0); } if (this._sheetO) this._sheetO.hass = h; this._hwPaint(); if (this._g4G) this._g4Paint(); }
   get hass() { return this._hass; }
   set editMode(v) { const was = !!this._edit; this._edit = v; this._layout(); this._ssPaint(); if (v) hvEditChromeSoon(this);
     if (v && !was && hvHubArr.hub === this) hvHubArr.exit(true); // HA's edit mode takes over: finish the Home Screen arrange (saves like Done)
@@ -8761,7 +8796,7 @@ class HVHubCard extends HTMLElement {
     const sig = this._rSig();
     if (sig === this._sig && this._w) return; this._sig = sig;
     if (!this._w) {
-      this.shadowRoot.innerHTML = `<style>${HUB_CSS}${HW_CSS}</style><div class="bg"><div class="bgi"></div><div class="bgi"></div><div class="bgx"></div><div class="tint"></div><div class="dim"></div></div><div class="w"></div><div class="ssp" hidden title="Swipe down for the screensaver"></div>`;
+      this.shadowRoot.innerHTML = `<style>${HUB_CSS}${HW_CSS}${HV_G4_CSS}</style><div class="bg"><div class="bgi"></div><div class="bgi"></div><div class="bgx"></div><div class="tint"></div><div class="dim"></div></div><div class="w"></div><div class="ssp" hidden title="Swipe down for the screensaver"></div>`;
       this._ssp = this.shadowRoot.querySelector('.ssp'); this._ssPaint();
       this._w = this.shadowRoot.querySelector('.w'); this._bgs = [...this.shadowRoot.querySelectorAll('.bgi')];
       this._w.addEventListener('click', e => { const t = e.composedPath().find(n => n.dataset && (n.dataset.app != null || n.dataset.k)); if (!t) return;
@@ -8863,7 +8898,7 @@ class HVHubCard extends HTMLElement {
     try { el.setConfig(cfg); } catch (e) { el.textContent = String(e); } el.hass = this._hass; this._cal = el;
   }
   // Home Screen grid (home_layout set): apps, Photos, the extra tiles, the Calendar and the cards in one grid, in that order (see hvHomeOrder)
-  _gridOn() { return !!this._config && Array.isArray(this._config.home_layout); }
+  _gridOn() { return !!this._config && (Array.isArray(this._config.home_layout) || this._config.home_style === 'grid4'); }
   _putApps(ap, html) { for (const n of [...ap.children]) if (n.classList.contains('app')) n.remove(); ap.insertAdjacentHTML('afterbegin', html); } // the app icons only: tiles / cards in the grid stay
   _hwMk(key) { const M = this._hwM || (this._hwM = new Map()); let el = M.get(key); if (el) return el;
     el = document.createElement('div'); el.className = 'tile hw'; el.setAttribute('role', 'button'); el.tabIndex = 0; el.innerHTML = '<div class="hwi"></div>';
@@ -8872,16 +8907,16 @@ class HVHubCard extends HTMLElement {
     el.addEventListener('click', open); el.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); open(ev); } });
     M.set(key, el); return el; }
   _layoutGrid(o) { const c = this._config, ap = this._w.querySelector('.apps'); if (!ap) return; const { px, pt, pb, H, Wc, gap, set } = o;
-    this.toggleAttribute('hgrid', true); ap.classList.add('hg');
+    this.toggleAttribute('hgrid', true); ap.classList.add('hg'); const g4 = c.home_style === 'grid4' ? this._g4Geo(o) : null; // V2: the strict 4 x 4 grid
     // columns: 8 on a landscape tablet, 6 on a portrait one, 4 on a phone; an app icon fills most of a column
-    const N = Wc >= 1000 ? 8 : Wc >= 680 ? 6 : 4, gx = Math.round(Math.max(12, Math.min(30, Wc * 0.024))), hs = hubTileSizes(c), toks = hvHomeOrder(c, hvSideN(c));
+    const N = g4 ? 4 : Wc >= 1000 ? 8 : Wc >= 680 ? 6 : 4, gx = g4 ? g4.g : Math.round(Math.max(12, Math.min(30, Wc * 0.024))), hs = hubTileSizes(c), toks = hvHomeOrder(c, hvSideN(c));
     const cells = t => { const z = hvHomeCells(c, t, hs); return [Math.min(z[0], N), z[1]]; };
     const szs = toks.map(cells), packed = hvGridPack(szs, N), dragPl = (hvHubArr.drag && hvHubArr.hub === this && hvHubArr.drag.placed) || null, usePl = !!(dragPl || hvPlacesOk(c.home_places, toks, szs, N)), pl = dragPl || c.home_places, rows = usePl ? Math.max(1, ...toks.map((t, i) => ((pl[t] && +pl[t][1]) || packed[i][1]) + szs[i][1])) : hvGridRows(szs, N);
     const met = I => { const lfs = Math.round(Math.max(12, Math.min(17, I * 0.15))), lh = Math.round(lfs * 1.3), lg = Math.round(I * 0.08); return { I, lfs, lh, lg, R: I + lg + lh, gy: Math.round(Math.max(12, I * 0.2)) }; };
-    let C = (Wc - (N - 1) * gx) / N, I = Math.max(52, Math.min(Math.floor(C * 0.8), Number(c.max_icon) || 140));
+    let C = g4 ? g4.C : (Wc - (N - 1) * gx) / N, I = g4 ? g4.I : Math.max(52, Math.min(Math.floor(C * 0.8), Number(c.max_icon) || 140));
     const greetH = Math.max(15, Math.min(26, Wc * 0.03)) * 2.5, room = H - pt - pb - greetH - gap, need = i => { const m = met(i); return rows * m.R + Math.max(0, rows - 1) * m.gy; };
-    { const lo0 = Math.max(52, Math.round(I * 0.72)); if (rows && need(I) > room && need(lo0) <= room) { let lo = lo0, hi = I; while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (need(mid) > room) hi = mid; else lo = mid; } I = lo; } } // a little smaller to fit the screen; more than that scrolls (columns keep the width)
-    const M = met(I); C = Math.floor(C); this._hgM = { N, C, R: M.R, gx, gy: M.gy, I };
+    if (!g4) { const lo0 = Math.max(52, Math.round(I * 0.72)); if (rows && need(I) > room && need(lo0) <= room) { let lo = lo0, hi = I; while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (need(mid) > room) hi = mid; else lo = mid; } I = lo; } } // a little smaller to fit the screen; more than that scrolls (columns keep the width)
+    const M = g4 ? { I, lfs: g4.lfs, lh: Math.round(g4.lfs * 1.3), lg: g4.lg, R: g4.C, gy: g4.g } : met(I); C = Math.floor(C); this._hgM = { N, C, R: M.R, gx, gy: M.gy, I };
     const apps = [...ap.querySelectorAll(':scope > .app:not(.hgp)')], phw = this._w.querySelector('.phw'), els = [], live = new Set(), map = this._hgMap = new Map();
     const appAt = new Map(apps.map((n, j) => [n.dataset.app != null && n.dataset.app !== '' ? Number(n.dataset.app) : j, n])); // a:<i> = the icon of app i (data-app), never its DOM position: the DOM is already in Home Screen order, so by position every re-layout swapped reordered icons
     for (const t of toks) { const m = /^([a-z]+)(?::(\d+))?$/.exec(t), k = m[1], i = Number(m[2] || 0); let el = null;
@@ -8895,15 +8930,54 @@ class HVHubCard extends HTMLElement {
     if (this._hwM) for (const [k, el] of [...this._hwM]) if (!live.has(el)) { el.remove(); this._hwM.delete(k); }
     if (!(hvHubArr.drag && hvHubArr.hub === this)) hvOrder(ap, els); // a drag in progress owns the order until it drops
     else if (dragPl) { const d = hvHubArr.drag; if (d.ph && dragPl[d.tok]) hvGridPlace(d.ph, dragPl[d.tok], d.g._hvCells || [1, 1]); }
-    const ppw = phw && phw.querySelector('.pw'), ph = map.get('p'); if (ppw && ph) { const h = ph._hvCells[1]; ppw.style.setProperty('--ph', Math.max(40, h * M.R + (h - 1) * M.gy - (phw.querySelector('.lb') ? M.lh + M.lg : 0)) + 'px'); }
+    const ppw = phw && phw.querySelector('.pw'), ph = map.get('p'); if (ppw && ph) { const h = ph._hvCells[1]; ppw.style.setProperty('--ph', Math.max(40, h * M.R + (h - 1) * M.gy - (phw.querySelector('.lb') && !g4 ? M.lh + M.lg : 0)) + 'px'); }
     set('--px', px + 'px'); set('--pt', Math.max(0, pt) + 'px'); set('--pb', pb + 'px'); set('--gap', gap + 'px'); set('--h', Math.floor(H) + 'px');
     set('--I', I + 'px'); set('--lfs', M.lfs + 'px'); set('--lh', M.lh + 'px'); set('--lg', M.lg + 'px'); set('--cg2', gx + 'px');
     set('--gn', String(N)); set('--gc', C + 'px'); set('--gr', M.R + 'px'); set('--gx', gx + 'px'); set('--gy', M.gy + 'px'); set('--hu', ((2 * C + gx) / 1.55).toFixed(1) + 'px');
-    const i0 = Math.min(Wc / 5.2, Number(c.max_icon) || 140); set('--gfs', Math.round(Math.max(15, Math.min(26, i0 * 0.2))) + 'px'); set('--av', Math.round(Math.max(44, Math.min(72, i0 * 0.56))) + 'px');
+    const i0 = Math.min(Wc / 5.2, Number(c.max_icon) || 140); set('--gfs', Math.round(Math.max(15, Math.min(26, i0 * 0.2))) + 'px'); set('--av', (g4 ? Math.round(62 * g4.s) : Math.round(Math.max(44, Math.min(72, i0 * 0.56)))) + 'px');
+    this._g4Set(g4, rows);
     (this._sideEls || []).forEach(w => { w.classList.toggle('fit', !!w._fit); if (w._fit) requestAnimationFrame(() => this._fitTile(w)); });
     this._hwPaint(true); }
+  // ---- home_style: grid4 (V2): the strict 4 × 4 grid's geometry, its left column (greeting, clock, date, weather, Now Playing) and page pill
+  _g4Geo(o) { const W = this.getBoundingClientRect().width || o.Wc, H = o.H, port = H > W * 1.05, G0 = 672; let s, gl, gt, lx, ly, lw;
+    if (port) { s = Math.min(1, (W - 48) / G0, (H - 436) / G0); const G = G0 * s; gl = Math.round((W - G) / 2); gt = Math.round(Math.max(o.pt + 300 * s, H - 56 * s - G)); lx = gl; ly = Math.round(Math.max(o.pt + 40, 96 * s)); lw = Math.round(G); }
+    else { const m = W >= 1000 ? 48 : 24; s = Math.min(1, (H - 100 - Math.max(48, o.pb)) / G0, (W - 2 * m - 340) / G0); const G = G0 * s; gl = Math.round(W - m - G); gt = Math.round(Math.max(o.pt + 56, (H - G) / 2 + 26)); lx = m; ly = gt; lw = Math.round(Math.min(380, gl - m - 32)); }
+    s = Math.max(.5, s); const r = v => Math.round(v * s); return { s, port, C: r(150), g: r(24), I: r(104), lfs: Math.max(12, r(15)), lg: r(9), gl, gt, lx, ly, lw, G: 4 * r(150) + 3 * r(24) }; }
+  _g4Set(g, rows) { const w = this._w; if (!w) return; this.toggleAttribute('g4', !!g); this.toggleAttribute('g4p', !!(g && g.port)); this.toggleAttribute('g4sc', !!(g && rows > 4));
+    let l = w.querySelector(':scope > .g4l'), n = w.querySelector(':scope > .g4n'), pp = w.querySelector(':scope > .g4pp');
+    if (!g) { for (const x of [l, n, pp]) if (x) x.remove(); clearInterval(this._g4iv); this._g4iv = 0; return; }
+    const S = w.style, set = (k, v) => S.setProperty(k, v); set('--g4s', g.s.toFixed(3)); set('--g4gl', g.gl + 'px'); set('--g4gt', g.gt + 'px'); set('--g4lx', g.lx + 'px'); set('--g4ly', g.ly + 'px'); set('--g4lw', g.lw + 'px'); set('--g4G', g.G + 'px');
+    if (!l) { l = document.createElement('div'); l.className = 'g4l'; l.innerHTML = '<div class="g4t"></div><div class="g4d"></div><div class="g4w"></div>'; w.appendChild(l); }
+    if (!n) { n = document.createElement('div'); n.className = 'g4n'; n.setAttribute('role', 'button'); n.tabIndex = 0; n.hidden = true; w.appendChild(n);
+      n.addEventListener('click', e => { e.stopPropagation(); if (this._edit || hvHubArr.hub === this) return; const b = e.target.closest('button'), id = n.dataset.e, h = this._hass;
+        if (b && id && h) { h.callService('media_player', b.dataset.a === 'next' ? 'media_next_track' : 'media_play_pause', { entity_id: id }); return; } // the pill's own buttons (a tap)
+        const apps = this._config.apps || [], i = apps.findIndex(a => a && a.kind === 'now_playing'); if (i >= 0) this._runApp(null, i); else if (id) this._openMusicSheet({ kind: 'now_playing' }, [id]); });
+      n.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target === n) { e.preventDefault(); n.click(); } }); }
+    if (!pp) { pp = document.createElement('div'); pp.className = 'g4pp'; pp.setAttribute('role', 'tablist'); w.appendChild(pp);
+      pp.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; e.stopPropagation(); const ap = w.querySelector('.apps.hg');
+        if (b.dataset.pg === 'swipe') { const p = (hvSwipe.pairs().find(x => location.pathname.replace(/\/$/, '') === x.home) || {}).page; if (p) hvSwipe.go(p, -1); return; }
+        if (ap) ap.scrollTo({ top: Number(b.dataset.pg) * (g.G + g.g), behavior: 'smooth' }); }); }
+    const ap = w.querySelector('.apps.hg'); if (ap && !ap._g4sc) { ap._g4sc = true; ap.addEventListener('scroll', () => this._g4Pill(), { passive: true }); }
+    this._g4G = g; this._g4Rows = rows; this._g4Pill(); this._g4Paint(); if (!this._g4iv) this._g4iv = setInterval(() => { if (!this.isConnected) { clearInterval(this._g4iv); this._g4iv = 0; return; } this._g4Paint(); }, 15000); }
+  _g4Pill() { const w = this._w, pp = w && w.querySelector(':scope > .g4pp'), g = this._g4G; if (!pp || !g) return; const ap = w.querySelector('.apps.hg'), gp = Math.max(1, Math.ceil((this._g4Rows || 1) / 4)), cur = ap ? Math.round(ap.scrollTop / (g.G + g.g)) : 0;
+    const sw = !!(this._config.swipe_page && hvSwipe.pairs().some(x => location.pathname.replace(/\/$/, '') === x.home)), n = gp + (sw ? 1 : 0); pp.hidden = n < 2;
+    const h = Array.from({ length: gp }, (_, i) => `<button data-pg="${i}" role="tab" aria-selected="${i === cur}" aria-label="Page ${i + 1}"${i === cur ? ' class="on"' : ''}></button>`).join('') + (sw ? '<button data-pg="swipe" role="tab" aria-selected="false" aria-label="Next page"></button>' : '');
+    if (pp._h !== h) { pp._h = h; pp.innerHTML = h; } }
+  _g4Paint() { const w = this._w, h = this._hass, c = this._config; if (!w || !h || !c || !this.hasAttribute('g4')) return; const l = w.querySelector(':scope > .g4l'), n = w.querySelector(':scope > .g4n'); if (!l) return;
+    const lang = (h.locale && h.locale.language) || undefined, d = new Date(), S = h.states || {}, set = (el, v) => { if (el && el._v !== v) { el._v = v; el.innerHTML = v; } };
+    let t; try { t = d.toLocaleTimeString(lang, { hour: 'numeric', minute: '2-digit', hour12: !(h.locale && h.locale.time_format === '24') }).replace(/\s?[AP]\.?M\.?$/i, ''); } catch (e) { t = (d.getHours() % 12 || 12) + ':' + String(d.getMinutes()).padStart(2, '0'); }
+    set(l.querySelector('.g4t'), esc(t)); set(l.querySelector('.g4d'), esc(hvFmtDate(d, lang, { weekday: 'long', month: 'long', day: 'numeric' })));
+    const we = (c.weather_entity && S[c.weather_entity]) ? c.weather_entity : Object.keys(S).find(k => k.startsWith('weather.')), ws = we && S[we];
+    if (ws && !UNAVAILABLE.includes(ws.state)) { const cond = ws.state, tmp = Number(ws.attributes.temperature), ic = cond === 'partlycloudy' ? 'partly-cloudy' : cond === 'clear-night' ? 'night' : cond === 'exceptional' ? 'alert' : cond;
+      set(l.querySelector('.g4w'), `<ha-icon icon="mdi:weather-${esc(ic)}"></ha-icon>${isFinite(tmp) ? Math.round(tmp) + '° · ' : ''}${esc((typeof HV_SS_COND !== 'undefined' && HV_SS_COND[cond]) || cond)}`); } else set(l.querySelector('.g4w'), '');
+    if (!n) return; const np = (c.apps || []).find(a => a && a.kind === 'now_playing') || {}, ids = [np.entity].concat(np.entities || []).filter(Boolean), pool = ids.length ? ids : Object.keys(S).filter(k => k.startsWith('media_player.'));
+    const live = id => S[id] && ['playing', 'paused'].includes(S[id].state) && S[id].attributes.media_title, id = pool.find(x => live(x) && S[x].state === 'playing') || pool.find(live);
+    n.hidden = !id; if (!id) return; const a = S[id].attributes, pic = a.entity_picture ? (h.hassUrl ? h.hassUrl(a.entity_picture) : a.entity_picture) : '';
+    n.dataset.e = id; n.setAttribute('aria-label', `Now playing: ${a.media_title}`);
+    set(n, `<span class="art"${pic ? ` style="background-image:url('${esc(pic)}')"` : ''}></span><span class="tx"><b>${esc(a.media_title)}</b><small>${esc(a.media_artist || a.friendly_name || '')}</small></span>`
+      + `<button data-a="pp" aria-label="${S[id].state === 'playing' ? 'Pause' : 'Play'}">${S[id].state === 'playing' ? HV_G4_SVG.pause : HV_G4_SVG.play}</button><button data-a="next" aria-label="Next track">${HV_G4_SVG.next}</button>`); }
   // back to the classic layout (home_layout removed, e.g. leaving arrange without a change): the tiles go back to their row
-  _gridOff() { if (!this.hasAttribute('hgrid')) return; this.toggleAttribute('hgrid', false); const ap = this._w.querySelector('.apps'); this._hgMap = null; this._hgM = null;
+  _gridOff() { this._g4Set(null); if (!this.hasAttribute('hgrid')) return; this.toggleAttribute('hgrid', false); const ap = this._w.querySelector('.apps'); this._hgMap = null; this._hgM = null;
     if (ap) { ap.classList.remove('hg'); for (const n of ap.children) { n.style.gridColumn = ''; n.style.gridRow = ''; } }
     if (this._hwM) { for (const el of this._hwM.values()) el.remove(); this._hwM.clear(); }
     const phw = this._w.querySelector('.phw'), ppw = phw && phw.querySelector('.pw'); if (ppw) ppw.style.removeProperty('--ph'); if (phw) { phw.style.gridColumn = phw.style.gridRow = ''; if (this._rowEl && phw.parentNode === ap) this._rowEl.prepend(phw); }
@@ -9424,6 +9498,7 @@ const HUB_SCHEMA = [
       { name: 'assistant_quiet_focus_entity', selector: { entity: { domain: ['binary_sensor', 'sensor', 'input_boolean'] } } },
       { type: 'grid', name: '', schema: [{ name: 'assistant_quiet_start', selector: { time: { no_second: true } } }, { name: 'assistant_quiet_end', selector: { time: { no_second: true } } }] }] }] },
   { type: 'expandable', name: '', flatten: true, title: 'Layout & weather', icon: 'mdi:view-dashboard-outline', schema: [
+    { name: 'home_style', selector: { select: { mode: 'dropdown', options: [{ value: 'classic', label: 'Classic (default)' }, { value: 'grid4', label: '4 × 4 grid: clock on the left, page pill' }] } } },
     { type: 'grid', name: '', schema: [{ name: 'photo_size', selector: { select: { mode: 'dropdown', options: [{ value: 'wide', label: 'Wide (2 units; alone it fills the row)' }, { value: 'big', label: '4 × 6: two wide, 2 rows (on the row below)' }, { value: 'square', label: 'Square (1 unit)' }] } } }, n_('photo_max_aspect', 0.8, 4, 0.1)] },
     { type: 'grid', name: '', schema: [{ name: 'side_sizes', selector: { text: {} } }, n_('row_units', 1, 6)] },
     { name: 'show_homie', selector: { boolean: {} } },
@@ -9448,7 +9523,7 @@ Object.assign(LABELS, { photo_source_mode: 'Photo source', photo_album_url: 'Alb
   morning_start: 'Morning from (hour)', afternoon_start: 'Afternoon from', evening_start: 'Evening from', night_start: 'Night from (empty = evening until morning)', greeting_night: 'Night greeting', greeting_morning: 'Morning greeting', greeting_afternoon: 'Afternoon greeting', greeting_evening: 'Evening greeting',
   wallpaper: 'Wallpaper when there are no photos (any CSS background, e.g. a colour or gradient)', photo_source: 'Media folder (empty = the Wallpanel screensaver\'s, e.g. media-source://media_source/local/)', photo_interval: 'Next photo every', photo_order: 'Order', blur: 'Background blur (px)', dim: 'Edge darkening for text readability (0-0.9)', photo_backdrop: 'Show the current photo, blurred, behind the page', bg_freeze: 'Freeze the blurred background while the Home Screen is showing', bg_blur_level: 'Background blur',
   photo_tap: 'Tapping Photos', photo_label: 'Photos label', photo_viewer_nav: 'Viewer: Previous / Next buttons', photo_viewer_swipe: 'Viewer: swipe left / right to change picture', photo_viewer_add: 'Viewer: View Gallery button', photo_gallery_upload: 'Gallery: let people upload new pictures', photo_viewer_pause: 'Pause the screensaver while the viewer is open', show_calendar: 'Show the calendar', calendar_show_weather: 'Forecast per day', calendar_entities: 'Calendars (empty = all)', calendar_layout: 'Calendar layout',
-  calendar_size: 'Calendar size', calendar_columns: 'Days side by side', calendar_rows: 'Rows of days (phones always stack)', calendar_days: 'Days to load', calendar_title: 'Calendar title', calendar_min_height: 'Calendar min height', max_icon: 'Largest app icon', photo_max_aspect: 'Photos widget: widest aspect (w/h)', photo_size: 'Photos tile size', side_sizes: 'Extra tiles\' sizes, in order: S = square, W = wide (e.g. S, S)', side_portrait: 'Tiles that don\'t fit beside the apps', row_units: 'Landscape: units beside the apps (icons shrink to fit)',
+  home_style: 'Home Screen layout', calendar_size: 'Calendar size', calendar_columns: 'Days side by side', calendar_rows: 'Rows of days (phones always stack)', calendar_days: 'Days to load', calendar_title: 'Calendar title', calendar_min_height: 'Calendar min height', max_icon: 'Largest app icon', photo_max_aspect: 'Photos widget: widest aspect (w/h)', photo_size: 'Photos tile size', side_sizes: 'Extra tiles\' sizes, in order: S = square, W = wide (e.g. S, S)', side_portrait: 'Tiles that don\'t fit beside the apps', row_units: 'Landscape: units beside the apps (icons shrink to fit)',
   full_height_popups: 'Full-height popups: every popup on this dashboard reaches the top of the screen; swipe down to close',
   popup_edit: 'Edit pencil next to ✕ in popups (admins only): opens the editor of the card the popup belongs to',
   assistant_enabled: 'Assistant on this Home Screen', assistant_button: 'Mic button beside the avatar', assistant_pipeline: 'Assist pipeline', assistant_theme: 'Assistant look',
@@ -10865,7 +10940,7 @@ const hvSwipe = (() => {
 .e{position:fixed;top:50%;margin-top:-28px;width:22px;height:56px;border-radius:11px;display:grid;place-items:center;color:rgba(255,255,255,.6);background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);pointer-events:auto;cursor:pointer;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
 .e svg{width:20px;height:20px;fill:currentColor}.r{right:6px}.l{left:6px}</style><div class="d"><i class="a"></i><i></i></div>`;
       document.body.appendChild(hint); }
-    hint.style.display = w.at === 'home' ? '' : 'none'; }; // page dots on the Home Screen only (no edge handles)
+    hint.style.display = w.at === 'home' && ![...HV_HUBS].some(h => h.isConnected && h.hasAttribute('g4')) ? '' : 'none'; }; // page dots on the Home Screen only (no edge handles; the 4 x 4 grid has its page pill at the top)
   addEventListener('location-changed', () => setTimeout(paint, 60)); addEventListener('popstate', () => setTimeout(paint, 60)); setInterval(paint, 1000);
   return { pairs, go, paint };
 })();
