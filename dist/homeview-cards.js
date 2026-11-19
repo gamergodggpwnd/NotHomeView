@@ -5940,8 +5940,8 @@ const HV_AP_SET_CSS = `:host{display:block}.g{background:var(--card,#fff);border
 .r .v{margin-left:auto;display:flex;align-items:center;gap:8px;color:var(--t2)}.r select,.r input[type=time]{all:unset;text-align:right;direction:rtl;color:var(--t2);cursor:pointer;font-size:16px}.r input[type=time]{direction:ltr}
 .sw{all:unset;margin-left:auto;flex:none;position:relative;width:51px;height:31px;border-radius:16px;background:var(--swo);transition:background .2s;cursor:pointer}
 .sw::after{content:'';position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.18);transition:left .2s}.sw[aria-checked=true]{background:var(--acc)}.sw[aria-checked=true]::after{left:22px}
-.apr{display:flex;gap:28px;justify-content:center;padding:22px 10px 18px;flex-wrap:wrap}
-.opt{all:unset;cursor:pointer;display:flex;flex-direction:column;align-items:center;text-align:center;font-size:16px;font-weight:500;color:inherit}.opt .ph{display:block;width:150px;height:104px;border-radius:14px;overflow:hidden;position:relative;margin-bottom:10px;box-shadow:0 0 0 1px var(--sep)}
+.apr{display:flex;gap:min(28px,4%);justify-content:center;padding:22px 10px 18px;flex-wrap:nowrap}
+.opt{all:unset;cursor:pointer;display:flex;flex-direction:column;align-items:center;text-align:center;font-size:16px;font-weight:500;color:inherit;flex:0 1 150px;min-width:0}.opt .ph{display:block;width:100%;aspect-ratio:150/104;border-radius:14px;overflow:hidden;position:relative;margin-bottom:10px;box-shadow:0 0 0 1px var(--sep)}
 .opt .ph i{position:absolute;border-radius:6px}.opt[aria-checked=true] .ph{box-shadow:0 0 0 3px var(--acc)}
 .rad{width:24px;height:24px;border-radius:50%;border:2px solid var(--t3);margin:8px auto 0;display:grid;place-items:center;box-sizing:border-box}.opt[aria-checked=true] .rad{background:var(--acc);border-color:var(--acc);color:#fff}.rad svg{width:13px;height:13px}
 .dot{width:20px;height:20px;border-radius:50%;display:inline-block}button:focus-visible,select:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
@@ -5949,7 +5949,7 @@ const HV_AP_SET_CSS = `:host{display:block}.g{background:var(--card,#fff);border
 :host([dark]){--card:#1c1c1e;--t2:rgba(235,235,245,.6);--t3:rgba(235,235,245,.3);--sep:rgba(84,84,88,.6);--swo:#39393d;--acc:#7a6cf0;color:#f5f5f7}`;
 // ctx: { cfg() (saved Home Screen card), save(k, v), ro }
 function hvAppearanceUI(ctx) { const el = document.createElement('div');
-  const ph = (bg, t, tl) => `<span class="ph" style="background:${bg}"><i style="left:10px;top:12px;width:44px;height:8px;background:${t}"></i><i style="left:10px;top:26px;width:30px;height:16px;background:${t}"></i><i style="left:70px;top:12px;width:30px;height:30px;background:${tl}"></i><i style="left:108px;top:12px;width:30px;height:30px;background:${tl}"></i><i style="left:70px;top:50px;width:68px;height:44px;background:${tl}"></i></span>`;
+  const ph = (bg, t, tl) => `<span class="ph" style="background:${bg}"><i style="left:6.668%;top:11.5404%;width:29.3347%;height:7.6942%;background:${t}"></i><i style="left:6.668%;top:25.0019%;width:20.0013%;height:15.3865%;background:${t}"></i><i style="left:46.668%;top:11.5404%;width:20.0013%;height:28.8481%;background:${tl}"></i><i style="left:72.0013%;top:11.5404%;width:20.0013%;height:28.8481%;background:${tl}"></i><i style="left:46.668%;top:48.0788%;width:45.3347%;height:42.3096%;background:${tl}"></i></span>`;
   const ck = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
   const paint = () => { const c = Object.assign({}, HVHubCard.defaults, ctx.cfg() || {}), th = HV_THEMES.includes(c.theme) ? c.theme : HV_THEME_DEFAULT, dis = ctx.ro ? ' disabled' : '', home = c.appearance_home === true;
     const opt = (v, l, p) => `<button class="opt" role="radio" data-th="${v}" aria-checked="${th === v}"${dis}>${p}${l}<span class="rad">${th === v ? ck : ''}</span></button>`;
@@ -8208,6 +8208,7 @@ function hvOpenCalApp(hub, app) {
 .add,.detail{position:absolute;inset:0;background:rgba(0,0,0,.48);z-index:12;overflow:auto;padding:18px 12px;box-sizing:border-box}
 .add[hidden],.detail[hidden]{display:none}
 .sheet{width:min(440px,100%);margin:12px auto;background:#1c1c1e;border-radius:18px;box-shadow:0 24px 70px rgba(0,0,0,.55);overflow:hidden}
+.add .sheet{display:flex;flex-direction:column;max-height:calc(100% - 24px)}.add .sheet>.ah,.add .sheet>.trow{flex:none}.add .sheet>.form{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:none}.add .sheet>.form::-webkit-scrollbar{display:none}
 .ah{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px}
 .ah .seg button{padding:6px 14px}
 .ck{all:unset;cursor:pointer;width:32px;height:32px;border-radius:50%;background:#2c2c2e;color:#fff;display:flex;align-items:center;justify-content:center}
@@ -8278,6 +8279,7 @@ function hvOpenCalApp(hub, app) {
 .cv .cd .tm{width:84px;flex:none}.cv .cd .tm b{display:block;font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}.cv .cd .tm span{font-size:13px;color:var(--t2)}
 .cv .cd .br{width:5px;align-self:stretch;border-radius:3px;flex:none}
 .cv .cd .ti{flex:1;min-width:0}.cv .cd .ti b{display:block;font-size:19px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.cv .cd .ti > span{display:block;font-size:14px;color:var(--t2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cv .cd .ti b.hn{display:flex;align-items:center}.cv .cd .ti b.hn .tx{min-width:0;overflow:hidden;text-overflow:ellipsis}.cv .cd .ti b.hn .nb{flex:none}
 .cv .nb{font-size:12px;font-weight:700;color:#fff;background:var(--nbb);padding:3px 8px;border-radius:8px;margin-left:8px;vertical-align:2px}
 .cv .who{margin-left:auto;display:flex;flex:none;padding-left:8px}.cv .pa{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:700;border:2px solid var(--ct);margin-left:-8px;box-sizing:border-box}
 @media (max-width:700px){.cv{grid-template-columns:1fr;padding:8px 16px 0;overflow-y:auto}.cv .lc{display:none}}
@@ -8362,7 +8364,7 @@ function hvOpenCalApp(hub, app) {
     const dur = e => { const m = Math.round((e._e - e._s) / 6e4); if (m <= 0 || m >= 24 * 60) return ''; return m < 60 ? m + ' min' : Math.floor(m / 60) + ' h' + (m % 60 ? ' ' + (m % 60) + ' min' : ''); };
     const card = e => { const nx = e === next, [t, ap] = e._all ? ['All day', ''] : tparts(e._s), d1 = String(e.location || '').split('\n')[0] || String(e.description || '').split('\n')[0], sub = [d1, e._all ? '' : dur(e)].filter(Boolean).join(' · ');
       return `<button type="button" class="cd${nx ? ' nx' : ''}" data-ev="${idxOf(e)}"><span class="tm"><b>${esc(t)}</b>${ap ? `<span>${esc(ap)}</span>` : ''}</span><i class="br" style="background:${colorOf(e._cal)}"></i>
-<span class="ti"><b>${esc(e.summary || '(No title)')}${nx ? '<span class="nb">NEXT</span>' : ''}</b>${sub ? `<span>${esc(sub)}</span>` : ''}</span><span class="who">${who(e).map(p => `<span class="pa" style="background:${p.pic ? `center/cover url('${esc(p.pic)}')` : `linear-gradient(140deg,color-mix(in srgb,${p.c} 70%,#fff),color-mix(in srgb,${p.c} 82%,#000))`}">${p.pic ? '' : esc(p.ini)}</span>`).join('')}</span></button>`; };
+<span class="ti">${nx ? `<b class="hn"><span class="tx">${esc(e.summary || '(No title)')}</span><span class="nb">NEXT</span></b>` : `<b>${esc(e.summary || '(No title)')}</b>`}${sub ? `<span>${esc(sub)}</span>` : ''}</span><span class="who">${who(e).map(p => `<span class="pa" style="background:${p.pic ? `center/cover url('${esc(p.pic)}')` : `linear-gradient(140deg,color-mix(in srgb,${p.c} 70%,#fff),color-mix(in srgb,${p.c} 82%,#000))`}">${p.pic ? '' : esc(p.ini)}</span>`).join('')}</span></button>`; };
     const c = hub._config || {}, we = (c.weather_entity && S[c.weather_entity]) ? c.weather_entity : Object.keys(S).find(k => k.startsWith('weather.')), ws = we && S[we];
     const wx = ws && !UNAVAILABLE.includes(ws.state) ? `${isFinite(Number(ws.attributes.temperature)) ? Math.round(Number(ws.attributes.temperature)) + '° ' : ''}${((typeof HV_SS_COND !== 'undefined' && HV_SS_COND[ws.state]) || ws.state).toLowerCase()}` : '';
     let secs = ''; for (let i = 0; i < 7; i++) { const d = hvCalAddDays(today, i), list = ev.filter(e => dayKey(e._s < today ? today : e._s) === dayKey(d)); if (!list.length && i > 0) continue;
