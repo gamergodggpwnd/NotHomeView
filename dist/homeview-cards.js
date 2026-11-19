@@ -89,7 +89,7 @@ const HV_DAY_VARS = '--hv-bg:#ffffff;--hv-bg-on:#cdc6ef;--hv-border:rgba(0,0,0,.
 const HV_DAY_BG = 'radial-gradient(80% 90% at 20% 0%, #ffffff 0%, rgba(255,255,255,0) 70%), linear-gradient(160deg,#f1f1f4 0%,#e3e3e8 100%)';
 // for :host CSS of every card (custom properties set on the card itself win over the dark ones inherited from the view)
 const HV_DAY_HOST = `:host([hv-day]){${HV_DAY_VARS};--primary-text-color:#1c1c1e;--secondary-text-color:rgba(60,60,67,.72)}`;
-const hvSunUp = h => { const s = h && h.states && h.states['sun.sun']; return s ? s.state === 'above_horizon' : (new Date().getHours() >= 7 && new Date().getHours() < 19); };
+const hvSunUp = h => { const tt = typeof hvApTimesDay === 'function' ? hvApTimesDay() : null; if (tt != null) return tt; const s = h && h.states && h.states['sun.sun']; return s ? s.state === 'above_horizon' : (new Date().getHours() >= 7 && new Date().getHours() < 19); };
 const hvMode = (t, h) => t === 'day' ? 'day' : t === 'auto' ? (hvSunUp(h) ? 'day' : 'night') : 'night';
 const HVT = { els: new Set(), over: '', cur: 'night', root: null, hass: null, key: '', page: null, docStyle: null, cfg: undefined, path: null, t: '' };
 const hvFindRoot = el => { let n = el; for (let i = 0; i < 80 && n; i++) { if (n.tagName === 'HUI-ROOT') return n; n = n.parentNode || n.host; } return null; };
@@ -330,7 +330,7 @@ function hvThemeTick(el, hass) {
   if (!hvFhIv) hvFhWatch(); // 1.31.1: full-height popups (only when the dashboard turned them on)
 }
 // own setting (Home Screen / Page Grid, also in the card editor preview) > dashboard theme
-const hvOwnTheme = el => { if (el && el._hvThemeVal) return el._hvThemeVal; if (el && el._hvNight) return 'night'; // the Home Screen and everything in it: always the original look
+const hvOwnTheme = el => { if (el && el._hvThemeVal) return el._hvThemeVal; if (el && el._hvNight) return el._apMode || 'night'; // the Home Screen and everything in it: the original look (V2: its Appearance when appearance_home is on)
   const c = el && el._config; return c && el._hvOwnTheme && HV_THEMES.includes(c.theme) ? c.theme : ''; };
 // the Home Screen / Page Grid a card sits in (its tiles follow that card's own setting, e.g. in the card editor preview)
 const hvBoxOf = el => { let n = el.parentNode || el.host; for (let i = 0; i < 40 && n; i++) { if (n._hvOwnTheme) return n; n = n.parentNode || n.host; } return null; };
@@ -5899,6 +5899,82 @@ const HV_G4_SVG = { pause: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x=
   play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 5.2v13.6a1 1 0 0 0 1.5.86l11-6.8a1 1 0 0 0 0-1.72l-11-6.8A1 1 0 0 0 7 5.2z"/></svg>',
   next: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 6.3v11.4a.8.8 0 0 0 1.25.66L12 13v4.7a.8.8 0 0 0 1.25.66l8.3-5.7a.8.8 0 0 0 0-1.32l-8.3-5.7A.8.8 0 0 0 12 6.3V11L4.25 5.64A.8.8 0 0 0 3 6.3z"/></svg>' };
 Object.assign(HELPERS, { home_style: 'Classic: the layout as before. 4 × 4 grid: 150 px cells and 24 px gaps (2 × 2 tiles 324 × 324), the greeting, a big clock, the date and the weather on the left (above the grid in portrait), the Now Playing pill and a page pill.' });
+/* ---------------- Appearance (V2): true Light / Dark / Automatic for the Home Screen and its apps ----------------
+   Uses the existing theme option (day = Light, night = Dark, auto = Automatic; default stays day). New, all off / default unless set:
+   appearance_home (the Home Screen and the apps follow it too; set when Light / Dark / Automatic is picked in Settings › Appearance),
+   theme_switch: sun | times (Automatic: sunset to sunrise, or theme_night_at → theme_day_at), tile_day: white | grey, tile_night: graphite | black,
+   accent: purple | blue | green | orange | pink, bold_numbers (true), text_size: default | large | larger, reduce_transparency (false).
+   Dark = true black with #1c1c1e tiles and light text; screensaver faces keep their own colours. Old configs look exactly as before. */
+const HV_AP_ACC = { purple: ['#cdc6ef', '#3f3399', '#3a3360', '#d9d3ff', '#7a6cf0'], blue: ['#cfe2ff', '#0a5bd6', '#16304f', '#b9d7ff', '#0a84ff'], green: ['#cdeed6', '#1f7a3a', '#173a24', '#b8ecc8', '#30d158'],
+  orange: ['#ffe0c2', '#a85400', '#47300f', '#ffd3a6', '#ff9f0a'], pink: ['#ffd3df', '#b3204a', '#4a1a2a', '#ffc2d3', '#ff375f'] };
+const HV_AP_L = { purple: 'Purple', blue: 'Blue', green: 'Green', orange: 'Orange', pink: 'Pink' };
+// Automatic, "Switch at" custom times: day between theme_day_at and theme_night_at (else the sun, as before)
+const hvApTimesDay = () => { const s = HVT.sw; if (!s || s.mode !== 'times') return null; const m = t => { const p = String(t || '').split(':').map(Number); return isFinite(p[0]) ? p[0] * 60 + (p[1] || 0) : null; };
+  const d = m(s.day), n = m(s.night), now = new Date().getHours() * 60 + new Date().getMinutes(); if (d == null || n == null || d === n) return null; return d < n ? now >= d && now < n : now >= d || now < n; };
+const HV_AP_CSS = `
+:host([ap]) .bg{background:var(--ap-bg) !important}:host([ap]) .bgi,:host([ap]) .bgx,:host([ap]) .ssface,:host([ap]) .tint,:host([ap]) .dim{display:none !important}
+:host([ap=day]){--ap-bg:radial-gradient(900px 600px at 15% 10%,#ffffff 0%,rgba(255,255,255,0) 60%),radial-gradient(700px 600px at 95% 100%,#dcd6f5 0%,rgba(220,214,245,0) 70%),linear-gradient(160deg,#f3f3f8,#e9e8f2);color:#3c3c43;--hv-bg:var(--ap-tile,#ffffff)}
+:host([ap=night]){--ap-bg:radial-gradient(800px 600px at 10% 0%,#2a2550 0%,rgba(42,37,80,0) 60%),radial-gradient(700px 600px at 100% 100%,#1b2a4a 0%,rgba(27,42,74,0) 70%),#08080c;--hv-bg:var(--ap-tile,#1c1c1e);--hv-border:rgba(255,255,255,.06);--hv-blur:none;--hv-bg-on:var(--ap-on-bg);--hv-text-on:var(--ap-on-fg);--hv-icon-on:var(--ap-on-fg)}
+:host([ap=day]){--hv-bg-on:var(--ap-on-bg);--hv-text-on:var(--ap-on-fg);--hv-icon-on:var(--ap-on-fg)}
+:host([ap=day]) .gr,:host([ap=day]) .lb,:host([ap=day]) .tile > .lb,:host([ap=day]) .g4l{color:#3c3c43;text-shadow:none}:host([ap=day]) .g1{color:rgba(60,60,67,.85)}:host([ap=day]) .g2{color:#3c3c43}:host([ap=day]) .g4w{color:rgba(60,60,67,.6)}
+:host([ap=day]) .amic{background:#fff;color:#3c3c43;border:0;box-shadow:0 4px 14px rgba(30,30,60,.08);-webkit-backdrop-filter:none;backdrop-filter:none}
+:host([ap=day]) .g4n{background:var(--ap-tile,#fff);color:#3c3c43;border:0;box-shadow:0 1px 2px rgba(0,0,0,.04),0 8px 24px rgba(30,30,60,.08);-webkit-backdrop-filter:none;backdrop-filter:none}:host([ap=day]) .g4n button:active{background:rgba(60,60,67,.08)}
+:host([ap=day]) .g4pp{background:rgba(60,60,67,.08)}:host([ap=day]) .g4pp button{background:rgba(60,60,67,.3)}:host([ap=day]) .g4pp button.on{background:#3c3c43}
+:host([ap=day]) .pw{background:var(--ap-tile,#fff);box-shadow:0 1px 2px rgba(0,0,0,.04),0 8px 24px rgba(30,30,60,.08)}:host([ap=day]) .pw .ph0{color:rgba(60,60,67,.4)}
+:host([ap=day]) .hw[data-ty="calendar"] .hwi{background:var(--ap-tile,#fff);color:#3c3c43;box-shadow:0 1px 2px rgba(0,0,0,.04),0 8px 24px rgba(30,30,60,.08)}
+:host([ap=day]) .hw[data-ty="calendar"] .ev span,:host([ap=day]) .hw[data-ty="calendar"] .no,:host([ap=day]) .hw[data-ty="calendar"] .th,:host([ap=day]) .hw[data-ty="calendar"] .tl .hr span,:host([ap=day]) .hw[data-ty="calendar"] .c-x .dh,:host([ap=day]) .hw[data-ty="calendar"] .c-x .dh b,:host([ap=day]) .hw[data-ty="calendar"] .c-x .hc span{color:rgba(60,60,67,.65)}
+:host([ap=day]) .hw[data-ty="calendar"] .no,:host([ap=day]) .hw[data-ty="calendar"] .ld{color:rgba(60,60,67,.6)}
+:host([ap]) .av .pic:not([style]){background:linear-gradient(140deg,#8a7ff0,#3f3399);color:#fff}
+:host([ap=day]) .ico{box-shadow:0 1px 2px rgba(0,0,0,.06),0 8px 20px rgba(30,30,60,.12)}:host([ap=day]) .ssp{background:rgba(60,60,67,.3)}
+:host([ap=night]) .amic{background:#2c2c2e;border-color:rgba(255,255,255,.08);-webkit-backdrop-filter:none;backdrop-filter:none}
+:host([ap=night]) .g4n{background:var(--ap-tile,#1c1c1e);border-color:rgba(255,255,255,.06);box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none}:host([ap=night]) .g4pp{background:rgba(255,255,255,.1)}
+:host([ap=night]) .pw,:host([ap=night]) .hw[data-ty="calendar"] .hwi{background:var(--ap-tile,#1c1c1e);box-shadow:0 0 0 1px rgba(255,255,255,.06)}:host([ap=night]) .ico{box-shadow:0 0 0 1px rgba(255,255,255,.08)}
+:host([ap]) .g4t{font-weight:var(--ap-num,700)}
+:host([ap]) .lb,:host([ap]) .gr{font-size:calc(var(--lfs,17px) * var(--ap-ts,1))}:host([ap]) .gr{font-size:calc(var(--gfs,22px) * var(--ap-ts,1))}:host([g4][ap]) .gr{font-size:calc(20px * var(--g4s,1) * var(--ap-ts,1))}
+:host([ap]) .g4d{font-size:calc(24px * var(--g4s,1) * var(--ap-ts,1))}:host([ap]) .g4w{font-size:calc(18px * var(--g4s,1) * var(--ap-ts,1))}
+:host([ap][ap-rt]) .amic,:host([ap][ap-rt]) .g4n,:host([ap][ap-rt]) .g4pp{-webkit-backdrop-filter:none !important;backdrop-filter:none !important}:host([ap=night][ap-rt]) .g4pp{background:#2c2c2e}:host([ap][ap-rt]){--hv-blur:none}`;
+// ---- Settings › Appearance
+const HV_AP_SET_CSS = `:host{display:block}.g{background:var(--card,#fff);border-radius:14px;overflow:hidden;margin:0 0 22px}
+.h{font-size:13px;color:var(--t2);text-transform:uppercase;letter-spacing:.02em;margin:0 16px 7px}.ft{font-size:13px;color:var(--t2);margin:-14px 16px 22px;line-height:1.35}
+.r{all:unset;box-sizing:border-box;position:relative;display:flex;align-items:center;gap:12px;width:100%;min-height:46px;padding:6px 14px;font-size:16px}.r+.r::before{content:'';position:absolute;top:0;left:16px;right:0;height:1px;background:var(--sep)}
+.r .v{margin-left:auto;display:flex;align-items:center;gap:8px;color:var(--t2)}.r select,.r input[type=time]{all:unset;text-align:right;direction:rtl;color:var(--t2);cursor:pointer;font-size:16px}.r input[type=time]{direction:ltr}
+.sw{all:unset;margin-left:auto;flex:none;position:relative;width:51px;height:31px;border-radius:16px;background:var(--swo);transition:background .2s;cursor:pointer}
+.sw::after{content:'';position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.18);transition:left .2s}.sw[aria-checked=true]{background:var(--acc)}.sw[aria-checked=true]::after{left:22px}
+.apr{display:flex;gap:28px;justify-content:center;padding:22px 10px 18px;flex-wrap:wrap}
+.opt{all:unset;cursor:pointer;display:flex;flex-direction:column;align-items:center;text-align:center;font-size:16px;font-weight:500;color:inherit}.opt .ph{display:block;width:150px;height:104px;border-radius:14px;overflow:hidden;position:relative;margin-bottom:10px;box-shadow:0 0 0 1px var(--sep)}
+.opt .ph i{position:absolute;border-radius:6px}.opt[aria-checked=true] .ph{box-shadow:0 0 0 3px var(--acc)}
+.rad{width:24px;height:24px;border-radius:50%;border:2px solid var(--t3);margin:8px auto 0;display:grid;place-items:center;box-sizing:border-box}.opt[aria-checked=true] .rad{background:var(--acc);border-color:var(--acc);color:#fff}.rad svg{width:13px;height:13px}
+.dot{width:20px;height:20px;border-radius:50%;display:inline-block}button:focus-visible,select:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+:host{--card:#fff;--t2:rgba(60,60,67,.6);--t3:rgba(60,60,67,.3);--sep:rgba(60,60,67,.12);--swo:#e9e9eb;--acc:#3f3399;color:#1c1c1e}
+:host([dark]){--card:#1c1c1e;--t2:rgba(235,235,245,.6);--t3:rgba(235,235,245,.3);--sep:rgba(84,84,88,.6);--swo:#39393d;--acc:#7a6cf0;color:#f5f5f7}`;
+// ctx: { cfg() (saved Home Screen card), save(k, v), ro }
+function hvAppearanceUI(ctx) { const el = document.createElement('div');
+  const ph = (bg, t, tl) => `<span class="ph" style="background:${bg}"><i style="left:10px;top:12px;width:44px;height:8px;background:${t}"></i><i style="left:10px;top:26px;width:30px;height:16px;background:${t}"></i><i style="left:70px;top:12px;width:30px;height:30px;background:${tl}"></i><i style="left:108px;top:12px;width:30px;height:30px;background:${tl}"></i><i style="left:70px;top:50px;width:68px;height:44px;background:${tl}"></i></span>`;
+  const ck = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+  const paint = () => { const c = Object.assign({}, HVHubCard.defaults, ctx.cfg() || {}), th = HV_THEMES.includes(c.theme) ? c.theme : HV_THEME_DEFAULT, dis = ctx.ro ? ' disabled' : '', home = c.appearance_home === true;
+    const opt = (v, l, p) => `<button class="opt" role="radio" data-th="${v}" aria-checked="${th === v}"${dis}>${p}${l}<span class="rad">${th === v ? ck : ''}</span></button>`;
+    const sel = (k, cur, ops) => `<select data-k="${k}" aria-label="${k}"${dis}>${ops.map(([v, l]) => `<option value="${v}"${String(cur) === v ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
+    const sw = (k, on, l) => `<button class="sw" role="switch" data-k="${k}" aria-checked="${!!on}" aria-label="${esc(l)}"${dis}></button>`;
+    el.innerHTML = `<div class="g"><div class="apr" role="radiogroup" aria-label="Appearance">${opt('day', 'Light', ph('linear-gradient(160deg,#f3f3f8,#e3e0f2)', '#3c3c43', '#fff'))}${opt('night', 'Dark', ph('linear-gradient(160deg,#1a1830,#08080c)', '#f5f5f7', '#2c2c2e'))}${opt('auto', 'Automatic', ph('linear-gradient(90deg,#efeff5 50%,#0c0c12 50%)', '#8e8e93', '#c7c7cc'))}</div></div>
+<div class="g"><div class="r"><span>Automatic</span>${sw('@auto', th === 'auto', 'Automatic')}</div>
+<label class="r"><span>Switch at</span><span class="v">${sel('theme_switch', c.theme_switch, [['sun', 'Sunset to Sunrise'], ['times', 'Custom times']])}</span></label>
+${c.theme_switch === 'times' ? `<label class="r"><span>Dark from</span><span class="v"><input type="time" data-k="theme_night_at" value="${esc(c.theme_night_at)}"${dis}></span></label><label class="r"><span>Light from</span><span class="v"><input type="time" data-k="theme_day_at" value="${esc(c.theme_day_at)}"${dis}></span></label>` : ''}
+<div class="r"><span>Home Screen &amp; apps</span>${sw('appearance_home', home, 'Home Screen and apps')}</div></div>
+<div class="ft">Dark tiles use #1c1c1e on true black so the iPad glows less at night. Faces keep their own colours.${home ? '' : ' Home Screen &amp; apps off: only the device pages follow (as before).'}</div>
+<div class="h">Tiles</div><div class="g"><label class="r"><span>Day tiles</span><span class="v">${sel('tile_day', c.tile_day, [['white', 'White'], ['grey', 'Light grey']])}</span></label>
+<label class="r"><span>Night tiles</span><span class="v">${sel('tile_night', c.tile_night, [['graphite', 'Graphite'], ['black', 'Black']])}</span></label>
+<label class="r"><span>Accent</span><span class="v"><span class="dot" style="background:${(HV_AP_ACC[c.accent] || HV_AP_ACC.purple)[4]}"></span>${sel('accent', c.accent, Object.keys(HV_AP_ACC).map(k => [k, HV_AP_L[k]]))}</span></label>
+<div class="r"><span>Bold large numbers</span>${sw('bold_numbers', c.bold_numbers !== false, 'Bold large numbers')}</div></div>
+<div class="h">Text</div><div class="g"><label class="r"><span>Text size</span><span class="v">${sel('text_size', c.text_size, [['default', 'Default'], ['large', 'Large'], ['larger', 'Larger']])}</span></label>
+<div class="r"><span>Reduce transparency</span>${sw('reduce_transparency', c.reduce_transparency === true, 'Reduce transparency')}</div></div>`; };
+  const put = (k, v) => { if (!ctx.ro) ctx.save(k, v); };
+  el.addEventListener('click', e => { const t = e.target.closest('[data-th],.sw'); if (!t || t.disabled) return; const c = Object.assign({}, HVHubCard.defaults, ctx.cfg() || {});
+    if (t.dataset.th) { put('theme', t.dataset.th); if (c.appearance_home !== true) put('appearance_home', true); return; } // picking here also turns on the Home Screen & apps
+    const on = t.getAttribute('aria-checked') !== 'true', k = t.dataset.k;
+    if (k === '@auto') { put('theme', on ? 'auto' : (hvMode('auto', null) === 'day' ? 'day' : 'night')); return; }
+    put(k, on); });
+  el.addEventListener('change', e => { const t = e.target, k = t.dataset && t.dataset.k; if (!k) return; put(k, t.value); });
+  el._refresh = paint; paint(); return el; }
 const hubWeatherBg = (cond, night) => {
   const n = night, g = { sunny: ['#2f86e0', '#8cc8f5'], 'clear-night': ['#0b1736', '#2a3d75'], partlycloudy: n ? ['#141d3a', '#3a4a72'] : ['#3d7fd0', '#9cc3e8'],
     cloudy: n ? ['#1d2333', '#40485c'] : ['#5d7190', '#a9b7c9'], rainy: ['#33445c', '#6c7d93'], pouring: ['#2a3446', '#5b6a80'], lightning: ['#252a3d', '#555b78'], 'lightning-rainy': ['#252a3d', '#555b78'],
@@ -7279,6 +7355,11 @@ const HV_COOK_CSS = `.ck{position:absolute;inset:0;color:#3c3c43;font-family:${F
  .sv{grid-template-columns:1fr;grid-template-rows:auto auto auto auto auto;padding:32px 32px 32px;overflow-y:auto}.sv .main{grid-row:3;overflow:visible}
  .sv .tms{grid-column:1;grid-row:4;margin-top:28px;overflow:visible}.sv .nav{grid-row:5}.sv .vh{display:none}
 }
+.ck.dk{background:#000;color:#f5f5f7}.ck.dk .tl,.ck.dk .ov .meta div,.ck.dk .tmr,.ck.dk .sv .nav .bk,.ck.dk .sv .vh,.ck.dk .sv .cx,.ck.dk .sv .ing span,.ck.dk .ls .rc,.ck.dk .emp pre{background:#1c1c1e;color:#f5f5f7;box-shadow:none}
+.ck.dk h1,.ck.dk .sv .big,.ck.dk .ls h1,.ck.dk .emp h2{color:#f5f5f7}.ck.dk .sub,.ck.dk .ov .meta span,.ck.dk .tmr .l,.ck.dk .ov .ingr p,.ck.dk .ov .ingr b span,.ck.dk .ls .rc span,.ck.dk .sv .vh span,.ck.dk .emp p{color:rgba(235,235,245,.6)}
+.ck.dk .ov .st .n,.ck.dk .tmr .bt button{background:#2c2c2e;color:#f5f5f7}.ck.dk .ov .st+.st::before{background:rgba(84,84,88,.6)}.ck.dk .tmr .rg circle:first-child{stroke:#2c2c2e}
+.ck.dk .tmc,.ck.dk .addl,.ck.dk .tmr.nxt{background:#3a3360;color:#d9d3ff}.ck.dk .tmr.nxt .t,.ck.dk .tmr.nxt .l,.ck.dk .tmr.nxt .ic{color:#d9d3ff}.ck.dk .tmr.nxt .bt button{background:#7a6cf0;color:#fff}.ck.dk .sv .big em,.ck.dk .sv .lab,.ck.dk .ov .hd .all{color:#a99df2}
+.ck.dk .sv .prog i{background:rgba(235,235,245,.18)}.ck.dk .sv .prog i.d{background:#7a6cf0}.ck.dk .sv .prog i.c{background:linear-gradient(90deg,#7a6cf0 50%,rgba(235,235,245,.18) 50%)}
 @media (prefers-reduced-motion:reduce){.tmr.done{animation:none}}`;
 function hvOpenCooking(hub, app, at) {
   if (!hub || hub._sheetO || !hub._hass) return null; const H = () => hub._hass;
@@ -7332,8 +7413,9 @@ ${cfg.voice ? `<div class="vh"><div class="m">${HV_COOK_SVG.mic}</div><div><b>Ha
     const req = () => { try { if (navigator.wakeLock && navigator.wakeLock.request && document.visibilityState === 'visible') navigator.wakeLock.request('screen').then(l => { if (!keep) { l.release(); return; } lock = l; }, () => {}); } catch (e) {} };
     req(); vis = () => { if (document.visibilityState === 'visible' && keep) req(); }; document.addEventListener('visibilitychange', vis); };
   const onKey = e => { if (!root || !root.isConnected || st.view !== 'sv' || e.defaultPrevented) return; if (e.key === 'ArrowRight') { e.preventDefault(); root.querySelector('[data-a=next]').click(); } else if (e.key === 'ArrowLeft') { e.preventDefault(); root.querySelector('[data-a=back]').click(); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); go('ov'); } };
-  const s = hub._openSheet({ label: 'Cooking', edit: null, day: true, dayBg: '#f2f2f7', bg: '#f2f2f7', onClose: () => { clearInterval(iv); clearTimeout(tstT); awake(false); removeEventListener('keydown', onKey, true); root = null; },
-    build: bd => { const sty = document.createElement('style'); sty.textContent = HV_COOK_CSS; bd.appendChild(sty); root = document.createElement('div'); root.className = 'ck'; bd.appendChild(root);
+  const dark = hub._config.appearance_home === true && hvMode(HV_THEMES.includes(hub._config.theme) ? hub._config.theme : HV_THEME_DEFAULT, H()) === 'night';
+  const s = hub._openSheet({ label: 'Cooking', edit: null, day: !dark, dayBg: '#f2f2f7', bg: dark ? '#000' : '#f2f2f7', onClose: () => { clearInterval(iv); clearTimeout(tstT); awake(false); removeEventListener('keydown', onKey, true); root = null; },
+    build: bd => { const sty = document.createElement('style'); sty.textContent = HV_COOK_CSS; bd.appendChild(sty); root = document.createElement('div'); root.className = dark ? 'ck dk' : 'ck'; bd.appendChild(root);
       root.addEventListener('click', e => { const t = e.target.closest && e.target.closest('[data-a],[data-r],[data-go],[data-t]'); if (!t || t.disabled) return; const a = t.dataset.a;
         if (t.dataset.r != null) { st.r = Number(t.dataset.r); go('ov'); return; }
         if (t.dataset.go != null) { go('sv', Number(t.dataset.go)); return; }
@@ -7387,7 +7469,9 @@ const HV_SET_PAGES = [
     sec: [{ f: ['person', 'fallback_person', 'name', 'ring_color'] }, { h: 'Times of day', f: ['morning_start', 'afternoon_start', 'evening_start', 'night_start'] },
       { h: 'Greetings', f: ['greeting_morning', 'greeting_afternoon', 'greeting_evening', 'greeting_night'] }] },
   { id: 'general', t: 'General', i: 'mdi:cog', c: '#8e8e93', g: 1, d: 'The look of the device pages, popups on this dashboard, and the way into edit mode.',
-    sec: [{ f: ['@about', '@update'] }, { f: ['theme'] }, { h: 'Popups', f: ['full_height_popups', 'popup_edit'] }, { f: ['@edit'] }, { f: ['@setup'] }] },
+    sec: [{ f: ['@about', '@update'] }, { f: ['@apprlink'] }, { h: 'Popups', f: ['full_height_popups', 'popup_edit'] }, { f: ['@edit'] }, { f: ['@setup'] }] },
+  { id: 'appearance', t: 'Appearance', i: 'mdi:white-balance-sunny', c: '#3f3399', g: 1, d: 'Light, Dark or Automatic for the Home Screen, its apps and the device pages; the tiles, the accent and the text.',
+    sec: [{ bare: true, f: ['@appearance'] }] },
   { id: 'photos', t: 'Photos & Background', i: 'mdi:image-multiple', c: '#32ade6', g: 1, d: 'The pictures on the Home Screen, the blurred background behind it and the Photos tile.',
     sec: [{ h: 'Photos', f: ['photo_source_mode', 'photo_source', 'photo_interval', 'photo_order'] }, { f: ['@wpnote'] },
       { h: 'Photos tile', f: ['photo_tap', 'photo_label', 'photo_viewer_nav', 'photo_viewer_swipe', 'photo_viewer_add', 'photo_gallery_upload', 'photo_viewer_pause'] }] },
@@ -7429,6 +7513,8 @@ const HV_SET_ACTS = {
   '@facesched': { l: 'Face Schedule', h: 'Morning, Day, Evening and Night: a face each, starting at a time, sunrise or sunset. Change faces automatically. Nightstand when the room is dark (a light sensor).', fs: true },
   '@profiles': { l: 'Profiles', h: 'Who is using this iPad: Corey, Guest, … Each has its own Home Screen, name, person, ring colour. Switch automatically with Home Assistant presence. Add, rename, delete; Guest hides locks, garage and cameras.', pf: true },
   '@cooking': { l: 'Cooking', h: 'Recipes (set in YAML: cooking: recipes:), Add to Reminders list, Keep screen on, the Hands busy hint.', ck: true },
+  '@appearance': { l: 'Appearance', h: 'Light, Dark, Automatic (Sunset to Sunrise or custom times), Home Screen & apps, Day tiles, Night tiles, Accent, Bold large numbers, Text size, Reduce transparency. Theme.', ap: true },
+  '@apprlink': { l: 'Appearance', h: 'Light, Dark or Automatic (the theme) is in Appearance.', i: 'mdi:white-balance-sunny', nav: true },
   '@customapps': { l: 'Custom Apps', h: 'Your custom apps: add, edit, reorder or delete. App Store search for the name and icon, a preset or your own link (URL scheme), ask before opening.', ca: true },
   '@canote': { l: '', h: 'Add a custom app to the Home Screen with Add App (edit the Home Screen, then Add App).', note: true },
   '@wpnote': { l: '', h: 'The Home Screen background behind the apps is set in Wallpaper › Inner (Customize), with its blur.', note: true },
@@ -7644,6 +7730,7 @@ function hvOpenSettings(hub, app, from, goTo) {
       if (a.fs) return '<div class="r stk" data-k="@facesched"><div data-fsched></div></div>';
       if (a.pf) return '<div class="r stk" data-k="@profiles"><div data-profs></div></div>';
       if (a.ck) return '<div class="r stk" data-k="@cooking"><div data-cook></div></div>';
+      if (a.ap) return '<div class="r stk" data-k="@appearance"><div data-appr></div></div>';
       if (a.ww) { const ok = hvWwSupport(), miss = a.ww === 'homey' && HVWW.hmOk === false, on = ok && hvWwPh(a.ww);
         if (ok && a.ww === 'homey' && HVWW.hmOk == null) hvWwHmCheck().then(() => { if (root && root.isConnected) paintPane(); });
         const why = !ok ? 'Not available on this device (iPhone / iPad). Use the mic button instead.' : miss ? 'Needs its wake word model (wakeword/hey_homey.onnx, next to homeview-cards.js): see the wake word README.' : a.h;
@@ -7859,6 +7946,11 @@ function hvOpenSettings(hub, app, from, goTo) {
       r.appendChild(hvProfilesUI({ H: () => H(), cfg: () => st.cfg, save: (k, v) => { const p = save(k, v, true); paintSide(); return p; }, onUse: () => paintSide(), get ro() { return ro(); } })); }
     else { const u = pfEl.shadowRoot.lastElementChild; if (u && u._refresh) u._refresh(); }
     pfEl.toggleAttribute('dark', !!(s && !s.host.hasAttribute('hv-day'))); box.appendChild(pfEl); };
+  let apEl = null; const apMount = () => { const box = pane && pane.querySelector('[data-appr]'); if (!box) { apEl = null; return; }
+    if (!apEl) { apEl = document.createElement('div'); apEl.className = 'aph'; const r = apEl.attachShadow({ mode: 'open' }); r.innerHTML = `<style>${HV_AP_SET_CSS}</style>`;
+      r.appendChild(hvAppearanceUI({ cfg: () => st.cfg, save: (k, v) => save(k, v, true), get ro() { return ro(); } })); }
+    else { const u = apEl.shadowRoot.lastElementChild; if (u && u._refresh) u._refresh(); }
+    apEl.toggleAttribute('dark', !!(s && !s.host.hasAttribute('hv-day'))); box.appendChild(apEl); };
   let ckEl = null; const ckMount = () => { const box = pane && pane.querySelector('[data-cook]'); if (!box) { ckEl = null; return; }
     if (!ckEl) { ckEl = document.createElement('div'); ckEl.className = 'ckh'; const r = ckEl.attachShadow({ mode: 'open' }); r.innerHTML = `<style>${HV_COOK_SET_CSS}</style>`;
       r.appendChild(hvCookingUI({ H: () => H(), cfg: () => hvProfFlat(st.cfg || {}), save: (k, v) => save(k, v, true), get ro() { return ro(); },
@@ -7939,7 +8031,7 @@ function hvOpenSettings(hub, app, from, goTo) {
     st.uins = 'all'; paintPane(); flash('Installing ' + L.length + ' update' + (L.length === 1 ? '' : 's') + '…');
     try { for (const x of L) { const f = Number((x.attributes || {}).supported_features) || 0, data = { entity_id: x.entity_id }; if ((f & 8) && st.ubk) data.backup = true; await H().callService('update', 'install', data); } }
     catch (e) { flash('Not installed: ' + ((e && (e.message || e.code)) || e), true); } finally { st.uins = null; if (root && root.isConnected) paintPane(); } };
-  const subAct = (a, t) => { if (a === 'about') { subGo('about'); aboutLive(); return true; } if (a === 'update') { subGo('update'); hvGhRel.load(false).then(() => { if (st.sub === 'update') paintPane(); paintSide(); }); if (admin && !st.uchk0) { st.uchk0 = true; uCheck(); } return true; }
+  const subAct = (a, t) => { if (a === 'apprlink') { go('appearance'); return true; } if (a === 'about') { subGo('about'); aboutLive(); return true; } if (a === 'update') { subGo('update'); hvGhRel.load(false).then(() => { if (st.sub === 'update') paintPane(); paintSide(); }); if (admin && !st.uchk0) { st.uchk0 = true; uCheck(); } return true; }
     if (a === 'wpback') { subGo(null); return true; }
     if (a === 'caback') { subGo(st.page === 'apps' ? 'customapps' : null); return true; }
     if (a === 'appsback') { if (st.sub && String(st.sub).startsWith('dev:')) { const dom = String(st.sub).slice(4).split(':')[0]; subGo(dom ? 'int:' + dom : null); } else subGo(null); return true; }
@@ -7963,7 +8055,7 @@ function hvOpenSettings(hub, app, from, goTo) {
     if (st.sub === 'about') { const c = st.cfg || {}, W = hvAboutPick(H(), 'wifi', c), B = hvAboutPick(H(), 'batt', c); o += '|' + sv(S, W.id) + sv(S, B.id) + (B.id ? sv(S, B.id.replace(/_battery_level$/, '_battery_state')) : '') + W.cands.length + B.cands.length + (H().config || {}).version; } return o; };
   const paintSide = () => { if (list) list.innerHTML = sideHtml(); };
   const shrinkAppsBack = () => { const bk = pane && pane.querySelector('.ph .bk[data-act="appsback"]'); if (!bk) return; const label = [...bk.childNodes].reverse().find(n => n.nodeType === 3 && /Apps & Integrations/.test(n.textContent || '')); if (!label) return; if (bk.scrollWidth > bk.clientWidth + 1) { label.textContent = 'Apps'; if (bk.getAttribute('aria-label') === 'Back to Apps & Integrations') bk.setAttribute('aria-label', 'Back to Apps'); } };
-  const paintPane = () => { if (!pane) return; const sy = pane.scrollTop; for (const f of forms.values()) f.remove(); if (ssPick) ssPick.remove(); if (fPick) fPick.remove(); pane.innerHTML = paneHtml(); ssMount(); fMount(); wpMount(); caMount(); fsMount(); pfMount(); ckMount(); pane.scrollTop = sy; formsMount(); if ((st.wide ? (st.page || 'general') : st.page) === 'apps') appsLoad(); pvPaint(hvBgLevel(st.cfg || {})); albCheck(); shrinkAppsBack(); };
+  const paintPane = () => { if (!pane) return; const sy = pane.scrollTop; for (const f of forms.values()) f.remove(); if (ssPick) ssPick.remove(); if (fPick) fPick.remove(); pane.innerHTML = paneHtml(); ssMount(); fMount(); wpMount(); caMount(); fsMount(); pfMount(); ckMount(); apMount(); pane.scrollTop = sy; formsMount(); if ((st.wide ? (st.page || 'general') : st.page) === 'apps') appsLoad(); pvPaint(hvBgLevel(st.cfg || {})); albCheck(); shrinkAppsBack(); };
   const paint = () => { if (!root) return;
     if (!st.ready) { root.classList.remove('pg'); list.innerHTML = '<div class="grp"><div class="empty">Loading…</div></div>'; pane.innerHTML = ''; return; }
     if (st.nohub) { root.classList.add('nohub', 'pg'); root.classList.remove('wide'); side.style.display = 'none';
@@ -8652,7 +8744,7 @@ class HVHubCard extends HTMLElement {
   constructor() { super(); this.attachShadow({ mode: 'open' }); this._layer = 0; }
   static get defaults() { return { theme: HV_THEME_DEFAULT, person: '', morning_start: 5, afternoon_start: 12, evening_start: 17, greeting_morning: 'Good morning', greeting_afternoon: 'Good afternoon',
     greeting_evening: 'Good evening', photo_source_mode: 'media', photo_album_url: '', photo_source: '', photo_interval: 25, photo_order: 'random', blur: 32, dim: 0.32, bg_blur_level: 3, photo_backdrop: true, bg_freeze: true, photo_tap: 'viewer', photo_viewer_nav: true, photo_viewer_swipe: true, photo_viewer_add: true, photo_gallery_upload: true, photo_viewer_pause: true, photo_label: 'Photos', photo_max_aspect: 2.6,
-    home_style: 'classic', show_calendar: true, calendar_size: 'full', calendar_layout: 'wide', calendar_columns: 3, calendar_days: 7, calendar_title: 'Calendar', calendar_min_height: 240, max_icon: 140, edge_sidebar: true, ss_hold: true, weather_entity: '', photo_size: 'wide', side_portrait: 'below', side_sizes: '', row_units: 3, block_pull_refresh: true, calendar_rows: 'auto', swipe_screensaver: 'auto', swipe_open_home: false, show_homie: false, full_height_popups: true, popup_edit: true, assistant_enabled: false, assistant_pipeline: 'preferred', assistant_theme: 'same', assistant_button: true, assistant_speak: true, assistant_auto_listen: true, assistant_orb: true, assistant_face: 'orb', assistant_continue: true, assistant_silence_timeout: 5, assistant_end_of_speech_pause: 2, assistant_history_retention: 'forever', assistant_dismiss_phrases: "thank you, thanks, thanks jarvis, thank you jarvis, thanks homey, thank you homey, thanks homie, thank you homie, goodbye, bye, good bye, that's all, that's it, never mind, nevermind, stop, cancel, no thanks, I'm done", assistant_quiet_volume_below: 5, assistant_quiet_start: '23:30', assistant_quiet_end: '10:00', timer_sound: true }; }
+    home_style: 'classic', appearance_home: false, theme_switch: 'sun', theme_day_at: '07:00', theme_night_at: '19:00', tile_day: 'white', tile_night: 'graphite', accent: 'purple', bold_numbers: true, text_size: 'default', reduce_transparency: false, show_calendar: true, calendar_size: 'full', calendar_layout: 'wide', calendar_columns: 3, calendar_days: 7, calendar_title: 'Calendar', calendar_min_height: 240, max_icon: 140, edge_sidebar: true, ss_hold: true, weather_entity: '', photo_size: 'wide', side_portrait: 'below', side_sizes: '', row_units: 3, block_pull_refresh: true, calendar_rows: 'auto', swipe_screensaver: 'auto', swipe_open_home: false, show_homie: false, full_height_popups: true, popup_edit: true, assistant_enabled: false, assistant_pipeline: 'preferred', assistant_theme: 'same', assistant_button: true, assistant_speak: true, assistant_auto_listen: true, assistant_orb: true, assistant_face: 'orb', assistant_continue: true, assistant_silence_timeout: 5, assistant_end_of_speech_pause: 2, assistant_history_retention: 'forever', assistant_dismiss_phrases: "thank you, thanks, thanks jarvis, thank you jarvis, thanks homey, thank you homey, thanks homie, thank you homie, goodbye, bye, good bye, that's all, that's it, never mind, nevermind, stop, cancel, no thanks, I'm done", assistant_quiet_volume_below: 5, assistant_quiet_start: '23:30', assistant_quiet_end: '10:00', timer_sound: true }; }
   static getStubConfig(hass) { return { apps: HUB_APPS.map(a => Object.assign({}, a)), calendar_entities: Object.keys((hass && hass.states) || {}).filter(k => k.startsWith('calendar.')).slice(0, 3) }; }
   static getConfigElement() { return document.createElement('homeview-hub-card-editor'); }
   setConfig(c) { if (!c) throw new Error('Invalid configuration'); this._hvRaw = c; this._prof = hvProfCur(c); if (this._prof) c = hvProfEff(c, this._prof); const old = this._config, nc = Object.assign({}, HVHubCard.defaults, c);
@@ -8662,11 +8754,11 @@ class HVHubCard extends HTMLElement {
     if (!Array.isArray(nc.apps) || !nc.apps.length) nc.apps = HUB_APPS;
     const BG = ['bg_blur_level', 'bg_transparency', 'blur', 'dim', 'photo_backdrop', 'bg_freeze', 'inner_wallpaper'], rest = o => JSON.stringify(Object.keys(o).filter(k => !BG.includes(k)).sort().map(k => [k, o[k]]));
     if (old && this._w && rest(old) === rest(nc)) { // only the background options changed (slider drag): update in place, no rebuild
-      this._config = nc; this.style.setProperty('--blur', (Number(nc.blur) || 0) + 'px'); this.style.setProperty('--dim', String(Math.max(0, Math.min(0.9, Number(nc.dim) || 0)))); this._bgMode(); if (nc.bg_freeze === false) this._paintBg(true, true); return; }
-    this._config = nc;
+      this._config = nc; this._apSet(); this.style.setProperty('--blur', (Number(nc.blur) || 0) + 'px'); this.style.setProperty('--dim', String(Math.max(0, Math.min(0.9, Number(nc.dim) || 0)))); this._bgMode(); if (nc.bg_freeze === false) this._paintBg(true, true); return; }
+    this._config = nc; this._apSet();
     this._sig = null; if (old && (old.photo_source !== c.photo_source || old.photo_order !== c.photo_order || old.photo_source_mode !== c.photo_source_mode || old.photo_album_url !== c.photo_album_url)) { this._ids = null; this._idsExp = 0; this._loadPhotos(); }
     this._calSig = null; this._render(); this._restartTimer(); if (this.isConnected) this._gBind(); }
-  set hass(h) { const first = !this._hass; this._hass = h; this._profAuto(); this._render(); if (this._cal) this._cal.hass = h; (this._sideEls || []).forEach(e => { e._card.hass = this._simHass(h); if (e._setLab) e._setLab();
+  set hass(h) { const first = !this._hass; this._hass = h; this._profAuto(); this._apSet(); this._render(); if (this._cal) this._cal.hass = h; (this._sideEls || []).forEach(e => { e._card.hass = this._simHass(h); if (e._setLab) e._setLab();
       if (e._fit) { const o = hubTileOpt(this._config, this._sideEls.indexOf(e)); if (o.sky === true && hvSky(h, o.sky_entity, window.__hvSimScene).sig !== e._skySig) requestAnimationFrame(() => this._fitTile(e)); } }); if (first) { this._loadPhotos(); this._loadCfg(); setTimeout(hvWwSync, 0); } if (this._sheetO) this._sheetO.hass = h; this._hwPaint(); if (this._g4G) this._g4Paint(); }
   get hass() { return this._hass; }
   set editMode(v) { const was = !!this._edit; this._edit = v; this._layout(); this._ssPaint(); if (v) hvEditChromeSoon(this);
@@ -8921,7 +9013,7 @@ class HVHubCard extends HTMLElement {
     const sig = this._rSig();
     if (sig === this._sig && this._w) return; this._sig = sig;
     if (!this._w) {
-      this.shadowRoot.innerHTML = `<style>${HUB_CSS}${HW_CSS}${HV_G4_CSS}</style><div class="bg"><div class="bgi"></div><div class="bgi"></div><div class="bgx"></div><div class="tint"></div><div class="dim"></div></div><div class="w"></div><div class="ssp" hidden title="Swipe down for the screensaver"></div>`;
+      this.shadowRoot.innerHTML = `<style>${HUB_CSS}${HW_CSS}${HV_G4_CSS}${HV_AP_CSS}</style><div class="bg"><div class="bgi"></div><div class="bgi"></div><div class="bgx"></div><div class="tint"></div><div class="dim"></div></div><div class="w"></div><div class="ssp" hidden title="Swipe down for the screensaver"></div>`;
       this._ssp = this.shadowRoot.querySelector('.ssp'); this._ssPaint();
       this._w = this.shadowRoot.querySelector('.w'); this._bgs = [...this.shadowRoot.querySelectorAll('.bgi')];
       this._w.addEventListener('click', e => { const t = e.composedPath().find(n => n.dataset && (n.dataset.app != null || n.dataset.k)); if (!t) return;
@@ -9210,6 +9302,15 @@ class HVHubCard extends HTMLElement {
     if (kind === 'assistant') { this._openAssist(); return; }
     if (kind === 'photos') { this._openPhoto(); return; }
     const cfg = a.tap_action; if (cfg && cfg.action !== 'none') fire(this, 'hass-action', { config: { entity: a.entity, tap_action: cfg }, action: 'tap' }); }
+  // V2 Appearance: with appearance_home on, the Home Screen (background, text, glass) and its cards follow Light / Dark / Automatic
+  _apSet() { const c = this._config; if (!c) return; HVT.sw = { mode: c.theme_switch, day: c.theme_day_at, night: c.theme_night_at };
+    const on = c.appearance_home === true, th = HV_THEMES.includes(c.theme) ? c.theme : HV_THEME_DEFAULT, mode = on ? hvMode(th, this._hass) : null, S = this.style;
+    this._apMode = on ? th : undefined; if (mode) { if (this.getAttribute('ap') !== mode) this.setAttribute('ap', mode); } else this.removeAttribute('ap'); this.toggleAttribute('ap-rt', on && c.reduce_transparency === true);
+    const ks = ['--ap-on-bg', '--ap-on-fg', '--ap-tile', '--ap-num', '--ap-ts'];
+    if (on) { const a = HV_AP_ACC[c.accent] || HV_AP_ACC.purple, d = mode === 'day'; S.setProperty(ks[0], d ? a[0] : a[2]); S.setProperty(ks[1], d ? a[1] : a[3]);
+      S.setProperty(ks[2], d ? (c.tile_day === 'grey' ? '#f2f2f7' : '#ffffff') : (c.tile_night === 'black' ? '#000000' : '#1c1c1e')); S.setProperty(ks[3], c.bold_numbers === false ? '300' : '700'); S.setProperty(ks[4], c.text_size === 'larger' ? '1.2' : c.text_size === 'large' ? '1.1' : '1'); }
+    else for (const k of ks) S.removeProperty(k);
+    const sig = String(mode); if (sig !== this._apSig) { this._apSig = sig; setTimeout(() => { for (const e of HVT.els) { try { hvThemeApply(e); } catch (x) {} } }, 0); } }
   _personTap() { if (hvProfList(this._hvRaw).length) { hvProfPop(this); return; } const p = this._person(); if (p) fire(this, 'hass-more-info', { entityId: p.entity_id }); }
   // Profiles › Switch automatically: the profile whose person is home (read-only presence); kept when none or more than one is home
   _profAuto() { const c = this._hvRaw, L = hvProfList(c); if (L.length < 2 || !this._hass || !hvProfAutoOn(c)) return; const S = this._hass.states || {};
