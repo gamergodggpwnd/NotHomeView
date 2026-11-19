@@ -1521,6 +1521,52 @@ input[type=range]::-moz-range-thumb{width:1px;height:100%;border:0;background:tr
 `;
 const NP_FEAT = { PAUSE: 1, VOLUME_SET: 4, VOLUME_MUTE: 8, PREV: 16, NEXT: 32, PLAY: 16384 };
 const npTime = s => { s = Math.max(0, Math.floor(s || 0)); const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = s % 60; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0'); };
+/* ---- Now Playing, layout: studio (V2; the full-screen Music app): the album art big on the left over itself blurred and saturated with a soft
+   dark gradient, "NOW PLAYING · ROOM", title, artist — album, progress, transport with a big round glass pause, an inline volume slider and the
+   speakers as pills (the active one white) with "+" for the speaker picker. Up next / Then cards when the player says what is queued
+   (media_next_title / queue attributes). No artwork: a calm gradient. The classic layout (the card, the Home Screen tile) is unchanged. */
+const NP_STUDIO_CSS = `
+:host ha-card.studio{--u:min(calc(100cqw / 1180),calc(100cqh / 820));background:linear-gradient(160deg,#4b4f7a 0%,#2c2f52 55%,#1b1c33 100%) !important;border:none !important;border-radius:0 !important}
+:host ha-card.studio .bg i{inset:-120px;filter:blur(70px) saturate(1.4);transform:translateZ(0) scale(1.2)}
+:host ha-card.studio .shade{background:linear-gradient(180deg,rgba(0,0,0,.08),rgba(0,0,0,.32))}
+:host ha-card.studio{display:block}
+:host ha-card.studio .w.st{--u:min(calc(100cqw / 1180),calc(100cqh / 820));display:block;position:absolute;inset:0;left:0;top:0;width:auto;height:auto;max-width:none;margin:0;transform:none;padding:0;--s:var(--u)}
+:host ha-card.studio .st .sa{position:absolute;left:calc(var(--u) * 72);top:calc(var(--u) * 110);width:calc(var(--u) * 500)}
+:host ha-card.studio .st .art{position:relative;width:100%;aspect-ratio:1;border-radius:calc(var(--u) * 34.32);overflow:hidden;box-shadow:0 calc(var(--u) * 30) calc(var(--u) * 70) rgba(30,10,60,.45);background:linear-gradient(160deg,rgba(255,255,255,.18),rgba(255,255,255,.06))}
+:host ha-card.studio .st .art img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .6s}:host ha-card.studio .st .art img.on{opacity:1}
+:host ha-card.studio .st .art .ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.55)}:host ha-card.studio .st .art .ph ha-icon{--mdc-icon-size:calc(var(--u) * 140)}
+:host ha-card.studio.hasart .art .ph{display:none}
+:host ha-card.studio .st .qs{display:flex;gap:calc(var(--u) * 12);margin-top:calc(var(--u) * 30)}:host ha-card.studio .st .qs:empty{display:none}
+:host ha-card.studio .st .q{flex:1;min-width:0;height:calc(var(--u) * 88);border-radius:calc(var(--u) * 26);display:flex;align-items:center;gap:calc(var(--u) * 12);padding:0 calc(var(--u) * 12);box-sizing:border-box}
+:host ha-card.studio .st .q i{width:calc(var(--u) * 62);height:calc(var(--u) * 62);border-radius:calc(var(--u) * 14);flex:none;background:var(--qa,linear-gradient(140deg,#6dd5ed,#2193b0)) center/cover}
+:host ha-card.studio .st .q div{min-width:0}:host ha-card.studio .st .q b{display:block;font-size:calc(var(--u) * 15);font-weight:700}:host ha-card.studio .st .q span{display:block;font-size:calc(var(--u) * 13);opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+:host ha-card.studio .st .sr{position:absolute;left:calc(var(--u) * 640);top:calc(var(--u) * 120);width:calc(var(--u) * 468)}
+:host ha-card.studio .st .eb{font-size:calc(var(--u) * 13);font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:rgba(255,255,255,.75)}
+:host ha-card.studio .st .tx{margin-top:calc(var(--u) * 8);min-width:0}
+:host ha-card.studio .st .t{font-size:calc(var(--u) * 40);font-weight:800;letter-spacing:-.02em;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-transform:none !important}
+:host ha-card.studio .st .ar{font-size:calc(var(--u) * 24);font-weight:500;opacity:.75;margin-top:calc(var(--u) * 4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+:host ha-card.studio .st .prog{margin-top:calc(var(--u) * 44)}:host ha-card.studio .st .prog.noprog{visibility:hidden}
+:host ha-card.studio .st .bar{height:calc(var(--u) * 8);border-radius:calc(var(--u) * 4);background:rgba(255,255,255,.28);position:relative;overflow:hidden}:host ha-card.studio .st .bar i{position:absolute;left:0;top:0;bottom:0;border-radius:inherit;background:#fff}
+:host ha-card.studio .st .times{display:flex;justify-content:space-between;font-size:calc(var(--u) * 14);font-weight:600;opacity:.7;margin-top:calc(var(--u) * 8);font-variant-numeric:tabular-nums}
+:host ha-card.studio .st .ctl{display:flex;justify-content:center;margin:calc(var(--u) * 36) calc(var(--u) * 30) 0}:host ha-card.studio .st .ctl .tr{flex:1;display:flex;justify-content:space-between;align-items:center}
+:host ha-card.studio .st .ctl .md{width:calc(var(--u) * 72);height:calc(var(--u) * 72)}:host ha-card.studio .st .ctl .md ha-icon{--mdc-icon-size:calc(var(--u) * 48);display:flex}
+:host ha-card.studio .st .ctl .big{width:calc(var(--u) * 96);height:calc(var(--u) * 96)}:host ha-card.studio .st .ctl .big ha-icon{--mdc-icon-size:calc(var(--u) * 44);display:flex}
+:host ha-card.studio .st .gl,:host ha-card.studio .st .ctl .big{background:linear-gradient(135deg,rgba(255,255,255,.16),rgba(255,255,255,.05));border:1px solid rgba(255,255,255,.38);box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 10px 30px rgba(0,0,0,.18);-webkit-backdrop-filter:blur(3px) saturate(1.25);backdrop-filter:blur(3px) saturate(1.25);box-sizing:border-box}
+:host ha-card.studio .pop.vol{position:static;transform:none;opacity:1;visibility:visible;pointer-events:auto;display:flex;align-items:center;gap:calc(var(--u) * 14);margin-top:calc(var(--u) * 40);padding:0;width:auto;height:auto;background:none;border:none;box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none}
+:host ha-card.studio .pop.vol button{width:calc(var(--u) * 26);height:calc(var(--u) * 26);flex:none;opacity:.8}:host ha-card.studio .pop.vol button ha-icon{--mdc-icon-size:calc(var(--u) * 22)}
+:host ha-card.studio .pop.vol input[type=range]{flex:1;width:auto;margin:0;height:calc(var(--u) * 28);border-radius:0;background:linear-gradient(90deg,#fff 0 var(--v,0%),rgba(255,255,255,.28) var(--v,0%) 100%) center/100% calc(var(--u) * 8) no-repeat;clip-path:inset(calc(var(--u) * 10) 0 round calc(var(--u) * 4))}:host ha-card.studio .pop.vol .pct{display:none}
+:host ha-card.studio .st .outs{display:flex;gap:calc(var(--u) * 12);margin-top:calc(var(--u) * 34)}
+:host ha-card.studio .st .outs button{flex:1;min-width:0;height:calc(var(--u) * 56);border-radius:calc(var(--u) * 26);justify-content:flex-start;gap:calc(var(--u) * 10);padding:0 calc(var(--u) * 16);font-size:calc(var(--u) * 15);font-weight:600;white-space:nowrap}
+:host ha-card.studio .st .outs button span{overflow:hidden;text-overflow:ellipsis}:host ha-card.studio .st .outs button ha-icon{--mdc-icon-size:calc(var(--u) * 20);flex:none}
+:host ha-card.studio .st .outs button.on{background:rgba(255,255,255,.92);color:#3c3c43;border-color:rgba(255,255,255,.92)}
+:host ha-card.studio .st .outs button.add{flex:none;width:calc(var(--u) * 56);padding:0;justify-content:center;border-radius:50%}
+:host ha-card.studio .st .hide{display:none !important}
+@container (max-aspect-ratio: 4/5) {
+ :host ha-card.studio .w.st{--u:min(calc(100cqw / 820),calc(100cqh / 1180))}
+ :host ha-card.studio .st .sa{left:calc(var(--u) * 150);top:calc(var(--u) * 84);width:calc(var(--u) * 520)}
+ :host ha-card.studio .st .sr{left:calc(var(--u) * 100);top:calc(var(--u) * 660);width:calc(var(--u) * 620)}
+ :host ha-card.studio .st .qs{display:none}
+}`;
 class HVNowPlayingCard extends HTMLElement {
   constructor() { super(); this.attachShadow({ mode: 'open' }); }
   static get defaults() { return { auto_select: true, art_background: true, show_progress: true, show_volume: true, show_output: true, show_extra: true, uppercase_title: true, popup_style: 'window', swipe_to_close: true }; }
@@ -1531,6 +1577,7 @@ class HVNowPlayingCard extends HTMLElement {
     this._config = Object.assign({}, this.constructor.defaults, c);
     if (this._config.height) { this.setAttribute('fixed', ''); this.style.height = this._config.height; } else { this.removeAttribute('fixed'); this.style.removeProperty('height'); }
     this.toggleAttribute('fs', this._config.popup_style === 'fullscreen'); this._swipeAttr();
+    const studio = this._config.layout === 'studio'; if (this._built && studio !== !!this._studio) this._built = false; this._studio = studio;
     this._sig = null; this._render();
   }
   set hass(h) { this._hass = h; if (hvLdBusy()) return; this._render(); }
@@ -1605,7 +1652,18 @@ class HVNowPlayingCard extends HTMLElement {
     return st(ids[0]);
   }
   _build() {
-    this.shadowRoot.innerHTML = `<style>${NP_CSS}</style><ha-card><div class="bg"><i></i><i></i><div class="shade"></div></div>
+    if (this._studio) this.shadowRoot.innerHTML = `<style>${NP_CSS}${NP_STUDIO_CSS}</style><ha-card class="studio"><div class="bg"><i></i><i></i><div class="shade"></div></div>
+      <div class="w st"><div class="sa"><div class="art"><div class="ph"><ha-icon icon="mdi:music-note"></ha-icon></div><img alt=""><img alt=""></div><div class="qs"></div></div>
+        <div class="sr"><div class="eb"></div><div class="tx"><div class="t"></div><div class="ar"></div></div>
+          <div class="prog"><div class="bar"><i></i></div><div class="times"><span class="el">0:00</span><span class="rm">-0:00</span></div></div>
+          <div class="ctl"><div class="tr"><button class="md" data-a="prev" aria-label="Previous"><ha-icon icon="mdi:rewind"></ha-icon></button>
+            <button class="big" data-a="play" aria-label="Play/Pause"><ha-icon class="pi" icon="mdi:play"></ha-icon></button>
+            <button class="md" data-a="next" aria-label="Next"><ha-icon icon="mdi:fast-forward"></ha-icon></button></div></div>
+          <div class="pop vol open"><button data-a="mute" aria-label="Mute"><ha-icon class="vi" icon="mdi:volume-high"></ha-icon></button><input type="range" min="0" max="100" step="1" aria-label="Volume"><span class="pct"></span></div>
+          <div class="outs"></div></div>
+        <div class="hide"><div class="pill"><button data-a="output"></button><button data-a="volume"></button></div><button data-a="app"></button><button data-a="more"></button><button data-a="lyrics"></button><button data-a="queue"></button></div></div>
+      <div class="pop out"></div><div class="grab" aria-hidden="true"></div></ha-card>`;
+    else this.shadowRoot.innerHTML = `<style>${NP_CSS}</style><ha-card><div class="bg"><i></i><i></i><div class="shade"></div></div>
       <div class="w">
         <div class="top"><button class="rb glass" data-a="app" aria-label="Music"><ha-icon icon="mdi:music-note"></ha-icon></button>
           <div class="pill glass"><button data-a="output" aria-label="Output"><ha-icon icon="mdi:cast-audio"></ha-icon></button><button data-a="volume" aria-label="Volume"><ha-icon class="vi" icon="mdi:volume-high"></ha-icon></button></div></div>
@@ -1707,8 +1765,22 @@ class HVNowPlayingCard extends HTMLElement {
     ['lyrics', 'queue', 'more', 'app'].forEach(k => this._$(`[data-a="${k}"]`).classList.toggle('ghost', c.show_extra === false));
     this._$('[data-a="more"]').style.visibility = c.show_extra === false ? 'hidden' : '';
     this._paintVol(a.volume_level); if (this._open === 'out') this._paintOut();
+    if (this._studio) this._paintStudio(p, a, ids);
     this._progress();
   }
+  // studio: the room, artist — album, the speakers as pills (+ the picker), what's queued
+  _paintStudio(p, a, ids) { const h = this._hass, E = h.entities || {}, D = h.devices || {}, A = h.areas || {}, id = p && p.entity_id;
+    const area = x => { const e = E[x], aid = e && (e.area_id || (e.device_id && D[e.device_id] && D[e.device_id].area_id)); return (aid && A[aid] && A[aid].name) || ''; };
+    const nm = x => area(x) || ((h.states[x] && h.states[x].attributes.friendly_name) || x || '').replace(/ (speaker|homepod|sonos|echo)$/i, '');
+    this._$('.eb').textContent = 'Now playing' + (id ? ' · ' + nm(id) : '');
+    if (a.media_title && (a.media_artist || a.media_album_name)) this._$('.ar').textContent = [a.media_artist, a.media_album_name].filter(Boolean).join(' — ');
+    const outs = this._$('.outs'), more = ids.length > 1; let show = ids.filter(x => h.states[x]).slice(0, 2); if (id && show.indexOf(id) < 0) show = [id].concat(show.slice(0, 1));
+    const html = show.map(x => `<button class="gl${x === id ? ' on' : ''}" data-a="pick" data-id="${esc(x)}" aria-pressed="${x === id}"><ha-icon icon="mdi:cast-audio-variant"></ha-icon><span>${esc(nm(x))}</span></button>`).join('')
+      + (more ? '<button class="gl add" data-a="output" aria-label="All speakers"><ha-icon icon="mdi:plus"></ha-icon></button>' : '');
+    if (outs._h !== html) { outs._h = html; outs.innerHTML = html; }
+    const q = [[a.media_next_title || (a.queue_next && a.queue_next.title), a.media_next_image_url], [a.media_then_title || (a.queue_then && a.queue_then.title), a.media_then_image_url]].filter(x => x[0]);
+    const qh = q.map((x, i) => `<div class="q gl"><i${x[1] ? ` style="--qa:url('${esc(this._artUrl({ entity_picture: x[1] }))}')"` : i ? ' style="--qa:linear-gradient(140deg,#f7971e,#ffd200)"' : ''}></i><div><b>${i ? 'Then' : 'Up next'}</b><span>${esc(x[0])}</span></div></div>`).join(''), qs = this._$('.qs');
+    if (qs._h !== qh) { qs._h = qh; qs.innerHTML = qh; } }
   _progress() {
     if (!this._built || !this._hass) return;
     const p = this._player(), a = p ? p.attributes : {}, dur = Number(a.media_duration) || 0;
@@ -8734,8 +8806,8 @@ class HVHubCard extends HTMLElement {
   // dismiss only from the pill / the artwork area, never from the controls, volume or seek bar.
   _openMusicSheet(a, ids) {
     const d = HVMusicCard.prototype.nowPlayingData.call({ _config: Object.assign({}, NP_TILE_DEFAULTS, a, { entity: ids[0], entities: ids.slice(1) }) });
-    const cfg = Object.assign({}, d.content, { height: '100%', popup_style: 'fullscreen', swipe_to_close: false });
-    this._openSheet({ label: a.name || 'Music', bg: '#121218', day: false, dragOk: (path, y, h) => y < h * 0.45 && !path.some(n => n instanceof Element && (n.tagName === 'BUTTON' || (n.classList && (n.classList.contains('pop') || n.classList.contains('prog') || n.classList.contains('ctl'))))),
+    const cfg = Object.assign({}, d.content, { height: '100%', popup_style: 'fullscreen', swipe_to_close: false }, this._config.music_layout === 'classic' ? {} : { layout: 'studio' });
+    this._openSheet({ label: a.name || 'Music', bg: '#121218', day: false, dragOk: (path, y, h) => y < h * 0.45 && !path.some(n => n instanceof Element && (n.tagName === 'BUTTON' || (n.classList && (n.classList.contains('pop') || n.classList.contains('prog') || n.classList.contains('ctl') || n.classList.contains('outs'))))),
       build: bd => { bd.style.padding = '0'; bd.style.overflow = 'hidden'; const el = document.createElement('homeview-now-playing-card');
         try { el.setConfig(cfg); } catch (e) { el.textContent = String(e); } el.style.cssText = 'display:block;position:absolute;inset:0;height:100%;--hv-safe-top:30px'; el.hass = this._hass; bd.appendChild(el);
         return { set hass(h) { el.hass = h; } }; } }); }
