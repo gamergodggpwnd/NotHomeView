@@ -5712,7 +5712,8 @@ const HUB_APP_CATALOG = [
   { key: 'lights', name: 'Lights', icon: 'mdi:lightbulb-group', color_from: '#ffd36b', color_to: '#ff9f0a', kind: 'navigate', navigation_path: 'lights', views: ['lights', 'lights-on'] },
   { key: 'climate', name: 'Climate', icon: 'mdi:thermostat', color_from: '#ffb37a', color_to: '#ff6a3d', kind: 'navigate', navigation_path: 'climate', views: ['climate'] },
   { key: 'garage', name: 'Garage', icon: 'mdi:garage-variant', color_from: '#9aa7b8', color_to: '#4d5a6b', kind: 'navigate', navigation_path: 'garage', views: ['garage'] },
-  { key: 'rooms', name: 'Rooms', icon: 'mdi:sofa-outline', color_from: '#c5a3ff', color_to: '#7c4dff', kind: 'navigate', navigation_path: 'rooms', views: ['rooms'] }];
+  { key: 'rooms', name: 'Rooms', icon: 'mdi:sofa-outline', color_from: '#c5a3ff', color_to: '#7c4dff', kind: 'navigate', navigation_path: 'rooms', views: ['rooms'] },
+  { key: 'cooking', name: 'Cooking', icon: 'mdi:fire', color_from: '#ffb340', color_to: '#ff6a00', glyph_color: '#ffffff', kind: 'cooking' }];
 // a fresh copy of a catalog app as an apps[] entry (no catalog-only keys)
 const hubAppBase = k => { const c = HUB_APP_CATALOG.find(x => x.key === k); if (!c) return null; const a = Object.assign({}, c); delete a.key; delete a.views; return a; };
 // which catalog app an apps[] entry is: its kind (weather, calendar, assistant, Music) or, for a page, the page's last path segment
@@ -7063,6 +7064,210 @@ function hvOpenReminders(hub, app) {
       paint(); load(); tickIv = setInterval(() => { root && root.querySelectorAll('.tm').forEach(x => { x.textContent = clock(); }); }, 15000);
       return { set hass(h) { const sig = idsOf().map(id => id + '=' + ((h.states[id] || {}).state)).join(';'); if (sig !== st.sig) { const first = !st.sig; st.sig = sig; if (!first && !st.busy) reload(null, 400); } } }; } });
   return s; }
+/* ---------------- Cooking (V2): recipes, step by step, kitchen timers ----------------
+   cooking: { title: "Marie's recipes", todo_entity: todo.shopping_list, keep_awake: true, voice_hint: true,
+     recipes: [{ name, tags: [Dinner, Vegetarian], time: 35, servings: 4, image?: url, ingredients: [..],
+                 steps: [{ text, timer?: { minutes, label }, items?: [..] }] }] }
+   Opens full screen like the other apps (grabber, swipe down). The screen stays on while it is open (Wake Lock where the browser has it, and
+   the screensaver's idle clock is kept fresh). Timers run in this browser only (no Home Assistant services) and keep going between steps.
+   Add to Reminders adds the ingredients to a to-do list with todo.add_item, the same call the Reminders app makes, and only on that tap. */
+const HV_COOK_COLS = ['#3f3399', '#ff9500', '#34c759', '#ff2d55', '#0a84ff'];
+const HV_COOK_ART = ['radial-gradient(circle closest-side at 50% 50%,#e8603c 0 58%,#d9512f 61%,rgba(217,81,47,0) 62%),radial-gradient(circle closest-side at 50% 50%,#f5f0ea 0 88%,#e6ddd2 92%,rgba(0,0,0,0) 93%),linear-gradient(160deg,#efe4d6,#dccbb6)',
+  'radial-gradient(circle closest-side at 50% 50%,#7fae5a 0 58%,#6c9a4a 61%,rgba(108,154,74,0) 62%),radial-gradient(circle closest-side at 50% 50%,#f6f3ec 0 88%,#e4e6da 92%,rgba(0,0,0,0) 93%),linear-gradient(160deg,#e6eadf,#cfd8c3)',
+  'radial-gradient(circle closest-side at 50% 50%,#e0ac48 0 58%,#cf983a 61%,rgba(207,152,58,0) 62%),radial-gradient(circle closest-side at 50% 50%,#f7f2e8 0 88%,#e8dcc6 92%,rgba(0,0,0,0) 93%),linear-gradient(160deg,#f1e6d2,#e0cfae)'];
+const hvCookCfg = c => { const k = (c && c.cooking && typeof c.cooking === 'object') ? c.cooking : {};
+  const recipes = (Array.isArray(k.recipes) ? k.recipes : []).filter(r => r && typeof r === 'object' && r.name).map(r => ({ name: String(r.name), tags: (Array.isArray(r.tags) ? r.tags : r.tags ? [r.tags] : []).map(String),
+    time: r.time, servings: r.servings, image: r.image ? String(r.image) : '', ingredients: (Array.isArray(r.ingredients) ? r.ingredients : []).map(String),
+    steps: (Array.isArray(r.steps) ? r.steps : []).map(s => typeof s === 'string' ? { text: s } : s && typeof s === 'object' ? { text: String(s.text || ''), items: (Array.isArray(s.items) ? s.items : []).map(String),
+      timer: s.timer && Number(s.timer.minutes) > 0 ? { minutes: Number(s.timer.minutes), label: String(s.timer.label || '') } : Number(s.timer) > 0 ? { minutes: Number(s.timer), label: '' } : null } : null).filter(s => s && s.text) }));
+  return { title: k.title ? String(k.title) : '', todo: k.todo_entity ? String(k.todo_entity) : '', awake: k.keep_awake !== false, voice: k.voice_hint !== false, recipes }; };
+// kitchen timers: one set per browser, kept while Cooking is closed too
+const HVCOOK = { t: new Map(), pos: new Map(), n: 0,
+  left(t) { return t.end ? Math.max(0, t.end - Date.now()) : t.left; },
+  start(key, label, min) { const old = this.t.get(key); if (old && !old.done) return old; const t = { key, label, total: min * 60000, end: Date.now() + min * 60000, left: 0, done: false, col: HV_COOK_COLS[this.n++ % HV_COOK_COLS.length] }; this.t.set(key, t); return t; },
+  pause(t) { if (t.done) return; if (t.end) { t.left = this.left(t); t.end = null; } else { t.end = Date.now() + t.left; } },
+  add(t, ms) { if (t.done) { t.done = false; t.end = Date.now() + ms; t.total = ms; return; } if (t.end) t.end += ms; else t.left += ms; t.total += ms; },
+  stop(key) { this.t.delete(key); },
+  check() { let hit = false; for (const t of this.t.values()) if (!t.done && t.end && t.end <= Date.now()) { t.done = true; t.end = null; t.left = 0; hit = true; } return hit; } };
+const hvCookFmt = ms => { const s = Math.ceil(ms / 1000), h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = s % 60, p = n => String(n).padStart(2, '0'); return h ? `${h}:${p(m)}:${p(x)}` : `${p(m)}:${p(x)}`; };
+const hvCookTime = v => { if (v == null || v === '') return '—'; const n = Number(v); if (!isNaN(n)) return n >= 60 ? `${Math.floor(n / 60)} h${n % 60 ? ' ' + (n % 60) + ' min' : ''}` : `${n} min`; return String(v); };
+// the time words of a step ("12 minutes", "1–2 hours") in purple
+const hvCookMark = t => esc(t).replace(/\b(\d+(?:[.,]\d+)?(?:\s?(?:–|-|to)\s?\d+(?:[.,]\d+)?)?\s?(?:minutes?|mins?|hours?|hrs?|seconds?|secs?))\b/gi, '<em>$1</em>');
+const hvCookBeep = () => { try { const A = window.AudioContext || window.webkitAudioContext; if (!A) return; const a = hvCookBeep.a || (hvCookBeep.a = new A()); if (a.state === 'suspended') a.resume();
+    [0, .32, .64].forEach(d => { const o = a.createOscillator(), g = a.createGain(); o.frequency.value = 880; o.connect(g); g.connect(a.destination); const t = a.currentTime + d; g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.25, t + .02); g.gain.exponentialRampToValueAtTime(.0001, t + .24); o.start(t); o.stop(t + .26); }); } catch (e) {}
+  try { if (navigator.vibrate) navigator.vibrate([200, 120, 200]); } catch (e) {} };
+const HV_COOK_SVG = { play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M8 5.5v13a1 1 0 0 0 1.5.86l10.4-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z"/></svg>',
+  timer: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="13.5" r="7.5"/><path d="M12 13.5V10M9.5 2.5h5M19 6.5l1.5-1.5"/></svg>',
+  list: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M9 6.5h11M9 12h11M9 17.5h11"/><circle cx="4.5" cy="6.5" r="1.2" fill="currentColor"/><circle cx="4.5" cy="12" r="1.2" fill="currentColor"/><circle cx="4.5" cy="17.5" r="1.2" fill="currentColor"/></svg>',
+  x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  l: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>',
+  r: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>',
+  mic: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>',
+  flame: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21.5c-4 0-7-2.7-7-6.6 0-3.5 2.3-5.6 4-7.6.9 1.6 2 2.4 3 2.6-.2-2.8.9-5.6 3.1-7.4.5 3 4.9 5.6 4.9 11.6 0 4.6-3.6 7.4-8 7.4z"/></svg>' };
+const HV_COOK_CSS = `.ck{position:absolute;inset:0;color:#3c3c43;font-family:${FONT};background:#f2f2f7;overflow:hidden;-webkit-tap-highlight-color:transparent}
+.ck *{box-sizing:border-box}.ck button{all:unset;box-sizing:border-box;cursor:pointer}.ck button:focus-visible{outline:3px solid #3f3399;outline-offset:2px}
+.ck .tl{background:#fff;border-radius:26px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 8px 24px rgba(30,30,60,.08)}
+.ck .art{position:relative;overflow:hidden;background:var(--art) center/cover no-repeat}
+.ck .eb{font-size:13px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#ff9500}
+.ck .sub{color:rgba(60,60,67,.6)}
+/* overview */
+.ov{position:absolute;inset:0;display:grid;grid-template-columns:minmax(0,520fr) minmax(0,564fr);gap:32px;padding:24px 40px 24px 24px}
+.ov .hero{border-radius:34.32px;min-height:0}
+.ov .tags{position:absolute;left:20px;top:20px;display:flex;flex-wrap:wrap;gap:8px;right:20px}
+.ov .tags span{padding:7px 12px;border-radius:14px;font-size:14px;font-weight:600;color:#fff;background:rgba(40,25,10,.28);border:1px solid rgba(255,255,255,.3);box-shadow:inset 0 1px 0 rgba(255,255,255,.3);-webkit-backdrop-filter:blur(3px) saturate(1.25);backdrop-filter:blur(3px) saturate(1.25)}
+.ov .rp{min-width:0;min-height:0;display:flex;flex-direction:column;padding-top:16px;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:none}.ov .rp::-webkit-scrollbar{display:none}
+.ov .hd{display:flex;align-items:center;gap:10px;min-height:16px}.ov .hd .all{font-size:13px;font-weight:600;color:#3f3399;margin-left:auto}
+.ov h1{margin:2px 0 0;font-size:40px;font-weight:800;letter-spacing:-.02em;line-height:1.05;color:#3c3c43}
+.ov .meta{display:flex;gap:10px;margin:14px 0 20px;flex:none}
+.ov .meta div{flex:1;min-width:0;background:#fff;border-radius:14px;padding:10px 14px}.ov .meta b{display:block;font-size:22px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ov .meta span{font-size:13px;color:rgba(60,60,67,.6)}
+.ov .start{flex:none;height:64px;border-radius:26px;background:#3f3399;color:#fff;font-size:20px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:22px;transition:transform .12s}
+.ov .start:active{transform:scale(.98)}.ov .start svg{width:22px;height:22px}
+.ov .steps{flex:none;padding:4px 0}
+.ov .st{display:flex;align-items:center;gap:14px;width:100%;padding:11px 18px;position:relative;font-size:16px;min-height:52px}
+.ov .st+.st::before{content:'';position:absolute;top:0;left:62px;right:0;height:1px;background:rgba(60,60,67,.12)}
+.ov .st .n{width:30px;height:30px;border-radius:50%;background:#f2f2f7;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex:none}
+.ov .st .tx{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tmc{margin-left:auto;display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:12px;background:#cdc6ef;color:#3f3399;font-size:13px;font-weight:700;flex:none;white-space:nowrap}.tmc svg{width:15px;height:15px}
+.ov .ingr{flex:none;margin-top:16px;padding:16px 18px;display:flex;align-items:center;gap:14px;justify-content:space-between}
+.ov .ingr .it{min-width:0}.ov .ingr b{font-size:17px;font-weight:700}.ov .ingr b span{color:rgba(60,60,67,.6);font-weight:500}.ov .ingr p{margin:3px 0 0;font-size:14px;color:rgba(60,60,67,.6);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ck .addl{display:flex;align-items:center;gap:6px;padding:10px 14px;border-radius:14px;background:#cdc6ef;color:#3f3399;font-weight:700;font-size:15px;white-space:nowrap;flex:none}.ck .addl svg{width:18px;height:18px}.ck .addl[aria-disabled=true]{opacity:.45;cursor:default}
+/* recipe list */
+.ls{position:absolute;inset:0;overflow-y:auto;padding:40px 40px 40px;overscroll-behavior:contain}
+.ls h1{margin:4px 0 22px;font-size:40px;font-weight:800;letter-spacing:-.02em;color:#3c3c43}
+.ls .gd{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:24px}
+.ls .rc{display:block;overflow:hidden;border-radius:26px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.04),0 8px 24px rgba(30,30,60,.08)}
+.ls .rc .art{height:170px}.ls .rc div.tx{padding:14px 18px 16px}.ls .rc b{display:block;font-size:18px;font-weight:700}.ls .rc span{font-size:14px;color:rgba(60,60,67,.6)}
+.emp{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;padding:40px}
+.emp .ic{width:104px;height:104px;border-radius:24px;background:linear-gradient(160deg,#ffb340,#ff6a00);color:#fff;display:flex;align-items:center;justify-content:center}.emp .ic svg{width:56px;height:56px}
+.emp h2{margin:8px 0 0;font-size:28px;font-weight:800}.emp p{margin:0;max-width:520px;color:rgba(60,60,67,.6);font-size:16px;line-height:1.4}
+.emp pre{margin:6px 0 0;text-align:left;background:#fff;border-radius:14px;padding:14px 18px;font:13px/1.45 ui-monospace,Menlo,monospace;color:#3c3c43;max-width:100%;overflow:auto}
+/* step view */
+.sv{position:absolute;inset:0;display:grid;grid-template-columns:minmax(0,1fr) 360px;grid-template-rows:auto auto 1fr auto;column-gap:40px;padding:32px 40px 40px}
+.sv .bar{grid-column:1/-1;display:flex;align-items:center;gap:16px;min-width:0}
+.sv .th{width:44px;height:44px;border-radius:12px;flex:none}.sv .bar b{font-size:17px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:34%}
+.sv .prog{flex:1;display:flex;gap:6px;min-width:60px}.sv .prog i{flex:1;height:6px;border-radius:3px;background:rgba(60,60,67,.15)}.sv .prog i.d{background:#3f3399}.sv .prog i.c{background:linear-gradient(90deg,#3f3399 50%,rgba(60,60,67,.15) 50%)}
+.sv .cx{width:44px;height:44px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;flex:none;box-shadow:0 1px 2px rgba(0,0,0,.04)}.sv .cx svg{width:22px;height:22px}
+.sv .lab{grid-column:1;margin-top:40px;font-size:18px;font-weight:700;color:#3f3399;letter-spacing:.02em}
+.sv .main{grid-column:1;grid-row:3;min-height:0;overflow-y:auto;scrollbar-width:none}.sv .main::-webkit-scrollbar{display:none}
+.sv .big{margin:12px 0 0;font-size:48px;font-weight:700;line-height:1.16;letter-spacing:-.02em;color:#3c3c43}.sv .big em{font-style:normal;color:#3f3399}
+.sv .ing{display:flex;gap:10px;flex-wrap:wrap;margin-top:28px}.sv .ing span{padding:9px 14px;border-radius:14px;background:#fff;font-size:16px;font-weight:500}
+.sv .nav{grid-column:1;grid-row:4;display:flex;gap:16px;margin-top:20px}
+.sv .nav button{flex:1;height:72px;border-radius:26px;display:flex;align-items:center;justify-content:center;gap:8px;font-size:20px;font-weight:700;transition:transform .12s}.sv .nav button:active{transform:scale(.98)}
+.sv .nav .bk{background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.04),0 8px 24px rgba(30,30,60,.08)}.sv .nav .nx{background:#3f3399;color:#fff}.sv .nav svg{width:22px;height:22px}
+.sv .tms{grid-column:2;grid-row:2/4;margin-top:16px;display:flex;flex-direction:column;gap:16px;min-height:0;overflow-y:auto;scrollbar-width:none}.sv .tms::-webkit-scrollbar{display:none}
+.tmr{flex:none;border-radius:34.32px;padding:22px;display:flex;align-items:center;gap:18px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.04),0 8px 24px rgba(30,30,60,.08)}
+.tmr .rg{width:96px;height:96px;flex:none}.tmr .rg svg{width:96px;height:96px;transform:rotate(-90deg)}.tmr .rg circle{transition:stroke-dasharray .25s linear}
+.tmr .t{font-size:44px;font-weight:700;letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums}.tmr .l{font-size:15px;color:rgba(60,60,67,.6);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tmr .bt{display:flex;gap:8px;margin-top:10px}.tmr .bt button{padding:6px 12px;border-radius:12px;background:#f2f2f7;font-size:14px;font-weight:600}
+.tmr.nxt{background:#cdc6ef;box-shadow:none}.tmr.nxt .ic{width:96px;display:flex;justify-content:center;flex:none;color:#3c3c43}.tmr.nxt .ic svg{width:34px;height:34px}.tmr.nxt .t,.tmr.nxt .l{color:#3f3399}.tmr.nxt .bt button{background:#3f3399;color:#fff}
+.tmr.done{background:#ff9500;color:#fff;animation:ckp 1s ease-in-out infinite}.tmr.done .l{color:#fff}.tmr.done .bt button{background:rgba(255,255,255,.25);color:#fff}
+@keyframes ckp{50%{box-shadow:0 0 0 8px rgba(255,149,0,.25),0 8px 24px rgba(30,30,60,.08)}}
+.sv .vh{grid-column:2;grid-row:4;margin-top:20px;height:72px;border-radius:26px;display:flex;align-items:center;gap:14px;padding:0 20px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.04),0 8px 24px rgba(30,30,60,.08)}
+.sv .vh .m{width:44px;height:44px;border-radius:50%;background:linear-gradient(140deg,#8a7ff0,#3f3399);color:#fff;display:flex;align-items:center;justify-content:center;flex:none}.sv .vh .m svg{width:20px;height:20px}
+.sv .vh b{display:block;font-size:16px;font-weight:600}.sv .vh span{font-size:14px;color:rgba(60,60,67,.6)}
+.tst{position:absolute;left:50%;bottom:28px;transform:translate(-50%,20px);opacity:0;padding:10px 18px;border-radius:14px;background:rgba(28,28,30,.9);color:#fff;font-size:15px;font-weight:600;transition:opacity .2s,transform .2s;pointer-events:none;z-index:5}.tst.on{opacity:1;transform:translate(-50%,0)}
+/* portrait: the picture on top, everything else below; the timers under the step */
+@media (max-aspect-ratio: 4/5) {
+ .ov{grid-template-columns:1fr;grid-template-rows:34% 1fr;gap:24px;padding:24px}.ov .rp{padding-top:0}
+ .sv{grid-template-columns:1fr;grid-template-rows:auto auto auto auto auto;padding:32px 32px 32px;overflow-y:auto}.sv .main{grid-row:3;overflow:visible}
+ .sv .tms{grid-column:1;grid-row:4;margin-top:28px;overflow:visible}.sv .nav{grid-row:5}.sv .vh{display:none}
+}
+@media (prefers-reduced-motion:reduce){.tmr.done{animation:none}}`;
+function hvOpenCooking(hub, app, at) {
+  if (!hub || hub._sheetO || !hub._hass) return null; const H = () => hub._hass;
+  const st = { view: 'list', r: 0, step: 0, added: new Set() }; let root = null, iv = 0, keep = 0, lock = null, tstT = 0, vis = null, cfg = hvCookCfg(hub._config);
+  const R = () => cfg.recipes[st.r];
+  if (cfg.recipes.length === 1) st.view = 'ov'; if (at != null && cfg.recipes[at]) { st.r = at; st.view = 'ov'; }
+  const art = (r, i) => r && r.image ? `url("${String(r.image).replace(/"/g, '%22')}"), ${HV_COOK_ART[i % HV_COOK_ART.length]}` : HV_COOK_ART[i % HV_COOK_ART.length];
+  const todo = () => { const S = H().states || {}, all = Object.keys(S).filter(k => k.startsWith('todo.')).sort(); if (cfg.todo && S[cfg.todo]) return cfg.todo;
+    return all.find(k => /shop|grocer|courses|epicerie|épicerie/i.test(k + ' ' + ((S[k].attributes || {}).friendly_name || ''))) || all[0] || ''; };
+  const tname = id => { const s = H().states[id]; return (s && s.attributes.friendly_name) || (id || '').split('.')[1] || ''; };
+  const toast = m => { const t = root && root.querySelector('.tst'); if (!t) return; t.textContent = m; t.classList.add('on'); clearTimeout(tstT); tstT = setTimeout(() => t.classList.remove('on'), 2200); };
+  const eyebrow = () => { const h = new Date().getHours(), w = h < 11 ? 'This morning' : h < 16 ? 'Today' : 'Tonight'; return cfg.title ? `${w} · ${cfg.title}` : w; };
+  const key = i => st.r + ':' + i;
+  // timers on screen: the running / done ones, then the next timer to start (this step's, else the next step's)
+  const timersHtml = () => { const r = R(), out = [];
+    for (const t of HVCOOK.t.values()) { const left = HVCOOK.left(t), p = t.total ? Math.max(0, Math.min(1, left / t.total)) : 0;
+      out.push(`<div class="tmr${t.done ? ' done' : ''}" data-tk="${esc(t.key)}"><div class="rg"><svg viewBox="0 0 96 96"><circle cx="48" cy="48" r="42" fill="none" stroke="${t.done ? 'rgba(255,255,255,.35)' : '#efeff4'}" stroke-width="10"/><circle class="pr" cx="48" cy="48" r="42" fill="none" stroke="${t.done ? '#fff' : t.col}" stroke-width="10" stroke-linecap="round" stroke-dasharray="${(264 * p).toFixed(1)} 264"/></svg></div>
+<div style="min-width:0"><div class="t">${t.done ? 'Done' : hvCookFmt(left)}</div><div class="l">${esc(t.label)}</div><div class="bt">${t.done ? '<button data-t="stop">Dismiss</button>' : `<button data-t="pause">${t.end ? 'Pause' : 'Resume'}</button>`}<button data-t="add">+1 min</button></div></div></div>`); }
+    if (r) for (let i = st.step; i < r.steps.length && i <= st.step + 1; i++) { const s = r.steps[i]; if (!s.timer || HVCOOK.t.has(key(i))) continue;
+      const lb = s.timer.label || `Step ${i + 1}`; out.push(`<div class="tmr nxt" data-ns="${i}"><div class="ic">${HV_COOK_SVG.timer}</div><div style="min-width:0"><div class="t">${hvCookFmt(s.timer.minutes * 60000)}</div><div class="l">${esc(lb)} · ${i === st.step ? 'this step' : 'next step'}</div><div class="bt"><button data-t="start">Start timer</button></div></div></div>`); break; }
+    return out.join(''); };
+  const paint = () => { if (!root) return; cfg = hvCookCfg(hub._config); const r = R(); const x = root.getRootNode().querySelector('.x'); if (x) x.style.display = st.view === 'sv' ? 'none' : '';
+    let h = '';
+    if (!cfg.recipes.length) h = `<div class="emp"><div class="ic">${HV_COOK_SVG.flame}</div><h2>No recipes yet</h2><p>Add recipes to the Home Screen card's YAML. Settings › Cooking lists them.</p><pre>cooking:\n  recipes:\n    - name: Tomato Pasta\n      time: 35\n      servings: 4\n      ingredients: [Pasta, Tomatoes, Basil]\n      steps:\n        - text: Boil the pasta for 9 minutes.\n          timer: { minutes: 9, label: Pasta }</pre></div>`;
+    else if (st.view === 'list' || !r) h = `<div class="ls"><div class="eb">${esc(eyebrow())}</div><h1>Recipes</h1><div class="gd">${cfg.recipes.map((x, i) => `<button class="rc" data-r="${i}"><div class="art" style="--art:${art(x, i)}"></div><div class="tx"><b>${esc(x.name)}</b><span>${esc([hvCookTime(x.time), x.steps.length + ' steps'].join(' · '))}</span></div></button>`).join('')}</div></div>`;
+    else if (st.view === 'ov') { const nT = r.steps.filter(s => s.timer).length, tid = todo(), done = st.added.has(st.r);
+      h = `<div class="ov"><div class="hero art" style="--art:${art(r, st.r)}">${r.tags.length ? `<div class="tags">${r.tags.map(t => `<span>${esc(t)}</span>`).join('')}</div>` : ''}</div><div class="rp">
+<div class="hd"><span class="eb">${esc(eyebrow())}</span>${cfg.recipes.length > 1 ? '<button class="all" data-a="list">All recipes</button>' : ''}</div><h1>${esc(r.name)}</h1>
+<div class="meta"><div><b>${esc(hvCookTime(r.time))}</b><span>Total time</span></div><div><b>${esc(r.servings != null && r.servings !== '' ? r.servings : '—')}</b><span>Servings</span></div><div><b>${r.steps.length}</b><span>Steps</span></div><div><b>${nT}</b><span>Timers</span></div></div>
+<button class="start" data-a="start"${r.steps.length ? '' : ' disabled'}>${HV_COOK_SVG.play}${(HVCOOK.pos.get(st.r) || 0) > 0 ? 'Continue Cooking' : 'Start Cooking'}</button>
+${r.steps.length ? `<div class="tl steps">${r.steps.map((s, i) => `<button class="st" data-go="${i}"><span class="n">${i + 1}</span><span class="tx">${esc(s.text)}</span>${s.timer ? `<span class="tmc">${HV_COOK_SVG.timer}${esc(hvCookTime(s.timer.minutes))}</span>` : ''}</button>`).join('')}</div>` : ''}
+${r.ingredients.length ? `<div class="tl ingr"><div class="it"><b>Ingredients <span>· ${r.ingredients.length}</span></b><p>${esc(r.ingredients.join(', '))}</p></div><button class="addl" data-a="rem" aria-disabled="${!tid || done}"${tid ? ` title="Adds them to ${esc(tname(tid))}"` : ' title="No to-do list in Home Assistant"'}>${HV_COOK_SVG.list}${done ? 'Added' : 'Add to Reminders'}</button></div>` : ''}</div></div>`; }
+    else { const s = r.steps[st.step], n = r.steps.length;
+      h = `<div class="sv"><div class="bar"><div class="th art" style="--art:${art(r, st.r)}"></div><b>${esc(r.name)}</b><div class="prog" aria-label="Step ${st.step + 1} of ${n}">${r.steps.map((_, i) => `<i class="${i < st.step ? 'd' : i === st.step ? 'c' : ''}"></i>`).join('')}</div><button class="cx" data-a="ov" aria-label="Close the steps">${HV_COOK_SVG.x}</button></div>
+<div class="lab">STEP ${st.step + 1} OF ${n}</div><div class="main"><div class="big">${hvCookMark(s.text)}</div>${s.items.length ? `<div class="ing">${s.items.map(x => `<span>${esc(x)}</span>`).join('')}</div>` : ''}</div>
+<div class="tms" aria-live="polite">${timersHtml()}</div>
+<div class="nav"><button class="bk" data-a="back">${HV_COOK_SVG.l}Back</button><button class="nx" data-a="next">${st.step + 1 >= n ? 'Done' : 'Next step'}${st.step + 1 >= n ? '' : HV_COOK_SVG.r}</button></div>
+${cfg.voice ? `<div class="vh"><div class="m">${HV_COOK_SVG.mic}</div><div><b>Hands busy? Just say it.</b><span>"Next step" · "Add a minute"</span></div></div>` : ''}</div>`; }
+    root.innerHTML = h + '<div class="tst" role="status"></div>'; };
+  // timers only (once a second-ish): text, rings, a finished one
+  const tick = () => { if (HVCOOK.check()) { hvCookBeep(); if (st.view === 'sv') { const m = root.querySelector('.main'), y = m ? m.scrollTop : 0; paint(); const m2 = root.querySelector('.main'); if (m2) m2.scrollTop = y; } else { const d = [...HVCOOK.t.values()].find(t => t.done); toast((d && d.label ? d.label + ': ' : '') + 'timer done'); } return; }
+    if (st.view !== 'sv' || !root) return; for (const el of root.querySelectorAll('.tmr[data-tk]')) { const t = HVCOOK.t.get(el.dataset.tk); if (!t || t.done) continue; const left = HVCOOK.left(t);
+      const tx = el.querySelector('.t'), v = hvCookFmt(left); if (tx.textContent !== v) tx.textContent = v; const c = el.querySelector('circle.pr'); if (c) c.setAttribute('stroke-dasharray', (264 * Math.max(0, Math.min(1, left / t.total))).toFixed(1) + ' 264'); } };
+  const go = (v, step) => { st.view = v; if (step != null) { st.step = Math.max(0, Math.min(step, R().steps.length - 1)); HVCOOK.pos.set(st.r, st.step); } paint(); };
+  const addRem = async () => { const r = R(), id = todo(); if (!r || !id || st.added.has(st.r)) return; st.added.add(st.r); paint(); let n = 0;
+    for (const it of r.ingredients) { try { await H().callService('todo', 'add_item', { item: it }, { entity_id: id }); n++; } catch (e) { hvToast('Couldn\'t add the reminder: ' + (e && e.message || e)); break; } }
+    if (n < r.ingredients.length) st.added.delete(st.r); paint(); if (n) toast(`Added ${n} to ${tname(id)}`); };
+  // the screen stays on: Wake Lock (when the browser has it) + the screensaver's idle clock kept fresh
+  const awake = on => { clearInterval(keep); keep = 0; if (lock) { try { lock.release(); } catch (e) {} lock = null; } if (vis) { document.removeEventListener('visibilitychange', vis); vis = null; } if (!on || !cfg.awake) return;
+    const bump = () => { const w = ssWallpanel(); if (w && !(w.screensaverRunning && w.screensaverRunning())) w.idleSince = Date.now(); }; bump(); keep = setInterval(bump, 2000);
+    const req = () => { try { if (navigator.wakeLock && navigator.wakeLock.request && document.visibilityState === 'visible') navigator.wakeLock.request('screen').then(l => { if (!keep) { l.release(); return; } lock = l; }, () => {}); } catch (e) {} };
+    req(); vis = () => { if (document.visibilityState === 'visible' && keep) req(); }; document.addEventListener('visibilitychange', vis); };
+  const onKey = e => { if (!root || !root.isConnected || st.view !== 'sv' || e.defaultPrevented) return; if (e.key === 'ArrowRight') { e.preventDefault(); root.querySelector('[data-a=next]').click(); } else if (e.key === 'ArrowLeft') { e.preventDefault(); root.querySelector('[data-a=back]').click(); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); go('ov'); } };
+  const s = hub._openSheet({ label: 'Cooking', edit: null, day: true, dayBg: '#f2f2f7', bg: '#f2f2f7', onClose: () => { clearInterval(iv); clearTimeout(tstT); awake(false); removeEventListener('keydown', onKey, true); root = null; },
+    build: bd => { const sty = document.createElement('style'); sty.textContent = HV_COOK_CSS; bd.appendChild(sty); root = document.createElement('div'); root.className = 'ck'; bd.appendChild(root);
+      root.addEventListener('click', e => { const t = e.target.closest && e.target.closest('[data-a],[data-r],[data-go],[data-t]'); if (!t || t.disabled) return; const a = t.dataset.a;
+        if (t.dataset.r != null) { st.r = Number(t.dataset.r); go('ov'); return; }
+        if (t.dataset.go != null) { go('sv', Number(t.dataset.go)); return; }
+        if (t.dataset.t) { const card = t.closest('.tmr'), r = R(); if (t.dataset.t === 'start' && card && card.dataset.ns != null) { const i = Number(card.dataset.ns), sp = r.steps[i]; HVCOOK.start(key(i), sp.timer.label || `Step ${i + 1}`, sp.timer.minutes); }
+          else { const tm = card && HVCOOK.t.get(card.dataset.tk); if (!tm) return; if (t.dataset.t === 'pause') HVCOOK.pause(tm); else if (t.dataset.t === 'add') HVCOOK.add(tm, 60000); else if (t.dataset.t === 'stop') HVCOOK.stop(tm.key); }
+          try { hvCookBeep.a && hvCookBeep.a.resume(); } catch (x) {} paint(); return; }
+        if (a === 'list') go('list'); else if (a === 'start') go('sv', HVCOOK.pos.get(st.r) || 0); else if (a === 'ov') go('ov');
+        else if (a === 'back') { if (st.step <= 0) go('ov'); else go('sv', st.step - 1); }
+        else if (a === 'next') { if (st.step + 1 >= R().steps.length) { HVCOOK.pos.delete(st.r); go('ov'); toast('Enjoy!'); } else go('sv', st.step + 1); }
+        else if (a === 'rem' && t.getAttribute('aria-disabled') !== 'true') addRem(); });
+      // the step view's own drag: swipe left / right for the next / previous step
+      let sx = null; root.addEventListener('touchstart', e => { sx = st.view === 'sv' && e.touches.length === 1 ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : null; }, { passive: true });
+      root.addEventListener('touchend', e => { if (!sx) return; const t = e.changedTouches[0], dx = t.clientX - sx.x, dy = t.clientY - sx.y; sx = null; if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.5) root.querySelector(dx < 0 ? '[data-a=next]' : '[data-a=back]').click(); }, { passive: true });
+      paint(); awake(true); iv = setInterval(tick, 250); addEventListener('keydown', onKey, true);
+      return { set hass(h) { const n = hvCookCfg(hub._config); if (JSON.stringify(n) !== JSON.stringify(cfg)) { cfg = n; if (st.r >= cfg.recipes.length) { st.r = 0; st.view = cfg.recipes.length > 1 ? 'list' : 'ov'; } paint(); } } }; } });
+  return s; }
+// ---- Settings › Cooking: the recipes (from YAML), the to-do list for Add to Reminders, keep the screen on, the voice hint
+const HV_COOK_SET_CSS = `:host{display:block}.g{background:var(--card,#fff);border-radius:14px;overflow:hidden;margin:0 0 22px}
+.h{font-size:13px;color:var(--t2,rgba(60,60,67,.6));text-transform:uppercase;letter-spacing:.02em;margin:0 16px 7px}.ft{font-size:13px;color:var(--t2,rgba(60,60,67,.6));margin:-14px 16px 22px;line-height:1.35}
+.r{all:unset;box-sizing:border-box;position:relative;display:flex;align-items:center;gap:12px;width:100%;min-height:46px;padding:6px 14px;font-size:16px}
+.r+.r::before{content:'';position:absolute;top:0;left:16px;right:0;height:1px;background:var(--sep,rgba(60,60,67,.12))}.r.rc+.r::before,.r+.r.rc::before{left:72px}
+button.r{cursor:pointer}.r .art{width:44px;height:44px;border-radius:12px;flex:none;background:var(--art) center/cover}.r .tx{flex:1;min-width:0}.r .tx b{display:block;font-weight:600}.r .tx small{display:block;font-size:13px;color:var(--t2,rgba(60,60,67,.6))}
+.r .ch{color:var(--t3,rgba(60,60,67,.3));font-size:20px}.r select{all:unset;flex:1;min-width:0;text-align:right;direction:rtl;color:var(--t2,rgba(60,60,67,.6));cursor:pointer}
+.sw{all:unset;margin-left:auto;flex:none;position:relative;width:51px;height:31px;border-radius:16px;background:var(--swo,#e9e9eb);transition:background .2s;cursor:pointer}
+.sw::after{content:'';position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.18);transition:left .2s}.sw[aria-checked=true]{background:var(--afg,#3f3399)}.sw[aria-checked=true]::after{left:22px}
+.emp{padding:14px 16px;font-size:14px;color:var(--t2,rgba(60,60,67,.6));line-height:1.4}pre{margin:8px 0 0;font:12px/1.45 ui-monospace,Menlo,monospace;white-space:pre-wrap}
+:host([dark]){--card:#1c1c1e;--t2:rgba(235,235,245,.6);--t3:rgba(235,235,245,.3);--sep:rgba(84,84,88,.6);--afg:#7a6cf0;--swo:#39393d;color:#f5f5f7}`;
+function hvCookingUI(ctx) { const el = document.createElement('div');
+  const paint = () => { const c = ctx.cfg() || {}, k = hvCookCfg(c), S = (ctx.H() && ctx.H().states) || {}, todos = Object.keys(S).filter(x => x.startsWith('todo.')).sort(), dis = ctx.ro ? ' disabled' : '';
+    el.innerHTML = `<div class="h">Recipes</div><div class="g">${k.recipes.length ? k.recipes.map((r, i) => `<button class="r rc" data-open="${i}"><span class="art" style="--art:${HV_COOK_ART[i % HV_COOK_ART.length]}"></span><span class="tx"><b>${esc(r.name)}</b><small>${esc([hvCookTime(r.time), r.steps.length + ' steps', r.steps.filter(s => s.timer).length + ' timers'].concat(r.tags).join(' · '))}</small></span><span class="ch">›</span></button>`).join('')
+      : '<div class="emp">No recipes yet. Add them in the Home Screen card\'s YAML:<pre>cooking:\n  recipes:\n    - name: Tomato Pasta\n      time: 35\n      servings: 4\n      tags: [Dinner]\n      ingredients: [Pasta, Tomatoes, Basil]\n      steps:\n        - text: Boil the pasta for 9 minutes.\n          timer: { minutes: 9, label: Pasta }\n          items: [Pasta, Salt]</pre></div>'}</div>
+<div class="ft">Recipes are set in YAML (cooking: recipes:). Tap one to open it in Cooking.</div>
+<div class="g"><label class="r"><span>Add to Reminders list</span><select data-k="todo_entity" aria-label="Add to Reminders list"${dis}><option value="">Automatic</option>${todos.map(t => `<option value="${esc(t)}"${k.todo === t ? ' selected' : ''}>${esc((S[t].attributes && S[t].attributes.friendly_name) || t)}</option>`).join('')}</select></label>
+<div class="r"><span>Keep screen on</span><button class="sw" role="switch" data-k="keep_awake" aria-checked="${k.awake}" aria-label="Keep screen on"${dis}></button></div>
+<div class="r"><span>"Hands busy?" hint</span><button class="sw" role="switch" data-k="voice_hint" aria-checked="${k.voice}" aria-label="Hands busy hint"${dis}></button></div></div>
+<div class="ft">Add to Reminders puts a recipe's ingredients on this to-do list (Automatic: a shopping or grocery list, else the first). The screen stays on and the screensaver waits while Cooking is open. Timers run on this iPad only.</div>`; };
+  const set = (k, v, def) => { if (ctx.ro) return; const c = JSON.parse(JSON.stringify(ctx.cfg() || {})), o = c.cooking && typeof c.cooking === 'object' ? c.cooking : {}; if (v === def || v === '' || v == null) delete o[k]; else o[k] = v; ctx.save('cooking', Object.keys(o).length ? o : null); };
+  el.addEventListener('click', e => { const t = e.target.closest('[data-open],.sw'); if (!t || t.disabled) return; if (t.dataset.open != null) { if (ctx.open) ctx.open(Number(t.dataset.open)); return; }
+    const on = t.getAttribute('aria-checked') !== 'true'; t.setAttribute('aria-checked', String(on)); set(t.dataset.k, on, true); });
+  el.addEventListener('change', e => { const t = e.target; if (t.dataset && t.dataset.k === 'todo_entity') set('todo_entity', t.value, ''); });
+  el._refresh = paint; paint(); return el; }
 /* ---------------- Settings app (iPad / iPhone Settings) ----------------
    The Home Screen's options as a Settings app: a full-screen sheet (grab bar, swipe down to close). Wide screens (700px and up): a sidebar
    (Settings, Search, grouped rows with coloured squircles) and the selected page on the right; phones: the list, and a tap pushes the page
@@ -7099,6 +7304,8 @@ const HV_SET_PAGES = [
       { h: 'Conversation', f: ['assistant_orb', 'assistant_continue', 'assistant_dismiss_phrases', 'assistant_silence_timeout', 'assistant_end_of_speech_pause', 'assistant_history_retention'] },
       { h: 'Wake word · this device', f: ['@wwjarvis', '@wwhomey'] },
       { h: 'Quiet mode: Auto', f: ['assistant_quiet_volume_entity', 'assistant_quiet_volume_below', 'assistant_quiet_focus_entity', 'assistant_quiet_start', 'assistant_quiet_end'] }] },
+  { id: 'cooking', t: 'Cooking', i: 'mdi:fire', c: '#ff9500', g: 2, d: 'Recipes step by step with kitchen timers. The to-do list for Add to Reminders, and the screen staying on while you cook.',
+    sec: [{ bare: true, f: ['@cooking'] }] },
   { id: 'layout', t: 'Layout & weather', i: 'mdi:view-dashboard', c: '#ff9500', g: 2, d: 'The Photos and extra tiles\' sizes, the app icons\' size, and the weather.',
     sec: [{ h: 'Photos tile', f: ['photo_size', 'photo_max_aspect'] }, { h: 'Extra tiles', f: ['show_homie', 'side_sizes', 'row_units', 'side_tiles', 'side_portrait', 'max_icon', '@sidecards'] },
       { h: 'Weather', f: ['weather_entity', 'location_name', 'weather_sky_header'] }] }];
@@ -7114,6 +7321,7 @@ const HV_SET_ACTS = {
   '@wallpair': { l: 'Wallpaper', h: 'Screensaver (Outer) and Home Screen background (Inner): Customize each. Screensaver style and colours; Photos, a device or Home Assistant photo, gradients and colours behind the apps, background blur, Match Outer wallpaper.', wp: true },
   '@facesched': { l: 'Face Schedule', h: 'Morning, Day, Evening and Night: a face each, starting at a time, sunrise or sunset. Change faces automatically. Nightstand when the room is dark (a light sensor).', fs: true },
   '@profiles': { l: 'Profiles', h: 'Who is using this iPad: Corey, Guest, … Each has its own Home Screen, name, person, ring colour. Switch automatically with Home Assistant presence. Add, rename, delete; Guest hides locks, garage and cameras.', pf: true },
+  '@cooking': { l: 'Cooking', h: 'Recipes (set in YAML: cooking: recipes:), Add to Reminders list, Keep screen on, the Hands busy hint.', ck: true },
   '@customapps': { l: 'Custom Apps', h: 'Your custom apps: add, edit, reorder or delete. App Store search for the name and icon, a preset or your own link (URL scheme), ask before opening.', ca: true },
   '@canote': { l: '', h: 'Add a custom app to the Home Screen with Add App (edit the Home Screen, then Add App).', note: true },
   '@wpnote': { l: '', h: 'The Home Screen background behind the apps is set in Wallpaper › Inner (Customize), with its blur.', note: true },
@@ -7328,6 +7536,7 @@ function hvOpenSettings(hub, app, from, goTo) {
       if (a.ca) return '<div class="r stk" data-k="@customapps"><div data-calist></div></div>';
       if (a.fs) return '<div class="r stk" data-k="@facesched"><div data-fsched></div></div>';
       if (a.pf) return '<div class="r stk" data-k="@profiles"><div data-profs></div></div>';
+      if (a.ck) return '<div class="r stk" data-k="@cooking"><div data-cook></div></div>';
       if (a.ww) { const ok = hvWwSupport(), miss = a.ww === 'homey' && HVWW.hmOk === false, on = ok && hvWwPh(a.ww);
         if (ok && a.ww === 'homey' && HVWW.hmOk == null) hvWwHmCheck().then(() => { if (root && root.isConnected) paintPane(); });
         const why = !ok ? 'Not available on this device (iPhone / iPad). Use the mic button instead.' : miss ? 'Needs its wake word model (wakeword/hey_homey.onnx, next to homeview-cards.js): see the wake word README.' : a.h;
@@ -7389,7 +7598,7 @@ function hvOpenSettings(hub, app, from, goTo) {
     const out = (pageHit(p0, q) ? `<div class="grp"><button class="sr pr${sel === 'person' ? ' on' : ''}" data-go="person" aria-current="${sel === 'person'}"><span class="av"${pic || d.avatar ? ` style="background-image:url('${esc(d.avatar || pic)}')"` : pf ? ` style="background:${hvProfLook(H(), st.cfg, pf, hvProfList(st.cfg).findIndex(x => x.id === pf.id)).bg};color:#fff"` : ''}>${pic || d.avatar ? '' : esc(ini)}</span><span class="tx"><span class="nm">${esc(nm)}</span><small>${hvProfList(st.cfg).length ? 'Profile, greeting & presence' : 'Person & greeting'}</small></span><ha-icon class="ch" icon="mdi:chevron-right"></ha-icon></button></div>` : '') + grp(1) + grp(2);
     return out || `<div class="grp"><div class="empty">No results for “${esc(st.q.trim())}”</div></div>`; };
   const hvNhvApps = () => {
-    const map = { calendar: 'calendar', assistant: 'assistant', settings: 'general', weather: 'layout' };
+    const map = { calendar: 'calendar', assistant: 'assistant', settings: 'general', weather: 'layout', cooking: 'cooking' };
     const extra = [
       { key: 'photos', name: 'Photos', icon: 'mdi:image-multiple', color: '#32ade6', page: 'photos', blurb: 'The pictures on the Home Screen and the Photos tile.' },
       { key: 'homey', name: 'Homey', icon: 'mdi:home-variant', color: '#7c5cff', page: 'layout', blurb: 'The animated Homey tile on the Home Screen.' },
@@ -7543,6 +7752,12 @@ function hvOpenSettings(hub, app, from, goTo) {
       r.appendChild(hvProfilesUI({ H: () => H(), cfg: () => st.cfg, save: (k, v) => { const p = save(k, v, true); paintSide(); return p; }, onUse: () => paintSide(), get ro() { return ro(); } })); }
     else { const u = pfEl.shadowRoot.lastElementChild; if (u && u._refresh) u._refresh(); }
     pfEl.toggleAttribute('dark', !!(s && !s.host.hasAttribute('hv-day'))); box.appendChild(pfEl); };
+  let ckEl = null; const ckMount = () => { const box = pane && pane.querySelector('[data-cook]'); if (!box) { ckEl = null; return; }
+    if (!ckEl) { ckEl = document.createElement('div'); ckEl.className = 'ckh'; const r = ckEl.attachShadow({ mode: 'open' }); r.innerHTML = `<style>${HV_COOK_SET_CSS}</style>`;
+      r.appendChild(hvCookingUI({ H: () => H(), cfg: () => hvProfFlat(st.cfg || {}), save: (k, v) => save(k, v, true), get ro() { return ro(); },
+        open: i => { const h = live(); if (s) s.close(); if (h) setTimeout(() => hvOpenCooking(h, null, i), 480); } })); }
+    else { const u = ckEl.shadowRoot.lastElementChild; if (u && u._refresh) u._refresh(); }
+    ckEl.toggleAttribute('dark', !!(s && !s.host.hasAttribute('hv-day'))); box.appendChild(ckEl); };
   let caEl = null, caKey = ''; const caMount = () => { if (!pane) return; const box = pane.querySelector('[data-calist]') || pane.querySelector('[data-casub]'); if (!box) { caEl = null; caKey = ''; return; }
     const key = box.hasAttribute('data-calist') ? 'list' : st.sub; if (!caEl || caKey !== key) { const ui = hvCustomAppsUI(caCtx); caEl = document.createElement('div'); caEl.className = 'cah';
       const r = caEl.attachShadow({ mode: 'open' }); r.innerHTML = `<style>${HV_CA_CSS}</style>`; r.appendChild(key === 'list' ? ui.list() : ui.editor(key.startsWith('ca:') ? key.slice(3) : null)); caKey = key; }
@@ -7641,7 +7856,7 @@ function hvOpenSettings(hub, app, from, goTo) {
     if (st.sub === 'about') { const c = st.cfg || {}, W = hvAboutPick(H(), 'wifi', c), B = hvAboutPick(H(), 'batt', c); o += '|' + sv(S, W.id) + sv(S, B.id) + (B.id ? sv(S, B.id.replace(/_battery_level$/, '_battery_state')) : '') + W.cands.length + B.cands.length + (H().config || {}).version; } return o; };
   const paintSide = () => { if (list) list.innerHTML = sideHtml(); };
   const shrinkAppsBack = () => { const bk = pane && pane.querySelector('.ph .bk[data-act="appsback"]'); if (!bk) return; const label = [...bk.childNodes].reverse().find(n => n.nodeType === 3 && /Apps & Integrations/.test(n.textContent || '')); if (!label) return; if (bk.scrollWidth > bk.clientWidth + 1) { label.textContent = 'Apps'; if (bk.getAttribute('aria-label') === 'Back to Apps & Integrations') bk.setAttribute('aria-label', 'Back to Apps'); } };
-  const paintPane = () => { if (!pane) return; const sy = pane.scrollTop; for (const f of forms.values()) f.remove(); if (ssPick) ssPick.remove(); if (fPick) fPick.remove(); pane.innerHTML = paneHtml(); ssMount(); fMount(); wpMount(); caMount(); fsMount(); pfMount(); pane.scrollTop = sy; formsMount(); if ((st.wide ? (st.page || 'general') : st.page) === 'apps') appsLoad(); pvPaint(hvBgLevel(st.cfg || {})); albCheck(); shrinkAppsBack(); };
+  const paintPane = () => { if (!pane) return; const sy = pane.scrollTop; for (const f of forms.values()) f.remove(); if (ssPick) ssPick.remove(); if (fPick) fPick.remove(); pane.innerHTML = paneHtml(); ssMount(); fMount(); wpMount(); caMount(); fsMount(); pfMount(); ckMount(); pane.scrollTop = sy; formsMount(); if ((st.wide ? (st.page || 'general') : st.page) === 'apps') appsLoad(); pvPaint(hvBgLevel(st.cfg || {})); albCheck(); shrinkAppsBack(); };
   const paint = () => { if (!root) return;
     if (!st.ready) { root.classList.remove('pg'); list.innerHTML = '<div class="grp"><div class="empty">Loading…</div></div>'; pane.innerHTML = ''; return; }
     if (st.nohub) { root.classList.add('nohub', 'pg'); root.classList.remove('wide'); side.style.display = 'none';
@@ -8791,6 +9006,7 @@ class HVHubCard extends HTMLElement {
     if (kind === 'weather') { this._openWeather(a.weather_entity); return; }
     if (kind === 'calendar') { hvOpenCalApp(this, a); return; }
     if (kind === 'reminders') { hvOpenReminders(this, a); return; }
+    if (kind === 'cooking') { hvOpenCooking(this, a); return; }
     if (kind === 'settings') { hvOpenSettings(this, a); return; }
     if (kind === 'assistant') { this._openAssist(); return; }
     if (kind === 'photos') { this._openPhoto(); return; }
