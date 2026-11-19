@@ -10687,9 +10687,44 @@ const MH_POP_CSS = `.mhov{position:fixed;inset:0;z-index:7;font-family:${FONT};c
 .sc{position:relative}.cam>.eye,.sc>.eye{display:none;position:absolute;inset:auto;z-index:2;width:24px;height:24px;border-radius:50%;background:#ff453a;color:#fff;place-items:center;box-shadow:0 2px 6px rgba(0,0,0,.35)}
 .cam>.eye{top:10px;left:10px}.sc>.eye{top:-6px;left:-6px}.cam>.eye ha-icon,.sc>.eye ha-icon{--mdc-icon-size:16px}
 .w.hiding .cam>.eye,.w.hiding .sc>.eye{display:grid}.w.hiding .cam.hid,.w.hiding .sc.hid{opacity:.35}.w.hiding .cam.hid>.eye,.w.hiding .sc.hid>.eye{background:#30d158}.w.hiding .cam>homeview-camera-card{pointer-events:none}`;
+/* ---- My Home, layout: v2 (V2): a header (title, "Friday 9:41 AM · 7° outside", ••• and ×), status tiles (Climate, Lights, Locks, Garage,
+   Media: they only show state; a tap opens that device, or scrolls to it when there are several), Cameras › as a 2-column grid of true 16:9
+   tiles (LIVE, name and status, a round full-screen button; a tap still opens the camera's own large view), Scenes › as a column on the right
+   (the most recently run one in purple), then the rooms as before. Default layout = as before. */
+const MH_V2_CSS = `
+.w.v2{--t1:#fff;--t2:rgba(255,255,255,.66);--tb:linear-gradient(150deg,rgba(255,255,255,.15) 0%,rgba(255,255,255,.07) 100%);--tbd:1px solid rgba(255,255,255,.25);--abg:rgba(196,182,255,.46);--afg:#fff;padding:24px 40px 40px;container-type:inline-size}
+:host([hv-day]) .w.v2{--t1:#3c3c43;--t2:rgba(60,60,67,.6);--tb:#fff;--tbd:0 solid transparent;--abg:#cdc6ef;--afg:#3f3399;color:#3c3c43}
+.v2h{display:flex;align-items:flex-end;justify-content:space-between;gap:16px}.v2h h1{font-size:36px;font-weight:800;letter-spacing:-.02em;line-height:1.1}
+.v2s{font-size:17px;color:var(--t2);margin-top:2px;font-variant-numeric:tabular-nums}
+.v2b{display:flex;gap:12px}.v2b button{all:unset;cursor:pointer;width:44px;height:44px;border-radius:50%;display:grid;place-items:center;background:var(--tb);border:var(--tbd);box-sizing:border-box;color:var(--t1);box-shadow:0 4px 14px rgba(30,30,60,.08)}
+.v2b button ha-icon{--mdc-icon-size:20px}
+.v2st{display:flex;gap:12px;margin-top:16px;overflow-x:auto;scrollbar-width:none;padding-bottom:4px}.v2st::-webkit-scrollbar{display:none}
+.v2st button{all:unset;cursor:pointer;flex:1 1 0;min-width:150px;height:64px;border-radius:26px;display:flex;align-items:center;gap:12px;padding:0 16px;box-sizing:border-box;background:var(--tb);border:var(--tbd);color:var(--t1)}
+.v2st .ic{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;flex:none;background:color-mix(in srgb,var(--ic) 26%,transparent);color:var(--ic)}:host([hv-day]) .v2st .ic{background:var(--ib)}.v2st .ic ha-icon{--mdc-icon-size:20px}
+.v2st b{display:block;font-size:16px;font-weight:600}.v2st span.v{display:block;font-size:13px;color:var(--t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.v2st .tx{min-width:0}
+.v2m{display:grid;grid-template-columns:minmax(0,1fr) 176px;gap:28px;margin-top:20px}
+.v2m h2{font-size:22px;font-weight:800;margin:0 0 14px;display:flex;align-items:center;gap:6px}.v2m h2 ha-icon{--mdc-icon-size:22px;color:var(--t2)}
+.v2g{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.w.v2 .cam.v16{width:auto;height:auto;aspect-ratio:16/9;border-radius:26px;flex:none;background:#2c2c2e}
+.w.v2 .cam.v16 > homeview-camera-card{z-index:0}
+.cov{z-index:2;pointer-events:none;color:#fff}.cov > *{position:absolute}
+.cov .lv{left:12px;top:12px;font-size:11px;font-weight:800;letter-spacing:.06em;padding:4px 9px;border-radius:10px;display:flex;align-items:center;gap:5px;background:linear-gradient(135deg,rgba(255,255,255,.16),rgba(255,255,255,.05));border:1px solid rgba(255,255,255,.38);box-shadow:inset 0 1px 0 rgba(255,255,255,.45);-webkit-backdrop-filter:blur(3px) saturate(1.25);backdrop-filter:blur(3px) saturate(1.25)}
+.cov .lv::before{content:'';width:6px;height:6px;border-radius:50%;background:#ff3b30}.cov .lv.off{opacity:.8}.cov .lv.off::before{background:#8e8e93}
+.cov .fs{all:unset;position:absolute;pointer-events:auto;cursor:pointer;right:12px;top:12px;width:36px;height:36px;border-radius:50%;display:grid;place-items:center;color:#fff;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.4);box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 6px 18px rgba(0,0,0,.25);-webkit-backdrop-filter:blur(6px) saturate(1.3);backdrop-filter:blur(6px) saturate(1.3);box-sizing:border-box}
+.cov .fs svg{width:18px;height:18px}
+.cov .cn{left:14px;bottom:12px;right:60px;text-shadow:0 1px 6px rgba(0,0,0,.4)}.cov .cn b{display:block;font-size:16px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.cov .cn span{display:block;font-size:12px;font-weight:600;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.v2sc{display:flex;flex-direction:column;gap:12px}
+.w.v2 .v2sc .sc{height:118px;border-radius:26px;padding:16px;display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;gap:0;background:var(--tb);border:var(--tbd);box-sizing:border-box;color:var(--t1);box-shadow:none;position:relative}
+.w.v2 .v2sc .sc ha-icon{--mdc-icon-size:24px}.w.v2 .v2sc .sc b{font-size:17px;font-weight:700;white-space:normal;line-height:1.2}
+.w.v2 .v2sc .sc.act,.w.v2 .v2sc .sc.on{background:var(--abg) !important;color:var(--afg)}
+.w.v2 .sec h2 small{color:var(--t2)}
+.w.v2 .cam .eye,.w.v2 .sc .eye{display:none;position:absolute;top:-6px;left:-6px;z-index:4;width:24px;height:24px;border-radius:50%;background:#ff453a;color:#fff;place-items:center}.w.v2.hiding .cam .eye,.w.v2.hiding .sc .eye{display:grid}
+@container (max-width: 860px){.v2m{grid-template-columns:1fr}.v2sc{flex-direction:row;overflow-x:auto;scrollbar-width:none}.w.v2 .v2sc .sc{flex:0 0 160px}}
+@container (max-width: 520px){.v2g{grid-template-columns:1fr}.w.v2{padding:16px 16px 32px}}`;
+const MH_FS_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5"/></svg>';
 class HVMyHomeCard extends HTMLElement {
   constructor() { super(); this.attachShadow({ mode: 'open' }); this._cams = new Map(); }
-  static get defaults() { return { title: 'My Home', back_label: 'Home Screen', back_path: '', show_back: true, show_clock: true, show_pills: true, show_cameras: true, show_scenes: true, show_unavailable: true, group_members: 'hide', tap_toggles: true, show_menu: true, cameras: [], scenes: [], room_order: [], hidden_areas: [], hidden_entities: [], section_order: [] }; }
+  static get defaults() { return { layout: 'classic', title: 'My Home', back_label: 'Home Screen', back_path: '', show_back: true, show_clock: true, show_pills: true, show_cameras: true, show_scenes: true, show_unavailable: true, group_members: 'hide', tap_toggles: true, show_menu: true, cameras: [], scenes: [], room_order: [], hidden_areas: [], hidden_entities: [], section_order: [] }; }
   static getStubConfig(hass) { const sc = Object.keys((hass && hass.states) || {}).filter(k => k.startsWith('scene.')).slice(0, 6); return { scenes: sc.map(entity => ({ entity })) }; }
   static getConfigElement() { const e = document.createElement('homeview-card-editor'); e.cardClass = HVMyHomeCard; return e; }
   getCardSize() { return 12; }
@@ -10762,10 +10797,10 @@ class HVMyHomeCard extends HTMLElement {
     return { t: f(s.state), on: ['on', 'cleaning', 'mowing'].includes(s.state) }; }
   // ---- render
   _render() { const h = this._hass, c = this._config; if (!h || !c || !this.isConnected) return; const M = this._model();
-    const sig = JSON.stringify([M.secs.map(s => [s.key, s.cams, s.scenes && s.scenes.map(x => [x.entity, x.name, x.icon]), s.items && s.items.map(i => [i.id, i.name, i.s.state, i.s.attributes.brightness, i.s.attributes.current_temperature, i.s.attributes.temperature, i.s.attributes.hvac_action, i.s.attributes.media_title])]), M.temps, M.lightsOn, M.gar.map(g => g.s.state), M.media.length, [...M.hidE], this._hiding, this._arr, this._draft && JSON.stringify(this._draft), c.title, c.show_back, c.show_pills, c.show_menu]);
+    const sig = JSON.stringify([M.secs.map(s => [s.key, s.cams, s.scenes && s.scenes.map(x => [x.entity, x.name, x.icon]), s.items && s.items.map(i => [i.id, i.name, i.s.state, i.s.attributes.brightness, i.s.attributes.current_temperature, i.s.attributes.temperature, i.s.attributes.hvac_action, i.s.attributes.media_title])]), M.temps, M.lightsOn, M.gar.map(g => g.s.state), M.media.length, [...M.hidE], this._hiding, this._arr, this._draft && JSON.stringify(this._draft), c.title, c.show_back, c.show_pills, c.show_menu, c.layout, c.layout === 'v2' && [new Date().getMinutes(), M.secs.filter(s => s.cams).flatMap(s => s.cams).map(id => (h.states[id] || {}).state)]]);
     if (sig === this._sig) return; this._sig = sig; this._M = M; this.toggleAttribute('hv-arr', !!this._arr);
     const R = this.shadowRoot; let w = R.querySelector('.w');
-    if (!w) { R.innerHTML = `<style>${MH_CSS}</style><div class="w"></div>`; w = R.querySelector('.w');
+    if (!w) { R.innerHTML = `<style>${MH_CSS}${MH_V2_CSS}</style><div class="w"></div>`; w = R.querySelector('.w');
       w.addEventListener('click', e => this._click(e)); this._holdBind(w); }
     for (const el of this._cams.values()) el.remove(); // keep the camera elements, re-attach below
     const tmin = M.temps.length ? Math.floor(Math.min(...M.temps)) : null, tmax = M.temps.length ? Math.round(Math.max(...M.temps)) : null;
@@ -10786,13 +10821,15 @@ class HVMyHomeCard extends HTMLElement {
       return `<div class="sec" data-sec="${esc(s.key)}"><h2>${esc(s.name)}<ha-icon icon="mdi:chevron-right"></ha-icon>${on ? `<small>${on} on</small>` : ''}</h2><div class="devs">${vis.map(i => { const st = this._state(i), un = MH_UNAV.includes(i.s.state);
         const z = HV_RZ[this._size(i.id, i.d === 'climate' && !un ? '2x6' : '2x3')];
         return `<div class="dv g ${i.d}${st.on ? ' on' : ''}${un ? ' un' : ''}${z[0] > 1 ? ' wide' : ''}${z[1] > 1 ? ' r2' : ''}${M.hidE.has(i.id) ? ' hid' : ''}" data-e="${esc(i.id)}" style="grid-column:span ${z[0]};grid-row:span ${z[1]}"><span class="eye"><ha-icon icon="mdi:${M.hidE.has(i.id) ? 'plus' : 'minus'}"></ha-icon></span><span class="i"><ha-icon icon="${esc(mhIcon(i.s, i.name))}"></ha-icon></span><div class="t"><div class="n">${esc(i.name)}</div><div class="s">${esc(st.t)}</div></div>${st.tp != null && !un ? `<span class="tp">${esc(st.tp)}°</span>` : ''}</div>`; }).join('')}</div></div>`; };
-    w.innerHTML = `${c.show_back !== false ? `<button class="back" data-a="back"><ha-icon icon="mdi:chevron-left"></ha-icon>${esc(c.back_label || 'Home Screen')}</button>` : ''}
+    const v2 = c.layout === 'v2'; w.classList.toggle('v2', v2);
+    if (v2) w.innerHTML = this._v2Html(M, secHtml, shown, eye) + '<div class="donebar g"><span>Tap tiles to hide or show them</span><button class="btn" data-a="hcancel">Cancel</button><button class="btn p" data-a="hdone">Done</button></div>';
+    else w.innerHTML = `${c.show_back !== false ? `<button class="back" data-a="back"><ha-icon icon="mdi:chevron-left"></ha-icon>${esc(c.back_label || 'Home Screen')}</button>` : ''}
       <div class="top"><h1>${esc(c.title || 'My Home')}</h1><div class="tr">${c.show_clock !== false ? `<span class="tm">${this._time()}</span>` : ''}${c.show_menu !== false ? `<button class="more" data-a="menu" aria-label="More"><ha-icon icon="mdi:dots-horizontal"></ha-icon></button>` : ''}</div></div>
       ${pills}${M.secs.map(secHtml).join('')}
       <div class="donebar g"><span>Tap tiles to hide or show them</span><button class="btn" data-a="hcancel">Cancel</button><button class="btn p" data-a="hdone">Done</button></div>`;
     w.classList.toggle('hiding', !!this._hiding);
-    const used = new Set(); w.querySelectorAll('.cam').forEach(box => { const id = box.dataset.cam; used.add(id); let el = this._cams.get(id);
-      if (!el) { el = document.createElement('homeview-camera-card'); try { el.setConfig({ type: 'custom:homeview-camera-card', entity: id }); } catch (e) {} this._cams.set(id, el); }
+    const used = new Set(); w.querySelectorAll('.cam').forEach(box => { const id = box.dataset.cam, key = (v2 ? 'v2|' : '') + id; used.add(key); let el = this._cams.get(key);
+      if (!el) { el = document.createElement('homeview-camera-card'); try { el.setConfig(Object.assign({ type: 'custom:homeview-camera-card', entity: id }, v2 ? { show_name: false, show_status: false } : {})); } catch (e) {} this._cams.set(key, el); }
       el.hass = h; box.appendChild(el); });
     for (const [id, el] of this._cams) if (!used.has(id)) this._cams.delete(id); }
   // ---- interaction
@@ -10805,10 +10842,12 @@ class HVMyHomeCard extends HTMLElement {
     if (a) { const k = a.dataset.a;
       if (k === 'back') { const L = hvSheetLayer(this), x = L && L.querySelector('.x'); if (x) x.click(); else hvSwipe.go(this._backPath(), 1); return; }
       if (k === 'menu') { this._menu(a); return; }
+      if (k === 'camfs') { const el = this._cams.get('v2|' + a.dataset.id); if (el && el.openLarge) el.openLarge(); return; }
       if (k === 'hdone') { this._saveHidden(this._hidDraft); this._hiding = false; this._hidDraft = null; this._sig = null; this._render(); return; }
       if (k === 'hcancel') { this._hiding = false; this._hidDraft = null; this._localSet({ hidden_entities: this._hidPrev }); this._sig = null; this._render(); return; } }
     if (this._hiding) { const x = t.closest && t.closest('.cam,.sc'), id = x && (x.dataset.cam || x.dataset.scene); // Edit Home View: cameras and scenes hide / show like device tiles
       if (id) { const s = new Set(this._hidDraft || []); s.has(id) ? s.delete(id) : s.add(id); this._hidDraft = [...s]; this._localSet({ hidden_entities: this._hidDraft }); this._sig = null; this._render(); return; } }
+    const stt = t.closest && t.closest('[data-st]'); if (stt && !this._hiding) { this._v2Tile(stt.dataset.st); return; } // v2 status tiles only show state
     const d = t.closest && t.closest('.dv');
     if (d) { const id = d.dataset.e, dom = id.split('.')[0];
       if (this._hiding) { const s = new Set(this._hidDraft || []); s.has(id) ? s.delete(id) : s.add(id); this._hidDraft = [...s]; this._localSet({ hidden_entities: this._hidDraft }); this._sig = null; this._render(); return; }
@@ -10816,6 +10855,31 @@ class HVMyHomeCard extends HTMLElement {
       else fire(this, 'hass-more-info', { entityId: id }); return; }
     const sc = t.closest && t.closest('.sc'); if (sc) { const id = sc.dataset.scene, dom = id.split('.')[0];
       h.callService(['scene', 'script'].includes(dom) ? dom : 'homeassistant', 'turn_on', { entity_id: id }); sc.classList.add('on'); setTimeout(() => sc.classList.remove('on'), 900); } }
+  // layout: v2: header, status tiles, Cameras (16:9 grid) + Scenes column, then the rooms
+  _v2Html(M, secHtml, shown, eye) { const h = this._hass, c = this._config, S = h.states, lang = (h.locale && h.locale.language) || undefined, d = new Date();
+    const items = M.secs.filter(s => s.items).flatMap(s => s.items), tmin = M.temps.length ? Math.floor(Math.min(...M.temps)) : null, tmax = M.temps.length ? Math.round(Math.max(...M.temps)) : null;
+    const we = (c.weather_entity && S[c.weather_entity]) ? c.weather_entity : Object.keys(S).find(k => k.startsWith('weather.')), ws = we && S[we], out = ws && isFinite(Number(ws.attributes.temperature)) ? Math.round(Number(ws.attributes.temperature)) + '° outside' : '';
+    let wd = ''; try { wd = d.toLocaleDateString(lang, { weekday: 'long' }); } catch (e) {} let tm = ''; try { tm = d.toLocaleTimeString(lang, { hour: 'numeric', minute: '2-digit' }); } catch (e) {}
+    const locks = items.filter(i => i.d === 'lock'), unl = locks.filter(i => i.s.state !== 'locked').length, gOpen = M.gar.filter(g => g.s.state !== 'closed').length, np = M.media[0];
+    const area = id => { const e = (h.entities || {})[id], D = h.devices || {}, A = h.areas || {}, a = e && (e.area_id || (e.device_id && D[e.device_id] && D[e.device_id].area_id)); return (a && A[a] && A[a].name) || ''; };
+    const tile = (k, ic, ib, icc, name, v) => `<button type="button" data-st="${k}"><span class="ic" style="--ib:${ib};--ic:${icc}"><ha-icon icon="${ic}"></ha-icon></span><span class="tx"><b>${esc(name)}</b><span class="v">${esc(v)}</span></span></button>`;
+    const st = (c.show_pills === false ? '' : `<div class="v2st">${tmin != null ? tile('climate', 'mdi:thermometer', '#fff1e0', '#ff9500', 'Climate', tmin === tmax ? tmin + '°' : tmin + '–' + tmax + '°') : ''}
+${tile('light', 'mdi:lightbulb-outline', '#fff8d6', '#d9a400', 'Lights', M.lightsOn ? M.lightsOn + ' on' : 'All off')}${locks.length ? tile('lock', 'mdi:lock-outline', '#e5f6ea', '#34c759', 'Locks', unl ? unl + ' unlocked' : 'All locked') : ''}
+${M.gar.length ? tile('garage', 'mdi:garage-variant', '#e3efff', '#0a84ff', 'Garage', gOpen ? gOpen + ' open' : 'Closed') : ''}${tile('media', 'mdi:music', '#ffe5ea', '#ff2d55', 'Media', np ? (area(np.id) || np.name) + ' playing' : 'Nothing playing')}</div>`);
+    const camS = M.secs.find(s => s.cams), scS = M.secs.find(s => s.scenes), cv = camS ? camS.cams.filter(shown) : [], sv = scS ? scS.scenes.filter(x => shown(x.entity)) : [];
+    const last = sv.map(x => ({ x, t: Date.parse((S[x.entity] || {}).state) })).filter(o => isFinite(o.t) && Date.now() - o.t < 6 * 3600e3).sort((a, b) => b.t - a.t)[0];
+    const cams = cv.length ? `<div><h2>Cameras<ha-icon icon="mdi:chevron-right"></ha-icon></h2><div class="v2g">${cv.map(id => { const s = S[id], off = !s || MH_UNAV.includes(s.state);
+      return `<div class="cam v16${M.hidE.has(id) ? ' hid' : ''}" data-cam="${esc(id)}"><div class="cov"><span class="lv${off ? ' off' : ''}">${off ? 'OFFLINE' : 'LIVE'}</span><button class="fs" type="button" data-a="camfs" data-id="${esc(id)}" aria-label="Full screen">${MH_FS_SVG}</button><div class="cn"><b>${esc((s && s.attributes.friendly_name) || id)}</b><span>${esc(typeof hvCamStatus === 'function' ? hvCamStatus(h, { entity: id }, s) : '')}</span></div></div>${eye(id)}</div>`; }).join('')}</div></div>` : '';
+    const scenes = sv.length ? `<div><h2>Scenes<ha-icon icon="mdi:chevron-right"></ha-icon></h2><div class="v2sc">${sv.map(x => { const s = S[x.entity];
+      return `<div class="sc${last && last.x === x ? ' act' : ''}${M.hidE.has(x.entity) ? ' hid' : ''}" data-scene="${esc(x.entity)}" role="button" tabindex="0">${eye(x.entity)}<ha-icon icon="${esc(x.icon || s.attributes.icon || 'mdi:palette')}"></ha-icon><b>${esc(x.name || s.attributes.friendly_name || x.entity)}</b></div>`; }).join('')}</div></div>` : '';
+    return `<div class="v2h"><div><h1>${esc(c.title || 'My Home')}</h1>${c.show_clock !== false ? `<div class="v2s"><span class="tm">${esc([wd, tm].filter(Boolean).join(' '))}</span>${out ? ' · ' + esc(out) : ''}</div>` : ''}</div>
+<div class="v2b">${c.show_menu !== false ? '<button class="more" data-a="menu" aria-label="More"><ha-icon icon="mdi:dots-horizontal"></ha-icon></button>' : ''}${c.show_back !== false ? '<button data-a="back" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button>' : ''}</div></div>
+${st}${cams || scenes ? `<div class="v2m">${cams || '<div></div>'}${scenes}</div>` : ''}${M.secs.filter(s => s.items).map(secHtml).join('')}`; }
+  // a status tile: that device (more-info), or the first such tile on the page when there are several
+  _v2Tile(k) { const M = this._M, w = this.shadowRoot.querySelector('.w'); if (!M || !w) return; const items = M.secs.filter(s => s.items).flatMap(s => s.items);
+    const pick = k === 'garage' ? M.gar : k === 'media' ? (M.media.length ? M.media : items.filter(i => i.d === 'media_player')) : items.filter(i => i.d === k);
+    if (pick.length === 1) { fire(this, 'hass-more-info', { entityId: pick[0].id }); return; }
+    const el = pick.length && w.querySelector(`.dv[data-e="${CSS.escape(pick[0].id)}"]`); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
   _localSet(patch) { const k = this._key(), cur = mhLs.get(k) || {}; Object.assign(cur, patch); for (const x of Object.keys(cur)) if (cur[x] == null) delete cur[x]; mhLs.set(k, Object.keys(cur).length ? cur : null); }
   // admins: write to the card config as well (every device), then drop the local copy; others keep it in this browser
   async _persist(patch) { this._localSet(patch); const root = hvFindRoot(this), lv = root && root.lovelace, h = this._hass;
@@ -10867,6 +10931,7 @@ class HVMyHomeCard extends HTMLElement {
 }
 HVMyHomeCard.layoutSection = false; HVMyHomeCard.sizePresets = false;
 HVMyHomeCard.schema = [
+  { name: 'layout', selector: { select: { mode: 'dropdown', options: [{ value: 'classic', label: 'Classic (default)' }, { value: 'v2', label: 'V2: status tiles, 16:9 camera grid, scenes column' }] } } },
   { type: 'grid', name: '', schema: [{ name: 'title', selector: { text: {} } }, { name: 'back_label', selector: { text: {} } }] },
   { name: 'back_path', selector: { navigation: {} } },
   { name: 'scenes', selector: { object: { multiple: true, label_field: 'name', description_field: 'entity', fields: {
