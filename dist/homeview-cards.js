@@ -7945,7 +7945,7 @@ function hvOpenSettings(hub, app, from, goTo) {
     if (!pfEl) { pfEl = document.createElement('div'); pfEl.className = 'pfh'; const r = pfEl.attachShadow({ mode: 'open' }); r.innerHTML = `<style>${HV_PROF_SET_CSS}</style>`;
       r.appendChild(hvProfilesUI({ H: () => H(), cfg: () => st.cfg, save: (k, v) => { const p = save(k, v, true); paintSide(); return p; }, onUse: () => paintSide(), get ro() { return ro(); } })); }
     else { const u = pfEl.shadowRoot.lastElementChild; if (u && u._refresh) u._refresh(); }
-    pfEl.toggleAttribute('dark', !!(s && !s.host.hasAttribute('hv-day'))); box.appendChild(pfEl); };
+    pfEl.toggleAttribute('dark', s ? !s.host.hasAttribute('hv-day') : !day); box.appendChild(pfEl); };
   let apEl = null; const apMount = () => { const box = pane && pane.querySelector('[data-appr]'); if (!box) { apEl = null; return; }
     if (!apEl) { apEl = document.createElement('div'); apEl.className = 'aph'; const r = apEl.attachShadow({ mode: 'open' }); r.innerHTML = `<style>${HV_AP_SET_CSS}</style>`;
       r.appendChild(hvAppearanceUI({ cfg: () => st.cfg, save: (k, v) => save(k, v, true), get ro() { return ro(); } })); }
@@ -7956,7 +7956,7 @@ function hvOpenSettings(hub, app, from, goTo) {
       r.appendChild(hvCookingUI({ H: () => H(), cfg: () => hvProfFlat(st.cfg || {}), save: (k, v) => save(k, v, true), get ro() { return ro(); },
         open: i => { const h = live(); if (s) s.close(); if (h) setTimeout(() => hvOpenCooking(h, null, i), 480); } })); }
     else { const u = ckEl.shadowRoot.lastElementChild; if (u && u._refresh) u._refresh(); }
-    ckEl.toggleAttribute('dark', !!(s && !s.host.hasAttribute('hv-day'))); box.appendChild(ckEl); };
+    ckEl.toggleAttribute('dark', s ? !s.host.hasAttribute('hv-day') : !day); box.appendChild(ckEl); };
   let caEl = null, caKey = ''; const caMount = () => { if (!pane) return; const box = pane.querySelector('[data-calist]') || pane.querySelector('[data-casub]'); if (!box) { caEl = null; caKey = ''; return; }
     const key = box.hasAttribute('data-calist') ? 'list' : st.sub; if (!caEl || caKey !== key) { const ui = hvCustomAppsUI(caCtx); caEl = document.createElement('div'); caEl.className = 'cah';
       const r = caEl.attachShadow({ mode: 'open' }); r.innerHTML = `<style>${HV_CA_CSS}</style>`; r.appendChild(key === 'list' ? ui.list() : ui.editor(key.startsWith('ca:') ? key.slice(3) : null)); caKey = key; }
