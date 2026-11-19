@@ -8127,13 +8127,9 @@ function hvOpenCalApp(hub, app) {
   const colorOf = id => { const list = idsOf(); let i = list.indexOf(id); if (i < 0) { let n = 0; for (let k = 0; k < id.length; k++) n = (n + id.charCodeAt(k)) % HV_CAL_PAL.length; i = n; } return HV_CAL_PAL[i % HV_CAL_PAL.length]; };
   const st = { mode: 'month', gridMode: 'month', anchor: startOfDay(new Date()), events: null, q: '', hidden: new Set(), add: null, addRev: 0, addPainted: -1, detail: null, filt: false, loadedKey: '', seq: 0, calSig: '', timeY: null, err: '', saving: false };
   const css = `<style>
-:host{position:fixed;inset:0;z-index:20;font-family:${FONT};color:#fff;-webkit-tap-highlight-color:transparent}
-.scrim{position:absolute;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
-.win{position:absolute;left:50%;top:50%;width:min(1180px,calc(100vw - 28px));height:min(860px,calc(100dvh - 20px));transform:translate(-50%,-46%) scale(.985);border-radius:22px;background:#000;box-shadow:0 28px 80px rgba(0,0,0,.55);display:flex;flex-direction:column;overflow:hidden;opacity:0}
-:host(.in) .win{transform:translate(-50%,-50%) scale(1);opacity:1;transition:transform .34s cubic-bezier(.32,.72,0,1),opacity .24s ease}
-.x{all:unset;cursor:pointer;position:absolute;top:12px;right:12px;z-index:8;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(120,120,128,.45);color:#fff}
-.x ha-icon{--mdc-icon-size:18px;display:flex}
-.tb{display:flex;align-items:center;gap:10px;padding:16px 56px 4px 14px;flex:none}
+:host{position:absolute;inset:0;font-family:${FONT};color:#fff;-webkit-tap-highlight-color:transparent}
+.win{position:absolute;inset:0;background:#000;display:flex;flex-direction:column;overflow:hidden}
+.tb{display:flex;align-items:center;gap:10px;padding:40px 56px 4px 14px;flex:none}
 .left,.right{display:flex;align-items:center;gap:8px;flex:none}
 .mid{flex:1;display:flex;justify-content:center;min-width:0}
 .ib{all:unset;cursor:pointer;width:34px;height:34px;border-radius:50%;background:#2c2c2e;color:#fff;display:flex;align-items:center;justify-content:center}
@@ -8206,7 +8202,7 @@ function hvOpenCalApp(hub, app) {
 .yg button{all:unset;cursor:pointer;text-align:center;font-size:11px;line-height:1.7;border-radius:50%}
 .yg button.tod{background:#ff3b30;color:#fff}
 .empty{height:100%;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.55);padding:24px;text-align:center}
-.fpop{position:absolute;top:58px;right:58px;z-index:9;background:#2c2c2e;border-radius:12px;padding:8px;min-width:220px;box-shadow:0 12px 40px rgba(0,0,0,.5)}
+.fpop{position:absolute;top:82px;right:58px;z-index:9;background:#2c2c2e;border-radius:12px;padding:8px;min-width:220px;box-shadow:0 12px 40px rgba(0,0,0,.5)}
 .fpop label{display:flex;gap:8px;align-items:center;padding:6px 8px;font-size:14px;cursor:pointer}
 .fpop i{width:10px;height:10px;border-radius:50%;flex:none}
 .add,.detail{position:absolute;inset:0;background:rgba(0,0,0,.48);z-index:12;overflow:auto;padding:18px 12px;box-sizing:border-box}
@@ -8285,26 +8281,23 @@ function hvOpenCalApp(hub, app) {
 .cv .nb{font-size:12px;font-weight:700;color:#fff;background:var(--nbb);padding:3px 8px;border-radius:8px;margin-left:8px;vertical-align:2px}
 .cv .who{margin-left:auto;display:flex;flex:none;padding-left:8px}.cv .pa{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:700;border:2px solid var(--ct);margin-left:-8px;box-sizing:border-box}
 @media (max-width:700px){.cv{grid-template-columns:1fr;padding:8px 16px 0;overflow-y:auto}.cv .lc{display:none}}
-@media (prefers-reduced-motion:reduce){:host(.in) .win{transition:none}}
 </style>`;
-  host.shadowRoot.innerHTML = css + `<div class="scrim"></div><div class="win" role="dialog" aria-modal="true" aria-label="Calendar"><button class="x" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button>
+  host.shadowRoot.innerHTML = css + `<div class="win" aria-label="Calendar">
 <div class="tb"><div class="left"><button class="ib" type="button" data-act="cal" aria-label="Calendar"><ha-icon icon="mdi:calendar-month"></ha-icon></button><button class="ib" type="button" data-act="list" aria-label="List"><ha-icon icon="mdi:format-list-bulleted"></ha-icon></button><button class="ib" type="button" data-act="add" aria-label="Add event"><ha-icon icon="mdi:plus"></ha-icon></button></div>
 <div class="mid"><div class="seg" role="tablist">${['day', 'cards', 'week', 'month', 'year'].map(m => `<button type="button" data-mode="${m}" role="tab">${m === 'cards' ? 'List' : m[0].toUpperCase() + m.slice(1)}</button>`).join('')}</div></div>
 <div class="right"><label class="srch"><ha-icon icon="mdi:magnify"></ha-icon><input type="search" placeholder="Search" aria-label="Search events"></label><button class="ib" type="button" data-act="filter" aria-label="Calendars"><ha-icon icon="mdi:filter-variant"></ha-icon></button><button class="today" type="button" data-act="today">Today</button></div></div>
 <h1 class="ttl"></h1><div class="err" hidden></div><div class="body"></div><div class="fpop" hidden></div><div class="add" hidden></div><div class="detail" hidden></div></div>`;
   const sr = host.shadowRoot, win = sr.querySelector('.win'), body = sr.querySelector('.body'), titleEl = sr.querySelector('.ttl'), errEl = sr.querySelector('.err'), addEl = sr.querySelector('.add'), detEl = sr.querySelector('.detail'), fpop = sr.querySelector('.fpop'), search = sr.querySelector('.srch input');
-  const launch = [hub.shadowRoot && hub.shadowRoot.querySelector('.bg'), hub._w].filter(Boolean);
-  const fabs = [...document.querySelectorAll('homeview-edit-fab')]; fabs.forEach(f => { f.style.visibility = 'hidden'; });
-  launch.forEach(el => { el.style.transition = 'transform .4s cubic-bezier(.32,.72,0,1), border-radius .4s'; el.style.transformOrigin = '50% 0'; el.style.transform = 'translate3d(0,8px,0) scale(.965)'; el.style.borderRadius = '16px'; });
-  (hub.shadowRoot || document.body).appendChild(host);
   let closed = false;
-  const close = () => { if (closed) return; closed = true; window.__hvCalOpen = false; removeEventListener('keydown', onKey); clearInterval(st.tick); host.remove();
-    launch.forEach(el => { el.style.transition = ''; el.style.transform = ''; el.style.borderRadius = ''; el.style.transformOrigin = ''; });
-    fabs.forEach(f => { f.style.visibility = ''; }); if (hub._sheetO && hub._sheetO.host === host) hub._sheetO = null; if (hub._layout) hub._layout(); };
-  const api = { host, close, set hass(h) { const sig = idsOf().map(id => { const s = h.states[id]; return s ? s.state + '|' + (s.attributes.message || '') + '|' + (s.attributes.start_time || '') + '|' + (s.attributes.end_time || '') : ''; }).join(';'); if (sig !== st.calSig) { st.calSig = sig; st.loadedKey = ''; ensure(); } } };
-  hub._sheetO = api; window.__hvCalOpen = true;
-  try { const fn = hub._penFn && hub._penFn(); if (fn) hvPen(sr.querySelector('.x'), fn); } catch (e) {}
-  requestAnimationFrame(() => requestAnimationFrame(() => host.classList.add('in')));
+  // 2.0: Calendar is a Home Screen sheet like the other apps (full screen with Full-height popups on, grab bar, swipe down to close);
+  // a drag inside the Add / event / calendar-filter panels never closes the app
+  const sheet = hub._openSheet({ label: 'Calendar', bg: '#000', day: false, dragOk: path => !path.some(n => n === addEl || n === detEl || n === fpop),
+    onClose: () => { closed = true; window.__hvCalOpen = false; removeEventListener('keydown', onKey); clearInterval(st.tick); },
+    build: bd => { bd.style.padding = '0'; bd.style.overflow = 'hidden'; bd.appendChild(host); addEventListener('keydown', onKey); // before the sheet's own Escape
+      return { set hass(h) { if (!st.tick) return; const sig = idsOf().map(id => { const s = h.states[id]; return s ? s.state + '|' + (s.attributes.message || '') + '|' + (s.attributes.start_time || '') + '|' + (s.attributes.end_time || '') : ''; }).join(';'); if (sig !== st.calSig) { st.calSig = sig; st.loadedKey = ''; ensure(); } } }; } });
+  if (!sheet) return null;
+  const close = () => sheet.close();
+  window.__hvCalOpen = true;
   const shown = () => { const q = st.q.trim().toLowerCase(); st.shown = (st.events || []).filter(e => { if (st.hidden.has(e._cal)) return false; if (!q) return true; return ((e.summary || '') + ' ' + (e.description || '') + ' ' + (e.location || '')).toLowerCase().includes(q); }); return st.shown; };
   const idxOf = e => st.shown.indexOf(e);
   const titleFor = d => { const lang = hvCalLang(hub._hass), y = d.getFullYear(), sameY = y === new Date().getFullYear();
@@ -8517,10 +8510,7 @@ ${reminder ? '<p class="warn">Reminders aren’t stored on a Home Assistant cale
       list.sort((a, b) => a._s - b._s); st.events = list; st.loadedKey = key; st.err = ''; st.calSig = ids.map(id => { const s = hub._hass.states[id]; return s ? s.state + '|' + (s.attributes.message || '') + '|' + (s.attributes.start_time || '') + '|' + (s.attributes.end_time || '') : ''; }).join(';');
     } catch (e) { if (seq !== st.seq || closed) return; st.err = hvCalErr(e); if (!st.events) st.events = []; }
     if (!closed) paint(); }
-  function onKey(e) { if (closed) return; if (e.key === 'Escape') { if (st.filt) { st.filt = false; paintChrome(); return; } if (st.detail) { st.detail = null; paintDetail(); return; } if (st.add) { st.add = null; st.addRev++; paintAdd(); return; } close(); return; } if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return; if (e.key === 'ArrowLeft') shift(-1); else if (e.key === 'ArrowRight') shift(1); else if (e.key === 't' && !e.metaKey && !e.ctrlKey && !e.altKey) { st.anchor = startOfDay(new Date()); paint(); } }
-  addEventListener('keydown', onKey);
-  sr.querySelector('.scrim').addEventListener('click', close);
-  sr.querySelector('.x').addEventListener('click', close);
+  function onKey(e) { if (closed) return; if (e.key === 'Escape') { if (st.filt || st.detail || st.add) e.stopImmediatePropagation(); if (st.filt) { st.filt = false; paintChrome(); return; } if (st.detail) { st.detail = null; paintDetail(); return; } if (st.add) { st.add = null; st.addRev++; paintAdd(); return; } close(); return; } if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return; if (e.key === 'ArrowLeft') shift(-1); else if (e.key === 'ArrowRight') shift(1); else if (e.key === 't' && !e.metaKey && !e.ctrlKey && !e.altKey) { st.anchor = startOfDay(new Date()); paint(); } }
   search.addEventListener('input', () => { st.q = search.value; paintBody(); });
   fpop.addEventListener('change', e => { const id = e.target && e.target.dataset && e.target.dataset.cal; if (!id) return; if (e.target.checked) st.hidden.delete(id); else st.hidden.add(id); paintBody(); });
   addEl.addEventListener('click', e => { const b = e.target.closest('[data-act],[data-kind],[data-pick]'); if (!b) return;
@@ -8546,7 +8536,7 @@ ${reminder ? '<p class="warn">Reminders aren’t stored on a Home Assistant cale
   });
   st.tick = setInterval(() => { if (closed || document.hidden) return; if (st.mode === 'day' || st.mode === 'week' || st.mode === 'cards') paintBody(); }, 60000);
   paint(); ensure();
-  return api;
+  return sheet;
 }
 try { window.HVCal = { blockDesc: hvCalBlockDesc, eventPayload: hvCalEventPayload, columns: hvCalColumns, ymd: hvCalYmd, addDays: hvCalAddDays, addMonths: hvCalAddMonths, startOfWeek: hvCalStartOfWeek, iso: hvCalIso, create: hvCalCreate, canCreate: hvCalCanCreate, writeTarget: hvCalWriteTarget, name: hvCalName }; } catch (e) {}
 
