@@ -4670,10 +4670,10 @@ const HV_GAL = {
   house: { name: 'House', ico: 'mdi:home-analytics', bg: 'linear-gradient(180deg,#64d2ff 0%,#2f8fe0 100%)', desc: 'A house overview with weather and the garage, as labels on the home.', tag: 'homeview-house-card', sizes: HV_GAL_LG, keys: 'house home overview weather garage' }
 };
 const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: null, rs: null, dirty: false, busy: false, conv: false,
-  ok(h) { return !!(h && h._w && h.isConnected && !h._sheetO && h._config && h._config.arrange !== false && !hvInDialog(h) && hvEclOK(h)); },
-  raw() { return JSON.parse(JSON.stringify(this.hub._hvRaw || {})); },
+  ok(h) { return !!(h && h._w && h.isConnected && !h._sheetO && h._config && h._config.arrange !== false && !(h._prof && h._prof.guest) && !hvInDialog(h) && hvEclOK(h)); },
+  raw() { return JSON.parse(JSON.stringify(hvProfFlat(this.hub._hvRaw || {}))); }, // the profile's Home Screen (= the card's own without profiles)
   enter(h) { if (this.hub || !this.ok(h)) return; this.hub = h; this.orig = JSON.stringify(h._hvRaw || {}); this.dirty = false; this.pend = []; this.t0 = Date.now(); hvEcl.ensure(); h.toggleAttribute('hv-arr', true);
-    this.conv = !Array.isArray((h._hvRaw || {}).home_layout); if (this.conv) { const raw = this.raw(); raw.home_layout = hvHomeOrder(h._config, hvSideN(h._config)); h._arrSet(raw); }
+    this.conv = !Array.isArray((h._hvRaw || {}).home_layout); if (this.conv) { const raw = this.raw(); raw.home_layout = hvHomeOrder(h._config, hvSideN(h._config)); h._arrSet(hvProfFold(h._hvRaw || {}, raw)); }
     this.blank(h, true); if (navigator.vibrate) try { navigator.vibrate(15); } catch (x) {} this.timer = setInterval(() => this.tick(), 150);
     this._k = () => this.tick(); addEventListener('scroll', this._k, { capture: true, passive: true }); addEventListener('resize', this._k); this.tick(); try { if (h._layout) h._layout(); } catch (e) {} },
   // save = false only when the Home Screen went away and saving failed: back to how it was
@@ -4683,7 +4683,7 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
     if (!this.dirty || !save) { if (this.dirty || this.conv) h._arrSet(JSON.parse(this.orig)); fin(); return Promise.resolve(true); }
     if (this.busy) return Promise.resolve(false); this.busy = true; const raw = this.raw(), now = (Array.isArray(raw.apps) && raw.apps.length ? raw.apps : HUB_APPS).map(hvHubAppKey);
     const pend = (this.pend || []).filter(p => now.includes(p.key)); // Add App: the Home / Security pages behind added icons (not ones deleted again)
-    return (async () => { const pg = pend.length ? await hvHubPagesPrep(h, pend) : null; await hvHubMutate(h, this.orig, raw, pg && pg.apply); if (pg) pg.after(); return pg; })()
+    return (async () => { const pg = pend.length ? await hvHubPagesPrep(h, pend) : null; await hvHubMutate(h, this.orig, JSON.parse(JSON.stringify(h._hvRaw || {})), pg && pg.apply); if (pg) pg.after(); return pg; })()
       .then(pg => { this.busy = false; fin(); if (pg) h._loadCfg(true); hvToast(pg ? pg.msg() : 'Saved', 'hv-arrange'); return true; },
         e => { this.busy = false; hvToast('Could not save: ' + (e && e.message || e), 'hv-arrange'); return false; }); },
   // a short tap on the Home Screen itself (items, the bar and menus are in the layer above it) = save and leave
@@ -4696,7 +4696,7 @@ const hvHubArr = { hub: null, orig: null, ctl: new Map(), timer: null, drag: nul
     b.c = () => { b.p = null; }; b.k = e => { if (b.eat && Date.now() - b.eat < 500) { b.eat = 0; e.stopPropagation(); e.preventDefault(); } }; // the click of that same tap only
     h.addEventListener('pointerdown', b.d, true); addEventListener('pointerup', b.u, true); addEventListener('pointercancel', b.c, true); h.addEventListener('click', b.k, true); },
   // every change animates: the items slide to their new places
-  change(fn) { const raw = this.raw(); fn(raw); this.dirty = true; const ap = this.grid(), m = ap && this.snap(ap); this.hub._arrSet(raw); if (m) this.flip(m); [40, 200, 450].forEach(t => setTimeout(() => this.tick(), t)); },
+  change(fn) { const raw = this.raw(); fn(raw); this.dirty = true; const ap = this.grid(), m = ap && this.snap(ap); this.hub._arrSet(hvProfFold(this.hub._hvRaw || {}, raw)); if (m) this.flip(m); [40, 200, 450].forEach(t => setTimeout(() => this.tick(), t)); },
   grid() { const w = this.hub && this.hub._w; return w && w.querySelector('.apps.hg'); },
   bar(on) { const lay = hvEcl.lay; let b = lay && lay.querySelector('.abar.hb'); if (!on) { if (b) b.remove(); return; } if (b || !lay) return;
     b = document.createElement('div'); b.className = 'abar hb'; b.innerHTML = '<span>Hold to move · drag a corner to resize</span><button class="add" data-k="app" aria-haspopup="menu"><ha-icon icon="mdi:plus"></ha-icon>Add App</button><button class="add" data-k="card" aria-haspopup="menu"><ha-icon icon="mdi:plus"></ha-icon>Add Card</button>'; lay.appendChild(b);
@@ -7085,6 +7085,8 @@ const HV_SET_PAGES = [
     sec: [{ bare: true, f: ['@facesched'] }] },
   { id: 'gestures', t: 'Gestures', i: 'mdi:gesture-swipe', c: '#34c759', g: 1, d: 'Swipes on the Home Screen.',
     sec: [{ f: ['swipe_open_home', 'swipe_page'] }, { f: ['edge_sidebar', 'block_pull_refresh'] }] },
+  { id: 'profiles', t: 'Profiles', i: 'mdi:account-multiple', c: '#ff6f91', g: 2, d: 'Who uses this iPad: each profile has its own Home Screen, greeting name, ring colour and picture. Guest hides locks, garage and cameras.',
+    sec: [{ bare: true, f: ['@profiles'] }] },
   { id: 'apps', t: 'Apps & Integrations', i: 'mdi:apps', c: '#007aff', g: 2, d: 'The app icons on the Home Screen, NotHomeView apps, and Home Assistant integrations.',
     sec: [{ f: ['apps'] }, { f: ['@appsnote'] }] },
   { id: 'customapps', t: 'Custom Apps', i: 'mdi:apps-box', c: '#5e5ce6', g: 2, d: 'Buttons that open other apps on this device (Google Home, Spotify, …), with a confirm before leaving Home Assistant.',
@@ -7111,6 +7113,7 @@ const HV_SET_ACTS = {
   '@sspick': { l: 'Screensaver style', h: 'Photo clock, Info dashboard, Abstract fluid, Modern typographic or Whimsical minimalist: swipe or tap to choose. Screensaver colors for the chosen style (colour pickers, swatches, reset to default colors) are underneath.', pick: true },
   '@wallpair': { l: 'Wallpaper', h: 'Screensaver (Outer) and Home Screen background (Inner): Customize each. Screensaver style and colours; Photos, a device or Home Assistant photo, gradients and colours behind the apps, background blur, Match Outer wallpaper.', wp: true },
   '@facesched': { l: 'Face Schedule', h: 'Morning, Day, Evening and Night: a face each, starting at a time, sunrise or sunset. Change faces automatically. Nightstand when the room is dark (a light sensor).', fs: true },
+  '@profiles': { l: 'Profiles', h: 'Who is using this iPad: Corey, Guest, … Each has its own Home Screen, name, person, ring colour. Switch automatically with Home Assistant presence. Add, rename, delete; Guest hides locks, garage and cameras.', pf: true },
   '@customapps': { l: 'Custom Apps', h: 'Your custom apps: add, edit, reorder or delete. App Store search for the name and icon, a preset or your own link (URL scheme), ask before opening.', ca: true },
   '@canote': { l: '', h: 'Add a custom app to the Home Screen with Add App (edit the Home Screen, then Add App).', note: true },
   '@wpnote': { l: '', h: 'The Home Screen background behind the apps is set in Wallpaper › Inner (Customize), with its blur.', note: true },
@@ -7303,7 +7306,7 @@ function hvOpenSettings(hub, app, from, goTo) {
   const user = H().user || {}, admin = user.is_admin !== false;
   const why = () => { const lv = lvOf(); return !st.ready ? '' : st.nohub ? '' : lv && lv.mode === 'yaml' ? 'This dashboard is in YAML mode, so Settings can\'t be saved here. Change the Home Screen card in the dashboard\'s YAML.' : !admin ? 'Only an admin can change settings.' : ''; };
   const ro = () => !st.ready || st.nohub || !!why();
-  const data = () => { const c = st.cfg || {}, d = Object.assign({}, HVHubCard.defaults, { calendar_show_weather: true, apps: HUB_APPS }, c); d.bg_blur_level = hvBgLevel(c); return d; };
+  const data = () => { const c = st.cfg || {}, d = Object.assign({}, HVHubCard.defaults, { calendar_show_weather: true, apps: HUB_APPS }, hvProfFlat(c)); d.bg_blur_level = hvBgLevel(c); return d; };
   const fields = () => hvSetFields(hvHubSchemaAlbum(hvHubSchemaPipes(st.pipes), data().photo_source_mode === 'album'));
   const fname = k => k === 'photo_source' && data().photo_source_mode === 'album' ? 'photo_album_url' : k;
   const label = k => HV_SET_ACTS[k] ? (k === '@edit' && st.nohub ? 'Edit Dashboard' : HV_SET_ACTS[k].l) : k === 'bg_blur_level' ? 'Background blur' : hvHubLabel({ name: k });
@@ -7324,6 +7327,7 @@ function hvOpenSettings(hub, app, from, goTo) {
     const a = HV_SET_ACTS[k]; if (a) { if (a.note) return `<div class="r note"><small>${esc(a.h)}</small></div>`;
       if (a.ca) return '<div class="r stk" data-k="@customapps"><div data-calist></div></div>';
       if (a.fs) return '<div class="r stk" data-k="@facesched"><div data-fsched></div></div>';
+      if (a.pf) return '<div class="r stk" data-k="@profiles"><div data-profs></div></div>';
       if (a.ww) { const ok = hvWwSupport(), miss = a.ww === 'homey' && HVWW.hmOk === false, on = ok && hvWwPh(a.ww);
         if (ok && a.ww === 'homey' && HVWW.hmOk == null) hvWwHmCheck().then(() => { if (root && root.isConnected) paintPane(); });
         const why = !ok ? 'Not available on this device (iPhone / iPad). Use the mic button instead.' : miss ? 'Needs its wake word model (wakeword/hey_homey.onnx, next to homeview-cards.js): see the wake word README.' : a.h;
@@ -7367,22 +7371,22 @@ function hvOpenSettings(hub, app, from, goTo) {
   const persist = async (k, v) => { const lv = lvOf(), d0 = dash(); if (lv && lv.mode === 'yaml') throw new Error('this dashboard is in YAML mode');
     const q = { type: 'lovelace/config', force: true }; if (d0) q.url_path = d0; const fresh = clone(await H().callWS(q)), node = hvHubCfgOf(fresh);
     if (!node) throw new Error('no NotHomeView Home Screen card on this dashboard'); const same = !!lv && JSON.stringify(fresh) === JSON.stringify(lv.rawConfig || lv.config);
-    hvSetApply(node, k, v); const h = live();
+    hvProfSet(node, k, v); const h = live();
     if (lv && typeof lv.saveConfig === 'function' && (lv.urlPath || null) === (d0 || null)) { if (same && h) { h.setConfig(clone(node)); await hvQuietSave(h, lv, fresh); } else await lv.saveConfig(fresh); }
     else { const sv = { type: 'lovelace/config/save', config: fresh }; if (d0) sv.url_path = d0; await H().callWS(sv); }
     useCfg(fresh); // the saved Home Screen card (and the views for the page lists)
     if (k === 'theme') { setTimeout(() => { HVT.key = ''; const el = (from && from.isConnected && from) || live(); if (el) hvThemeTick(el, H()); }, 50); retheme(); } };
-  const save = (k, v, repaint) => { if (ro()) return chain; const before = clone(st.cfg || {}); hvSetApply(st.cfg, k, v); liveApply(st.cfg); if (repaint) paintPane();
+  const save = (k, v, repaint) => { if (ro()) return chain; const before = clone(st.cfg || {}); hvProfSet(st.cfg, k, v); liveApply(st.cfg); if (repaint) paintPane();
     chain = chain.then(() => persist(k, v)).then(() => flash('Saved')).catch(async e => { const m = (e && (e.message || e.code)) || String(e); flash('Not saved: ' + m, true); hvToast('Settings not saved: ' + m);
       try { const lv = lvOf(), q = { type: 'lovelace/config', force: true }; if (dash()) q.url_path = dash(); useCfg(await H().callWS(q)); if (!st.cfg) st.cfg = before; } catch (z) { st.cfg = before; }
       liveApply(st.cfg); paintPane(); }); return chain; };
   const retheme = () => { if (!s) return; const day = hvMode((st.cfg || {}).theme, H()) === 'day', sh = s.host.shadowRoot.querySelector('.sh'); s.host.toggleAttribute('hv-day', day); sh.style.setProperty('--sbg', day ? '#f2f2f7' : '#000'); };
   // --- painting
-  const sideHtml = () => { const q = st.q.trim().toLowerCase(), sel = st.wide ? (st.page || 'general') : st.page, p0 = HV_SET_PAGES[0], P = personOf(), d = data();
+  const sideHtml = () => { const q = st.q.trim().toLowerCase(), sel = st.wide ? (st.page || 'general') : st.page, p0 = HV_SET_PAGES[0], P = personOf(), d = data(), pf = hvProfCur(st.cfg || {});
     const nm = d.name || (P && P.attributes.friendly_name) || user.name || 'Home', pic = P && P.attributes.entity_picture, ini = String(nm).trim().split(/\s+/).map(w => w[0] || '').join('').slice(0, 2).toUpperCase();
     const un = hvUpdCount(H()), row = p => `<button class="sr${sel === p.id ? ' on' : ''}" data-go="${p.id}" aria-current="${sel === p.id}"><span class="sq" style="--c:${p.c}"><ha-icon icon="${p.i}"></ha-icon></span><span class="nm">${esc(p.t)}</span>${p.id === 'general' && un ? `<span class="bdg" aria-label="${un} updates">${un}</span>` : ''}<ha-icon class="ch" icon="mdi:chevron-right"></ha-icon></button>`;
     const grp = g => { const ps = HV_SET_PAGES.filter(p => p.g === g && p.id !== 'customapps' && pageHit(p, q)); return ps.length ? `<div class="grp">${ps.map(row).join('')}</div>` : ''; };
-    const out = (pageHit(p0, q) ? `<div class="grp"><button class="sr pr${sel === 'person' ? ' on' : ''}" data-go="person" aria-current="${sel === 'person'}"><span class="av"${pic ? ` style="background-image:url('${esc(pic)}')"` : ''}>${pic ? '' : esc(ini)}</span><span class="tx"><span class="nm">${esc(nm)}</span><small>Person & greeting</small></span><ha-icon class="ch" icon="mdi:chevron-right"></ha-icon></button></div>` : '') + grp(1) + grp(2);
+    const out = (pageHit(p0, q) ? `<div class="grp"><button class="sr pr${sel === 'person' ? ' on' : ''}" data-go="person" aria-current="${sel === 'person'}"><span class="av"${pic || d.avatar ? ` style="background-image:url('${esc(d.avatar || pic)}')"` : pf ? ` style="background:${hvProfLook(H(), st.cfg, pf, hvProfList(st.cfg).findIndex(x => x.id === pf.id)).bg};color:#fff"` : ''}>${pic || d.avatar ? '' : esc(ini)}</span><span class="tx"><span class="nm">${esc(nm)}</span><small>${hvProfList(st.cfg).length ? 'Profile, greeting & presence' : 'Person & greeting'}</small></span><ha-icon class="ch" icon="mdi:chevron-right"></ha-icon></button></div>` : '') + grp(1) + grp(2);
     return out || `<div class="grp"><div class="empty">No results for “${esc(st.q.trim())}”</div></div>`; };
   const hvNhvApps = () => {
     const map = { calendar: 'calendar', assistant: 'assistant', settings: 'general', weather: 'layout' };
@@ -7534,6 +7538,11 @@ function hvOpenSettings(hub, app, from, goTo) {
     if (!fsEl) { fsEl = document.createElement('div'); fsEl.className = 'fsh'; const r = fsEl.attachShadow({ mode: 'open' }); r.innerHTML = `<style>${HV_FS_CSS}</style>`;
       r.appendChild(hvFaceScheduleUI({ H: () => H(), save: (k, v) => save(k, v), flash: (m, e) => flash(m, e), get ro() { return ro(); } })); }
     else { const u = fsEl.shadowRoot.lastElementChild; if (u && u._refresh) u._refresh(); } box.appendChild(fsEl); };
+  let pfEl = null; const pfMount = () => { const box = pane && pane.querySelector('[data-profs]'); if (!box) { pfEl = null; return; }
+    if (!pfEl) { pfEl = document.createElement('div'); pfEl.className = 'pfh'; const r = pfEl.attachShadow({ mode: 'open' }); r.innerHTML = `<style>${HV_PROF_SET_CSS}</style>`;
+      r.appendChild(hvProfilesUI({ H: () => H(), cfg: () => st.cfg, save: (k, v) => { const p = save(k, v, true); paintSide(); return p; }, onUse: () => paintSide(), get ro() { return ro(); } })); }
+    else { const u = pfEl.shadowRoot.lastElementChild; if (u && u._refresh) u._refresh(); }
+    pfEl.toggleAttribute('dark', !!(s && !s.host.hasAttribute('hv-day'))); box.appendChild(pfEl); };
   let caEl = null, caKey = ''; const caMount = () => { if (!pane) return; const box = pane.querySelector('[data-calist]') || pane.querySelector('[data-casub]'); if (!box) { caEl = null; caKey = ''; return; }
     const key = box.hasAttribute('data-calist') ? 'list' : st.sub; if (!caEl || caKey !== key) { const ui = hvCustomAppsUI(caCtx); caEl = document.createElement('div'); caEl.className = 'cah';
       const r = caEl.attachShadow({ mode: 'open' }); r.innerHTML = `<style>${HV_CA_CSS}</style>`; r.appendChild(key === 'list' ? ui.list() : ui.editor(key.startsWith('ca:') ? key.slice(3) : null)); caKey = key; }
@@ -7632,7 +7641,7 @@ function hvOpenSettings(hub, app, from, goTo) {
     if (st.sub === 'about') { const c = st.cfg || {}, W = hvAboutPick(H(), 'wifi', c), B = hvAboutPick(H(), 'batt', c); o += '|' + sv(S, W.id) + sv(S, B.id) + (B.id ? sv(S, B.id.replace(/_battery_level$/, '_battery_state')) : '') + W.cands.length + B.cands.length + (H().config || {}).version; } return o; };
   const paintSide = () => { if (list) list.innerHTML = sideHtml(); };
   const shrinkAppsBack = () => { const bk = pane && pane.querySelector('.ph .bk[data-act="appsback"]'); if (!bk) return; const label = [...bk.childNodes].reverse().find(n => n.nodeType === 3 && /Apps & Integrations/.test(n.textContent || '')); if (!label) return; if (bk.scrollWidth > bk.clientWidth + 1) { label.textContent = 'Apps'; if (bk.getAttribute('aria-label') === 'Back to Apps & Integrations') bk.setAttribute('aria-label', 'Back to Apps'); } };
-  const paintPane = () => { if (!pane) return; const sy = pane.scrollTop; for (const f of forms.values()) f.remove(); if (ssPick) ssPick.remove(); if (fPick) fPick.remove(); pane.innerHTML = paneHtml(); ssMount(); fMount(); wpMount(); caMount(); fsMount(); pane.scrollTop = sy; formsMount(); if ((st.wide ? (st.page || 'general') : st.page) === 'apps') appsLoad(); pvPaint(hvBgLevel(st.cfg || {})); albCheck(); shrinkAppsBack(); };
+  const paintPane = () => { if (!pane) return; const sy = pane.scrollTop; for (const f of forms.values()) f.remove(); if (ssPick) ssPick.remove(); if (fPick) fPick.remove(); pane.innerHTML = paneHtml(); ssMount(); fMount(); wpMount(); caMount(); fsMount(); pfMount(); pane.scrollTop = sy; formsMount(); if ((st.wide ? (st.page || 'general') : st.page) === 'apps') appsLoad(); pvPaint(hvBgLevel(st.cfg || {})); albCheck(); shrinkAppsBack(); };
   const paint = () => { if (!root) return;
     if (!st.ready) { root.classList.remove('pg'); list.innerHTML = '<div class="grp"><div class="empty">Loading…</div></div>'; pane.innerHTML = ''; return; }
     if (st.nohub) { root.classList.add('nohub', 'pg'); root.classList.remove('wide'); side.style.display = 'none';
@@ -8108,6 +8117,162 @@ const hvBgLevel = c => { c = c || {}; const l = Number(c.bg_blur_level); if (c.b
   const t = Number(c.bg_transparency); if (c.bg_transparency == null || c.bg_transparency === '' || isNaN(t)) return 3;
   return t <= 20 ? 1 : t <= 45 ? 2 : t <= 70 ? 3 : t <= 90 ? 4 : 5; };
 
+/* ---------------- Profiles (V2): who is using this iPad ----------------
+   profiles: [{ id, name, person, ring_color, avatar, subtitle, guest, …a Home Screen of its own: apps, home_cards, home_layout, side_cards, … }]
+   active_profile: the profile a new device starts on (default: the first). Each device remembers its own choice (localStorage), so
+   switching on one iPad never saves the dashboard. profile_auto: true starts "Switch automatically" on for a device without its own choice.
+   The FIRST profile is the Home Screen card's own options (today's config: its apps, tiles and layout); its entry only adds a name,
+   person, ring colour and picture. Every other profile keeps its own Home Screen (a profile without apps etc. shows the first one's until
+   it is arranged). guest: true hides locks, garage and cameras (apps, tiles, My Home) and turns off Home Screen arrange.
+   No profiles = exactly as before. */
+const HV_PROF_ID_KEYS = ['name', 'person', 'ring_color', 'avatar'];
+const HV_PROF_LAY_KEYS = ['apps', 'home_cards', 'home_layout', 'home_places', 'side_cards', 'side_tiles', 'side_sizes', 'show_homie', 'show_calendar', 'photo_size', 'calendar_size', 'calendar_entities'];
+const HV_PROF_RINGS = ['#a99df2', '#ff9db0', '#c7c7cc', '#64d2ff', '#7ed98a', '#ffc46b', '#ff8a80', '#d29bff'];
+const HV_PROF_LS = 'nothomeview-profile', HV_PROF_AUTO_LS = 'nothomeview-profile-auto';
+const hvProfIdOf = (p, i) => String((p && (p.id || p.name)) || 'profile-' + (i + 1)).trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'profile-' + (i + 1);
+const hvProfList = c => (Array.isArray(c && c.profiles) ? c.profiles : []).map((p, i) => p && typeof p === 'object' ? Object.assign({}, p, { id: hvProfIdOf(p, i), _i: i }) : null).filter(Boolean);
+const hvProfLs = (k, v) => { const key = k + ':' + (ssDash() || 'lovelace'); try { if (v === undefined) return localStorage.getItem(key); if (v === null) localStorage.removeItem(key); else localStorage.setItem(key, String(v)); } catch (e) {} return null; };
+// the profile this device shows: its own choice, else active_profile, else the first
+const hvProfCur = c => { const L = hvProfList(c); if (!L.length) return null; const want = hvProfLs(HV_PROF_LS) || (c.active_profile != null ? hvProfIdOf({ id: c.active_profile }, 0) : ''); return L.find(p => p.id === want) || L[0]; };
+const hvProfMain = (c, p) => !p || p._i === hvProfList(c)[0]._i;
+const hvProfAutoOn = c => { const v = hvProfLs(HV_PROF_AUTO_LS); return v != null ? v === '1' : !!(c && c.profile_auto === true); };
+// the options to draw (and to arrange / edit in Settings) with: the card's own, the profile's name / person / ring / picture and, for any
+// but the first profile, its own Home Screen
+function hvProfFlat(c, p) { if (!c) return c; if (p === undefined) p = hvProfCur(c); if (!p) return c; const o = Object.assign({}, c);
+  for (const k of HV_PROF_ID_KEYS) if (p[k] != null && p[k] !== '') o[k] = p[k];
+  if (!hvProfMain(c, p)) for (const k of HV_PROF_LAY_KEYS) if (p[k] !== undefined) o[k] = p[k];
+  return o; }
+// the other way: a changed Home Screen (flat) written back where it belongs (the profile's own, or the card's for the first profile)
+function hvProfFold(c, flat, p) { if (p === undefined) p = hvProfCur(c); if (!p) return flat; const out = JSON.parse(JSON.stringify(c)), main = hvProfMain(c, p);
+  const tgt = main ? out : out.profiles[p._i], cl = v => v === undefined ? undefined : JSON.parse(JSON.stringify(v));
+  for (const k of Object.keys(flat)) if (k !== 'profiles' && !HV_PROF_ID_KEYS.includes(k) && (main || !HV_PROF_LAY_KEYS.includes(k))) out[k] = cl(flat[k]);
+  for (const k of Object.keys(out)) if (k !== 'profiles' && !HV_PROF_ID_KEYS.includes(k) && (main || !HV_PROF_LAY_KEYS.includes(k)) && !(k in flat)) delete out[k];
+  if (!main) for (const k of HV_PROF_LAY_KEYS) { if (flat[k] === undefined) delete tgt[k]; else tgt[k] = cl(flat[k]); }
+  return out; }
+// Settings: one option changed, in the profile's own options where it is one of them
+function hvProfSet(node, k, v) { const p = hvProfCur(node);
+  if (p && HV_PROF_ID_KEYS.includes(k)) { const e = node.profiles[p._i], n = hvSetNorm(k, v); if (n === undefined) delete e[k]; else e[k] = n; return node; }
+  if (!p || hvProfMain(node, p) || !HV_PROF_LAY_KEYS.includes(k)) return hvSetApply(node, k, v);
+  const f = JSON.parse(JSON.stringify(hvProfFlat(node, p))); hvSetApply(f, k, v); const out = hvProfFold(node, f, p);
+  for (const x of Object.keys(node)) delete node[x]; Object.assign(node, out); return node; }
+// Guest: no locks, garage or cameras on the Home Screen (apps and tiles; the layout's places follow the shorter lists)
+const HV_PROF_NOAPP = new Set(['security', 'garage']);
+const hvProfNoGo = x => /"(lock|camera)\.[^"]*"|cover\.[^"]*garage|homeview-(camera|garage|garage-chooser|doorbell)-?|"(custom:)?(webrtc-camera|frigate-card|advanced-camera-card|picture-glance)"|"navigation_path":"[^"]*(security|garage)"/i.test(JSON.stringify(x || {}));
+function hvProfGuestCfg(o) { o = Object.assign({}, o); const maps = {};
+  const keep = (pre, arr, bad) => { const m = {}, out = []; (arr || []).forEach((x, i) => { if (!bad(x)) { m[i] = out.length; out.push(x); } }); maps[pre] = m; return out; };
+  if (Array.isArray(o.apps) && o.apps.length) o.apps = keep('a', o.apps, a => HV_PROF_NOAPP.has(hvHubAppKey(a)) || hvProfNoGo(a)); else o.apps = keep('a', HUB_APPS, a => HV_PROF_NOAPP.has(hvHubAppKey(a)));
+  if (Array.isArray(o.home_cards)) o.home_cards = keep('w', o.home_cards, hvProfNoGo);
+  if (Array.isArray(o.side_cards)) { const sz = String(o.side_sizes || '').trim() ? String(o.side_sizes).split(',').map(s => s.trim()) : null, t = Array.isArray(o.side_tiles) ? o.side_tiles : null, old = o.side_cards;
+    o.side_cards = keep('s', old, hvProfNoGo); const ix = Object.keys(maps.s).map(Number); if (sz) o.side_sizes = ix.map(i => sz[i] || 'S').join(', '); if (t) o.side_tiles = ix.map(i => t[i] || {}); }
+  const tok = t => { const m = /^([a-z]+):(\d+)$/.exec(String(t)); if (!m || !maps[m[1]]) return t; const n = maps[m[1]][Number(m[2])]; return n == null ? null : m[1] + ':' + n; };
+  if (Array.isArray(o.home_layout)) o.home_layout = o.home_layout.map(tok).filter(Boolean);
+  if (o.home_places && typeof o.home_places === 'object') { const p = {}; for (const [k, v] of Object.entries(o.home_places)) { const n = tok(k); if (n) p[n] = v; } o.home_places = p; }
+  return o; }
+// what the Home Screen card draws with: flat, and Guest's limits
+const hvProfEff = (c, p) => { if (p === undefined) p = hvProfCur(c); const f = hvProfFlat(c, p); return p && p.guest ? hvProfGuestCfg(f) : f; };
+// Guest on this device right now (My Home leaves out cameras, locks and garage doors)
+const hvProfGuestNow = () => { for (const h of HV_HUBS) if (h.isConnected && h._prof) return !!h._prof.guest; return false; };
+// a profile's face: picture (avatar / its person's), else its initial on its ring colour; Guest without either: a person glyph
+const hvProfLook = (hass, c, p, i) => { const S = (hass && hass.states) || {}, ps = p.person && S[p.person], ring = p.ring_color || HV_PROF_RINGS[i % HV_PROF_RINGS.length];
+  const name = String(p.name || (ps && ps.attributes.friendly_name) || (p.guest ? 'Guest' : 'Profile')).trim(), pic = p.avatar || (ps && ps.attributes.entity_picture) || '';
+  const where = ps ? (ps.state === 'home' ? 'Home' : ps.state === 'not_home' ? 'Away' : String(ps.state || '').replace(/_/g, ' ').replace(/^./, x => x.toUpperCase())) : '';
+  const sub = p.subtitle || (p.guest ? 'No locks, garage or cameras' : [i === 0 && hass && hass.user && hass.user.is_admin && (!p.person || (ps && ps.attributes.user_id === hass.user.id)) ? 'Admin' : where, 'Home Screen ' + (i + 1)].filter(Boolean).join(' · '));
+  return { name, pic, ring, sub, ini: name.charAt(0).toUpperCase(), bg: `linear-gradient(140deg,color-mix(in srgb,${ring} 70%,#fff),color-mix(in srgb,${ring} 82%,#000))` }; };
+const hvProfAvHtml = (lk, guest, sz) => `<span class="pfa" style="width:${sz}px;height:${sz}px;font-size:${Math.round(sz * .42)}px;background:${lk.pic ? `center/cover no-repeat url('${esc(lk.pic)}')` : lk.bg}">${lk.pic ? '' : guest ? '<ha-icon icon="mdi:account"></ha-icon>' : esc(lk.ini)}</span>`;
+// ---- the "Who's using this iPad?" popover under the avatar
+const HV_PROF_POP_CSS = `.pfd{position:fixed;inset:0;z-index:40;background:rgba(20,20,40,.18);animation:pff .16s ease}
+.pfp{position:fixed;z-index:41;width:340px;max-width:calc(100vw - 24px);border-radius:26px;background:#fff;color:#3c3c43;box-shadow:0 24px 60px rgba(30,30,60,.25),0 0 0 1px rgba(60,60,67,.06);padding:8px 0;font-family:${FONT};transform-origin:var(--ox,90%) 0;animation:pfz .2s cubic-bezier(.2,.9,.3,1.2)}
+.pfp::before{content:'';position:absolute;top:-9px;right:var(--ar,44px);width:20px;height:20px;background:inherit;transform:rotate(45deg);border-radius:4px}
+.pfp .ph{position:relative;font-size:13px;font-weight:600;color:rgba(60,60,67,.6);text-transform:uppercase;letter-spacing:.04em;padding:10px 20px 6px}
+.pfp .pr{all:unset;box-sizing:border-box;position:relative;display:flex;align-items:center;gap:14px;width:calc(100% - 16px);margin:0 8px;padding:10px 12px;border-radius:18px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.pfp .pr:active{background:rgba(60,60,67,.06)}.pfp .pr.on{background:#cdc6ef;color:#3f3399}
+.pfp .pr .tx{flex:1;min-width:0}.pfp .pr b{display:block;font-size:17px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pfp .pr small{display:block;font-size:13px;color:rgba(60,60,67,.6);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pfp .pr.on small{color:#3f3399;opacity:.8}
+.pfp .pr .ck{--mdc-icon-size:22px;color:#3f3399;display:flex}
+.pfa{flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;overflow:hidden}.pfa ha-icon{--mdc-icon-size:60%;display:flex}
+.pfp .hr{height:1px;background:rgba(60,60,67,.12);margin:8px 20px}
+.pfp .pl{all:unset;box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;padding:10px 20px;font-size:16px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.pfp .pl small{display:block;font-size:13px;color:rgba(60,60,67,.6)}.pfp .pl.mg{color:#3f3399;font-weight:500}.pfp .pl.mg ha-icon{--mdc-icon-size:20px;color:rgba(60,60,67,.3);display:flex}
+.pfp .sw{all:unset;flex:none;position:relative;width:51px;height:31px;border-radius:16px;background:#e9e9eb;transition:background .2s;cursor:pointer}
+.pfp .sw::after{content:'';position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.18);transition:left .2s}
+.pfp .sw[aria-checked=true]{background:#3f3399}.pfp .sw[aria-checked=true]::after{left:22px}
+@keyframes pff{from{opacity:0}}@keyframes pfz{from{opacity:0;transform:scale(.92)}}
+@media (prefers-reduced-motion:reduce){.pfd,.pfp{animation:none}}`;
+function hvProfPop(hub) { const sr = hub.shadowRoot, av = sr.querySelector('.av'); if (!av || sr.querySelector('.pfp')) return;
+  const c = hub._hvRaw || {}, L = hvProfList(c), cur = hub._prof, hass = hub._hass; if (!L.length) return;
+  if (!sr.querySelector('style[data-pf]')) { const s = document.createElement('style'); s.dataset.pf = ''; s.textContent = HV_PROF_POP_CSS; sr.appendChild(s); }
+  const d = document.createElement('div'), p = document.createElement('div'); d.className = 'pfd'; p.className = 'pfp'; p.setAttribute('role', 'dialog'); p.setAttribute('aria-label', "Who's using this iPad?");
+  const row = (x, i) => { const lk = hvProfLook(hass, c, x, i), on = cur && cur.id === x.id;
+    return `<button class="pr${on ? ' on' : ''}" data-id="${esc(x.id)}" role="menuitemradio" aria-checked="${!!on}">${hvProfAvHtml(lk, x.guest, 44)}<span class="tx"><b>${esc(lk.name)}</b><small>${esc(lk.sub)}</small></span>${on ? '<ha-icon class="ck" icon="mdi:check"></ha-icon>' : ''}</button>`; };
+  p.innerHTML = `<div class="ph">Who's using this iPad?</div>${L.map(row).join('')}<div class="hr"></div>
+<div class="pl" data-a="auto"><span>Switch automatically<small>Uses Home Assistant presence</small></span><button class="sw" role="switch" aria-checked="${hvProfAutoOn(c)}" aria-label="Switch automatically"></button></div><div class="hr"></div>
+<button class="pl mg" data-a="manage">Manage Profiles…<ha-icon icon="mdi:chevron-right"></ha-icon></button>`;
+  const close = () => { d.remove(); p.remove(); removeEventListener('keydown', key, true); try { av.focus(); } catch (e) {} };
+  const key = e => { if (e.key === 'Escape') { e.preventDefault(); close(); } };
+  d.addEventListener('click', close); addEventListener('keydown', key, true);
+  p.addEventListener('click', e => { const b = e.target.closest('[data-id],[data-a]'); if (!b) return;
+    if (b.dataset.id) { close(); hvProfLs(HV_PROF_LS, b.dataset.id); if (hvProfAutoOn(c)) hvProfLs(HV_PROF_AUTO_LS, '0'); hvProfRefresh(); return; } // a manual pick turns Switch automatically off on this device
+    if (b.dataset.a === 'auto') { const sw = p.querySelector('.sw'), on = sw.getAttribute('aria-checked') !== 'true'; sw.setAttribute('aria-checked', String(on)); hvProfLs(HV_PROF_AUTO_LS, on ? '1' : '0'); hub._profPres = undefined; if (on) hub._profAuto(); return; }
+    if (b.dataset.a === 'manage') { close(); hvOpenSettings(hub, null, null, { page: 'profiles' }); } });
+  sr.appendChild(d); sr.appendChild(p);
+  const r = av.getBoundingClientRect(), W = innerWidth, w = Math.min(340, W - 24), left = Math.max(12, Math.min(W - w - 12, r.right + 12 - w));
+  Object.assign(p.style, { left: left + 'px', top: Math.round(r.bottom + 14) + 'px' }); p.style.setProperty('--ar', Math.max(18, Math.round(left + w - (r.left + r.width / 2) - 10)) + 'px');
+  const f = p.querySelector('.pr.on') || p.querySelector('.pr'); if (f) try { f.focus({ preventScroll: true }); } catch (e) {} }
+// every Home Screen on the page redraws for the profile now chosen on this device
+const hvProfRefresh = () => { for (const h of HV_HUBS) if (h._hvRaw && h._config) { try { h._sig = null; h.setConfig(h._hvRaw); } catch (e) {} } };
+// ---- Settings › Profiles
+const HV_PROF_SET_CSS = `:host{display:block}.g{background:var(--card,#fff);border-radius:14px;overflow:hidden;margin:0 0 22px}
+.h{font-size:13px;color:var(--t2,rgba(60,60,67,.6));text-transform:uppercase;letter-spacing:.02em;margin:0 16px 7px}.ft{font-size:13px;color:var(--t2,rgba(60,60,67,.6));margin:-14px 16px 22px;line-height:1.35}
+.r{position:relative;display:flex;align-items:center;gap:12px;min-height:46px;padding:0 14px;font-size:16px;box-sizing:border-box}
+.r+.r::before{content:'';position:absolute;top:0;left:16px;right:0;height:1px;background:var(--sep,rgba(60,60,67,.12))}
+.r.pr{min-height:64px;cursor:pointer}.r.pr+.r::before,.r+.r.pr::before{left:72px}.r .tx{flex:1;min-width:0}.r .tx b{display:block;font-weight:600;font-size:17px}.r .tx small{display:block;font-size:13px;color:var(--t2,rgba(60,60,67,.6))}
+.r.on{background:var(--abg,#cdc6ef);color:var(--afg,#3f3399)}.r.on small{color:inherit;opacity:.8}.r.on::before,.r.on+.r::before{display:none}
+.pfa{flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;overflow:hidden}.pfa ha-icon{--mdc-icon-size:60%;display:flex}
+.l{flex:none}.r input[type=text]{all:unset;flex:1;min-width:0;text-align:right;color:var(--t2,rgba(60,60,67,.6));font-size:16px;cursor:text}
+.r select{all:unset;flex:1;min-width:0;text-align:right;direction:rtl;color:var(--t2,rgba(60,60,67,.6));cursor:pointer;text-overflow:ellipsis}
+.sw{all:unset;margin-left:auto;flex:none;position:relative;width:51px;height:31px;border-radius:16px;background:var(--swo,#e9e9eb);transition:background .2s;cursor:pointer}
+.sw::after{content:'';position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.18);transition:left .2s}.sw[aria-checked=true]{background:var(--afg,#3f3399)}.sw[aria-checked=true]::after{left:22px}
+.sws{display:flex;gap:10px;margin-left:auto}.sws button{all:unset;width:26px;height:26px;border-radius:50%;cursor:pointer;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08)}.sws button[aria-checked=true]{box-shadow:0 0 0 2px var(--card,#fff),0 0 0 4px var(--afg,#3f3399)}
+.bt{all:unset;box-sizing:border-box;display:flex;align-items:center;width:100%;min-height:46px;padding:0 16px;font-size:16px;cursor:pointer;color:var(--afg,#3f3399)}.bt.del{color:#ff3b30}.bt[disabled]{opacity:.4;cursor:default}
+.ck{--mdc-icon-size:22px;display:flex}button:focus-visible{outline:2px solid var(--afg,#3f3399);outline-offset:-2px}
+:host([dark]){--card:#1c1c1e;--t2:rgba(235,235,245,.6);--sep:rgba(84,84,88,.6);--abg:#3a3360;--afg:#d9d3ff;--swo:#39393d;color:#f5f5f7}`;
+// ctx: { H(), cfg() (saved Home Screen card), save(k, v), ro, dark }
+function hvProfilesUI(ctx) { const el = document.createElement('div'), clone = o => JSON.parse(JSON.stringify(o));
+  const paint = () => { const c = ctx.cfg() || {}, L = hvProfList(c), hass = ctx.H(), cur = hvProfCur(c), dis = ctx.ro ? ' disabled' : '', S = (hass && hass.states) || {};
+    const persons = Object.keys(S).filter(k => k.startsWith('person.')).sort();
+    if (!L.length) { el.innerHTML = `<div class="g"><div class="r" style="min-height:64px"><span class="tx"><b>Profiles are off</b><small>Everyone sees the same Home Screen.</small></span></div><button class="bt" data-a="setup"${dis}>Set Up Profiles</button></div>
+<div class="ft">Makes a profile from this Home Screen and a Guest profile. Each profile then gets its own Home Screen, greeting name, ring colour and picture. Guest hides locks, garage and cameras.</div>`; return; }
+    const rows = L.map((p, i) => { const lk = hvProfLook(hass, c, p, i), on = cur && cur.id === p.id;
+      return `<div class="r pr${on ? ' on' : ''}" data-use="${esc(p.id)}" role="button" tabindex="0" aria-pressed="${!!on}">${hvProfAvHtml(lk, p.guest, 44)}<span class="tx"><b>${esc(lk.name)}</b><small>${esc(lk.sub)}</small></span>${on ? '<ha-icon class="ck" icon="mdi:check"></ha-icon>' : ''}</div>`; }).join('');
+    const ed = L.map((p, i) => { const lk = hvProfLook(hass, c, p, i);
+      return `<div class="h">${esc(lk.name)}${i === 0 ? ' · this Home Screen' : ''}</div><div class="g" data-p="${i}">
+<label class="r"><span class="l">Name</span><input type="text" data-f="name" value="${esc(p.name || '')}" placeholder="${esc(lk.name)}" aria-label="Name"${dis}></label>
+<label class="r"><span class="l">Person</span><select data-f="person" aria-label="Linked person"${dis}><option value="">None</option>${persons.map(k => `<option value="${esc(k)}"${p.person === k ? ' selected' : ''}>${esc((S[k].attributes && S[k].attributes.friendly_name) || k)}</option>`).join('')}</select></label>
+<div class="r"><span class="l">Ring colour</span><span class="sws" role="radiogroup" aria-label="Ring colour">${HV_PROF_RINGS.map(x => `<button style="background:${x}" data-ring="${x}" role="radio" aria-checked="${lk.ring === x}" aria-label="${x}"${dis}></button>`).join('')}</span></div>
+<div class="r"><span class="l">Guest</span><small style="flex:1;font-size:13px;color:var(--t2,rgba(60,60,67,.6))">No locks, garage or cameras</small><button class="sw" role="switch" data-f="guest" aria-checked="${!!p.guest}" aria-label="Guest"${dis}></button></div>
+<button class="bt del" data-del="${i}"${dis}${i === 0 && L.length > 1 ? ' disabled title="The first profile is this Home Screen card\'s own; delete the others first"' : ''}>${i === 0 && L.length === 1 ? 'Turn Off Profiles' : 'Delete Profile'}</button></div>`; }).join('');
+    el.innerHTML = `<div class="h">Who's using this iPad?</div><div class="g">${rows}<div class="r"><span class="tx">Switch automatically<small>Uses Home Assistant presence: the profile whose person is home. Stays put when that's unclear.</small></span><button class="sw" data-a="auto" role="switch" aria-checked="${hvProfAutoOn(c)}" aria-label="Switch automatically"></button></div></div>
+<div class="ft">Tap a profile to use it on this iPad. Each iPad keeps its own choice. Arrange a profile's Home Screen while it's on (long-press the Home Screen).</div>${ed}
+<div class="g"><button class="bt" data-a="add"${dis}>Add Profile</button></div>`; };
+  const write = fn => { if (ctx.ro) return; const c = clone(ctx.cfg() || {}); const L = Array.isArray(c.profiles) ? c.profiles : (c.profiles = []); fn(L, c); ctx.save('profiles', L.length ? L : null); };
+  const fresh = (L, c, name, guest) => { const ids = new Set(hvProfList({ profiles: L }).map(p => p.id)); let id = hvProfIdOf({ name }, L.length), n = 2; while (ids.has(id)) id = hvProfIdOf({ name }, 0) + '-' + n++;
+    const p = { id, name, ring_color: guest ? '#c7c7cc' : HV_PROF_RINGS[L.length % HV_PROF_RINGS.length] }; if (guest) p.guest = true;
+    for (const k of HV_PROF_LAY_KEYS) if (c[k] !== undefined) p[k] = clone(c[k]); return p; }; // starts as a copy of this Home Screen
+  el.addEventListener('click', e => { const t = e.target.closest('[data-use],[data-a],[data-ring],[data-del],.sw[data-f]'); if (!t || t.disabled) return;
+    if (t.dataset.use) { hvProfLs(HV_PROF_LS, t.dataset.use); hvProfLs(HV_PROF_AUTO_LS, '0'); hvProfRefresh(); paint(); if (ctx.onUse) ctx.onUse(); return; }
+    const a = t.dataset.a, gi = t.closest('[data-p]') ? Number(t.closest('[data-p]').dataset.p) : -1;
+    if (a === 'auto') { const on = t.getAttribute('aria-checked') !== 'true'; hvProfLs(HV_PROF_AUTO_LS, on ? '1' : '0'); t.setAttribute('aria-checked', String(on)); for (const h of HV_HUBS) { h._profPres = undefined; if (on && h._profAuto) h._profAuto(); } return; }
+    if (a === 'setup') { write((L, c) => { const hass = ctx.H(), S = (hass && hass.states) || {}, me = c.person || (hass && hass.user && Object.keys(S).find(k => k.startsWith('person.') && S[k].attributes.user_id === hass.user.id)) || '';
+      const nm = String(c.name || (me && S[me] && S[me].attributes.friendly_name) || (hass && hass.user && hass.user.name) || 'Me').trim().split(/\s+/)[0], m = { id: hvProfIdOf({ name: nm }, 0), name: nm, ring_color: c.ring_color || HV_PROF_RINGS[0] }; if (me) m.person = me;
+      L.push(m); L.push(fresh(L, c, 'Guest', true)); }); return; }
+    if (a === 'add') { write((L, c) => L.push(fresh(L, c, 'New Profile', false))); return; }
+    if (t.dataset.ring && gi >= 0) { write(L => { const i = hvProfList({ profiles: L })[gi]._i; L[i].ring_color = t.dataset.ring; }); return; }
+    if (t.dataset.f === 'guest' && gi >= 0) { write(L => { const i = hvProfList({ profiles: L })[gi]._i; if (L[i].guest) delete L[i].guest; else L[i].guest = true; }); return; }
+    if (t.dataset.del != null) { const di = Number(t.dataset.del); write(L => { const i = hvProfList({ profiles: L })[di]._i; const gone = hvProfIdOf(L[i], i); L.splice(i, 1); if (hvProfLs(HV_PROF_LS) === gone) hvProfLs(HV_PROF_LS, null); }); } });
+  el.addEventListener('keydown', e => { const t = e.target.closest('[data-use]'); if (t && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); t.click(); } });
+  el.addEventListener('change', e => { const t = e.target, f = t.dataset && t.dataset.f, g = t.closest('[data-p]'); if (!f || !g || f === 'guest') return; const gi = Number(g.dataset.p);
+    write(L => { const i = hvProfList({ profiles: L })[gi]._i, v = String(t.value || '').trim(); if (v) L[i][f] = v; else delete L[i][f]; }); });
+  el._refresh = paint; paint(); return el; }
 class HVHubCard extends HTMLElement {
   constructor() { super(); this.attachShadow({ mode: 'open' }); this._layer = 0; }
   static get defaults() { return { theme: HV_THEME_DEFAULT, person: '', morning_start: 5, afternoon_start: 12, evening_start: 17, greeting_morning: 'Good morning', greeting_afternoon: 'Good afternoon',
@@ -8115,7 +8280,7 @@ class HVHubCard extends HTMLElement {
     show_calendar: true, calendar_size: 'full', calendar_layout: 'wide', calendar_columns: 3, calendar_days: 7, calendar_title: 'Calendar', calendar_min_height: 240, max_icon: 140, edge_sidebar: true, ss_hold: true, weather_entity: '', photo_size: 'wide', side_portrait: 'below', side_sizes: '', row_units: 3, block_pull_refresh: true, calendar_rows: 'auto', swipe_screensaver: 'auto', swipe_open_home: false, show_homie: false, full_height_popups: true, popup_edit: true, assistant_enabled: false, assistant_pipeline: 'preferred', assistant_theme: 'same', assistant_button: true, assistant_speak: true, assistant_auto_listen: true, assistant_orb: true, assistant_face: 'orb', assistant_continue: true, assistant_silence_timeout: 5, assistant_end_of_speech_pause: 2, assistant_history_retention: 'forever', assistant_dismiss_phrases: "thank you, thanks, thanks jarvis, thank you jarvis, thanks homey, thank you homey, thanks homie, thank you homie, goodbye, bye, good bye, that's all, that's it, never mind, nevermind, stop, cancel, no thanks, I'm done", assistant_quiet_volume_below: 5, assistant_quiet_start: '23:30', assistant_quiet_end: '10:00', timer_sound: true }; }
   static getStubConfig(hass) { return { apps: HUB_APPS.map(a => Object.assign({}, a)), calendar_entities: Object.keys((hass && hass.states) || {}).filter(k => k.startsWith('calendar.')).slice(0, 3) }; }
   static getConfigElement() { return document.createElement('homeview-hub-card-editor'); }
-  setConfig(c) { if (!c) throw new Error('Invalid configuration'); this._hvRaw = c; const old = this._config, nc = Object.assign({}, HVHubCard.defaults, c);
+  setConfig(c) { if (!c) throw new Error('Invalid configuration'); this._hvRaw = c; this._prof = hvProfCur(c); if (this._prof) c = hvProfEff(c, this._prof); const old = this._config, nc = Object.assign({}, HVHubCard.defaults, c);
     if (nc.wallpaper && typeof nc.wallpaper === 'string') this.style.setProperty('--hv-wall', nc.wallpaper); else this.style.removeProperty('--hv-wall'); // 1.31.0
     this._blurX = c.blur !== undefined && c.blur !== null && c.blur !== '' && Number(c.blur) !== HVHubCard.defaults.blur; // an older explicit blur (px, set in YAML before the levels) stays as set; otherwise the level's
     this._lvl = hvBgLevel(c); // Background blur level 1-5 (an older bg_transparency maps to the nearest)
@@ -8126,7 +8291,7 @@ class HVHubCard extends HTMLElement {
     this._config = nc;
     this._sig = null; if (old && (old.photo_source !== c.photo_source || old.photo_order !== c.photo_order || old.photo_source_mode !== c.photo_source_mode || old.photo_album_url !== c.photo_album_url)) { this._ids = null; this._idsExp = 0; this._loadPhotos(); }
     this._calSig = null; this._render(); this._restartTimer(); if (this.isConnected) this._gBind(); }
-  set hass(h) { const first = !this._hass; this._hass = h; this._render(); if (this._cal) this._cal.hass = h; (this._sideEls || []).forEach(e => { e._card.hass = this._simHass(h); if (e._setLab) e._setLab();
+  set hass(h) { const first = !this._hass; this._hass = h; this._profAuto(); this._render(); if (this._cal) this._cal.hass = h; (this._sideEls || []).forEach(e => { e._card.hass = this._simHass(h); if (e._setLab) e._setLab();
       if (e._fit) { const o = hubTileOpt(this._config, this._sideEls.indexOf(e)); if (o.sky === true && hvSky(h, o.sky_entity, window.__hvSimScene).sig !== e._skySig) requestAnimationFrame(() => this._fitTile(e)); } }); if (first) { this._loadPhotos(); this._loadCfg(); setTimeout(hvWwSync, 0); } if (this._sheetO) this._sheetO.hass = h; this._hwPaint(); }
   get hass() { return this._hass; }
   set editMode(v) { const was = !!this._edit; this._edit = v; this._layout(); this._ssPaint(); if (v) hvEditChromeSoon(this);
@@ -8360,14 +8525,14 @@ class HVHubCard extends HTMLElement {
   // --- render
   _rSig() { const c = this._config, h = this._hass, p = this._person();
     const first = (c.name || (p && p.attributes.friendly_name) || (h.user && h.user.name) || '').trim().split(/\s+/)[0] || '';
-    const now = new Date(); return JSON.stringify([first, p && p.attributes.entity_picture, this._greeting(), c.apps, c.custom_apps, c.ring_color, c.photo_label, c.show_calendar, c.assistant_enabled === true && c.assistant_button !== false, now.getFullYear(), now.getMonth(), now.getDate()]); }
+    const now = new Date(); return JSON.stringify([first, p && p.attributes.entity_picture, c.avatar, this._prof && [this._prof.id, this._prof.guest], this._greeting(), c.apps, c.custom_apps, c.ring_color, c.photo_label, c.show_calendar, c.assistant_enabled === true && c.assistant_button !== false, now.getFullYear(), now.getMonth(), now.getDate()]); }
   _appsHtml(c) { const glyph = a => a.icon === 'hv:home' ? HUB_HOME_SVG : hvHubCalGlyph(a, this._hass); let ms = false;
     const ext = (a, i) => { const e = hvCaOf(c, a.custom_app), nm = e ? String(e.name || 'App') : 'Missing app', g = e ? hvExtGlyph(e) : '<ha-icon icon="mdi:help-rounded"></ha-icon>'; if (/data-ms=/.test(g)) ms = true; // Settings › Custom Apps is the truth
       return `<button class="app" data-app="${i}" aria-label="${esc(nm)}"><span class="ico" style="background:${e ? hvExtBg(e) : 'linear-gradient(180deg,#8e8e93 0%,#636366 100%)'};color:#fff">${g}</span><span class="lb">${esc(nm)}</span></button>`; };
     const h = c.apps.map((a, i) => a && a.kind === 'external' ? ext(a, i) : `<button class="app" data-app="${i}" aria-label="${esc(a.name || '')}"><span class="ico" style="background:linear-gradient(180deg,${esc(a.color_from || '#8e8e93')} 0%,${esc(a.color_to || a.color_from || '#636366')} 100%);color:${esc(a.glyph_color || '#fff')}">${glyph(a)}</span><span class="lb">${esc(a.name || '')}</span></button>`).join('');
     if (ms) setTimeout(() => hvExtMs(this.shadowRoot, this), 0); return h; }
   // 1.32.0 Home Screen arrange: a new config applied in place (apps redrawn, side tiles reordered / resized with their elements kept, no rebuild)
-  _arrSet(raw) { const old = this._config; this._hvRaw = raw; const nc = Object.assign({}, HVHubCard.defaults, raw); if (!Array.isArray(nc.apps) || !nc.apps.length) nc.apps = HUB_APPS; this._config = nc;
+  _arrSet(raw) { const old = this._config; this._hvRaw = raw; this._prof = hvProfCur(raw); const nc = Object.assign({}, HVHubCard.defaults, this._prof ? hvProfEff(raw, this._prof) : raw); if (!Array.isArray(nc.apps) || !nc.apps.length) nc.apps = HUB_APPS; this._config = nc;
     if (!this._w) return this._render(); if (JSON.stringify([old && old.apps, old && old.custom_apps]) !== JSON.stringify([nc.apps, nc.custom_apps])) { const a = this._w.querySelector('.apps'); if (a) this._putApps(a, this._appsHtml(nc)); }
     if (old && (old.show_calendar !== false) !== (nc.show_calendar !== false)) { this._sig = null; return this._render(); } // calendar shown / hidden: rebuild once
     if (this._cal && old && old.calendar_size !== nc.calendar_size) this._makeCal(this._cal);
@@ -8376,7 +8541,7 @@ class HVHubCard extends HTMLElement {
     if (!this._config || !this._hass) return;
     const c = this._config, h = this._hass, p = this._person();
     const first = (c.name || (p && p.attributes.friendly_name) || (h.user && h.user.name) || '').trim().split(/\s+/)[0] || '';
-    const pic = p && p.attributes.entity_picture;
+    const pic = c.avatar || (p && p.attributes.entity_picture), pf = this._prof, pfl = pf ? hvProfLook(h, this._hvRaw, pf, Math.max(0, hvProfList(this._hvRaw).findIndex(x => x.id === pf.id))) : null;
     const amic = c.assistant_enabled === true && c.assistant_button !== false;
     const sig = this._rSig();
     if (sig === this._sig && this._w) return; this._sig = sig;
@@ -8392,7 +8557,7 @@ class HVHubCard extends HTMLElement {
     const keepCal = this._cal && c.show_calendar !== false ? this._cal : null;
     const topH = `<div class="top"><div class="gr"><div class="g1">${esc(greet)}</div><div class="g2">${esc(first)}</div></div>
       <div class="tr"><button class="tpill" data-k="timer" hidden aria-label="Show the timer"><ha-icon icon="mdi:timer-outline"></ha-icon><span></span></button>${amic ? '<button class="amic" data-k="assist" aria-label="Assistant"><ha-icon icon="mdi:microphone"></ha-icon></button>' : ''}
-      <button class="av" data-k="person" aria-label="${esc(first)}"${c.ring_color ? ` style="--ring:${esc(c.ring_color)}"` : ''}><div class="pic"${pic ? ` style="background-image:url('${esc(pic)}')"` : ''}>${pic ? '' : esc(first.charAt(0))}</div></button></div></div>`;
+      <button class="av" data-k="person" aria-label="${esc(first)}"${c.ring_color ? ` style="--ring:${esc(c.ring_color)}"` : ''}><div class="pic"${pic ? ` style="background-image:url('${esc(pic)}')"` : pfl ? ` style="background:${pfl.bg};color:#fff"` : ''}>${pic ? '' : pf && pf.guest ? '<ha-icon icon="mdi:account" style="--mdc-icon-size:60%;display:flex"></ha-icon>' : esc(first.charAt(0))}</div></button></div></div>`;
     if (this._rowEl && this._rowEl.parentNode && this._w.contains(this._rowEl)) { // 1.32.0: redraw in place: greeting / avatar / apps / labels / calendar slot; the tile row (camera streams) stays
       const t0 = this._w.querySelector('.top'); if (t0) { t0.insertAdjacentHTML('beforebegin', topH); t0.remove(); }
       const ap = this._w.querySelector('.apps'); if (ap) this._putApps(ap, apps);
@@ -8630,7 +8795,12 @@ class HVHubCard extends HTMLElement {
     if (kind === 'assistant') { this._openAssist(); return; }
     if (kind === 'photos') { this._openPhoto(); return; }
     const cfg = a.tap_action; if (cfg && cfg.action !== 'none') fire(this, 'hass-action', { config: { entity: a.entity, tap_action: cfg }, action: 'tap' }); }
-  _personTap() { const p = this._person(); if (p) fire(this, 'hass-more-info', { entityId: p.entity_id }); }
+  _personTap() { if (hvProfList(this._hvRaw).length) { hvProfPop(this); return; } const p = this._person(); if (p) fire(this, 'hass-more-info', { entityId: p.entity_id }); }
+  // Profiles › Switch automatically: the profile whose person is home (read-only presence); kept when none or more than one is home
+  _profAuto() { const c = this._hvRaw, L = hvProfList(c); if (L.length < 2 || !this._hass || !hvProfAutoOn(c)) return; const S = this._hass.states || {};
+    const home = L.filter(p => p.person && S[p.person] && S[p.person].state === 'home'), sig = home.map(p => p.id).join(',');
+    if (sig === this._profPres) return; this._profPres = sig; if (home.length !== 1 || (this._prof && this._prof.id === home[0].id)) return;
+    hvProfLs(HV_PROF_LS, home[0].id); setTimeout(hvProfRefresh, 0); }
   // --- photos (same source as the Wallpanel screensaver)
   async _source(noAlbum) { const c = this._config; if (!noAlbum && c.photo_source_mode === 'album' && String(c.photo_album_url || '').trim()) return { album: String(c.photo_album_url).trim(), ex: [] };
     if (c.photo_source) return { url: c.photo_source, ex: [] };
@@ -10128,7 +10298,8 @@ class HVMyHomeCard extends HTMLElement {
   _model() { const h = this._hass, c = this._config, S = h.states, E = h.entities || {}, D = h.devices || {}, A = h.areas || {};
     const areaOf = id => { const e = E[id]; if (!e) return null; return e.area_id || (e.device_id && D[e.device_id] && D[e.device_id].area_id) || null; };
     const hidA = new Set(c.hidden_areas || []), hidE = this._hiddenEnt(), rooms = new Map(), cams = [];
-    const ok = (id, s) => { const e = E[id]; if (!e || e.hidden || e.entity_category || e.platform === 'browser_mod' || /browser_mod/.test(id)) return false; return true; };
+    const guest = hvProfGuestNow(), ok = (id, s) => { const e = E[id]; if (!e || e.hidden || e.entity_category || e.platform === 'browser_mod' || /browser_mod/.test(id)) return false;
+      if (guest && (/^(camera|lock)\./.test(id) || (/^cover\./.test(id) && (/garage/.test(id) || (s && s.attributes && s.attributes.device_class === 'garage'))))) return false; return true; };
     for (const id of Object.keys(S)) { const d = id.split('.')[0], s = S[id]; if (d !== 'camera' && !MH_DOMAINS.includes(d)) continue; if (!ok(id, s)) continue;
       const a = areaOf(id); if (!a || !A[a] || hidA.has(a)) continue;
       if (d === 'camera') { if (!MH_UNAV.includes(s.state)) cams.push(id); continue; }
