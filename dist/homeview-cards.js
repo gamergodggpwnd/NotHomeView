@@ -7950,7 +7950,7 @@ function hvOpenSettings(hub, app, from, goTo) {
     if (!apEl) { apEl = document.createElement('div'); apEl.className = 'aph'; const r = apEl.attachShadow({ mode: 'open' }); r.innerHTML = `<style>${HV_AP_SET_CSS}</style>`;
       r.appendChild(hvAppearanceUI({ cfg: () => st.cfg, save: (k, v) => save(k, v, true), get ro() { return ro(); } })); }
     else { const u = apEl.shadowRoot.lastElementChild; if (u && u._refresh) u._refresh(); }
-    apEl.toggleAttribute('dark', !!(s && !s.host.hasAttribute('hv-day'))); box.appendChild(apEl); };
+    apEl.toggleAttribute('dark', s ? !s.host.hasAttribute('hv-day') : !day); box.appendChild(apEl); };
   let ckEl = null; const ckMount = () => { const box = pane && pane.querySelector('[data-cook]'); if (!box) { ckEl = null; return; }
     if (!ckEl) { ckEl = document.createElement('div'); ckEl.className = 'ckh'; const r = ckEl.attachShadow({ mode: 'open' }); r.innerHTML = `<style>${HV_COOK_SET_CSS}</style>`;
       r.appendChild(hvCookingUI({ H: () => H(), cfg: () => hvProfFlat(st.cfg || {}), save: (k, v) => save(k, v, true), get ro() { return ro(); },
@@ -8653,6 +8653,12 @@ const HV_PROF_POP_CSS = `.pfd{position:fixed;inset:0;z-index:40;background:rgba(
 .pfp .sw{all:unset;flex:none;position:relative;width:51px;height:31px;border-radius:16px;background:#e9e9eb;transition:background .2s;cursor:pointer}
 .pfp .sw::after{content:'';position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.18);transition:left .2s}
 .pfp .sw[aria-checked=true]{background:#3f3399}.pfp .sw[aria-checked=true]::after{left:22px}
+:host([ap=night]) .pfd{background:rgba(0,0,0,.42)}
+:host([ap=night]) .pfp{background:#2c2c2e;color:#f5f5f7;box-shadow:0 24px 60px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.08)}
+:host([ap=night]) .pfp .ph,:host([ap=night]) .pfp .pr small,:host([ap=night]) .pfp .pl small{color:rgba(235,235,245,.6)}
+:host([ap=night]) .pfp .pr:active{background:rgba(255,255,255,.08)}:host([ap=night]) .pfp .pr.on{background:var(--ap-on-bg,#3a3360);color:var(--ap-on-fg,#d9d3ff)}:host([ap=night]) .pfp .pr.on small{color:inherit}
+:host([ap=night]) .pfp .pr .ck,:host([ap=night]) .pfp .pl.mg{color:var(--ap-on-fg,#d9d3ff)}:host([ap=night]) .pfp .pl.mg ha-icon{color:rgba(235,235,245,.3)}
+:host([ap=night]) .pfp .hr{background:rgba(84,84,88,.6)}:host([ap=night]) .pfp .sw{background:#39393d}:host([ap=night]) .pfp .sw[aria-checked=true]{background:#7a6cf0}
 @keyframes pff{from{opacity:0}}@keyframes pfz{from{opacity:0;transform:scale(.92)}}
 @media (prefers-reduced-motion:reduce){.pfd,.pfp{animation:none}}`;
 function hvProfPop(hub) { const sr = hub.shadowRoot, av = sr.querySelector('.av'); if (!av || sr.querySelector('.pfp')) return;
