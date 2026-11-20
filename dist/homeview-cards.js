@@ -7258,11 +7258,83 @@ const HV_COOK_COLS = ['#3f3399', '#ff9500', '#34c759', '#ff2d55', '#0a84ff'];
 const HV_COOK_ART = ['radial-gradient(circle closest-side at 50% 50%,#e8603c 0 58%,#d9512f 61%,rgba(217,81,47,0) 62%),radial-gradient(circle closest-side at 50% 50%,#f5f0ea 0 88%,#e6ddd2 92%,rgba(0,0,0,0) 93%),linear-gradient(160deg,#efe4d6,#dccbb6)',
   'radial-gradient(circle closest-side at 50% 50%,#7fae5a 0 58%,#6c9a4a 61%,rgba(108,154,74,0) 62%),radial-gradient(circle closest-side at 50% 50%,#f6f3ec 0 88%,#e4e6da 92%,rgba(0,0,0,0) 93%),linear-gradient(160deg,#e6eadf,#cfd8c3)',
   'radial-gradient(circle closest-side at 50% 50%,#e0ac48 0 58%,#cf983a 61%,rgba(207,152,58,0) 62%),radial-gradient(circle closest-side at 50% 50%,#f7f2e8 0 88%,#e8dcc6 92%,rgba(0,0,0,0) 93%),linear-gradient(160deg,#f1e6d2,#e0cfae)'];
-const hvCookCfg = c => { const k = (c && c.cooking && typeof c.cooking === 'object') ? c.cooking : {};
-  const recipes = (Array.isArray(k.recipes) ? k.recipes : []).filter(r => r && typeof r === 'object' && r.name).map(r => ({ name: String(r.name), tags: (Array.isArray(r.tags) ? r.tags : r.tags ? [r.tags] : []).map(String),
-    time: r.time, servings: r.servings, image: r.image ? String(r.image) : '', ingredients: (Array.isArray(r.ingredients) ? r.ingredients : []).map(String),
-    steps: (Array.isArray(r.steps) ? r.steps : []).map(s => typeof s === 'string' ? { text: s } : s && typeof s === 'object' ? { text: String(s.text || ''), items: (Array.isArray(s.items) ? s.items : []).map(String),
-      timer: s.timer && Number(s.timer.minutes) > 0 ? { minutes: Number(s.timer.minutes), label: String(s.timer.label || '') } : Number(s.timer) > 0 ? { minutes: Number(s.timer), label: '' } : null } : null).filter(s => s && s.text) }));
+/* ---------------- Cooking › recipe search (V2) ----------------
+   The Cooking home has a search box. What you type is matched against your saved recipes right away, and "Ask <agent>" sends it to an Assist
+   agent (one of this Home Assistant's Assist pipelines; the default is the preferred one, the pill and the Change link switch it).
+   The question goes over the same websocket the Assistant popup uses (assist_pipeline/run, intent stage only, no speech) and asks for ONE reply:
+   a JSON object { recipes: [{ title, source_name, source_url, time_minutes, serves, description, image, ingredients: [..], steps: [{ text, minutes }] }] }.
+   The answer is read tolerantly (code fences, text around the JSON, other key names). No Home Assistant service is called. The built-in
+   Home Assistant agent can't search the web, so it isn't asked at all. Saved web recipes are kept in this browser (localStorage), like the timers. */
+const HV_COOK_LS = { saved: 'hv_cook_saved', recent: 'hv_cook_recent', agent: 'hv_cook_agent', caps: 'hv_cook_agent_caps' };
+const HV_COOK_ASK_MS = 75000;
+const hvCookLsGet = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k) || 'null'); return v == null ? d : v; } catch (e) { return d; } };
+const hvCookLsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } };
+const hvCookSavedGet = () => { const a = hvCookLsGet(HV_COOK_LS.saved, []); return Array.isArray(a) ? a.filter(r => r && typeof r === 'object' && r.name) : []; };
+// one recipe in the shape Cooking uses (from the YAML, the saved list or an agent's answer)
+const hvCookRecipe = r => ({ name: String(r.name), tags: (Array.isArray(r.tags) ? r.tags : r.tags ? [r.tags] : []).map(String),
+  time: r.time, servings: r.servings, image: r.image ? String(r.image) : '', ingredients: (Array.isArray(r.ingredients) ? r.ingredients : []).map(String),
+  steps: (Array.isArray(r.steps) ? r.steps : []).map(s => typeof s === 'string' ? { text: s } : s && typeof s === 'object' ? { text: String(s.text || ''), items: (Array.isArray(s.items) ? s.items : []).map(String),
+    timer: s.timer && Number(s.timer.minutes) > 0 ? { minutes: Number(s.timer.minutes), label: String(s.timer.label || '') } : Number(s.timer) > 0 ? { minutes: Number(s.timer), label: '' } : null } : null).filter(s => s && s.text),
+  web: r.web === true, url: r.url ? String(r.url) : '', source: r.source ? String(r.source) : '', desc: r.desc ? String(r.desc) : '', key: r.key ? String(r.key) : '' });
+// "1 hr 15 min", "45 minutes", 30 -> minutes
+const hvCookMin = v => { if (v == null || v === '' || typeof v === 'boolean') return null; if (typeof v === 'number') return v > 0 && isFinite(v) ? Math.round(v) : null; const s = String(v).toLowerCase(); let m = 0, f = false;
+  const h = s.match(/(\d+(?:[.,]\d+)?)\s*(?:h|hr|hrs|hour|hours)\b/); if (h) { m += parseFloat(h[1].replace(',', '.')) * 60; f = true; }
+  const mi = s.match(/(\d+(?:[.,]\d+)?)\s*(?:m|min|mins|minute|minutes)\b/); if (mi) { m += parseFloat(mi[1].replace(',', '.')); f = true; }
+  if (!f) { const n = s.match(/\d+(?:[.,]\d+)?/); if (n) m = parseFloat(n[0].replace(',', '.')); } return m > 0 ? Math.round(m) : null; };
+const hvCookDom = u => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return ''; } };
+// the text of one JSON value in an agent's reply: the whole text, a ```json fence, or the first balanced { } / [ ] inside prose
+const hvCookBal = (s, i) => { const o = s[i], c = o === '{' ? '}' : ']'; let d = 0, q = false; for (let j = i; j < s.length; j++) { const ch = s[j];
+    if (q) { if (ch === '\\') j++; else if (ch === '"') q = false; continue; } if (ch === '"') q = true; else if (ch === o) d++; else if (ch === c && --d === 0) return j; } return -1; };
+const hvCookJson = text => { const t = String(text || '').trim(); if (!t) return null; const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/i), srcs = fence ? [fence[1], t] : [t];
+  for (const s of srcs) { try { return JSON.parse(s.trim()); } catch (e) {} }
+  for (const s of srcs) { let tries = 0; for (let i = 0; i < s.length && tries < 6; i++) { if (s[i] !== '{' && s[i] !== '[') continue; tries++; const e = hvCookBal(s, i); if (e > 0) { try { return JSON.parse(s.slice(i, e + 1)); } catch (x) {} } } }
+  return null; };
+const hvCookFromAgent = x => { if (!x || typeof x !== 'object') return null; const title = String(x.title || x.name || '').trim(); if (!title) return null;
+  const urlRaw = [x.source_url, x.url, x.link, x.source].find(u => typeof u === 'string' && /^https?:\/\//i.test(u.trim())), url = urlRaw ? urlRaw.trim() : '';
+  const sn = [x.source_name, x.site, x.source].find(u => typeof u === 'string' && u.trim() && !/^https?:\/\//i.test(u.trim())), img = typeof x.image === 'string' && /^https?:\/\//i.test(x.image.trim()) ? x.image.trim() : '';
+  const sv = x.serves != null ? x.serves : x.servings != null ? x.servings : x.yield, svn = parseInt(String(sv == null ? '' : sv).replace(/[^\d]/g, ' ').trim().split(/\s+/)[0], 10);
+  const li = a => (Array.isArray(a) ? a : []).map(i => i && typeof i === 'object' ? String(i.text || i.name || i.item || i.ingredient || '') : String(i == null ? '' : i)).map(s => s.trim()).filter(Boolean);
+  const steps = (Array.isArray(x.steps) ? x.steps : Array.isArray(x.instructions) ? x.instructions : Array.isArray(x.directions) ? x.directions : []).map(s => typeof s === 'string' ? { text: s.trim() } : s && typeof s === 'object' ? { text: String(s.text || s.step || s.instruction || '').trim(), timer: hvCookMin(s.minutes != null ? s.minutes : s.timer_minutes) } : null).filter(s => s && s.text);
+  const tm = hvCookMin(x.time_minutes != null ? x.time_minutes : x.total_time != null ? x.total_time : x.time);
+  const o = hvCookRecipe({ name: title, time: tm == null ? undefined : tm, servings: isFinite(svn) && svn > 0 ? svn : (sv == null || sv === '' ? undefined : String(sv)), image: img, ingredients: li(x.ingredients), steps, web: true, url,
+    source: sn ? sn.trim() : '', desc: String(x.description || x.summary || '').trim(), key: '' }); o.key = (title.toLowerCase() + '|' + url).slice(0, 300); return o; };
+// recipe cards out of an agent's reply, or null when there is nothing readable
+const hvCookParse = text => { const j = hvCookJson(text); if (j == null || typeof j !== 'object') return null;
+  const arr = Array.isArray(j) ? j : Array.isArray(j.recipes) ? j.recipes : Array.isArray(j.results) ? j.results : Array.isArray(j.items) ? j.items : (j.title || j.name) ? [j] : [];
+  const out = arr.map(hvCookFromAgent).filter(Boolean).slice(0, 8); return out.length ? out : null; };
+const hvCookPrompt = (q, n) => `Find ${n} recipes on the web for: ${JSON.stringify(String(q))}. Reply with ONLY one JSON object, no markdown and no other text, in exactly this shape: {"recipes":[{"title":"","source_name":"","source_url":"https://","time_minutes":30,"serves":4,"description":"one short sentence","image":"","ingredients":[""],"steps":[{"text":"","minutes":null}]}]}. Use real recipes from pages you found, with each page's real address in source_url. time_minutes and serves are numbers. Each step is one short instruction; minutes is the timer in whole minutes when the step has a waiting or cooking time, otherwise null. image is a direct photo address if the page has one, otherwise "".`;
+const HV_COOK_ERR = /unexpected error|problem (talking|communicating)|(invalid|incorrect|wrong) api key|unauthori[sz]ed|authenticat(ion|e) (error|failed)|quota|rate.?limit|resource.exhausted|\b429\b|too many requests|service (is )?(down|unavailable)/i;
+const HV_COOK_NOWEB = /\b(can(?:'|’)?t|cannot|can not|unable to|not able to|don(?:'|’)?t have (?:access|the ability)|no (?:way|ability))\b[^.]{0,70}\b(search|browse|web|internet|online|look up)|only (?:help|control|handle|assist|manage)|couldn(?:'|’)?t understand|don(?:'|’)?t understand|not (?:sure )?what you mean/i;
+// what an agent's reply means: recipes, "can't search the web", an error, or text we can't read as recipes
+const hvCookClassify = (speech, rtype) => { const sp = String(speech || ''), rec = hvCookParse(sp); if (rec) return { kind: 'ok', recipes: rec };
+  if (HV_COOK_ERR.test(sp)) return { kind: 'error', msg: (sp.split(/\s*[{\[]|\n|\.:/)[0] || '').trim().slice(0, 160), quota: /resource.exhausted|quota|rate.?limit|\b429\b|too many requests/i.test(sp) };
+  if (!sp.trim()) return { kind: 'error', msg: '' };
+  if (HV_COOK_NOWEB.test(sp)) return { kind: 'noweb', text: sp.trim().slice(0, 300) };
+  if (rtype === 'error') return { kind: 'error', msg: sp.trim().slice(0, 160) };
+  return { kind: 'raw', text: sp.trim().slice(0, 600), full: sp.trim() }; };
+// words that don't help to find a saved recipe ("under 30 minutes", "quick ... for dinner")
+const HV_COOK_STOP = new Set('a an the for with without under over in of and or to on my me some any something what whats is are can i we recipe recipes ideas idea meal meals min mins minute minutes hour hours quick easy fast simple best good'.split(' '));
+const hvCookMatches = (recipes, q) => { const toks = String(q || '').toLowerCase().split(/[^a-z0-9àâçéèêëîïôûùüÿñæœ]+/).filter(t => t && !/^\d+$/.test(t) && !HV_COOK_STOP.has(t)); if (!toks.length) return [];
+  const stem = t => t.length > 3 ? t.replace(/(ies|es|s)$/, m => m === 'ies' ? 'y' : '') : t; const need = Math.max(1, Math.ceil(toks.length / 2));
+  return recipes.map((r, i) => { const nm = r.name.toLowerCase(), rest = (r.tags.join(' ') + ' ' + r.ingredients.join(' ')).toLowerCase(); let sc = 0;
+    for (const t of toks) { const s = stem(t); if (nm.includes(t) || nm.includes(s)) sc += 2; else if (rest.includes(t) || rest.includes(s)) sc += 1; }
+    const hit = toks.filter(t => { const s = stem(t); return nm.includes(t) || nm.includes(s) || rest.includes(t) || rest.includes(s); }).length; return { r, i, sc, hit }; })
+    .filter(x => x.hit >= need).sort((a, b) => b.sc - a.sc || a.i - b.i); };
+const hvCookAgo = t => { const d = Math.floor((Date.now() - t) / 86400000); return d <= 0 ? 'Today' : d === 1 ? 'Yesterday' : d < 7 ? d + ' days ago' : d < 14 ? 'Last week' : Math.floor(d / 7) + ' weeks ago'; };
+const HV_COOK_SUG = [['Quick weeknight dinners with chicken', '#ff9500', 'flame'], ['Vegetarian pasta under 30 minutes', '#34c759', 'scene'], ['Kid-friendly lunches for school', '#0a84ff', 'list'],
+  ['Something with what\'s in my fridge', '#af52de', 'home'], ['Slow cooker meals for a busy week', '#ff3b30', 'timer']];
+const HV_COOK_IC = { search: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="m20 20-4.8-4.8"/>', x: '<path d="M6 6l12 12M18 6 6 18"/>', check: '<path d="M4.5 12.5 9.5 17.5 19.5 7"/>', bookmark: '<path d="M6.5 3.5h11v17L12 16.5l-5.5 4z"/>',
+  users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.8a3.5 3.5 0 0 1 0 6.4M18 14a6.5 6.5 0 0 1 3.5 6"/>', globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.2 3 14.8 0 18M12 3c-3 3.2-3 14.8 0 18"/>',
+  warn: '<path d="M12 3.5 2.5 20h19z"/><path d="M12 10v4.5M12 17.5v.1"/>', ret: '<path d="M20 6v6a3 3 0 0 1-3 3H5M9 10.5 4.5 15 9 19.5"/>', scene: '<path d="M12 3l1.9 5.2L19 10l-5.1 1.8L12 17l-1.9-5.2L5 10l5.1-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/>',
+  flame: '<path d="M12 22c4 0 7-2.8 7-6.8 0-3.6-2.4-5.7-3.8-8.7-.6 2-1.6 3-2.7 3.2.3-3.2-1-5.8-3.5-7.7.2 3.7-4 6.3-4 11.7C5 19.2 8 22 12 22z"/>', list: '<path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1.2"/><circle cx="4.5" cy="12" r="1.2"/><circle cx="4.5" cy="18" r="1.2"/>',
+  home: '<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 9.8V20h13V9.8"/><path d="M10 20v-5.5h4V20"/>', timer: '<circle cx="12" cy="13.5" r="7.5"/><path d="M12 9.5v4l2.5 1.8M10 2.5h4M19 6l1.5-1.5"/>', play: '<path d="M7 4.5v15l12.5-7.5z"/>',
+  chevl: '<path d="M15 5l-7 7 7 7"/>', ban: '<circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/>' };
+const hvCookIc = (n, c) => `<svg class="ico${c ? ' ' + c : ''}" viewBox="0 0 24 24" aria-hidden="true">${HV_COOK_IC[n] || ''}</svg>`;
+const HV_COOK_FAV = ['#e55a35', '#2f6f73', '#9a6a2f', '#c7472c', '#3f3399', '#4f9a45', '#0a84ff', '#af52de'];
+const hvCookFav = s => { let h = 0; for (const c of String(s || '')) h = (h * 31 + c.charCodeAt(0)) >>> 0; return HV_COOK_FAV[h % HV_COOK_FAV.length]; };
+const hvCookCfg = (c, withSaved) => { const k = (c && c.cooking && typeof c.cooking === 'object') ? c.cooking : {};
+  const recipes = (Array.isArray(k.recipes) ? k.recipes : []).filter(r => r && typeof r === 'object' && r.name).map(hvCookRecipe);
+  if (withSaved) recipes.push(...hvCookSavedGet().map(hvCookRecipe));   // recipes kept from a search (this browser), after the YAML ones
   return { title: k.title ? String(k.title) : '', todo: k.todo_entity ? String(k.todo_entity) : '', awake: k.keep_awake !== false, voice: k.voice_hint !== false, recipes }; };
 // kitchen timers: one set per browser, kept while Cooking is closed too
 const HVCOOK = { t: new Map(), pos: new Map(), n: 0,
@@ -7361,19 +7433,191 @@ const HV_COOK_CSS = `.ck{position:absolute;inset:0;color:#3c3c43;font-family:${F
 .ck.dk .tmc,.ck.dk .addl,.ck.dk .tmr.nxt{background:#3a3360;color:#d9d3ff}.ck.dk .tmr.nxt .t,.ck.dk .tmr.nxt .l,.ck.dk .tmr.nxt .ic{color:#d9d3ff}.ck.dk .tmr.nxt .bt button{background:#7a6cf0;color:#fff}.ck.dk .sv .big em,.ck.dk .sv .lab,.ck.dk .ov .hd .all{color:#a99df2}
 .ck.dk .sv .prog i{background:rgba(235,235,245,.18)}.ck.dk .sv .prog i.d{background:#7a6cf0}.ck.dk .sv .prog i.c{background:linear-gradient(90deg,#7a6cf0 50%,rgba(235,235,245,.18) 50%)}
 @media (prefers-reduced-motion:reduce){.tmr.done{animation:none}}`;
-function hvOpenCooking(hub, app, at) {
+const hvCookEnc = u => String(u).replace(/[\s'"()\\<>]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'));
+const hvCookArt = (r, i) => { const k = (i < 0 ? 0 : i) % HV_COOK_ART.length; return r && r.image ? `url('${hvCookEnc(r.image)}'), ${HV_COOK_ART[k]}` : HV_COOK_ART[k]; };
+// one recipe card (Cooking search results, the Assist popup): data-sx="save" / "go" with data-i = the position in the answer
+const hvCookCard = (x, i, saved) => { const dom = hvCookDom(x.url), src = [x.source, dom].filter((v, k, a) => v && a.indexOf(v) === k).join(' · ');
+  return `<div class="sx-t sx-rc${saved ? ' saved' : ''}${x.steps.length ? '' : ' nosteps'}"><div class="rc-im" style="--art:${hvCookArt(x, i)}"></div><div class="rc-col"><div class="rc-inf"><h3>${esc(x.name)}</h3>${src ? `<div class="rc-src"><i class="rc-fv" style="background:${hvCookFav(dom || x.source)}"></i><span>${esc(src)}</span></div>` : ''}<div class="rc-mt">${x.time ? `<span>${hvCookIc('timer')}${esc(hvCookTime(x.time))}</span>` : ''}${x.servings != null && x.servings !== '' ? `<span>${hvCookIc('users')}Serves ${esc(x.servings)}</span>` : ''}</div></div>${x.desc ? `<div class="rc-ds">${esc(x.desc)}</div>` : '<div class="rc-ds"></div>'}<div class="rc-ac"><button class="sx-bt sv${saved ? ' done' : ''}" data-sx="save" data-i="${i}">${saved ? hvCookIc('check') + 'Saved' : hvCookIc('bookmark') + 'Save to Cooking'}</button><button class="sx-bt go" data-sx="go" data-i="${i}">${hvCookIc('play')}Start cooking</button></div></div></div>`; };
+const hvCookSaveRecipe = x => { if (!x || !x.key) return false; const a = hvCookSavedGet().filter(r => r.key !== x.key); a.unshift(Object.assign({}, x, { at: Date.now() })); return hvCookLsSet(HV_COOK_LS.saved, a.slice(0, 100)); };
+const hvCookIsSaved = x => !!x.key && hvCookSavedGet().some(r => r.key === x.key);
+// Assist popup: a question that asks for a recipe ("find a recipe for lasagna", "how do I bake bread", "dinner ideas"). Timers, devices, weather and the rest are not recipe questions.
+const hvCookIntent = t => { const x = String(t || '').trim(); if (!x || x.length > 240) return false;
+  return /\brecipes?\b/i.test(x) || /\b(?:how (?:do|can|should|would) (?:i|we|you)|how to|show me how to|teach me to) (?:cook|bake|grill|roast|fry|braise|poach|simmer|barbecue)\b/i.test(x)
+    || /\bwhat (?:can|should|could|do) (?:i|we) (?:cook|bake)\b/i.test(x) || /\b(?:dinner|lunch|breakfast|supper|dessert|meal) ideas?\b/i.test(x) || /\bwhat (?:can|should|could) (?:i|we) make for (?:dinner|lunch|breakfast|supper|dessert)\b/i.test(x); };
+// the cards only show where the Cooking app is on this Home Screen (it is off by default)
+const hvCookAppOn = hub => !!(hub && hub._config && Array.isArray(hub._config.apps) && hub._config.apps.some(a => a && a.kind === 'cooking'));
+const HV_COOK_POP_CSS = () => hvCookCardCss(':host([night])') + `
+.rz{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,420px),1fr));gap:14px;margin:16px 0 4px;text-align:left}.rz:empty{display:none}.rz .sx-rc{min-width:0}
+.m.a.rcp{width:min(96%,1100px);max-width:min(96%,1100px)}:host([read]) .m.a.rcp{width:100%;max-width:none}`;
+/* the recipe cards (Cooking search results and the Assist popup): one renderer, one stylesheet. dk = the selector that means dark where it is used */
+const hvCookCardCss = dk => `.sxc{--acc:#3f3399;--onacc:#fff;--actbg:#cdc6ef;--actfg:#3f3399;--tile:#fff;--ink:#3c3c43;--ink2:rgba(60,60,67,.6);color:var(--ink);font-family:${FONT}}
+${dk} .sxc{--acc:#7a6cf0;--actbg:#3a3360;--actfg:#d9d3ff;--tile:#1c1c1e;--ink:#f5f5f7;--ink2:rgba(235,235,245,.6)}
+.sxc *{box-sizing:border-box}
+.sxc button{all:unset;box-sizing:border-box;cursor:pointer;-webkit-tap-highlight-color:transparent}.sxc button:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+.sxc .ico{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.sxc .sx-t{background:var(--tile);border-radius:26px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 8px 24px rgba(30,30,60,.08);overflow:hidden;position:relative}
+${dk} .sxc .sx-t{box-shadow:0 0 0 1px rgba(255,255,255,.07)}
+.sxc .sx-rc{padding:18px;display:grid;grid-template-columns:124px minmax(0,1fr);grid-template-rows:124px auto minmax(0,1fr);column-gap:16px;min-height:0}
+.sxc .sx-rc .rc-col{display:contents}
+.sxc .sx-rc .rc-im{background:var(--art) center/cover no-repeat;overflow:hidden;position:relative;grid-column:1;grid-row:1;width:124px;height:124px;border-radius:14px}
+.sxc .sx-rc .rc-inf{grid-column:2;grid-row:1;min-width:0;display:flex;flex-direction:column}
+.sxc .sx-rc h3{margin:0;font-size:20px;font-weight:700;line-height:1.2;letter-spacing:-.01em;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;color:var(--ink)}
+.sxc .sx-rc .rc-src{display:flex;align-items:center;gap:6px;font-size:14px;color:var(--ink2);margin-top:6px;white-space:nowrap}.sxc .sx-rc .rc-src span{overflow:hidden;text-overflow:ellipsis;min-width:0}
+.sxc .sx-rc .rc-src .rc-fv{width:16px;height:16px;border-radius:5px;flex:none}
+.sxc .sx-rc .rc-mt{display:flex;gap:14px;margin-top:auto;font-size:15px;font-weight:600}
+.sxc .sx-rc .rc-mt span{display:inline-flex;align-items:center;gap:5px}.sxc .sx-rc .rc-mt .ico{width:17px;height:17px;color:var(--ink2)}
+.sxc .sx-rc .rc-ds{grid-column:1/-1;grid-row:2;font-size:15px;line-height:1.35;color:var(--ink2);margin-top:12px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.sxc .sx-rc .rc-ac{grid-column:1/-1;grid-row:3;align-self:end;display:flex;gap:10px;padding-top:10px}
+.sxc .sx-bt{height:44px;border-radius:14px;display:flex;align-items:center;justify-content:center;gap:7px;font-size:16px;font-weight:700;flex:1;white-space:nowrap;transition:transform .12s}.sxc .sx-bt:active{transform:scale(.98)}
+.sxc .sx-bt .ico{width:19px;height:19px}
+.sxc .sx-bt.sv{background:var(--actbg);color:var(--actfg)}
+.sxc .sx-bt.go{background:var(--acc);color:var(--onacc)}
+.sxc .sx-bt.go .ico{fill:currentColor;stroke:none}
+.sxc .sx-rc.saved{box-shadow:inset 0 0 0 2px var(--acc),0 8px 24px rgba(30,30,60,.08)}
+${dk} .sxc .sx-rc.saved{box-shadow:inset 0 0 0 2px var(--acc)}
+.sxc .sx-bt.sv.done{background:transparent;color:var(--acc);box-shadow:inset 0 0 0 1.5px var(--acc)}
+.sxc .sx-rc.nosteps .sx-bt.go{opacity:.45}
+@media (max-aspect-ratio: 4/5) {
+ .sxc .sx-rc{display:flex;flex-direction:row;gap:18px;padding:16px}
+ .sxc .sx-rc .rc-im{width:196px;height:auto;align-self:stretch;min-height:0}
+ .sxc .sx-rc .rc-col{display:flex;flex-direction:column;flex:1;min-width:0}.sxc .sx-rc .rc-inf{display:block}.sxc .sx-rc .rc-ac{margin-top:auto;align-self:auto}
+ .sxc .sx-rc h3{font-size:22px}.sxc .sx-rc .rc-mt{margin-top:10px}.sxc .sx-rc .rc-ds{margin-top:8px}
+}`;
+const HV_COOK_SX_CSS = `
+.ck{--bgc:#f2f2f7;--acc:#3f3399;--onacc:#fff;--actbg:#cdc6ef;--actfg:#3f3399;--tile:#fff;--ink:#3c3c43;--ink2:rgba(60,60,67,.6);--ink3:rgba(60,60,67,.3);--sep:rgba(60,60,67,.12);--skel:rgba(60,60,67,.07);--warnbg:rgba(255,149,0,.16);--warnfg:#a15600;--ok:#34c759;--okt:#1f8a3a}
+.ck.dk{--bgc:#000;--acc:#7a6cf0;--actbg:#3a3360;--actfg:#d9d3ff;--tile:#1c1c1e;--ink:#f5f5f7;--ink2:rgba(235,235,245,.6);--ink3:rgba(235,235,245,.3);--sep:rgba(84,84,88,.6);--skel:rgba(255,255,255,.08);--warnbg:rgba(255,159,10,.2);--warnfg:#ffb340;--okt:#34c759}
+.sx{position:absolute;inset:0;padding:26px 40px 32px;display:flex;flex-direction:column;color:var(--ink)}
+.sx *{box-sizing:border-box}
+.sx .ico{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}.sx .ico.f{fill:currentColor;stroke:none}
+.sx .sx-t{background:var(--tile);border-radius:26px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 8px 24px rgba(30,30,60,.08);overflow:hidden;position:relative}
+.ck.dk .sx .sx-t{box-shadow:0 0 0 1px rgba(255,255,255,.07)}
+.sx .sx-hd{height:52px;display:flex;align-items:center;gap:10px;flex:none;padding-right:58px}
+.sx .sx-hd h1{margin:0;font-size:34px;font-weight:800;letter-spacing:-.02em;line-height:1;color:var(--ink)}
+.sx .sx-back{display:flex;align-items:center;gap:2px;color:var(--acc);font-size:17px;font-weight:600;margin-right:6px}.sx .sx-back .ico{width:22px;height:22px}
+.sx .sx-sf{margin-top:14px;height:52px;border-radius:14px;background:rgba(118,118,128,.12);display:flex;align-items:center;gap:10px;padding:0 8px 0 14px;flex:none}
+.ck.dk .sx .sx-sf{background:rgba(118,118,128,.24)}
+.sx .sx-sf>.ico{color:var(--ink2);width:20px;height:20px}
+.sx .sx-sf input{all:unset;box-sizing:border-box;flex:1;min-width:0;height:40px;font-family:inherit;font-size:18px;color:var(--ink);caret-color:var(--acc);-webkit-user-select:text;user-select:text;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sx .sx-sf input::placeholder{color:var(--ink2);opacity:1}
+.sx .sx-clr{width:20px;height:20px;border-radius:50%;background:var(--ink3);color:var(--bgc);display:grid;place-items:center;flex:none;position:relative}.sx .sx-clr .ico{width:11px;height:11px;stroke-width:3}
+.sx .sx-clr::after{content:'';position:absolute;inset:-12px}
+.sx .sx-ask{display:inline-flex;align-items:center;gap:8px;height:38px;padding:0 14px 0 8px;border-radius:12px;background:var(--actbg);color:var(--actfg);font-size:15px;font-weight:700;white-space:nowrap;flex:none}
+.sx .sx-ask.warn{background:var(--warnbg);color:var(--warnfg)}
+.sx .sx-orb{display:block;width:22px;height:22px;border-radius:50%;background:radial-gradient(circle at 30% 28%,#d9d3ff 0,#8a7ff0 45%,#3f3399 100%);box-shadow:0 0 0 2px rgba(255,255,255,.55) inset;flex:none;position:relative}
+.sx .sx-orb::after{content:'';position:absolute;inset:-8px -4px}
+.ck.dk .sx .sx-orb{box-shadow:0 0 0 2px rgba(255,255,255,.25) inset}
+.sx .sx-orb.w{background:radial-gradient(circle at 30% 28%,#ffe2b0 0,#ffb340 55%,#d9780a 100%)}
+.sx .sx-spin{width:20px;height:20px;flex:none;animation:sxsp 1s linear infinite}
+@keyframes sxsp{to{transform:rotate(360deg)}}
+.sx .sx-capr{min-height:30px;margin-top:8px;display:flex;align-items:center;justify-content:space-between;font-size:14px;color:var(--ink2);flex:none;gap:12px}
+.sx .sx-capr .l{display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}.sx .sx-capr .l>span{overflow:hidden;text-overflow:ellipsis}
+.sx .sx-capr .ico{width:16px;height:16px}
+.sx .sx-capr b{color:var(--ink);font-weight:600}
+.sx .sx-capr .lnk{color:var(--acc);font-weight:600;flex:none;padding:6px 0}
+.sx .sx-capr.saved{background:var(--actbg);color:var(--actfg);border-radius:14px;padding:0 12px;font-weight:600;margin-top:8px;height:30px;min-height:30px}
+.sx .sx-capr.saved .ico{color:var(--okt)}.sx .sx-capr.saved b{color:inherit}
+.sx .sx-capr.saved .lnk{color:var(--actfg);text-decoration:underline}
+.sx .sx-body{flex:1;min-height:0;margin:8px -14px -24px;padding:6px 14px 24px;position:relative;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:none;display:flex;flex-direction:column}.sx .sx-body::-webkit-scrollbar{display:none}
+.sx .sx-body>*{flex:none}
+.sx .sx-body>.sx-fill{flex:1;min-height:0}
+/* result cards */
+.sx .sx-rg{display:grid;gap:14px;grid-template-columns:1fr 1fr;grid-template-rows:repeat(2,minmax(0,1fr));flex:1;min-height:0}
+.sx .sx-rg.many{grid-template-rows:none;grid-auto-rows:minmax(250px,1fr)}
+${hvCookCardCss('.ck.dk')}
+/* lists */
+.sx .sx-two{display:flex;gap:20px;flex:none}
+.sx .sx-two>div{min-width:0;flex:1}
+.sx .sx-gh{font-size:13px;color:var(--ink2);text-transform:uppercase;letter-spacing:.02em;margin:2px 16px 7px}
+.sx .sx-grp{background:var(--tile);border-radius:14px;overflow:hidden;margin-bottom:22px}
+.sx .sx-row{display:flex;align-items:center;gap:12px;width:100%;min-height:58px;padding:0 14px;font-size:17px;position:relative;color:var(--ink);text-align:left}
+.sx .sx-row+.sx-row::before{content:"";position:absolute;top:0;left:16px;right:0;height:1px;background:var(--sep)}
+.sx .sx-row .sq{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;color:#fff;flex:none}.sx .sx-row .sq .ico{width:20px;height:20px}
+.sx .sx-row>div{min-width:0;flex:1}.sx .sx-row>div>b{font-weight:inherit;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sx .sx-row small{display:block;font-size:13px;color:var(--ink2);font-weight:400;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sx .sx-row .val{margin-left:auto;color:var(--ink2);display:flex;align-items:center;gap:6px;flex:none;white-space:nowrap}.sx .sx-row .val .ico{width:18px;height:18px}
+.sx .sx-row .val.ok{color:var(--okt)}.sx .sx-row .val.no{color:var(--warnfg)}
+.sx .sx-row.hi{background:var(--actbg);color:var(--actfg);font-weight:600}.sx .sx-row.hi::before,.sx .sx-row.hi+.sx-row::before{display:none}
+.sx .sx-row.hi small{color:inherit;opacity:.8}.sx .sx-row.hi .val{color:inherit}
+.sx .sx-row .sx-orb{width:28px;height:28px}.sx .sx-row .sx-orb::after{display:none}
+.sx .sx-row.ag em{font-style:normal;font-weight:400}
+.sx .sx-note{padding:18px 20px;display:flex;gap:14px;align-items:flex-start;margin-bottom:22px}
+.sx .sx-note p{margin:0;font-size:15px;line-height:1.4;color:var(--ink2)}.sx .sx-note b{display:block;font-size:17px;color:var(--ink);margin-bottom:3px}
+.sx .sx-note .sx-orb{width:34px;height:34px;margin:0}.sx .sx-note .sx-orb::after{display:none}
+.sx .sx-gf{font-size:13px;color:var(--ink2);margin:-14px 16px 22px;line-height:1.35}
+/* asking */
+.sx .sx-stat{padding:18px 22px;display:flex;align-items:center;gap:18px;flex:none;margin-bottom:14px}
+.sx .sx-bigorb{width:64px;height:64px;border-radius:50%;position:relative;flex:none;display:grid;place-items:center}
+.sx .sx-bigorb .sx-orb{width:64px;height:64px}.sx .sx-bigorb .sx-orb::after{display:none}
+.sx .sx-bigorb svg{position:absolute;inset:-6px;width:76px;height:76px;animation:sxsp 1.2s linear infinite}
+.sx .sx-stat h2{margin:0;font-size:22px;font-weight:700;color:var(--ink)}.sx .sx-stat p{margin:2px 0 0;font-size:15px;color:var(--ink2)}
+.sx .sx-stat>div:nth-child(2){min-width:0}
+.sx .sx-steps{margin-left:auto;display:flex;flex-direction:column;gap:7px;font-size:15px;flex:none}
+.sx .sx-steps div{display:flex;align-items:center;gap:8px;white-space:nowrap}.sx .sx-steps .ico{width:18px;height:18px}
+.sx .sx-steps .dn{color:var(--ink2)}.sx .sx-steps .dn .ico{color:var(--ok)}.sx .sx-steps .nx{color:var(--ink3)}
+.sx .sx-sk{display:flex;flex-direction:column;overflow:hidden;min-height:0;border-radius:26px;background:var(--tile);padding:18px;opacity:.9}
+.sx .sx-sk i{display:block;border-radius:8px;background:var(--skel)}.sx .sx-sk .t{display:flex;gap:16px}.sx .sx-sk .im2{width:104px;height:104px;border-radius:14px;background:var(--skel);flex:none}
+/* no web search / error */
+.sx .sx-bub{padding:20px;display:flex;gap:14px;margin-bottom:14px}
+.sx .sx-bub .sx-orb{width:40px;height:40px}.sx .sx-bub .sx-orb::after{display:none}
+.sx .sx-bub .lab{font-size:13px;font-weight:700;color:var(--warnfg);letter-spacing:.03em;text-transform:uppercase;margin-bottom:4px}
+.sx .sx-bub .tx{font-size:20px;line-height:1.3;font-weight:500;color:var(--ink);display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;overflow:hidden}
+.sx .sx-hint{border-radius:26px;padding:20px;margin-bottom:22px;background:var(--warnbg)}
+.sx .sx-hint h4{margin:0;font-size:19px;font-weight:700;display:flex;align-items:center;gap:8px;color:var(--warnfg)}.sx .sx-hint h4 .ico{width:22px;height:22px}
+.sx .sx-hint p{margin:6px 0 0;font-size:15px;line-height:1.4;color:var(--ink)}
+.sx .sx-empty{font-size:15px;color:var(--ink2);margin:0 16px 22px}
+/* overview + saved tiles */
+.sx .sx-sech{height:34px;display:flex;align-items:baseline;gap:10px;flex:none}
+.sx .sx-sech b{font-size:22px;font-weight:800;color:var(--ink)}.sx .sx-sech span{font-size:15px;color:var(--ink2);display:inline-flex;align-items:center;gap:4px}.sx .sx-sech .ico{width:15px;height:15px}
+.sx .sx-og{display:grid;gap:14px;grid-template-columns:repeat(4,1fr);grid-auto-rows:minmax(220px,1fr);flex:1;min-height:0}
+.sx .sx-og.mini{grid-auto-rows:minmax(0,1fr);grid-template-rows:minmax(0,1fr);flex:none;height:210px}
+.sx .sx-og.mini .sx-ot:nth-child(n+5){display:none}
+.sx .sx-ot{display:flex;flex-direction:column;min-height:0;text-align:left;padding:0}
+.sx .sx-ot .im{flex:1;min-height:0;position:relative;width:100%}
+.sx .sx-ot .tx{padding:11px 14px 13px;flex:none;width:100%}
+.sx .sx-ot .tx b{display:block;font-size:16px;font-weight:700;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--ink)}
+.sx .sx-ot .tx span{display:flex;align-items:center;gap:5px;font-size:13px;color:var(--ink2);margin-top:3px;white-space:nowrap}.sx .sx-ot .tx .ico{width:13px;height:13px}
+.sx .sx-ot .nw{position:absolute;left:10px;top:10px;padding:4px 10px;border-radius:10px;background:var(--acc);color:var(--onacc);font-size:12px;font-weight:700;letter-spacing:.02em}
+.sx .sx-ot .wb{position:absolute;right:10px;top:10px;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;color:#fff;background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.35)}.sx .sx-ot .wb .ico{width:15px;height:15px}
+.sx .sx-ot.new::after{content:'';position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 0 2px var(--acc);pointer-events:none}
+.sx .sx-emp{display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;padding:30px 20px;color:var(--ink2);font-size:16px;line-height:1.4}
+.sx .sx-emp b{font-size:22px;color:var(--ink)}
+@media (max-aspect-ratio: 4/5) {
+ .sx .sx-rg{grid-template-columns:1fr;grid-template-rows:repeat(4,minmax(0,1fr))}.sx .sx-rg.many{grid-template-rows:none;grid-auto-rows:minmax(210px,1fr)}
+ .sx .sx-two{flex-direction:column;gap:0}
+ .sx .sx-og{grid-template-columns:repeat(3,1fr);grid-auto-rows:minmax(250px,1fr)}
+ .sx .sx-og.mini .sx-ot:nth-child(4){display:none}.sx .sx-og.mini{height:250px}
+ .sx .sx-two.nw2>div:last-child{margin-top:0}
+}
+@media (prefers-reduced-motion:reduce){.sx .sx-spin,.sx .sx-bigorb svg{animation:none}}`;
+
+function hvOpenCooking(hub, app, at, opt) {
   if (!hub || hub._sheetO || !hub._hass) return null; const H = () => hub._hass;
-  const st = { view: 'list', r: 0, step: 0, added: new Set() }; let root = null, iv = 0, keep = 0, lock = null, tstT = 0, vis = null, cfg = hvCookCfg(hub._config);
-  const R = () => cfg.recipes[st.r];
-  if (cfg.recipes.length === 1) st.view = 'ov'; if (at != null && cfg.recipes[at]) { st.r = at; st.view = 'ov'; }
-  const art = (r, i) => r && r.image ? `url("${String(r.image).replace(/"/g, '%22')}"), ${HV_COOK_ART[i % HV_COOK_ART.length]}` : HV_COOK_ART[i % HV_COOK_ART.length];
+  const getCfg = () => hvCookCfg(hub._config, true);
+  const st = { view: 'list', r: 0, step: 0, added: new Set(), ext: null }; let root = null, iv = 0, keep = 0, lock = null, tstT = 0, vis = null, blurT = 0, cfg = getCfg();
+  // recipe search: the text, the agent, the answer (sx.s), and which saved recipe was just kept
+  const sx = { q: '', focus: false, picker: false, s: null, tok: 0, pipes: null, agentId: String(hvCookLsGet(HV_COOK_LS.agent, '') || ''), just: '', savedMsg: '', shell: false, unsub: null, to: 0 };
+  const R = () => st.r < 0 ? st.ext : cfg.recipes[st.r];
+  const rk = () => st.r < 0 ? 'x:' + (st.ext ? st.ext.key : '') : st.r;   // key of the open recipe (an unsaved search result has no list position)
+  if (at != null && cfg.recipes[at]) { st.r = at; st.view = 'ov'; }
+  // opened from the Assist popup with a recipe it found: that recipe, at its first step (a saved copy is used when there is one)
+  if (opt && opt.ext) { const k = cfg.recipes.findIndex(r => r.key && r.key === opt.ext.key); if (k >= 0) st.r = k; else { st.r = -1; st.ext = opt.ext; } if (opt.ext.steps.length) { st.view = 'sv'; st.step = 0; HVCOOK.pos.set(rk(), 0); } else st.view = 'ov'; }
+  const art = hvCookArt;
   const todo = () => { const S = H().states || {}, all = Object.keys(S).filter(k => k.startsWith('todo.')).sort(); if (cfg.todo && S[cfg.todo]) return cfg.todo;
     return all.find(k => /shop|grocer|courses|epicerie|épicerie/i.test(k + ' ' + ((S[k].attributes || {}).friendly_name || ''))) || all[0] || ''; };
   const tname = id => { const s = H().states[id]; return (s && s.attributes.friendly_name) || (id || '').split('.')[1] || ''; };
   const toast = m => { const t = root && root.querySelector('.tst'); if (!t) return; t.textContent = m; t.classList.add('on'); clearTimeout(tstT); tstT = setTimeout(() => t.classList.remove('on'), 2200); };
   const eyebrow = () => { const h = new Date().getHours(), w = h < 11 ? 'This morning' : h < 16 ? 'Today' : 'Tonight'; return cfg.title ? `${w} · ${cfg.title}` : w; };
-  const key = i => st.r + ':' + i;
-  // timers on screen: the running / done ones, then the next timer to start (this step's, else the next step's)
+  const key = i => rk() + ':' + i;
+  // ---- the Assist agents (this Home Assistant's pipelines) and what each one turned out to do
+  const agents = () => { const p = sx.pipes; if (!p || !Array.isArray(p.pipelines) || !p.pipelines.length) return []; const S = H().states || {};
+    return p.pipelines.map(x => { const eng = String(x.conversation_engine || ''), builtin = eng === 'conversation.home_assistant' || eng === 'homeassistant', e = S[eng];
+      return { id: String(x.id), name: String(x.name || eng || 'Assist'), builtin, def: x.id === p.preferred_pipeline,
+        sub: builtin ? 'Built-in · home control only' : ((e && e.attributes && e.attributes.friendly_name) || eng.replace(/^conversation\./, '') || 'Assist agent') }; }); };
+  const curAgent = () => { const a = agents(); if (!a.length) return { id: '', name: 'Assist', builtin: false, def: true, sub: '' }; return a.find(x => x.id === sx.agentId) || a.find(x => x.def) || a[0]; };
+  const caps = () => hvCookLsGet(HV_COOK_LS.caps, {}) || {};
+  const capSet = (id, v) => { if (!id) return; const c = caps(); c[id] = v; hvCookLsSet(HV_COOK_LS.caps, c); };
+  const isSaved = x => !!x.key && cfg.recipes.some(r => r.key === x.key);
+  // ---- timers on screen: the running / done ones, then the next timer to start (this step's, else the next step's)
   const timersHtml = () => { const r = R(), out = [];
     for (const t of HVCOOK.t.values()) { const left = HVCOOK.left(t), p = t.total ? Math.max(0, Math.min(1, left / t.total)) : 0;
       out.push(`<div class="tmr${t.done ? ' done' : ''}" data-tk="${esc(t.key)}"><div class="rg"><svg viewBox="0 0 96 96"><circle cx="48" cy="48" r="42" fill="none" stroke="${t.done ? 'rgba(255,255,255,.35)' : '#efeff4'}" stroke-width="10"/><circle class="pr" cx="48" cy="48" r="42" fill="none" stroke="${t.done ? '#fff' : t.col}" stroke-width="10" stroke-linecap="round" stroke-dasharray="${(264 * p).toFixed(1)} 264"/></svg></div>
@@ -7381,15 +7625,114 @@ function hvOpenCooking(hub, app, at) {
     if (r) for (let i = st.step; i < r.steps.length && i <= st.step + 1; i++) { const s = r.steps[i]; if (!s.timer || HVCOOK.t.has(key(i))) continue;
       const lb = s.timer.label || `Step ${i + 1}`; out.push(`<div class="tmr nxt" data-ns="${i}"><div class="ic">${HV_COOK_SVG.timer}</div><div style="min-width:0"><div class="t">${hvCookFmt(s.timer.minutes * 60000)}</div><div class="l">${esc(lb)} · ${i === st.step ? 'this step' : 'next step'}</div><div class="bt"><button data-t="start">Start timer</button></div></div></div>`); break; }
     return out.join(''); };
-  const paint = () => { if (!root) return; cfg = hvCookCfg(hub._config); const r = R(); const x = root.getRootNode().querySelector('.x'); if (x) x.style.display = st.view === 'sv' ? 'none' : '';
-    let h = '';
-    if (!cfg.recipes.length) h = `<div class="emp"><div class="ic">${HV_COOK_SVG.flame}</div><h2>No recipes yet</h2><p>Add recipes to the Home Screen card's YAML. Settings › Cooking lists them.</p><pre>cooking:\n  recipes:\n    - name: Tomato Pasta\n      time: 35\n      servings: 4\n      ingredients: [Pasta, Tomatoes, Basil]\n      steps:\n        - text: Boil the pasta for 9 minutes.\n          timer: { minutes: 9, label: Pasta }</pre></div>`;
-    else if (st.view === 'list' || !r) h = `<div class="ls"><div class="eb">${esc(eyebrow())}</div><h1>Recipes</h1><div class="gd">${cfg.recipes.map((x, i) => `<button class="rc" data-r="${i}"><div class="art" style="--art:${art(x, i)}"></div><div class="tx"><b>${esc(x.name)}</b><span>${esc([hvCookTime(x.time), x.steps.length + ' steps'].join(' · '))}</span></div></button>`).join('')}</div></div>`;
-    else if (st.view === 'ov') { const nT = r.steps.filter(s => s.timer).length, tid = todo(), done = st.added.has(st.r);
+  // ---- recipe search page pieces
+  const shellHtml = () => `<div class="sx"><div class="sx-hd" data-p="hd"></div><div class="sx-sf">${hvCookIc('search')}<input type="text" enterkeyhint="search" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Search recipes or ask an Assist agent"><span data-p="clr" style="display:contents"></span><span data-p="pill" style="display:contents"></span></div><div class="sx-capr" data-p="cap"></div><div class="sx-body" data-p="body"></div></div><div class="tst" role="status"></div>`;
+  const askingFor = () => sx.s && sx.s.phase === 'asking' && sx.s.q === sx.q.trim();
+  const spinSvg = '<svg class="sx-spin" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7.5" fill="none" stroke="currentColor" stroke-opacity=".25" stroke-width="3"/><path d="M10 2.5a7.5 7.5 0 0 1 7.5 7.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>';
+  const pillHtml = () => { const ag = curAgent(); if (askingFor()) return `<span class="sx-ask">${spinSvg}Asking Assist…</span>`;
+    return `<button class="sx-ask${ag.builtin ? ' warn' : ''}" data-sx="pill" aria-label="${sx.q.trim() ? 'Ask ' : 'Choose the Assist agent, now '}${esc(ag.name)}"><i class="sx-orb${ag.builtin ? ' w' : ''}" data-sx="orb"></i>Ask ${esc(ag.name)}</button>`; };
+  const capHtml = () => { const ag = curAgent(), s = sx.s, onS = st.view === 'search';
+    if (sx.savedMsg && onS) return ['sx-capr saved', `<span class="l">${hvCookIc('check')}<span>Saved to Cooking · ${esc(sx.savedMsg)}</span></span><button class="lnk" data-sx="viewsaved">View in Cooking</button>`];
+    const row = (l, link, ln) => ['sx-capr', `<span class="l">${l}</span>${link ? `<button class="lnk" data-sx="${ln || 'change'}">${link}</button>` : ''}`];
+    if (onS && s) { if (s.phase === 'asking') return row('<span>Usually takes a few seconds · you can keep browsing Cooking</span>', 'Cancel', 'cancel');
+      if (s.phase === 'results') return row(`${hvCookIc('scene')}<span><b>${s.recipes.length} recipe${s.recipes.length === 1 ? '' : 's'}</b> from ${esc(s.agent.name)} · tap Save to keep one in Cooking</span>`, 'Ask again', 'again');
+      if (s.phase === 'noweb') return row(`${hvCookIc('warn')}<span>${s.agent.def ? 'Default Assist agent' : 'Assist agent'}: <b>${esc(s.agent.name)}</b> · can't search the web</span>`, 'Change');
+      return row(`${hvCookIc('warn')}<span><b>${esc(s.agent.name)}</b> · ${s.phase === 'raw' ? "didn't answer with recipes" : "couldn't answer"}</span>`, 'Ask again', 'again'); }
+    if (ag.builtin) return row(`${hvCookIc('warn')}<span>${ag.def ? 'Default Assist agent' : 'Assist agent'}: <b>${esc(ag.name)}</b> · can't search the web</span>`, 'Change');
+    return row(`${hvCookIc('scene')}<span>Answered by ${ag.def ? 'your default ' : ''}Assist agent · <b>${esc(ag.name)}</b></span>`, 'Change'); };
+  const relTime = t => hvCookAgo(t);
+  const recipeRow = (x, i) => `<button class="sx-row" data-r="${i}"><span class="sq" style="background:#ff9500">${hvCookIc('flame')}</span><div><b>${esc(x.name)}</b><small>${esc([hvCookTime(x.time), x.servings != null && x.servings !== '' ? 'Serves ' + x.servings : ''].filter(Boolean).join(' · '))}</small></div></button>`;
+  const matchesHtml = q => { const m = hvCookMatches(cfg.recipes, q);
+    if (!m.length) return `<div class="sx-gh">In your saved recipes</div><p class="sx-empty">No saved recipes match.</p>`;
+    return `<div class="sx-gh">In your saved recipes · ${m.length} match${m.length === 1 ? '' : 'es'}</div><div class="sx-grp">${m.map(x => recipeRow(x.r, x.i)).join('')}</div>`; };
+  const pickerHtml = () => { const a = agents(), c = caps(); if (!a.length) return `<div class="sx-gh">Assist agents in Home Assistant</div><p class="sx-empty">No Assist agents found. Set one up in Settings → Voice assistants.</p>`; const cur = curAgent();
+    return `<div class="sx-gh">Assist agents in Home Assistant</div><div class="sx-grp">${a.map(x => { const v = x.builtin ? 'no' : c[x.id];
+      return `<button class="sx-row ag${x.id === cur.id ? ' hi' : ''}" data-ag="${esc(x.id)}" aria-pressed="${x.id === cur.id}"><i class="sx-orb${x.builtin ? ' w' : ''}"></i><div><b>${esc(x.name)}${x.def ? ' <em>· default</em>' : ''}</b><small>${esc(x.sub)}</small></div>${v === 'ok' ? `<span class="val ok">${hvCookIc('check')}Web search on</span>` : v === 'no' ? `<span class="val no">${hvCookIc('ban')}Can't search the web</span>` : ''}</button>`; }).join('')}</div><div class="sx-gf">Whether an agent can search the web depends on its integration's settings. It is marked after it answers.</div>`; };
+  const tilesHtml = (list, mini) => list.map(({ r: x, i }) => `<button class="sx-t sx-ot${sx.just && x.key === sx.just ? ' new' : ''}" data-r="${i}"><div class="im art" style="--art:${art(x, i)}">${sx.just && x.key === sx.just ? '<span class="nw">Just saved</span>' : ''}${x.web ? `<span class="wb" title="Found with search">${hvCookIc('globe')}</span>` : ''}</div><div class="tx"><b>${esc(x.name)}</b><span>${hvCookIc('timer')}${esc(hvCookTime(x.time))}</span></div></button>`).join('');
+  const savedOrder = () => cfg.recipes.map((r, i) => ({ r, i })).sort((a, b) => (sx.just && b.r.key === sx.just ? 1 : 0) - (sx.just && a.r.key === sx.just ? 1 : 0));
+  const homeBody = () => { const q = sx.q.trim(), ag = curAgent(), n = cfg.recipes.length, list = savedOrder(); let h = '';
+    if (sx.picker) return pickerHtml();
+    if (q) { const s = sx.s && sx.s.q === q ? sx.s : null;
+      const row = s && s.phase === 'asking' ? `<button class="sx-row hi" data-sx="open"><span class="sq" style="background:var(--acc)">${spinSvg}</span><div><b>Asking ${esc(s.agent.name)}…</b><small>“${esc(q)}”</small></div></button>`
+        : s && s.phase === 'results' ? `<button class="sx-row hi" data-sx="open"><span class="sq" style="background:var(--acc)">${hvCookIc('scene')}</span><div><b>${s.recipes.length} recipe${s.recipes.length === 1 ? '' : 's'} from ${esc(s.agent.name)}</b><small>“${esc(q)}”</small></div><span class="val">${hvCookIc('ret')}</span></button>`
+        : `<button class="sx-row hi" data-sx="ask"><span class="sq" style="background:var(--acc)">${hvCookIc('scene')}</span><div><b>Ask ${esc(ag.name)}</b><small>“${esc(q)}”</small></div><span class="val">${hvCookIc('ret')}</span></button>`;
+      return `<div class="sx-grp">${row}</div>${matchesHtml(q)}`; }
+    if (sx.focus) { const rec = hvCookLsGet(HV_COOK_LS.recent, []).filter(x => x && x.q).slice(0, 3);
+      const L = `<div class="sx-gh">Try asking ${esc(ag.name)}</div><div class="sx-grp">${HV_COOK_SUG.map(x => `<button class="sx-row" data-sx="sug" data-q="${esc(x[0])}"><span class="sq" style="background:${x[1]}">${hvCookIc(x[2])}</span><span style="flex:1;min-width:0">${esc(x[0])}</span><span class="val">${hvCookIc('ret')}</span></button>`).join('')}</div>`;
+      const Rr = (rec.length ? `<div class="sx-gh">Recent searches</div><div class="sx-grp">${rec.map(x => `<button class="sx-row" data-sx="rec" data-q="${esc(x.q)}"><span class="sq" style="background:#8e8e93">${hvCookIc('search')}</span><div><b>${esc(x.q)}</b><small>${esc(relTime(x.t || 0))}</small></div></button>`).join('')}</div>` : '')
+        + `<div class="sx-t sx-note"><i class="sx-orb${ag.builtin ? ' w' : ''}"></i><p><b>How it works</b>Your question goes to your default Assist agent in Home Assistant. Recipes it finds are listed here, and you choose what to save.</p></div>`;
+      h = `<div class="sx-two"><div style="flex:1.25">${L}</div><div>${Rr}</div></div>`;
+      if (n) h += `<div class="sx-sech" style="margin-top:6px"><b>Saved recipes</b><span>${n} recipe${n === 1 ? '' : 's'}</span></div><div class="sx-og mini">${tilesHtml(list)}</div>`; return h; }
+    if (!n) return `<div class="sx-emp"><b>No recipes yet</b><span>Ask an Assist agent above and tap Save to keep a recipe here. Recipes can also be set in the Home Screen card's YAML (Settings › Cooking).</span></div>`;
+    const web = cfg.recipes.some(r => r.web);
+    return `<div class="sx-sech"><b>Saved recipes</b><span>${n} recipe${n === 1 ? '' : 's'}${web ? ` · ${hvCookIc('globe')} = found with search` : ''}</span></div><div class="sx-og">${tilesHtml(list)}</div>`; };
+  const skCard = () => '<div class="sx-sk"><div class="t"><div class="im2"></div><div style="flex:1;display:flex;flex-direction:column;gap:10px"><i style="height:20px;width:88%"></i><i style="height:14px;width:52%"></i><i style="height:14px;width:36%;margin-top:auto"></i></div></div><i style="height:14px;width:96%;margin-top:14px"></i><i style="height:14px;width:70%;margin-top:8px"></i><i style="height:44px;width:100%;margin-top:auto;border-radius:14px"></i></div>';
+  const cardHtml = (x, i) => hvCookCard(x, i, isSaved(x));
+  const searchBody = () => { const s = sx.s; if (!s) return ''; const ag = s.agent, q = s.q;
+    if (s.phase === 'asking') { const stp = s.step || 1;
+      return `<div class="sx-t sx-stat"><div class="sx-bigorb"><i class="sx-orb"></i><svg viewBox="0 0 76 76"><circle cx="38" cy="38" r="34" fill="none" stroke="#8a7ff0" stroke-opacity=".25" stroke-width="4"/><path d="M38 4a34 34 0 0 1 34 34" fill="none" stroke="var(--acc)" stroke-width="4" stroke-linecap="round"/></svg></div><div><h2>Asking Assist…</h2><p>${esc(ag.name)} is looking for “${esc(q)}”</p></div>
+<div class="sx-steps"><div class="dn">${hvCookIc('check')}Sent your question</div><div class="${stp > 1 ? 'dn' : ''}">${stp > 1 ? hvCookIc('check') : hvCookIc('globe')}Searching the web…</div><div class="${stp > 1 ? '' : 'nx'}">${hvCookIc('list')}Putting recipes together</div></div></div><div class="sx-rg" data-sk>${Array.from({ length: 4 }, skCard).join('')}</div>`; }
+    if (s.phase === 'results') return `<div class="sxc sx-rg${s.recipes.length > 4 ? ' many' : ''}">${s.recipes.map(cardHtml).join('')}</div>`;
+    let left = '';
+    if (s.phase === 'noweb') left += (s.text ? `<div class="sx-t sx-bub"><i class="sx-orb w"></i><div><div class="lab">${esc(ag.name)} says</div><div class="tx">${esc(s.text)}</div></div></div>` : '')
+      + `<div class="sx-hint"><h4>${hvCookIc('warn')}${ag.def ? 'Your default Assist agent' : esc(ag.name)} can't search the web</h4><p>${ag.builtin ? 'The built-in Home Assistant agent only controls devices. ' : esc(ag.name) + ' said it can\'t search the web. '}To find recipes online, pick an AI agent that has web search turned on, like OpenAI, Google, Anthropic or Ollama with a search tool.</p></div>`;
+    else if (s.phase === 'raw') left += `<div class="sx-t sx-bub"><i class="sx-orb"></i><div><div class="lab" style="color:var(--acc)">${esc(ag.name)} says</div><div class="tx">${esc(s.text)}</div></div></div><div class="sx-hint"><h4>${hvCookIc('warn')}Couldn't turn the answer into recipe cards</h4><p>${esc(ag.name)} answered in plain text instead of the recipe format Cooking asks for. Tap Ask again, or pick another Assist agent.</p></div>`;
+    else left += `<div class="sx-hint"><h4>${hvCookIc('warn')}${s.timeout ? esc(ag.name) + ' took too long to answer' : 'Couldn\'t get an answer from ' + esc(ag.name)}</h4><p>${s.timeout ? 'No answer arrived in time. Tap Ask again in a moment, or pick another Assist agent.' : esc(s.quota ? 'Its AI service has hit its usage limit for now. Try again later, or pick another Assist agent.' : (s.msg ? s.msg + '. ' : '') + 'Check that integration in Settings → Devices & services, or pick another Assist agent.')}</p></div>`;
+    left += matchesHtml(q);
+    return `<div class="sx-two"><div>${left}</div><div>${pickerHtml()}</div></div>`; };
+  const sxPaint = () => { if (!root) return; if (!sx.shell || !root.querySelector('.sx')) { root.innerHTML = shellHtml(); sx.shell = true; const i = root.querySelector('.sx-sf input'); i.value = sx.q; }
+    const P = n => root.querySelector(`[data-p=${n}]`), inp = root.querySelector('.sx-sf input'), ag = curAgent(), onS = st.view === 'search';
+    P('hd').innerHTML = onS ? `<button class="sx-back" data-sx="home">${hvCookIc('chevl')}Cooking</button><h1>Recipe search</h1>` : '<h1>Cooking</h1>';
+    P('clr').innerHTML = sx.q ? `<button class="sx-clr" data-sx="clear" aria-label="Clear">${hvCookIc('x')}</button>` : '';
+    P('pill').innerHTML = pillHtml(); inp.placeholder = `Search recipes or ask ${ag.name}…`; if (inp.value !== sx.q) inp.value = sx.q;
+    const cp = capHtml(), ce = P('cap'); ce.className = cp[0]; ce.innerHTML = cp[1];
+    const b = P('body'), y = b.scrollTop; b.innerHTML = onS ? (sx.picker && sx.s && sx.s.phase !== 'noweb' ? pickerHtml() : searchBody()) : homeBody(); b.scrollTop = y; };
+  // ---- ask an Assist agent, read the answer
+  const endRun = () => { clearTimeout(sx.to); sx.to = 0; const u = sx.unsub; sx.unsub = null; if (u) try { u(); } catch (e) {} };
+  const pushRecent = q => { const a = hvCookLsGet(HV_COOK_LS.recent, []).filter(x => x && x.q && x.q.toLowerCase() !== q.toLowerCase()); a.unshift({ q, t: Date.now() }); hvCookLsSet(HV_COOK_LS.recent, a.slice(0, 8)); };
+  const askSx = qq => { const q = String(qq == null ? sx.q : qq).trim(); const inp = root && root.querySelector('.sx-sf input');
+    if (!q) { if (inp) inp.focus(); return; }
+    sx.q = q; sx.picker = false; sx.savedMsg = ''; const ag = curAgent(), tok = ++sx.tok; endRun(); pushRecent(q); st.view = 'search';
+    if (ag.builtin) { capSet(ag.id, 'no'); sx.s = { phase: 'noweb', q, agent: ag, text: '' }; sxPaint(); return; }   // the built-in agent only runs home commands: not asked
+    sx.s = { phase: 'asking', q, agent: ag, step: 1 }; sxPaint(); if (inp) inp.blur();
+    let done = false; const finish = r => { if (done || tok !== sx.tok) return; done = true; endRun(); const s = { q, agent: ag };
+      if (r.kind === 'ok') { capSet(ag.id, 'ok'); Object.assign(s, { phase: 'results', recipes: r.recipes }); } else if (r.kind === 'noweb') { capSet(ag.id, 'no'); Object.assign(s, { phase: 'noweb', text: r.text }); }
+      else if (r.kind === 'raw') Object.assign(s, { phase: 'raw', text: r.text }); else Object.assign(s, { phase: 'error', msg: r.msg, quota: r.quota, timeout: r.kind === 'timeout' });
+      sx.s = s; if (st.view === 'list' || st.view === 'search') sxPaint(); else toast(r.kind === 'ok' ? 'Recipe results are ready in Cooking' : 'The recipe search finished'); };
+    const msg = { type: 'assist_pipeline/run', start_stage: 'intent', end_stage: 'intent', input: { text: hvCookPrompt(q, 4) }, timeout: Math.round(HV_COOK_ASK_MS / 1000) + 5 }; if (ag.id) msg.pipeline = ag.id;
+    sx.to = setTimeout(() => finish({ kind: 'timeout' }), HV_COOK_ASK_MS);
+    try { const p = H().connection.subscribeMessage(ev => { if (done || tok !== sx.tok) return; const d = (ev && ev.data) || {};
+        if (ev.type === 'intent-progress') { if (sx.s && sx.s.phase === 'asking' && sx.s.step < 2) { sx.s.step = 2; if (st.view === 'search') sxPaint(); } }
+        else if (ev.type === 'intent-end') { const o = d.intent_output || {}, r = o.response || {}; finish(hvCookClassify((r.speech && r.speech.plain && r.speech.plain.speech) || '', r.response_type)); }
+        else if (ev.type === 'error') finish({ kind: 'error', msg: String(d.message || d.code || '').slice(0, 160) });
+        else if (ev.type === 'run-end') finish({ kind: 'error', msg: '' }); }, msg);
+      Promise.resolve(p).then(u => { if (typeof u !== 'function') return; if (done || tok !== sx.tok) { try { u(); } catch (e) {} } else sx.unsub = u; }, e => finish({ kind: 'error', msg: String(e && e.message || e || '').slice(0, 160) })); }
+    catch (e) { finish({ kind: 'error', msg: String(e && e.message || e || '').slice(0, 160) }); } };
+  const saveRes = i => { const s = sx.s, x = s && s.recipes && s.recipes[i]; if (!x || isSaved(x)) return; if (!hvCookSaveRecipe(x)) { toast('Couldn\'t save on this iPad (storage is full)'); return; } sx.just = x.key; sx.savedMsg = x.name; cfg = getCfg(); sxPaint(); };
+  const goRes = i => { const s = sx.s, x = s && s.recipes && s.recipes[i]; if (!x) return; if (!x.steps.length) { toast('This recipe has no steps to cook'); return; }
+    const k = cfg.recipes.findIndex(r => r.key && r.key === x.key); if (k >= 0) { st.r = k; st.ext = null; } else { st.r = -1; st.ext = x; } go('sv', 0); };
+  const sxAct = t => { const a = t.dataset.sx, inp = root.querySelector('.sx-sf input'), q = sx.q.trim();
+    if (a === 'orb') { sx.picker = !sx.picker; sxPaint(); return; }
+    if (a === 'pill') { if (q) askSx(); else { sx.picker = !sx.picker; sxPaint(); } return; }
+    if (a === 'ask') askSx(); else if (a === 'again') askSx(sx.s ? sx.s.q : sx.q);
+    else if (a === 'sug' || a === 'rec') { sx.q = t.dataset.q; if (inp) inp.value = sx.q; askSx(sx.q); }
+    else if (a === 'clear') { sx.q = ''; if (inp) inp.value = ''; sx.savedMsg = ''; if (sx.s && sx.s.phase === 'asking') { sx.tok++; endRun(); } sx.s = null; sx.picker = false; st.view = 'list'; sx.focus = true; sxPaint(); if (inp) inp.focus(); }
+    else if (a === 'home') { sx.picker = false; sx.savedMsg = ''; st.view = 'list'; sxPaint(); }
+    else if (a === 'open') { st.view = 'search'; sx.picker = false; sxPaint(); }
+    else if (a === 'cancel') { sx.tok++; endRun(); sx.s = null; sx.picker = false; st.view = 'list'; sxPaint(); }
+    else if (a === 'change') { sx.picker = !sx.picker; sxPaint(); }
+    else if (a === 'viewsaved') { sx.savedMsg = ''; sx.q = ''; if (inp) inp.value = ''; sx.s = null; st.view = 'list'; sx.focus = false; sxPaint(); }
+    else if (a === 'save') saveRes(Number(t.dataset.i)); else if (a === 'go') goRes(Number(t.dataset.i)); };
+  const pickAgent = id => { sx.agentId = id; hvCookLsSet(HV_COOK_LS.agent, id); sx.picker = false; sx.savedMsg = '';
+    if (st.view === 'search' && sx.s && sx.s.phase !== 'results' && sx.s.phase !== 'asking') { sx.s = null; st.view = 'list'; } sxPaint(); };
+  const paint = () => { if (!root) return; cfg = getCfg(); const r = R(); const x = root.getRootNode().querySelector('.x'); if (x) x.style.display = st.view === 'sv' ? 'none' : '';
+    if (st.view === 'list' || st.view === 'search' || !r) { if (st.view !== 'search') st.view = 'list'; sxPaint(); return; }
+    sx.shell = false; let h = '';
+    if (st.view === 'ov') { const nT = r.steps.filter(s => s.timer).length, tid = todo(), done = st.added.has(rk());
       h = `<div class="ov"><div class="hero art" style="--art:${art(r, st.r)}">${r.tags.length ? `<div class="tags">${r.tags.map(t => `<span>${esc(t)}</span>`).join('')}</div>` : ''}</div><div class="rp">
-<div class="hd"><span class="eb">${esc(eyebrow())}</span>${cfg.recipes.length > 1 ? '<button class="all" data-a="list">All recipes</button>' : ''}</div><h1>${esc(r.name)}</h1>
+<div class="hd"><span class="eb">${esc(eyebrow())}</span><button class="all" data-a="list">All recipes</button></div><h1>${esc(r.name)}</h1>
 <div class="meta"><div><b>${esc(hvCookTime(r.time))}</b><span>Total time</span></div><div><b>${esc(r.servings != null && r.servings !== '' ? r.servings : '—')}</b><span>Servings</span></div><div><b>${r.steps.length}</b><span>Steps</span></div><div><b>${nT}</b><span>Timers</span></div></div>
-<button class="start" data-a="start"${r.steps.length ? '' : ' disabled'}>${HV_COOK_SVG.play}${(HVCOOK.pos.get(st.r) || 0) > 0 ? 'Continue Cooking' : 'Start Cooking'}</button>
+<button class="start" data-a="start"${r.steps.length ? '' : ' disabled'}>${HV_COOK_SVG.play}${(HVCOOK.pos.get(rk()) || 0) > 0 ? 'Continue Cooking' : 'Start Cooking'}</button>
 ${r.steps.length ? `<div class="tl steps">${r.steps.map((s, i) => `<button class="st" data-go="${i}"><span class="n">${i + 1}</span><span class="tx">${esc(s.text)}</span>${s.timer ? `<span class="tmc">${HV_COOK_SVG.timer}${esc(hvCookTime(s.timer.minutes))}</span>` : ''}</button>`).join('')}</div>` : ''}
 ${r.ingredients.length ? `<div class="tl ingr"><div class="it"><b>Ingredients <span>· ${r.ingredients.length}</span></b><p>${esc(r.ingredients.join(', '))}</p></div><button class="addl" data-a="rem" aria-disabled="${!tid || done}"${tid ? ` title="Adds them to ${esc(tname(tid))}"` : ' title="No to-do list in Home Assistant"'}>${HV_COOK_SVG.list}${done ? 'Added' : 'Add to Reminders'}</button></div>` : ''}</div></div>`; }
     else { const s = r.steps[st.step], n = r.steps.length;
@@ -7403,10 +7746,10 @@ ${cfg.voice ? `<div class="vh"><div class="m">${HV_COOK_SVG.mic}</div><div><b>Ha
   const tick = () => { if (HVCOOK.check()) { hvCookBeep(); if (st.view === 'sv') { const m = root.querySelector('.main'), y = m ? m.scrollTop : 0; paint(); const m2 = root.querySelector('.main'); if (m2) m2.scrollTop = y; } else { const d = [...HVCOOK.t.values()].find(t => t.done); toast((d && d.label ? d.label + ': ' : '') + 'timer done'); } return; }
     if (st.view !== 'sv' || !root) return; for (const el of root.querySelectorAll('.tmr[data-tk]')) { const t = HVCOOK.t.get(el.dataset.tk); if (!t || t.done) continue; const left = HVCOOK.left(t);
       const tx = el.querySelector('.t'), v = hvCookFmt(left); if (tx.textContent !== v) tx.textContent = v; const c = el.querySelector('circle.pr'); if (c) c.setAttribute('stroke-dasharray', (264 * Math.max(0, Math.min(1, left / t.total))).toFixed(1) + ' 264'); } };
-  const go = (v, step) => { st.view = v; if (step != null) { st.step = Math.max(0, Math.min(step, R().steps.length - 1)); HVCOOK.pos.set(st.r, st.step); } paint(); };
-  const addRem = async () => { const r = R(), id = todo(); if (!r || !id || st.added.has(st.r)) return; st.added.add(st.r); paint(); let n = 0;
+  const go = (v, step) => { st.view = v; if (step != null) { st.step = Math.max(0, Math.min(step, R().steps.length - 1)); HVCOOK.pos.set(rk(), st.step); } paint(); };
+  const addRem = async () => { const r = R(), id = todo(), k = rk(); if (!r || !id || st.added.has(k)) return; st.added.add(k); paint(); let n = 0;
     for (const it of r.ingredients) { try { await H().callService('todo', 'add_item', { item: it }, { entity_id: id }); n++; } catch (e) { hvToast('Couldn\'t add the reminder: ' + (e && e.message || e)); break; } }
-    if (n < r.ingredients.length) st.added.delete(st.r); paint(); if (n) toast(`Added ${n} to ${tname(id)}`); };
+    if (n < r.ingredients.length) st.added.delete(k); paint(); if (n) toast(`Added ${n} to ${tname(id)}`); };
   // the screen stays on: Wake Lock (when the browser has it) + the screensaver's idle clock kept fresh
   const awake = on => { clearInterval(keep); keep = 0; if (lock) { try { lock.release(); } catch (e) {} lock = null; } if (vis) { document.removeEventListener('visibilitychange', vis); vis = null; } if (!on || !cfg.awake) return;
     const bump = () => { const w = ssWallpanel(); if (w && !(w.screensaverRunning && w.screensaverRunning())) w.idleSince = Date.now(); }; bump(); keep = setInterval(bump, 2000);
@@ -7414,23 +7757,27 @@ ${cfg.voice ? `<div class="vh"><div class="m">${HV_COOK_SVG.mic}</div><div><b>Ha
     req(); vis = () => { if (document.visibilityState === 'visible' && keep) req(); }; document.addEventListener('visibilitychange', vis); };
   const onKey = e => { if (!root || !root.isConnected || st.view !== 'sv' || e.defaultPrevented) return; if (e.key === 'ArrowRight') { e.preventDefault(); root.querySelector('[data-a=next]').click(); } else if (e.key === 'ArrowLeft') { e.preventDefault(); root.querySelector('[data-a=back]').click(); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); go('ov'); } };
   const dark = hub._config.appearance_home === true && hvMode(HV_THEMES.includes(hub._config.theme) ? hub._config.theme : HV_THEME_DEFAULT, H()) === 'night';
-  const s = hub._openSheet({ label: 'Cooking', edit: null, day: !dark, dayBg: '#f2f2f7', bg: dark ? '#000' : '#f2f2f7', onClose: () => { clearInterval(iv); clearTimeout(tstT); awake(false); removeEventListener('keydown', onKey, true); root = null; },
-    build: bd => { const sty = document.createElement('style'); sty.textContent = HV_COOK_CSS; bd.appendChild(sty); root = document.createElement('div'); root.className = dark ? 'ck dk' : 'ck'; bd.appendChild(root);
-      root.addEventListener('click', e => { const t = e.target.closest && e.target.closest('[data-a],[data-r],[data-go],[data-t]'); if (!t || t.disabled) return; const a = t.dataset.a;
-        if (t.dataset.r != null) { st.r = Number(t.dataset.r); go('ov'); return; }
+  const s = hub._openSheet({ label: 'Cooking', edit: null, day: !dark, dayBg: '#f2f2f7', bg: dark ? '#000' : '#f2f2f7', onClose: () => { clearInterval(iv); clearTimeout(tstT); clearTimeout(blurT); sx.tok++; endRun(); awake(false); removeEventListener('keydown', onKey, true); root = null; },
+    build: bd => { const sty = document.createElement('style'); sty.textContent = HV_COOK_CSS + HV_COOK_SX_CSS; bd.appendChild(sty); root = document.createElement('div'); root.className = dark ? 'ck dk' : 'ck'; bd.appendChild(root);
+      root.addEventListener('click', e => { const t = e.target.closest && e.target.closest('[data-a],[data-r],[data-go],[data-t],[data-sx],[data-ag]'); if (!t || t.disabled) return; const a = t.dataset.a;
+        if (t.dataset.ag != null) { pickAgent(t.dataset.ag); return; }
+        if (t.dataset.sx) { sxAct(t); return; }
+        if (t.dataset.r != null) { st.r = Number(t.dataset.r); st.ext = null; go('ov'); return; }
         if (t.dataset.go != null) { go('sv', Number(t.dataset.go)); return; }
         if (t.dataset.t) { const card = t.closest('.tmr'), r = R(); if (t.dataset.t === 'start' && card && card.dataset.ns != null) { const i = Number(card.dataset.ns), sp = r.steps[i]; HVCOOK.start(key(i), sp.timer.label || `Step ${i + 1}`, sp.timer.minutes); }
           else { const tm = card && HVCOOK.t.get(card.dataset.tk); if (!tm) return; if (t.dataset.t === 'pause') HVCOOK.pause(tm); else if (t.dataset.t === 'add') HVCOOK.add(tm, 60000); else if (t.dataset.t === 'stop') HVCOOK.stop(tm.key); }
           try { hvCookBeep.a && hvCookBeep.a.resume(); } catch (x) {} paint(); return; }
-        if (a === 'list') go('list'); else if (a === 'start') go('sv', HVCOOK.pos.get(st.r) || 0); else if (a === 'ov') go('ov');
+        if (a === 'list') { st.view = 'list'; paint(); } else if (a === 'start') go('sv', HVCOOK.pos.get(rk()) || 0); else if (a === 'ov') go('ov');
         else if (a === 'back') { if (st.step <= 0) go('ov'); else go('sv', st.step - 1); }
-        else if (a === 'next') { if (st.step + 1 >= R().steps.length) { HVCOOK.pos.delete(st.r); go('ov'); toast('Enjoy!'); } else go('sv', st.step + 1); }
+        else if (a === 'next') { if (st.step + 1 >= R().steps.length) { HVCOOK.pos.delete(rk()); go('ov'); toast('Enjoy!'); } else go('sv', st.step + 1); }
         else if (a === 'rem' && t.getAttribute('aria-disabled') !== 'true') addRem(); });
       // the step view's own drag: swipe left / right for the next / previous step
-      let sx = null; root.addEventListener('touchstart', e => { sx = st.view === 'sv' && e.touches.length === 1 ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : null; }, { passive: true });
-      root.addEventListener('touchend', e => { if (!sx) return; const t = e.changedTouches[0], dx = t.clientX - sx.x, dy = t.clientY - sx.y; sx = null; if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.5) root.querySelector(dx < 0 ? '[data-a=next]' : '[data-a=back]').click(); }, { passive: true });
+      let sx0 = null; root.addEventListener('touchstart', e => { sx0 = st.view === 'sv' && e.touches.length === 1 ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : null; }, { passive: true });
+      root.addEventListener('touchend', e => { if (!sx0) return; const t = e.changedTouches[0], dx = t.clientX - sx0.x, dy = t.clientY - sx0.y; sx0 = null; if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.5) root.querySelector(dx < 0 ? '[data-a=next]' : '[data-a=back]').click(); }, { passive: true });
       paint(); awake(true); iv = setInterval(tick, 250); addEventListener('keydown', onKey, true);
-      return { set hass(h) { const n = hvCookCfg(hub._config); if (JSON.stringify(n) !== JSON.stringify(cfg)) { cfg = n; if (st.r >= cfg.recipes.length) { st.r = 0; st.view = cfg.recipes.length > 1 ? 'list' : 'ov'; } paint(); } } }; } });
+      // the Assist agents (a read, no service call): the default one named on the pill
+      Promise.resolve().then(() => H().callWS({ type: 'assist_pipeline/pipeline/list' })).then(r => { sx.pipes = r && Array.isArray(r.pipelines) ? r : false; if (root && (st.view === 'list' || st.view === 'search')) sxPaint(); }, () => { sx.pipes = false; });
+      return { set hass(h) { const n = getCfg(); if (JSON.stringify(n) !== JSON.stringify(cfg)) { cfg = n; if (st.r >= cfg.recipes.length) { st.r = 0; st.view = 'list'; } paint(); } } }; } });
   return s; }
 // ---- Settings › Cooking: the recipes (from YAML), the to-do list for Add to Reminders, keep the screen on, the voice hint
 const HV_COOK_SET_CSS = `:host{display:block}.g{background:var(--card,#fff);border-radius:14px;overflow:hidden;margin:0 0 22px}
@@ -7450,6 +7797,11 @@ function hvCookingUI(ctx) { const el = document.createElement('div');
 <div class="ft">Recipes are set in YAML (cooking: recipes:). Tap one to open it in Cooking.</div>
 <div class="g"><label class="r"><span>Add to Reminders list</span><select data-k="todo_entity" aria-label="Add to Reminders list"${dis}><option value="">Automatic</option>${todos.map(t => `<option value="${esc(t)}"${k.todo === t ? ' selected' : ''}>${esc((S[t].attributes && S[t].attributes.friendly_name) || t)}</option>`).join('')}</select></label>
 <div class="r"><span>Keep screen on</span><button class="sw" role="switch" data-k="keep_awake" aria-checked="${k.awake}" aria-label="Keep screen on"${dis}></button></div>
+      // the search box: type to filter your saved recipes, Enter (or the pill) to ask the agent
+      root.addEventListener('input', e => { if (!e.target.matches || !e.target.matches('.sx-sf input')) return; sx.q = e.target.value; if (!sx.q.trim()) sx.picker = false; sx.savedMsg = ''; sxPaint(); });
+      root.addEventListener('focusin', e => { if (e.target.matches && e.target.matches('.sx-sf input')) { clearTimeout(blurT); if (!sx.focus) { sx.focus = true; if (st.view === 'list') sxPaint(); } } });
+      root.addEventListener('focusout', e => { if (e.target.matches && e.target.matches('.sx-sf input')) { clearTimeout(blurT); blurT = setTimeout(() => { sx.focus = false; if (root && st.view === 'list') sxPaint(); }, 220); } });
+      root.addEventListener('keydown', e => { if (e.target.matches && e.target.matches('.sx-sf input') && e.key === 'Enter') { e.preventDefault(); askSx(); } });
 <div class="r"><span>"Hands busy?" hint</span><button class="sw" role="switch" data-k="voice_hint" aria-checked="${k.voice}" aria-label="Hands busy hint"${dis}></button></div></div>
 <div class="ft">Add to Reminders puts a recipe's ingredients on this to-do list (Automatic: a shopping or grocery list, else the first). The screen stays on and the screensaver waits while Cooking is open. Timers run on this iPad only.</div>`; };
   const set = (k, v, def) => { if (ctx.ro) return; const c = JSON.parse(JSON.stringify(ctx.cfg() || {})), o = c.cooking && typeof c.cooking === 'object' ? c.cooking : {}; if (v === def || v === '' || v == null) delete o[k]; else o[k] = v; ctx.save('cooking', Object.keys(o).length ? o : null); };
