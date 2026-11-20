@@ -6868,25 +6868,34 @@ function hvAssist(hub, o) {
   const ask = (text, um) => { const tok = ++runTok; sugEl.hidden = true; stick = true; if (!um) userMsg(text); asked = true; keepCap = false; capMode = compact; capWhy = ''; hvHistAdd(c, 'u', text); if (compact) cap.querySelector('.q').textContent = `“${text}”`; if (timerCmd(text)) return;
     st('thinking'); endRun(); if (hvCookIntent(text) && hvCookAppOn(hub)) { runRecipe(text, tok, botMsg()); return; } run(text, tok, true, botMsg()); };
   // a recipe question: the same recipe cards as Cooking › search (the agent is asked for the recipe format, no speech). Save / Start cooking act on this iPad's Cooking.
+  // "can't search the web" is a normal limit, not an error: a neutral hint with a way out (the agent picker in Cooking, this question kept in the search box)
+  const hint = (m, an, q) => { if (compact) { asked = true; showCap(null, `${an} can't search the web, so it can't look up recipes.`, '', false); }
+    const e = document.createElement('div'); e.className = 'rhint'; e.setAttribute('role', 'status');
+    e.innerHTML = `${hvCookIc('info')}<div class="rht"><b>${esc(an)} can't search the web</b><span>It can't look up recipes. Pick an assistant with web search to find them online.</span></div><button class="rpk" data-q="${esc(q)}">Pick another assistant</button>`;
+    m.appendChild(e); keep(); };
   const rzPaint = m => { const z = m.querySelector('.rz'); if (z) z.innerHTML = (m._rz || []).map((x, i) => hvCookCard(x, i, hvCookIsSaved(x))).join(''); };
-  const runRecipe = async (text, tok, m) => { const pi = await pinfoP; if (tok !== runTok) return; const eng = String((pi && pi.conversation_engine) || '');
+  const runRecipe = async (text, tok, m) => { let pi = await pinfoP, pid = pipe; if (tok !== runTok) return;
+    const ca = String(hvCookLsGet(HV_COOK_LS.agent, '') || '');   // the agent picked in Cooking (also through "Pick another assistant" below) is the one asked
+    if (ca && !(pi && pi.id === ca)) { try { const r = await h0.callWS({ type: 'assist_pipeline/pipeline/list' }), p = (r.pipelines || []).find(x => x.id === ca); if (p) { pi = p; pid = ca; } } catch (e) {} if (tok !== runTok) return; }
+    const eng = String((pi && pi.conversation_engine) || '');
     if (eng === 'conversation.home_assistant' || eng === 'homeassistant') { run(text, tok, true, m); return; }   // the built-in agent can't search the web: the answer is the usual one
-    const an = `“${(pi && pi.name) || 'This assistant'}”`; let fin = false, to = 0;
+    const an = (pi && pi.name) || 'This assistant'; let fin = false, to = 0;
     const finish = r => { if (fin || tok !== runTok) return; fin = true; clearTimeout(to); endRun();
-      if (r.kind === 'ok') { m._rz = r.recipes; const n = r.recipes.length; fill(m, `Here ${n === 1 ? 'is 1 recipe' : 'are ' + n + ' recipes'}. Save one, or start cooking.`);
+      if (r.kind === 'ok') { m._rz = r.recipes; const n = r.recipes.length; fill(m, `${n} recipe${n === 1 ? '' : 's'} from ${an} · tap Save to keep ${n === 1 ? 'it' : 'one'} in Cooking`);
         let z = m.querySelector('.rz'); if (!z) { z = document.createElement('div'); z.className = 'sxc rz'; m.insertBefore(z, m.querySelector('.ax')); } rzPaint(m); m.classList.add('lst', 'rcp'); st('idle'); keep(); if (compact) expand(); return; }
       if (r.kind === 'raw') { fill(m, r.full || r.text); st('idle'); return; }
-      if (r.kind === 'noweb') { fill(m, r.text || 'Sorry, I can\'t search the web.'); note(m, `${an} can't search the web, so it can't look up recipes. Pick another assistant in the Home Screen settings (Assistant & timer).`); }
-      else { fill(m, 'Sorry, something went wrong.'); note(m, r.kind === 'timeout' ? `${an} took too long to answer. Try again in a moment.` : r.quota ? `${an} couldn't answer: its AI service has hit its usage limit (quota) for now. Try again later, or pick another assistant in the Home Screen settings.`
-        : `${an} couldn't answer: its conversation agent reported an error. Check that integration (for example its API key) in Settings → Devices & services, or pick another assistant in the Home Screen settings.`); }
+      if (r.kind === 'noweb') { fill(m, r.text || 'Sorry, I can\'t search the web.'); hint(m, an, text); }
+      else { fill(m, 'Sorry, something went wrong.'); note(m, r.kind === 'timeout' ? `“${an}” took too long to answer. Try again in a moment.` : r.quota ? `“${an}” couldn't answer: its AI service has hit its usage limit (quota) for now. Try again later, or pick another assistant in the Home Screen settings.`
+        : `“${an}” couldn't answer: its conversation agent reported an error. Check that integration (for example its API key) in Settings → Devices & services, or pick another assistant in the Home Screen settings.`); }
       st('idle'); oops(); micOff(); };
-    const msg = { type: 'assist_pipeline/run', start_stage: 'intent', end_stage: 'intent', input: { text: hvCookPrompt(text, 4) }, timeout: Math.round(HV_COOK_ASK_MS / 1000) + 5 }; if (pipe) msg.pipeline = pipe;
+    const msg = { type: 'assist_pipeline/run', start_stage: 'intent', end_stage: 'intent', input: { text: hvCookPrompt(text, 4) }, timeout: Math.round(HV_COOK_ASK_MS / 1000) + 5 }; if (pid) msg.pipeline = pid;
     to = setTimeout(() => finish({ kind: 'timeout' }), HV_COOK_ASK_MS);
     try { unsub = hub._hass.connection.subscribeMessage(ev => { if (fin || tok !== runTok) return; const d = (ev && ev.data) || {};
         if (ev.type === 'intent-end') { const o = d.intent_output || {}, r = o.response || {}; finish(hvCookClassify((r.speech && r.speech.plain && r.speech.plain.speech) || '', r.response_type)); }
         else if (ev.type === 'error') finish({ kind: 'error', msg: String(d.message || d.code || '') }); else if (ev.type === 'run-end') finish({ kind: 'error', msg: '' }); }, msg);
       Promise.resolve(unsub).catch(e => finish({ kind: 'error', msg: String(e && e.message || e || '') })); }
     catch (e) { finish({ kind: 'error', msg: String(e && e.message || e || '') }); } };
+  log.addEventListener('click', e => { const b = e.target.closest && e.target.closest('.rpk'); if (!b || !log.contains(b)) return; const q = b.dataset.q || ''; close(); setTimeout(() => hvOpenCooking(hub, null, undefined, { pick: q }), 480); });   // opens Cooking with the agent picker and this question
   // Save to Cooking / Start cooking on a card in the chat
   log.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-sx]'); if (!b || !log.contains(b)) return; const m = b.closest('.m'), x = m && m._rz && m._rz[Number(b.dataset.i)]; if (!x) return;
     if (b.dataset.sx === 'save') { if (!hvCookIsSaved(x) && !hvCookSaveRecipe(x)) hvToast('Couldn\'t save the recipe on this iPad (storage is full)'); rzPaint(m); }
@@ -7347,7 +7356,7 @@ const hvCookMatches = (recipes, q) => { const toks = String(q || '').toLowerCase
 const hvCookAgo = t => { const d = Math.floor((Date.now() - t) / 86400000); return d <= 0 ? 'Today' : d === 1 ? 'Yesterday' : d < 7 ? d + ' days ago' : d < 14 ? 'Last week' : Math.floor(d / 7) + ' weeks ago'; };
 const HV_COOK_SUG = [['Quick weeknight dinners with chicken', '#ff9500', 'flame'], ['Vegetarian pasta under 30 minutes', '#34c759', 'scene'], ['Kid-friendly lunches for school', '#0a84ff', 'list'],
   ['Something with what\'s in my fridge', '#af52de', 'home'], ['Slow cooker meals for a busy week', '#ff3b30', 'timer']];
-const HV_COOK_IC = { search: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="m20 20-4.8-4.8"/>', x: '<path d="M6 6l12 12M18 6 6 18"/>', check: '<path d="M4.5 12.5 9.5 17.5 19.5 7"/>', bookmark: '<path d="M6.5 3.5h11v17L12 16.5l-5.5 4z"/>',
+const HV_COOK_IC = { info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.8v.1"/>', search: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="m20 20-4.8-4.8"/>', x: '<path d="M6 6l12 12M18 6 6 18"/>', check: '<path d="M4.5 12.5 9.5 17.5 19.5 7"/>', bookmark: '<path d="M6.5 3.5h11v17L12 16.5l-5.5 4z"/>',
   users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.8a3.5 3.5 0 0 1 0 6.4M18 14a6.5 6.5 0 0 1 3.5 6"/>', globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.2 3 14.8 0 18M12 3c-3 3.2-3 14.8 0 18"/>',
   warn: '<path d="M12 3.5 2.5 20h19z"/><path d="M12 10v4.5M12 17.5v.1"/>', ret: '<path d="M20 6v6a3 3 0 0 1-3 3H5M9 10.5 4.5 15 9 19.5"/>', scene: '<path d="M12 3l1.9 5.2L19 10l-5.1 1.8L12 17l-1.9-5.2L5 10l5.1-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/>',
   flame: '<path d="M12 22c4 0 7-2.8 7-6.8 0-3.6-2.4-5.7-3.8-8.7-.6 2-1.6 3-2.7 3.2.3-3.2-1-5.8-3.5-7.7.2 3.7-4 6.3-4 11.7C5 19.2 8 22 12 22z"/>', list: '<path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1.2"/><circle cx="4.5" cy="12" r="1.2"/><circle cx="4.5" cy="18" r="1.2"/>',
@@ -7454,7 +7463,7 @@ const HV_COOK_CSS = `.ck{position:absolute;inset:0;color:#3c3c43;font-family:${F
 .ck.dk{background:#000;color:#f5f5f7}.ck.dk .tl,.ck.dk .ov .meta div,.ck.dk .tmr,.ck.dk .sv .nav .bk,.ck.dk .sv .vh,.ck.dk .sv .cx,.ck.dk .sv .ing span,.ck.dk .ls .rc,.ck.dk .emp pre{background:#1c1c1e;color:#f5f5f7;box-shadow:none}
 .ck.dk h1,.ck.dk .sv .big,.ck.dk .ls h1,.ck.dk .emp h2{color:#f5f5f7}.ck.dk .sub,.ck.dk .ov .meta span,.ck.dk .tmr .l,.ck.dk .ov .ingr p,.ck.dk .ov .ingr b span,.ck.dk .ls .rc span,.ck.dk .sv .vh span,.ck.dk .emp p{color:rgba(235,235,245,.6)}
 .ck.dk .ov .st .n,.ck.dk .tmr .bt button{background:#2c2c2e;color:#f5f5f7}.ck.dk .ov .st+.st::before{background:rgba(84,84,88,.6)}.ck.dk .tmr .rg circle:first-child{stroke:#2c2c2e}
-.ck.dk .tmc,.ck.dk .addl,.ck.dk .tmr.nxt{background:#3a3360;color:#d9d3ff}.ck.dk .tmr.nxt .t,.ck.dk .tmr.nxt .l,.ck.dk .tmr.nxt .ic{color:#d9d3ff}.ck.dk .tmr.nxt .bt button{background:#7a6cf0;color:#fff}.ck.dk .sv .big em,.ck.dk .sv .lab,.ck.dk .ov .hd .all{color:#a99df2}
+.ck.dk .tmc,.ck.dk .addl,.ck.dk .tmr.nxt{background:#3a3360;color:#d9d3ff}.ck.dk .tmr.nxt .t,.ck.dk .tmr.nxt .l,.ck.dk .tmr.nxt .ic{color:#d9d3ff}.ck.dk .tmr.nxt .bt button,.ck.dk .sv .nav .nx{background:#7a6cf0;color:#fff}.ck.dk .sv .big em,.ck.dk .sv .lab,.ck.dk .ov .hd .all{color:#a99df2}
 .ck.dk .sv .prog i{background:rgba(235,235,245,.18)}.ck.dk .sv .prog i.d{background:#7a6cf0}.ck.dk .sv .prog i.c{background:linear-gradient(90deg,#7a6cf0 50%,rgba(235,235,245,.18) 50%)}
 @media (prefers-reduced-motion:reduce){.tmr.done{animation:none}}`;
 const hvCookEnc = u => String(u).replace(/[\s'"()\\<>]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'));
@@ -7472,7 +7481,14 @@ const hvCookIntent = t => { const x = String(t || '').trim(); if (!x || x.length
 const hvCookAppOn = hub => !!(hub && hub._config && Array.isArray(hub._config.apps) && hub._config.apps.some(a => a && a.kind === 'cooking'));
 const HV_COOK_POP_CSS = () => hvCookCardCss(':host([night])') + `
 .rz{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,420px),1fr));gap:14px;margin:16px 0 4px;text-align:left}.rz:empty{display:none}.rz .sx-rc{min-width:0}
-.m.a.rcp{width:min(96%,1100px);max-width:min(96%,1100px)}:host([read]) .m.a.rcp{width:100%;max-width:none}`;
+.m.a.rcp{width:min(96%,1100px);max-width:min(96%,1100px)}:host([read]) .m.a.rcp{width:100%;max-width:none}
+.m.a.rcp .re,:host([read]) .m.a.rcp .re,.m.a.rcp.rich .rd,:host([read]) .m.a.rcp.rich .rd{font-size:22px;font-weight:700;line-height:1.25;letter-spacing:-.01em}
+.rhint{--hb:rgba(63,51,153,.09);--hi:#3f3399;--hbt:#cdc6ef;--hbf:#3f3399;display:flex;align-items:center;gap:14px;margin-top:16px;padding:14px 16px;border-radius:18px;background:var(--hb);color:var(--fg);text-align:left;font-size:15px;line-height:1.35}
+:host([night]) .rhint{--hb:rgba(122,108,240,.18);--hi:#a99df2;--hbt:#3a3360;--hbf:#d9d3ff}
+.rhint svg{width:24px;height:24px;flex:none;color:var(--hi);fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.rhint .rht{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}.rhint .rht b{font-weight:700;font-size:16px}.rhint .rht span{color:var(--fg2)}
+.rhint .rpk{all:unset;box-sizing:border-box;cursor:pointer;flex:none;height:44px;padding:0 18px;border-radius:14px;display:flex;align-items:center;background:var(--hbt);color:var(--hbf);font-size:15px;font-weight:700;white-space:nowrap;-webkit-tap-highlight-color:transparent}.rhint .rpk:focus-visible{outline:3px solid var(--hi);outline-offset:2px}
+@media (max-width:560px){.rhint{flex-wrap:wrap}.rhint .rpk{width:100%;justify-content:center}}`;
 /* the recipe cards (Cooking search results and the Assist popup): one renderer, one stylesheet. dk = the selector that means dark where it is used */
 const hvCookCardCss = dk => `.sxc{--acc:#3f3399;--onacc:#fff;--actbg:#cdc6ef;--actfg:#3f3399;--tile:#fff;--ink:#3c3c43;--ink2:rgba(60,60,67,.6);color:var(--ink);font-family:${FONT}}
 ${dk} .sxc{--acc:#7a6cf0;--actbg:#3a3360;--actfg:#d9d3ff;--tile:#1c1c1e;--ink:#f5f5f7;--ink2:rgba(235,235,245,.6)}
@@ -7624,6 +7640,7 @@ function hvOpenCooking(hub, app, at, opt) {
   const rk = () => st.r < 0 ? 'x:' + (st.ext ? st.ext.key : '') : st.r;   // key of the open recipe (an unsaved search result has no list position)
   if (at != null && cfg.recipes[at]) { st.r = at; st.view = 'ov'; }
   // opened from the Assist popup with a recipe it found: that recipe, at its first step (a saved copy is used when there is one)
+  if (opt && opt.pick != null) { sx.q = String(opt.pick).slice(0, 240); sx.picker = true; }   // from the Assist popup: the agent picker, the question waits in the search box
   if (opt && opt.ext) { const k = cfg.recipes.findIndex(r => r.key && r.key === opt.ext.key); if (k >= 0) st.r = k; else { st.r = -1; st.ext = opt.ext; } if (opt.ext.steps.length) { st.view = 'sv'; st.step = 0; HVCOOK.pos.set(rk(), 0); } else st.view = 'ov'; }
   const art = hvCookArt;
   const todo = () => { const S = H().states || {}, all = Object.keys(S).filter(k => k.startsWith('todo.')).sort(); if (cfg.todo && S[cfg.todo]) return cfg.todo;
