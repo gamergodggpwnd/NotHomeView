@@ -6760,7 +6760,7 @@ function hvAssist(hub, o) {
   o = o || {}; let compact = !!o.orb;
   const c = hub._config, h0 = hub._hass; const theme = c.assistant_theme && c.assistant_theme !== 'same' ? c.assistant_theme : c.theme;
   const host = document.createElement('homeview-assist'), sr = host.attachShadow({ mode: 'open' }); host.toggleAttribute('night', hvMode(theme, h0) !== 'day');
-  sr.innerHTML = `<style>${ASSIST_CSS}${HV_HEAD_CSS}</style><div class="ov"><div class="ow"><button class="bo" aria-label="Open the chat">${HV_ORB_HTML}</button>
+  sr.innerHTML = `<style>${ASSIST_CSS}${HV_HEAD_CSS}${HV_COOK_POP_CSS()}</style><div class="ov"><div class="ow"><button class="bo" aria-label="Open the chat">${HV_ORB_HTML}</button>
     <div class="ost" role="status"><span class="wave" aria-hidden="true"><i style="--k:.5"></i><i style="--k:.8"></i><i style="--k:1"></i><i style="--k:.6"></i><i style="--k:.9"></i><i style="--k:.45"></i><i style="--k:.7"></i></span><span class="olt"></span></div>
     <div class="ohint">Tap the orb to see the chat</div><div class="cap" hidden aria-live="polite"><div class="q"></div><div class="a"></div><div class="mt"><span class="why"></span><span>Tap orb for chat</span></div></div></div></div>
     <div class="wrap"><div class="bg"></div>
@@ -6866,7 +6866,31 @@ function hvAssist(hub, o) {
     else say(s.done ? 'Your timer is done.' : `${hvSayLeft(HVTM.left())} left${s.paused != null ? ' (paused)' : ''}.`);
     st('idle'); return true; };
   const ask = (text, um) => { const tok = ++runTok; sugEl.hidden = true; stick = true; if (!um) userMsg(text); asked = true; keepCap = false; capMode = compact; capWhy = ''; hvHistAdd(c, 'u', text); if (compact) cap.querySelector('.q').textContent = `“${text}”`; if (timerCmd(text)) return;
-    st('thinking'); endRun(); run(text, tok, true, botMsg()); };
+    st('thinking'); endRun(); if (hvCookIntent(text) && hvCookAppOn(hub)) { runRecipe(text, tok, botMsg()); return; } run(text, tok, true, botMsg()); };
+  // a recipe question: the same recipe cards as Cooking › search (the agent is asked for the recipe format, no speech). Save / Start cooking act on this iPad's Cooking.
+  const rzPaint = m => { const z = m.querySelector('.rz'); if (z) z.innerHTML = (m._rz || []).map((x, i) => hvCookCard(x, i, hvCookIsSaved(x))).join(''); };
+  const runRecipe = async (text, tok, m) => { const pi = await pinfoP; if (tok !== runTok) return; const eng = String((pi && pi.conversation_engine) || '');
+    if (eng === 'conversation.home_assistant' || eng === 'homeassistant') { run(text, tok, true, m); return; }   // the built-in agent can't search the web: the answer is the usual one
+    const an = `“${(pi && pi.name) || 'This assistant'}”`; let fin = false, to = 0;
+    const finish = r => { if (fin || tok !== runTok) return; fin = true; clearTimeout(to); endRun();
+      if (r.kind === 'ok') { m._rz = r.recipes; const n = r.recipes.length; fill(m, `Here ${n === 1 ? 'is 1 recipe' : 'are ' + n + ' recipes'}. Save one, or start cooking.`);
+        let z = m.querySelector('.rz'); if (!z) { z = document.createElement('div'); z.className = 'sxc rz'; m.insertBefore(z, m.querySelector('.ax')); } rzPaint(m); m.classList.add('lst', 'rcp'); st('idle'); keep(); if (compact) expand(); return; }
+      if (r.kind === 'raw') { fill(m, r.full || r.text); st('idle'); return; }
+      if (r.kind === 'noweb') { fill(m, r.text || 'Sorry, I can\'t search the web.'); note(m, `${an} can't search the web, so it can't look up recipes. Pick another assistant in the Home Screen settings (Assistant & timer).`); }
+      else { fill(m, 'Sorry, something went wrong.'); note(m, r.kind === 'timeout' ? `${an} took too long to answer. Try again in a moment.` : r.quota ? `${an} couldn't answer: its AI service has hit its usage limit (quota) for now. Try again later, or pick another assistant in the Home Screen settings.`
+        : `${an} couldn't answer: its conversation agent reported an error. Check that integration (for example its API key) in Settings → Devices & services, or pick another assistant in the Home Screen settings.`); }
+      st('idle'); oops(); micOff(); };
+    const msg = { type: 'assist_pipeline/run', start_stage: 'intent', end_stage: 'intent', input: { text: hvCookPrompt(text, 4) }, timeout: Math.round(HV_COOK_ASK_MS / 1000) + 5 }; if (pipe) msg.pipeline = pipe;
+    to = setTimeout(() => finish({ kind: 'timeout' }), HV_COOK_ASK_MS);
+    try { unsub = hub._hass.connection.subscribeMessage(ev => { if (fin || tok !== runTok) return; const d = (ev && ev.data) || {};
+        if (ev.type === 'intent-end') { const o = d.intent_output || {}, r = o.response || {}; finish(hvCookClassify((r.speech && r.speech.plain && r.speech.plain.speech) || '', r.response_type)); }
+        else if (ev.type === 'error') finish({ kind: 'error', msg: String(d.message || d.code || '') }); else if (ev.type === 'run-end') finish({ kind: 'error', msg: '' }); }, msg);
+      Promise.resolve(unsub).catch(e => finish({ kind: 'error', msg: String(e && e.message || e || '') })); }
+    catch (e) { finish({ kind: 'error', msg: String(e && e.message || e || '') }); } };
+  // Save to Cooking / Start cooking on a card in the chat
+  log.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-sx]'); if (!b || !log.contains(b)) return; const m = b.closest('.m'), x = m && m._rz && m._rz[Number(b.dataset.i)]; if (!x) return;
+    if (b.dataset.sx === 'save') { if (!hvCookIsSaved(x) && !hvCookSaveRecipe(x)) hvToast('Couldn\'t save the recipe on this iPad (storage is full)'); rzPaint(m); }
+    else if (b.dataset.sx === 'go') { if (!x.steps.length) { hvToast('This recipe has no steps to cook'); return; } close(); setTimeout(() => hvOpenCooking(hub, null, undefined, { ext: x }), 480); } });
   const run = async (text, tok, tts, m) => { const pi = await pinfoP; if (tok !== runTok) return; const qn = hvQuietNow(c, hub._hass); const speak = tts && !qn.quiet && c.assistant_speak !== false && !(pi && !pi.tts_engine);
     capMode = compact && !speak; capWhy = qn.quiet ? qn.why + ' · shown as text' : 'Shown as text';
     const msg = { type: 'assist_pipeline/run', start_stage: 'intent', end_stage: speak ? 'tts' : 'intent', input: { text }, conversation_id: convId };
@@ -7771,6 +7795,11 @@ ${cfg.voice ? `<div class="vh"><div class="m">${HV_COOK_SVG.mic}</div><div><b>Ha
         else if (a === 'back') { if (st.step <= 0) go('ov'); else go('sv', st.step - 1); }
         else if (a === 'next') { if (st.step + 1 >= R().steps.length) { HVCOOK.pos.delete(rk()); go('ov'); toast('Enjoy!'); } else go('sv', st.step + 1); }
         else if (a === 'rem' && t.getAttribute('aria-disabled') !== 'true') addRem(); });
+      // the search box: type to filter your saved recipes, Enter (or the pill) to ask the agent
+      root.addEventListener('input', e => { if (!e.target.matches || !e.target.matches('.sx-sf input')) return; sx.q = e.target.value; if (!sx.q.trim()) sx.picker = false; sx.savedMsg = ''; sxPaint(); });
+      root.addEventListener('focusin', e => { if (e.target.matches && e.target.matches('.sx-sf input')) { clearTimeout(blurT); if (!sx.focus) { sx.focus = true; if (st.view === 'list') sxPaint(); } } });
+      root.addEventListener('focusout', e => { if (e.target.matches && e.target.matches('.sx-sf input')) { clearTimeout(blurT); blurT = setTimeout(() => { sx.focus = false; if (root && st.view === 'list') sxPaint(); }, 220); } });
+      root.addEventListener('keydown', e => { if (e.target.matches && e.target.matches('.sx-sf input') && e.key === 'Enter') { e.preventDefault(); askSx(); } });
       // the step view's own drag: swipe left / right for the next / previous step
       let sx0 = null; root.addEventListener('touchstart', e => { sx0 = st.view === 'sv' && e.touches.length === 1 ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : null; }, { passive: true });
       root.addEventListener('touchend', e => { if (!sx0) return; const t = e.changedTouches[0], dx = t.clientX - sx0.x, dy = t.clientY - sx0.y; sx0 = null; if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.5) root.querySelector(dx < 0 ? '[data-a=next]' : '[data-a=back]').click(); }, { passive: true });
@@ -7797,11 +7826,6 @@ function hvCookingUI(ctx) { const el = document.createElement('div');
 <div class="ft">Recipes are set in YAML (cooking: recipes:). Tap one to open it in Cooking.</div>
 <div class="g"><label class="r"><span>Add to Reminders list</span><select data-k="todo_entity" aria-label="Add to Reminders list"${dis}><option value="">Automatic</option>${todos.map(t => `<option value="${esc(t)}"${k.todo === t ? ' selected' : ''}>${esc((S[t].attributes && S[t].attributes.friendly_name) || t)}</option>`).join('')}</select></label>
 <div class="r"><span>Keep screen on</span><button class="sw" role="switch" data-k="keep_awake" aria-checked="${k.awake}" aria-label="Keep screen on"${dis}></button></div>
-      // the search box: type to filter your saved recipes, Enter (or the pill) to ask the agent
-      root.addEventListener('input', e => { if (!e.target.matches || !e.target.matches('.sx-sf input')) return; sx.q = e.target.value; if (!sx.q.trim()) sx.picker = false; sx.savedMsg = ''; sxPaint(); });
-      root.addEventListener('focusin', e => { if (e.target.matches && e.target.matches('.sx-sf input')) { clearTimeout(blurT); if (!sx.focus) { sx.focus = true; if (st.view === 'list') sxPaint(); } } });
-      root.addEventListener('focusout', e => { if (e.target.matches && e.target.matches('.sx-sf input')) { clearTimeout(blurT); blurT = setTimeout(() => { sx.focus = false; if (root && st.view === 'list') sxPaint(); }, 220); } });
-      root.addEventListener('keydown', e => { if (e.target.matches && e.target.matches('.sx-sf input') && e.key === 'Enter') { e.preventDefault(); askSx(); } });
 <div class="r"><span>"Hands busy?" hint</span><button class="sw" role="switch" data-k="voice_hint" aria-checked="${k.voice}" aria-label="Hands busy hint"${dis}></button></div></div>
 <div class="ft">Add to Reminders puts a recipe's ingredients on this to-do list (Automatic: a shopping or grocery list, else the first). The screen stays on and the screensaver waits while Cooking is open. Timers run on this iPad only.</div>`; };
   const set = (k, v, def) => { if (ctx.ro) return; const c = JSON.parse(JSON.stringify(ctx.cfg() || {})), o = c.cooking && typeof c.cooking === 'object' ? c.cooking : {}; if (v === def || v === '' || v == null) delete o[k]; else o[k] = v; ctx.save('cooking', Object.keys(o).length ? o : null); };
