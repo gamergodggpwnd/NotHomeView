@@ -5871,10 +5871,81 @@ const HUB_CSS = `:host{display:block;position:relative;font-family:${FONT};color
    tile exactly 324 × 324 with a 34.32 px radius (scaled down only when the screen is smaller than an 11" iPad). Landscape: the greeting, a big
    clock, the date and the weather in a column on the left, the compact Now Playing pill at its bottom; portrait: all of it above the grid. A page
    pill at the top centre (this page as a dash, the swipe page and any further grid pages as dots). Default (classic) = the layout as before. */
+/* ---------------- Home Screen status pill + clock corners (V2 grid4) ----------------
+   The greeting / clock / date / weather block and the status pill each snap to one of the four
+   corners (tl, tr, bl, br). Defaults: clock top-left, pill bottom-left. In arrange mode they
+   drag and snap on release; they cannot be deleted. Choice is kept in the card config
+   (clock_corner, pill_corner) when arrange is saved, and in this browser (localStorage) at once.
+   Same corner: the clock sits above the pill, with a gap, so they never overlap.
+   The pill shows, in this order, the active Cooking step or timer, music that is playing, or the
+   next calendar event from 30 minutes before it starts until it starts; it hides when none apply. */
+const HV_G4_CORNERS = ['tl', 'tr', 'bl', 'br'];
+const HV_G4_LS = { clock_corner: 'hv_g4_clock_corner', pill_corner: 'hv_g4_pill_corner' };
+const HV_G4_EVENT_LEAD = 30 * 60 * 1000;
+function hvG4Corner(v, fallback) { v = String(v || ''); return HV_G4_CORNERS.includes(v) ? v : fallback; }
+function hvG4CornerRead(src, key, fallback) {
+  const raw = (src && src._hvRaw) || src || {};
+  const prof = src && src._prof, row = (prof && Array.isArray(raw.profiles) && (raw.profiles.find(p => p && p.id === prof.id) || {})) || raw;
+  const fromCfg = hvG4Corner((row && row[key]) || raw[key], '');
+  if (fromCfg) return fromCfg;
+  try { return hvG4Corner(localStorage.getItem(HV_G4_LS[key]), fallback); } catch (e) { return fallback; }
+}
+function hvG4CornerWrite(hub, key, v) {
+  v = hvG4Corner(v, key === 'pill_corner' ? 'bl' : 'tl');
+  try { localStorage.setItem(HV_G4_LS[key], v); } catch (e) {}
+  if (hub) {
+    if (hub._config) hub._config[key] = v;
+    if (hub._hvRaw) { if (hub._prof && Array.isArray(hub._hvRaw.profiles)) { const id = hub._prof.id, p = (hub._hvRaw.profiles || []).find(x => x && x.id === id); if (p) p[key] = v; else hub._hvRaw[key] = v; } else hub._hvRaw[key] = v; }
+    if (typeof hvHubArr !== 'undefined' && hvHubArr.hub === hub) hvHubArr.change(raw => { raw[key] = v; });
+  }
+  return v;
+}
+function hvG4Nearest(x, y, W, H) {
+  const pts = { tl: [0, 0], tr: [W, 0], bl: [0, H], br: [W, H] };
+  let best = 'tl', d = Infinity;
+  for (const k of HV_G4_CORNERS) { const p = pts[k], dd = (x - p[0]) * (x - p[0]) + (y - p[1]) * (y - p[1]); if (dd < d) { d = dd; best = k; } }
+  return best;
+}
+// The next calendar event that is close to starting: from 30 minutes before start until the start time.
+function hvG4SoonEvent(list, now) {
+  const t = now || Date.now();
+  let best = null;
+  for (const e of list || []) {
+    const s = e._s ? e._s.getTime() : 0; if (!s) continue;
+    if (s <= t || s - t > HV_G4_EVENT_LEAD) continue;
+    if (!best || s < best._s.getTime()) best = e;
+  }
+  return best;
+}
+function hvG4CalIds(c, S) {
+  const raw = (c && (c.calendar_entities || c.calendars)) || [];
+  const ids = raw.map(e => typeof e === 'string' ? e : e && e.entity).filter(Boolean);
+  if (ids.length) return ids;
+  const one = c && c.calendar_entity; if (one) return [one];
+  return Object.keys(S || {}).filter(k => k.startsWith('calendar.'));
+}
+function hvG4Music(c, S) {
+  const np = ((c && c.apps) || []).find(a => a && a.kind === 'now_playing') || {};
+  const ids = [np.entity].concat(np.entities || []).filter(Boolean);
+  const pool = ids.length ? ids : Object.keys(S || {}).filter(k => k.startsWith('media_player.'));
+  const live = id => S[id] && ['playing', 'paused'].includes(S[id].state) && S[id].attributes && S[id].attributes.media_title;
+  const id = pool.find(x => live(x) && S[x].state === 'playing') || pool.find(live);
+  return id ? { kind: 'music', id, st: S[id] } : null;
+}
+// Cooking first, then music that is playing, then an upcoming event. Nothing else: the pill hides.
+function hvG4Status(hub, ev) {
+  const cook = typeof HVCOOK !== 'undefined' && HVCOOK.active && HVCOOK.active(); if (cook) return cook;
+  const c = hub && hub._config, S = (hub && hub._hass && hub._hass.states) || {};
+  const music = hvG4Music(c, S); if (music) return music;
+  const evn = ev || (hub && hub._g4Evs) || [];
+  const soon = hvG4SoonEvent(evn); if (soon) return { kind: 'event', ev: soon };
+  return null;
+}
+
 const HV_G4_CSS = `
 :host([g4]) .w{display:block;position:relative;height:var(--h,100vh);min-height:0;overflow:hidden}
 :host([g4]) .top{position:relative;justify-content:flex-end;min-height:var(--av,58px)}
-:host([g4]) .gr{position:absolute;left:calc(var(--g4lx) - var(--px,32px));top:calc(var(--g4ly) - var(--pt,24px));width:var(--g4lw);font-size:calc(20px * var(--g4s,1));line-height:1.3;letter-spacing:.02em}
+:host([g4]) .top .gr{display:none}
 :host([g4]) .apps.hg{position:absolute;left:var(--g4gl);top:var(--g4gt);width:max-content;margin:0;grid-auto-flow:row}
 :host([g4][g4sc]:not([hv-arr])) .apps.hg{max-height:var(--g4G);overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-width:none;padding:0 12px 12px;margin:0 -12px}
 :host([g4][g4sc]) .apps.hg::-webkit-scrollbar{display:none}
@@ -5883,23 +5954,33 @@ const HV_G4_CSS = `
 :host([g4]) .apps.hg > .tile > .lb,:host([g4]) .apps.hg > .phw > .lb{display:none}
 :host([g4]) .apps.hg > .tile > .tb,:host([g4]) .apps.hg > .phw .pw,:host([g4]) .apps.hg > .tile.hw{border-radius:calc(34.32px * var(--g4s,1));height:100%}
 :host([g4]) .ico{border-radius:calc(24px * var(--g4s,1))}
-.g4l{position:absolute;left:var(--g4lx);top:calc(var(--g4ly) + 52px * var(--g4s,1));width:var(--g4lw);color:#fff;text-shadow:0 1px 8px rgba(0,0,0,.25);pointer-events:none}
+.g4l{position:absolute;left:var(--g4lx);top:calc(var(--g4ly) + 52px * var(--g4s,1));width:var(--g4lw);color:#fff;text-shadow:0 1px 8px rgba(0,0,0,.25);pointer-events:none;box-sizing:border-box;z-index:3}
+.g4g{font-size:calc(20px * var(--g4s,1));line-height:1.3;letter-spacing:.02em;text-transform:uppercase}
+.g4g .g2{font-weight:700}
 .g4t{font-size:calc(128px * var(--g4s,1));font-weight:700;line-height:1;letter-spacing:-.05em;margin-top:calc(36px * var(--g4s,1));font-variant-numeric:tabular-nums;white-space:nowrap}
 .g4d{font-size:calc(24px * var(--g4s,1));font-weight:600;margin-top:calc(10px * var(--g4s,1));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .g4w{display:flex;align-items:center;gap:6px;font-size:calc(18px * var(--g4s,1));color:rgba(255,255,255,.72);margin-top:calc(8px * var(--g4s,1))}.g4w ha-icon{--mdc-icon-size:calc(17px * var(--g4s,1));display:flex}.g4w:empty{display:none}
 :host([g4p]) .g4t{margin-top:calc(22px * var(--g4s,1))}
-.g4n{all:unset;box-sizing:border-box;position:absolute;left:var(--g4lx);top:calc(var(--g4gt) + var(--g4G) - 88px * var(--g4s,1));width:var(--g4lw);height:calc(88px * var(--g4s,1));border-radius:calc(26px * var(--g4s,1));display:flex;align-items:center;gap:14px;padding:0 calc(22px * var(--g4s,1)) 0 calc(14px * var(--g4s,1));cursor:pointer;color:#fff;
+.g4n{all:unset;box-sizing:border-box;position:absolute;left:var(--g4lx);top:calc(var(--g4gt) + var(--g4G) - 88px * var(--g4s,1));width:var(--g4lw);height:calc(88px * var(--g4s,1));border-radius:calc(26px * var(--g4s,1));display:flex;align-items:center;gap:14px;padding:0 calc(22px * var(--g4s,1)) 0 calc(14px * var(--g4s,1));cursor:pointer;color:#fff;z-index:3;
  background:linear-gradient(135deg,rgba(255,255,255,.16),rgba(255,255,255,.07));border:1px solid rgba(255,255,255,.3);box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 10px 30px rgba(0,0,0,.18);-webkit-backdrop-filter:blur(3px) saturate(1.25);backdrop-filter:blur(3px) saturate(1.25)}
-.g4n[hidden],:host([g4p]) .g4n{display:none}
+.g4n[hidden]{display:none}
 .g4n .art{width:calc(60px * var(--g4s,1));height:calc(60px * var(--g4s,1));border-radius:14px;flex:none;background:radial-gradient(circle at 30% 30%,#ffe3a3,#ff8a65 45%,#8e5bd8 100%) center/cover no-repeat}
 .g4n .tx{flex:1;min-width:0}.g4n b{display:block;font-size:calc(17px * var(--g4s,1));font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.g4n small{display:block;font-size:calc(15px * var(--g4s,1));opacity:.72;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.g4n .cap{display:block;font-size:calc(12px * var(--g4s,1));font-weight:600;letter-spacing:.04em;text-transform:uppercase;opacity:.72}
 .g4n button{all:unset;cursor:pointer;width:40px;height:40px;display:flex;align-items:center;justify-content:center;border-radius:50%;flex:none}.g4n button svg{width:26px;height:26px}.g4n button:active{background:rgba(255,255,255,.14)}
+.g4n .bar{width:5px;height:52px;border-radius:3px;background:#0a84ff;flex:none}
+.g4n .ico{width:calc(28px * var(--g4s,1));height:calc(28px * var(--g4s,1));flex:none;display:flex}.g4n .ico svg{width:100%;height:100%}
+.g4n.ph{opacity:.55;border-style:dashed}
 .g4pp{position:absolute;left:50%;top:calc(24px * var(--g4s,1));transform:translateX(-50%);display:flex;gap:6px;align-items:center;padding:7px 10px;border-radius:12px;background:rgba(255,255,255,.14);z-index:2}.g4pp[hidden]{display:none}
 .g4pp button{all:unset;display:block;width:7px;height:7px;border-radius:4px;background:rgba(255,255,255,.4);cursor:pointer;transition:width .2s,background .2s}.g4pp button.on{width:20px;background:#fff}
-:host([hv-arr]) .g4pp,:host([hv-arr]) .g4n{visibility:hidden}`;
+:host([hv-arr]) .g4pp{visibility:hidden}
+:host([hv-arr]) .g4l,:host([hv-arr]) .g4n{pointer-events:auto;cursor:grab;outline:2px solid transparent}
+:host([hv-arr]) .g4l.dragging,:host([hv-arr]) .g4n.dragging{cursor:grabbing;transition:none !important;z-index:24;opacity:.94}
+.g4l.snap,.g4n.snap{transition:left .22s cubic-bezier(.2,.8,.2,1),top .22s cubic-bezier(.2,.8,.2,1)}`;
+
 const HV_G4_SVG = { pause: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="4.5" width="4" height="15" rx="1.2" fill="currentColor"/><rect x="14" y="4.5" width="4" height="15" rx="1.2" fill="currentColor"/></svg>',
   play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 5.2v13.6a1 1 0 0 0 1.5.86l11-6.8a1 1 0 0 0 0-1.72l-11-6.8A1 1 0 0 0 7 5.2z"/></svg>',
-  next: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 6.3v11.4a.8.8 0 0 0 1.25.66L12 13v4.7a.8.8 0 0 0 1.25.66l8.3-5.7a.8.8 0 0 0 0-1.32l-8.3-5.7A.8.8 0 0 0 12 6.3V11L4.25 5.64A.8.8 0 0 0 3 6.3z"/></svg>' };
+  next: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 6.3v11.4a.8.8 0 0 0 1.25.66L12 13v4.7a.8.8 0 0 0 1.25.66l8.3-5.7a.8.8 0 0 0 0-1.32l-8.3-5.7A.8.8 0 0 0 12 6.3V11L4.25 5.64A.8.8 0 0 0 3 6.3z"/></svg>', cal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="16" rx="3"/><path d="M8 3v4M16 3v4M3.5 10h17"/></svg>', flame: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21.5c-4 0-7-2.7-7-6.6 0-3.5 2.3-5.6 4-7.6.9 1.6 2 2.4 3 2.6-.2-2.8.9-5.6 3.1-7.4.5 3 4.9 5.6 4.9 11.6 0 4.6-3.6 7.4-8 7.4z"/></svg>' };
 Object.assign(HELPERS, { home_style: 'Classic: the layout as before. 4 × 4 grid: 150 px cells and 24 px gaps (2 × 2 tiles 324 × 324), the greeting, a big clock, the date and the weather on the left (above the grid in portrait), the Now Playing pill and a page pill.' });
 /* ---------------- Appearance (V2): true Light / Dark / Automatic for the Home Screen and its apps ----------------
    Uses the existing theme option (day = Light, night = Dark, auto = Automatic; default stays day). New, all off / default unless set:
@@ -5932,7 +6013,7 @@ const HV_AP_CSS = `
 :host([ap=night]) .g4n{background:var(--ap-tile,#1c1c1e);border-color:rgba(255,255,255,.06);box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none}:host([ap=night]) .g4pp{background:rgba(255,255,255,.1)}
 :host([ap=night]) .pw,:host([ap=night]) .hw[data-ty="calendar"] .hwi{background:var(--ap-tile,#1c1c1e);box-shadow:0 0 0 1px rgba(255,255,255,.06)}:host([ap=night]) .ico{box-shadow:0 0 0 1px rgba(255,255,255,.08)}
 :host([ap]) .g4t{font-weight:var(--ap-num,700)}
-:host([ap]) .lb,:host([ap]) .gr{font-size:calc(var(--lfs,17px) * var(--ap-ts,1))}:host([ap]) .gr{font-size:calc(var(--gfs,22px) * var(--ap-ts,1))}:host([g4][ap]) .gr{font-size:calc(20px * var(--g4s,1) * var(--ap-ts,1))}
+:host([ap]) .lb,:host([ap]) .gr{font-size:calc(var(--lfs,17px) * var(--ap-ts,1))}:host([ap]) .gr{font-size:calc(var(--gfs,22px) * var(--ap-ts,1))}:host([g4][ap]) .gr{font-size:calc(20px * var(--g4s,1) * var(--ap-ts,1))}:host([g4][ap]) .g4g{font-size:calc(20px * var(--g4s,1) * var(--ap-ts,1))}
 :host([ap]) .g4d{font-size:calc(24px * var(--g4s,1) * var(--ap-ts,1))}:host([ap]) .g4w{font-size:calc(18px * var(--g4s,1) * var(--ap-ts,1))}
 :host([ap][ap-rt]) .amic,:host([ap][ap-rt]) .g4n,:host([ap][ap-rt]) .g4pp{-webkit-backdrop-filter:none !important;backdrop-filter:none !important}:host([ap=night][ap-rt]) .g4pp{background:#2c2c2e}:host([ap][ap-rt]){--hv-blur:none}`;
 // ---- Settings › Appearance
@@ -7372,7 +7453,15 @@ const hvCookCfg = (c, withSaved) => { const k = (c && c.cooking && typeof c.cook
   if (withSaved) recipes.push(...hvCookSavedGet().map(hvCookRecipe));   // recipes kept from a search (this browser), after the YAML ones
   return { title: k.title ? String(k.title) : '', todo: k.todo_entity ? String(k.todo_entity) : '', awake: k.keep_awake !== false, voice: k.voice_hint !== false, recipes }; };
 // kitchen timers: one set per browser, kept while Cooking is closed too
-const HVCOOK = { t: new Map(), pos: new Map(), n: 0,
+const HVCOOK = { t: new Map(), pos: new Map(), n: 0, sess: null,
+  setSess(s) { this.sess = s || null; if (this._ping) try { this._ping(); } catch (e) {} },
+  active() { this.check(); const s = this.sess, timers = [...this.t.values()].filter(x => !x.done), run = timers.find(x => x.end) || timers[0];
+    if (s && s.recipe && (s.view === 'sv' || this.pos.get(s.key) != null || run)) {
+      const step = s.step != null ? s.step : (this.pos.get(s.key) || 0), r = s.recipe, steps = (r.steps || []).length, text = (r.steps && r.steps[step] && r.steps[step].text) || r.name;
+      return { kind: 'cook', name: r.name, step, steps, text, timer: run || null };
+    }
+    if (run) return { kind: 'cook', name: run.label || 'Cooking', step: 0, steps: 0, text: run.label || 'Timer', timer: run };
+    return null; },
   left(t) { return t.end ? Math.max(0, t.end - Date.now()) : t.left; },
   start(key, label, min) { const old = this.t.get(key); if (old && !old.done) return old; const t = { key, label, total: min * 60000, end: Date.now() + min * 60000, left: 0, done: false, col: HV_COOK_COLS[this.n++ % HV_COOK_COLS.length] }; this.t.set(key, t); return t; },
   pause(t) { if (t.done) return; if (t.end) { t.left = this.left(t); t.end = null; } else { t.end = Date.now() + t.left; } },
@@ -7789,7 +7878,7 @@ ${cfg.voice ? `<div class="vh"><div class="m">${HV_COOK_SVG.mic}</div><div><b>Ha
   const tick = () => { if (HVCOOK.check()) { hvCookBeep(); if (st.view === 'sv') { const m = root.querySelector('.main'), y = m ? m.scrollTop : 0; paint(); const m2 = root.querySelector('.main'); if (m2) m2.scrollTop = y; } else { const d = [...HVCOOK.t.values()].find(t => t.done); toast((d && d.label ? d.label + ': ' : '') + 'timer done'); } return; }
     if (st.view !== 'sv' || !root) return; for (const el of root.querySelectorAll('.tmr[data-tk]')) { const t = HVCOOK.t.get(el.dataset.tk); if (!t || t.done) continue; const left = HVCOOK.left(t);
       const tx = el.querySelector('.t'), v = hvCookFmt(left); if (tx.textContent !== v) tx.textContent = v; const c = el.querySelector('circle.pr'); if (c) c.setAttribute('stroke-dasharray', (264 * Math.max(0, Math.min(1, left / t.total))).toFixed(1) + ' 264'); } };
-  const go = (v, step) => { st.view = v; if (step != null) { st.step = Math.max(0, Math.min(step, R().steps.length - 1)); HVCOOK.pos.set(rk(), st.step); } paint(); };
+  const go = (v, step) => { st.view = v; if (step != null) { st.step = Math.max(0, Math.min(step, R().steps.length - 1)); HVCOOK.pos.set(rk(), st.step); } const rec = R(); if (rec && (v === 'sv' || HVCOOK.pos.get(rk()) != null)) HVCOOK.setSess({ key: rk(), recipe: rec, step: st.step || 0, view: v }); paint(); };
   const addRem = async () => { const r = R(), id = todo(), k = rk(); if (!r || !id || st.added.has(k)) return; st.added.add(k); paint(); let n = 0;
     for (const it of r.ingredients) { try { await H().callService('todo', 'add_item', { item: it }, { entity_id: id }); n++; } catch (e) { hvToast('Couldn\'t add the reminder: ' + (e && e.message || e)); break; } }
     if (n < r.ingredients.length) st.added.delete(k); paint(); if (n) toast(`Added ${n} to ${tname(id)}`); };
@@ -9552,44 +9641,136 @@ class HVHubCard extends HTMLElement {
     this._g4Set(g4, rows);
     (this._sideEls || []).forEach(w => { w.classList.toggle('fit', !!w._fit); if (w._fit) requestAnimationFrame(() => this._fitTile(w)); });
     this._hwPaint(true); }
-  // ---- home_style: grid4 (V2): the strict 4 × 4 grid's geometry, its left column (greeting, clock, date, weather, Now Playing) and page pill
+  // ---- home_style: grid4 (V2): the strict 4 × 4 grid's geometry, its clock block, status pill (4 corners) and page pill
   _g4Geo(o) { const W = this.getBoundingClientRect().width || o.Wc, H = o.H, port = H > W * 1.05, G0 = 672; let s, gl, gt, lx, ly, lw;
     if (port) { s = Math.min(1, (W - 48) / G0, (H - 436) / G0); const G = G0 * s; gl = Math.round((W - G) / 2); gt = Math.round(Math.max(o.pt + 300 * s, H - 56 * s - G)); lx = gl; ly = Math.round(Math.max(o.pt + 40, 96 * s)); lw = Math.round(G); }
     else { const m = W >= 1000 ? 48 : 24; s = Math.min(1, (H - 100 - Math.max(48, o.pb)) / G0, (W - 2 * m - 340) / G0); const G = G0 * s; gl = Math.round(W - m - G); gt = Math.round(Math.max(o.pt + 56, (H - G) / 2 + 26)); lx = m; ly = gt; lw = Math.round(Math.min(380, gl - m - 32)); }
-    s = Math.max(.5, s); const r = v => Math.round(v * s); return { s, port, C: r(150), g: r(24), I: r(104), lfs: Math.max(12, r(15)), lg: r(9), gl, gt, lx, ly, lw, G: 4 * r(150) + 3 * r(24) }; }
+    s = Math.max(.5, s); const r = v => Math.round(v * s); return { s, port, C: r(150), g: r(24), I: r(104), lfs: Math.max(12, r(15)), lg: r(9), gl, gt, lx, ly, lw, G: 4 * r(150) + 3 * r(24), W, H, mL: lx, mR: port ? lx : (W >= 1000 ? 48 : 24), mT: ly, mB: Math.round(Math.max(o.pb || 24, 24)) }; }
   _g4Set(g, rows) { const w = this._w; if (!w) return; this.toggleAttribute('g4', !!g); this.toggleAttribute('g4p', !!(g && g.port)); this.toggleAttribute('g4sc', !!(g && rows > 4));
     let l = w.querySelector(':scope > .g4l'), n = w.querySelector(':scope > .g4n'), pp = w.querySelector(':scope > .g4pp');
     if (!g) { for (const x of [l, n, pp]) if (x) x.remove(); clearInterval(this._g4iv); this._g4iv = 0; return; }
     const S = w.style, set = (k, v) => S.setProperty(k, v); set('--g4s', g.s.toFixed(3)); set('--g4gl', g.gl + 'px'); set('--g4gt', g.gt + 'px'); set('--g4lx', g.lx + 'px'); set('--g4ly', g.ly + 'px'); set('--g4lw', g.lw + 'px'); set('--g4G', g.G + 'px');
-    if (!l) { l = document.createElement('div'); l.className = 'g4l'; l.innerHTML = '<div class="g4t"></div><div class="g4d"></div><div class="g4w"></div>'; w.appendChild(l); }
-    if (!n) { n = document.createElement('div'); n.className = 'g4n'; n.setAttribute('role', 'button'); n.tabIndex = 0; n.hidden = true; w.appendChild(n);
-      n.addEventListener('click', e => { e.stopPropagation(); if (this._edit || hvHubArr.hub === this) return; const b = e.target.closest('button'), id = n.dataset.e, h = this._hass;
-        if (b && id && h) { h.callService('media_player', b.dataset.a === 'next' ? 'media_next_track' : 'media_play_pause', { entity_id: id }); return; } // the pill's own buttons (a tap)
+    if (!l) { l = document.createElement('div'); l.className = 'g4l'; l.innerHTML = '<div class="g4g"><div class="g1"></div><div class="g2"></div></div><div class="g4t"></div><div class="g4d"></div><div class="g4w"></div>'; l.setAttribute('data-g4', 'clock'); w.appendChild(l); this._g4Bind(l, 'clock_corner'); }
+    if (!n) { n = document.createElement('div'); n.className = 'g4n'; n.setAttribute('role', 'button'); n.tabIndex = 0; n.hidden = true; n.setAttribute('data-g4', 'pill'); w.appendChild(n);
+      n.addEventListener('click', e => { e.stopPropagation(); if (this._edit || (typeof hvHubArr !== 'undefined' && hvHubArr.hub === this)) return; const b = e.target.closest('button'), kind = n.dataset.k, id = n.dataset.e, h = this._hass;
+        if (b && id && h && kind === 'music') { h.callService('media_player', b.dataset.a === 'next' ? 'media_next_track' : 'media_play_pause', { entity_id: id }); return; }
+        if (kind === 'cook') { const apps = this._config.apps || [], i = apps.findIndex(a => a && a.kind === 'cooking'); if (i >= 0) this._runApp(null, i); return; }
+        if (kind === 'event') { hvOpenCalApp(this, (this._config.apps || []).find(a => a && a.kind === 'calendar')); return; }
         const apps = this._config.apps || [], i = apps.findIndex(a => a && a.kind === 'now_playing'); if (i >= 0) this._runApp(null, i); else if (id) this._openMusicSheet({ kind: 'now_playing' }, [id]); });
-      n.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target === n) { e.preventDefault(); n.click(); } }); }
+      n.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target === n) { e.preventDefault(); n.click(); } });
+      this._g4Bind(n, 'pill_corner'); }
     if (!pp) { pp = document.createElement('div'); pp.className = 'g4pp'; pp.setAttribute('role', 'tablist'); w.appendChild(pp);
       pp.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; e.stopPropagation(); const ap = w.querySelector('.apps.hg');
         if (b.dataset.pg === 'swipe') { const p = (hvSwipe.pairs().find(x => location.pathname.replace(/\/$/, '') === x.home) || {}).page; if (p) hvSwipe.go(p, -1); return; }
         if (ap) ap.scrollTo({ top: Number(b.dataset.pg) * (g.G + g.g), behavior: 'smooth' }); }); }
     const ap = w.querySelector('.apps.hg'); if (ap && !ap._g4sc) { ap._g4sc = true; ap.addEventListener('scroll', () => this._g4Pill(), { passive: true }); }
-    this._g4G = g; this._g4Rows = rows; this._g4Pill(); this._g4Paint(); if (!this._g4iv) this._g4iv = setInterval(() => { if (!this.isConnected) { clearInterval(this._g4iv); this._g4iv = 0; return; } this._g4Paint(); }, 15000); }
+    this._g4G = g; this._g4Rows = rows; this._g4Pill(); this._g4Paint(); this._g4Cal();
+    if (!this._g4iv) this._g4iv = setInterval(() => { if (!this.isConnected) { clearInterval(this._g4iv); this._g4iv = 0; return; } this._g4Paint(); }, 1000);
+    if (typeof HVCOOK !== 'undefined') HVCOOK._ping = () => { try { if (this.isConnected) this._g4Paint(); } catch (e) {} }; }
   _g4Pill() { const w = this._w, pp = w && w.querySelector(':scope > .g4pp'), g = this._g4G; if (!pp || !g) return; const ap = w.querySelector('.apps.hg'), gp = Math.max(1, Math.ceil((this._g4Rows || 1) / 4)), cur = ap ? Math.round(ap.scrollTop / (g.G + g.g)) : 0;
     const sw = !!(this._config.swipe_page && hvSwipe.pairs().some(x => location.pathname.replace(/\/$/, '') === x.home)), n = gp + (sw ? 1 : 0); pp.hidden = n < 2;
     const h = Array.from({ length: gp }, (_, i) => `<button data-pg="${i}" role="tab" aria-selected="${i === cur}" aria-label="Page ${i + 1}"${i === cur ? ' class="on"' : ''}></button>`).join('') + (sw ? '<button data-pg="swipe" role="tab" aria-selected="false" aria-label="Next page"></button>' : '');
     if (pp._h !== h) { pp._h = h; pp.innerHTML = h; } }
+  _g4First() { const c = this._config, h = this._hass, p = this._person(); return (c.name || (p && p.attributes.friendly_name) || (h && h.user && h.user.name) || '').trim().split(/\s+/)[0] || ''; }
   _g4Paint() { const w = this._w, h = this._hass, c = this._config; if (!w || !h || !c || !this.hasAttribute('g4')) return; const l = w.querySelector(':scope > .g4l'), n = w.querySelector(':scope > .g4n'); if (!l) return;
     const lang = (h.locale && h.locale.language) || undefined, d = new Date(), S = h.states || {}, set = (el, v) => { if (el && el._v !== v) { el._v = v; el.innerHTML = v; } };
+    const greet = String(this._greeting() || '').trim().replace(/,?$/, ',');
+    set(l.querySelector('.g1'), esc(greet)); set(l.querySelector('.g2'), esc(this._g4First()));
     let t; try { t = d.toLocaleTimeString(lang, { hour: 'numeric', minute: '2-digit', hour12: !(h.locale && h.locale.time_format === '24') }).replace(/\s?[AP]\.?M\.?$/i, ''); } catch (e) { t = (d.getHours() % 12 || 12) + ':' + String(d.getMinutes()).padStart(2, '0'); }
     set(l.querySelector('.g4t'), esc(t)); set(l.querySelector('.g4d'), esc(hvFmtDate(d, lang, { weekday: 'long', month: 'long', day: 'numeric' })));
     const we = (c.weather_entity && S[c.weather_entity]) ? c.weather_entity : Object.keys(S).find(k => k.startsWith('weather.')), ws = we && S[we];
     if (ws && !UNAVAILABLE.includes(ws.state)) { const cond = ws.state, tmp = Number(ws.attributes.temperature), ic = cond === 'partlycloudy' ? 'partly-cloudy' : cond === 'clear-night' ? 'night' : cond === 'exceptional' ? 'alert' : cond;
       set(l.querySelector('.g4w'), `<ha-icon icon="mdi:weather-${esc(ic)}"></ha-icon>${isFinite(tmp) ? Math.round(tmp) + '° · ' : ''}${esc((typeof HV_SS_COND !== 'undefined' && HV_SS_COND[cond]) || cond)}`); } else set(l.querySelector('.g4w'), '');
-    if (!n) return; const np = (c.apps || []).find(a => a && a.kind === 'now_playing') || {}, ids = [np.entity].concat(np.entities || []).filter(Boolean), pool = ids.length ? ids : Object.keys(S).filter(k => k.startsWith('media_player.'));
-    const live = id => S[id] && ['playing', 'paused'].includes(S[id].state) && S[id].attributes.media_title, id = pool.find(x => live(x) && S[x].state === 'playing') || pool.find(live);
-    n.hidden = !id; if (!id) return; const a = S[id].attributes, pic = a.entity_picture ? (h.hassUrl ? h.hassUrl(a.entity_picture) : a.entity_picture) : '';
-    n.dataset.e = id; n.setAttribute('aria-label', `Now playing: ${a.media_title}`);
+    if (n) this._g4PaintPill(n, S); this._g4Place(); }
+  _g4PaintPill(n, S) {
+    const arr = typeof hvHubArr !== 'undefined' && hvHubArr.hub === this, st = hvG4Status(this, this._g4Evs), set = (el, v) => { if (el && el._v !== v) { el._v = v; el.innerHTML = v; } };
+    if (!st) {
+      n.dataset.k = ''; n.dataset.e = ''; n.classList.toggle('ph', !!arr); n.classList.remove('ev', 'ck');
+      n.hidden = !arr; if (!arr) return;
+      n.setAttribute('aria-label', 'Up next'); set(n, `<span class="bar"></span><span class="tx"><span class="cap">Up next</span><b>Nothing running</b></span>`); return;
+    }
+    n.hidden = false; n.classList.toggle('ph', false); n.classList.toggle('ev', st.kind === 'event'); n.classList.toggle('ck', st.kind === 'cook');
+    if (st.kind === 'cook') {
+      const r = st, tm = r.timer, left = tm ? (typeof HVCOOK !== 'undefined' ? HVCOOK.left(tm) : 0) : 0;
+      const cap = r.steps ? `Cooking · Step ${r.step + 1} of ${r.steps}` : 'Cooking', sub = tm && !tm.done ? (typeof hvCookFmt === 'function' ? hvCookFmt(left) : '') : '';
+      n.dataset.k = 'cook'; n.dataset.e = ''; n.setAttribute('aria-label', cap + ': ' + (r.text || r.name || ''));
+      set(n, `<span class="ico" aria-hidden="true">${HV_G4_SVG.flame}</span><span class="tx"><span class="cap">${esc(cap)}</span><b>${esc(r.text || r.name || 'Cooking')}</b>${sub ? `<small>${esc(sub)}${r.name ? ' · ' + esc(r.name) : ''}</small>` : (r.name ? `<small>${esc(r.name)}</small>` : '')}</span>`); return;
+    }
+    if (st.kind === 'event') {
+      const e = st.ev, title = e.summary || e.title || 'Event', loc = e.location || '', tms = e._s ? hvCalFmtTime(this._hass, e._s) : '';
+      n.dataset.k = 'event'; n.dataset.e = ''; n.setAttribute('aria-label', 'Up next: ' + title);
+      set(n, `<span class="bar" style="background:${esc(e._color || '#0a84ff')}"></span><span class="tx"><span class="cap">Up next${tms ? ' · ' + esc(tms) : ''}</span><b>${esc(title)}</b>${loc ? `<small>${esc(loc)}</small>` : ''}</span><span class="ico" aria-hidden="true">${HV_G4_SVG.cal}</span>`); return;
+    }
+    const id = st.id, a = st.st.attributes, pic = a.entity_picture ? (this._hass.hassUrl ? this._hass.hassUrl(a.entity_picture) : a.entity_picture) : '';
+    n.dataset.k = 'music'; n.dataset.e = id; n.setAttribute('aria-label', `Now playing: ${a.media_title}`);
     set(n, `<span class="art"${pic ? ` style="background-image:url('${esc(pic)}')"` : ''}></span><span class="tx"><b>${esc(a.media_title)}</b><small>${esc(a.media_artist || a.friendly_name || '')}</small></span>`
-      + `<button data-a="pp" aria-label="${S[id].state === 'playing' ? 'Pause' : 'Play'}">${S[id].state === 'playing' ? HV_G4_SVG.pause : HV_G4_SVG.play}</button><button data-a="next" aria-label="Next track">${HV_G4_SVG.next}</button>`); }
+      + `<button data-a="pp" aria-label="${st.st.state === 'playing' ? 'Pause' : 'Play'}">${st.st.state === 'playing' ? HV_G4_SVG.pause : HV_G4_SVG.play}</button><button data-a="next" aria-label="Next track">${HV_G4_SVG.next}</button>`);
+  }
+  // Place the clock and the pill on their corners. Same corner: clock above the pill, with a 16 px gap.
+  _g4Place() {
+    const w = this._w, g = this._g4G, c = this._config; if (!w || !g || this._g4Dragging) return;
+    const l = w.querySelector(':scope > .g4l'), n = w.querySelector(':scope > .g4n'); if (!l) return;
+    const W = g.W || w.clientWidth, H = g.H || w.clientHeight, wr = Math.round(Math.min(g.lw, Math.max(200, 380 * g.s)));
+    const cc = hvG4CornerRead(this, 'clock_corner', 'tl'), pc = hvG4CornerRead(this, 'pill_corner', 'bl');
+    l.dataset.corner = cc; if (n) n.dataset.corner = pc;
+    const ch = Math.max(l.offsetHeight || 0, Math.round(220 * g.s)), ph = Math.round(88 * g.s), gap = Math.round(16 * g.s);
+    const leftOf = corner => (corner === 'tl' || corner === 'bl') ? g.mL : Math.max(0, W - g.mR - wr);
+    const topOf = (corner, h) => (corner === 'tl' || corner === 'tr') ? g.mT : Math.max(0, H - g.mB - h);
+    let cTop = topOf(cc, ch), pTop = n && !n.hidden ? topOf(pc, ph) : 0, cLeft = leftOf(cc), pLeft = leftOf(pc);
+    if (n && !n.hidden && cc === pc) {
+      if (cc === 'tl' || cc === 'tr') pTop = cTop + ch + gap;
+      else cTop = pTop - ch - gap;
+      if (cTop < 0) { cTop = 0; pTop = cTop + ch + gap; }
+      if (n && pTop + ph > H) { pTop = H - ph; cTop = pTop - ch - gap; }
+    }
+    const put = (el, x, y) => { if (!el) return; el.style.left = Math.round(x) + 'px'; el.style.top = Math.round(y) + 'px'; el.style.width = wr + 'px'; el.style.right = 'auto'; el.style.bottom = 'auto'; };
+    put(l, cLeft, cTop); if (n) put(n, pLeft, pTop);
+  }
+  _g4Bind(el, key) {
+    if (el._g4bd) return; el._g4bd = true;
+    el.addEventListener('pointerdown', e => {
+      if (typeof hvHubArr === 'undefined' || hvHubArr.hub !== this) return;
+      if (e.isPrimary === false || (e.button != null && e.button > 0)) return;
+      if (e.target.closest && e.target.closest('button')) return;
+      e.stopPropagation(); e.preventDefault();
+      const r = el.getBoundingClientRect(), wr = this._w.getBoundingClientRect();
+      const dx = e.clientX - r.left, dy = e.clientY - r.top;
+      this._g4Dragging = true; el.classList.add('dragging'); el.classList.remove('snap');
+      try { el.setPointerCapture(e.pointerId); } catch (x) {}
+      const move = ev => { ev.preventDefault(); ev.stopPropagation();
+        el.style.left = (ev.clientX - wr.left - dx) + 'px'; el.style.top = (ev.clientY - wr.top - dy) + 'px'; };
+      const up = ev => {
+        ev.stopPropagation();
+        el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up);
+        try { el.releasePointerCapture(ev.pointerId); } catch (x) {}
+        el.classList.remove('dragging'); el.classList.add('snap');
+        const midX = ev.clientX - wr.left, midY = ev.clientY - wr.top;
+        const v = hvG4Nearest(midX, midY, wr.width, wr.height);
+        this._g4Dragging = false; hvG4CornerWrite(this, key, v); this._g4Place();
+        setTimeout(() => el.classList.remove('snap'), 280);
+      };
+      el.addEventListener('pointermove', move); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+    }, true);
+  }
+  async _g4Cal() {
+    const h = this._hass, c = this._config; if (!h || !c || !h.callApi) return;
+    const ids = hvG4CalIds(c, h.states || {}); if (!ids.length) { this._g4Evs = []; return; }
+    const now = new Date(), from = startOfDay(now), to = new Date(from.getTime() + 2 * 864e5);
+    const q = `?start=${encodeURIComponent(from.toISOString())}&end=${encodeURIComponent(to.toISOString())}`;
+    const seq = (this._g4Cseq = (this._g4Cseq || 0) + 1);
+    try {
+      const res = await Promise.all(ids.map(id => h.callApi('GET', `calendars/${id}${q}`).then(r => (r || []).map(e => Object.assign({}, e, { _cal: id }))).catch(() => [])));
+      if (seq !== this._g4Cseq) return;
+      const seen = new Set(), list = [];
+      for (const e of res.flat()) {
+        const s = calDate(e.start), en = calDate(e.end) || s; if (!s) continue;
+        const k = (e.summary || '') + '|' + s.getTime(); if (seen.has(k)) continue; seen.add(k);
+        list.push(Object.assign(e, { _s: s, _e: en, _all: calAllDay(e) }));
+      }
+      list.sort((a, b) => a._s - b._s);
+      this._g4Evs = list; this._g4Paint();
+    } catch (e) { if (!this._g4Evs) this._g4Evs = []; }
+  }
   // back to the classic layout (home_layout removed, e.g. leaving arrange without a change): the tiles go back to their row
   _gridOff() { this._g4Set(null); if (!this.hasAttribute('hgrid')) return; this.toggleAttribute('hgrid', false); const ap = this._w.querySelector('.apps'); this._hgMap = null; this._hgM = null;
     if (ap) { ap.classList.remove('hg'); for (const n of ap.children) { n.style.gridColumn = ''; n.style.gridRow = ''; } }
