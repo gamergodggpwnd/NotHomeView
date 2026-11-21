@@ -4602,6 +4602,13 @@ function hwWxHtml(hub, cfg, cells) { const H = hub._hass, id = hwWxId(hub), s = 
   const dl = days.map((f, i) => { const d = new Date(f.datetime), l = f.templow != null ? f.templow : f.temperature;
     return `<div class="d"><span class="dn">${i ? esc(d.toLocaleDateString(hwLang(hub), { weekday: 'short' })) : 'Today'}</span>${hwWxIco(f.condition)}<span class="lo">${Math.round(l)}°</span><span class="rng"><i style="left:${((l - lo) / spn * 100).toFixed(1)}%;right:${((hi - f.temperature) / spn * 100).toFixed(1)}%"></i></span><span class="hi">${Math.round(f.temperature)}°</span></div>`; }).join('');
   return `<div class="w-l">${top}${hourly}<div class="dys">${dl || '<div class="d ld">Loading…</div>'}</div></div>`; }
+function hwFitRows(el) { const body = el.querySelector('.hwi') || el, bodyBottom = body.getBoundingClientRect().bottom;
+  for (const col of el.querySelectorAll('.c-m .col .evs, .c-m .col, .c-s .evs')) {
+    const evs = [...col.querySelectorAll(':scope > .ev')]; if (!evs.length) continue;
+    evs.forEach(e => { e.style.display = ''; });
+    const clipTop = col.getBoundingClientRect().top, clipBottom = Math.min(col.getBoundingClientRect().bottom, bodyBottom);
+    for (const e of evs) { const r = e.getBoundingClientRect(); if (r.bottom > clipBottom + 0.6 || r.top < clipTop - 0.6) e.style.display = 'none'; }
+  } }
 function hwCalHtml(hub, cfg, cells) { const ids = hwCalIds(hub); if (!ids.length) return '<div class="hwe"><ha-icon icon="mdi:calendar-remove-outline"></ha-icon>No calendars in Home Assistant</div>';
   const E = hwEv(hub), L = hwLang(hub), now = new Date(), t0 = hwDay(now), t1 = new Date(t0.getTime() + 864e5), t2 = new Date(t0.getTime() + 2 * 864e5);
   let sz = cfg.size || 'small'; const cw = cells && Number(cells[0]), ch = cells && Number(cells[1]);
@@ -4616,8 +4623,8 @@ function hwCalHtml(hub, cfg, cells) { const ids = hwCalIds(hub); if (!ids.length
   const up = on(now, t1).filter(e => e.ad || (e.en || e.st) > now), tm = on(t1, t2);
   if (sz === 'small') { const nx = up.slice(0, 2).map(evRow).concat(tm.slice(0, Math.max(0, 2 - up.length)).map(e => evRow(e).replace(/<span>/, '<span>Tomorrow · '))); // late in the day: tomorrow's first ones
     return `<div class="c-s"><div class="wd">${wd(now)}</div><div class="dn">${day}</div><div class="evs">${nx.join('') || none('No more events today')}</div></div>`; }
-  const tmCol = (n0) => `<div class="col tm"><div class="th">TOMORROW</div>${tm.slice(0, n0).map(evRow).join('') || none('No events')}</div>`;
-  if (sz === 'medium') return `<div class="c-m"><div class="col"><div class="wd">${wd(now)}</div><div class="dn">${day}</div>${up.slice(0, 3).map(evRow).join('') || none('No more events today')}</div>${tmCol(4)}</div>`;
+  const tmCol = (n0) => `<div class="col tm"><div class="th">TOMORROW</div><div class="evs">${tm.slice(0, n0).map(evRow).join('') || none('No events')}</div></div>`;
+  if (sz === 'medium') return `<div class="c-m"><div class="col"><div class="wd">${wd(now)}</div><div class="dn">${day}</div><div class="evs">${up.slice(0, 3).map(evRow).join('') || none('No more events today')}</div></div>${tmCol(4)}</div>`;
   // timed views: hours down the left, events as coloured blocks
   const h0 = Math.max(0, Math.min(now.getHours() - 1, 23 - (sz === 'xl' ? 9 : 6))), nh = sz === 'xl' ? 10 : 7, hours = Array.from({ length: nh + 1 }, (_, k) => h0 + k);
   const grid = (d0, withLabels) => { const a = new Date(d0.getTime() + h0 * 36e5), b = new Date(d0.getTime() + (h0 + nh) * 36e5), sp = b - a;
@@ -4661,7 +4668,7 @@ const HW_CSS = `
 .hw .ev b{font-size:calc(var(--f) * 12.5);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.hw .ev span{font-size:calc(var(--f) * 11.5);color:rgba(235,235,245,.6);white-space:nowrap}
 .hw .no{font-size:calc(var(--f) * 12);color:rgba(235,235,245,.6)}
 .c-d{align-items:flex-start}.c-d .md{color:#ff453a;font-size:calc(var(--f) * 15);font-weight:700;letter-spacing:.02em}.c-d .dn2{font-size:calc(var(--f) * 92);font-weight:300;line-height:1;letter-spacing:-.04em;margin-top:auto}
-.c-m{flex-direction:row;gap:calc(var(--f) * 14);min-width:0}.c-m .col{flex:1;min-width:0;display:flex;flex-direction:column;gap:calc(var(--f) * 5);overflow:hidden}.c-m .col.tm{border-left:1px solid rgba(84,84,88,.5);padding-left:calc(var(--f) * 12);flex:1 1 42%}
+.c-m{flex-direction:row;gap:calc(var(--f) * 14);min-width:0;--f:calc(var(--hu,112px) / 128)}.c-m .col{flex:1;min-width:0;display:flex;flex-direction:column;gap:calc(var(--f) * 5);overflow:hidden}.c-m .col.tm{border-left:1px solid rgba(84,84,88,.5);padding-left:calc(var(--f) * 12);flex:1 1 42%}
 .hw .th{font-size:calc(var(--f) * 11.5);font-weight:700;color:rgba(235,235,245,.6);letter-spacing:.04em;margin-bottom:calc(var(--f) * 2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .c-l .hd{display:flex;align-items:baseline;gap:8px;margin-bottom:calc(var(--f) * 6)}.c-l .dt{font-size:calc(var(--f) * 15);font-weight:600}
 .c-l .bd{display:flex;gap:calc(var(--f) * 12);flex:1;min-height:0;min-width:0}.c-l .lc{flex:1.45 1 0;min-width:0;display:flex}.c-l .col.tm{flex:1 1 36%;min-width:0;border-left:1px solid rgba(84,84,88,.5);padding-left:calc(var(--f) * 12);display:flex;flex-direction:column;gap:calc(var(--f) * 6);overflow:hidden}
@@ -9780,7 +9787,7 @@ class HVHubCard extends HTMLElement {
   // the cards' contents: repainted when they change (live data), at most every 1.5 s on state changes
   _hwPaint(force) { if (!this._hwM || !this._hwM.size || !this._hass) return; const now = Date.now();
     if (!force && now - (this._hwAt || 0) < 1500) { if (!this._hwT) this._hwT = setTimeout(() => { this._hwT = null; this._hwPaint(true); }, 1500); return; }
-    this._hwAt = now; for (const el of this._hwM.values()) { if (!el._cfg || !el.isConnected) continue; const h = hwHtml(this, el._cfg, el._hvCells); if (h !== el._hwH) { el._hwH = h; el.firstElementChild.innerHTML = h; } } }
+    this._hwAt = now; for (const el of this._hwM.values()) { if (!el._cfg || !el.isConnected) continue; const h = hwHtml(this, el._cfg, el._hvCells); if (h !== el._hwH) { el._hwH = h; el.firstElementChild.innerHTML = h; } hwFitRows(el); } }
   _px(css) { let p = this._probe; if (!p || !p.isConnected) { p = this._probe = document.createElement('div'); p.style.cssText = 'position:absolute;visibility:hidden;width:0;pointer-events:none'; this.shadowRoot.appendChild(p); }
     p.style.height = css; return p.getBoundingClientRect().height; }
   _layout() {
