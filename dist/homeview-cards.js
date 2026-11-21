@@ -9294,8 +9294,12 @@ class HVHubCard extends HTMLElement {
     this._ssPose(H, true, dur, 'cubic-bezier(.17,.84,.32,1)'); const w = ssWallpanel(), t0 = performance.now();
     // start on the next tick, once this touchend is fully dispatched (Wallpanel treats input as "stop")
     setTimeout(() => { if (!this._startSS(true)) setTimeout(() => this._ssSpring(), dur); }, 16);
-    const wait = () => { const op = w ? Number(getComputedStyle(w).opacity) : 0, run = w && w.screensaverRunning && w.screensaverRunning();
-      const m = w && w.getActiveMediaElement && w.getActiveMediaElement(), ready = !m || m.tagName !== 'IMG' || (m.complete && m.naturalWidth > 0);
+    // The preview may drop once the screensaver layer is up and opaque. A styled face (Nightstand, Glass, ...) covers Wallpanel's parked photo, which never loads, so it counts as ready; a photo that
+    // does not load must not hold the preview (black, stalled) for the whole 7 s: after 1.5 s of an opaque, running Wallpanel the preview goes anyway (its black / clock layer covers the page).
+    let up0 = 0;
+    const wait = () => { const op = w ? Number(getComputedStyle(w).opacity) : 0, run = w && w.screensaverRunning && w.screensaverRunning(), now = performance.now(); if (run && op > 0.98 && !up0) up0 = now;
+      const m = w && w.getActiveMediaElement && w.getActiveMediaElement(), styled = typeof hvSsOv !== 'undefined' && !!(hvSsOv._up && hvSsOv.style && hvSsOv.style !== 'photo' && hvSsOv.host && hvSsOv.host.isConnected);
+      const ready = styled || !m || m.tagName !== 'IMG' || (m.complete && m.naturalWidth > 0) || (!!up0 && now - up0 > 1500);
       if (run && op > 0.98 && ready && performance.now() - t0 > dur) { // Wallpanel is up: put the launch page back underneath, drop the preview
         this._paintBg(true, true); this._ssReset(); this._ssBusy = false; return; }
       if (performance.now() - t0 > 7000 || (w && w.screensaverRunning && !run && performance.now() - t0 > 1500)) { this._ssSpring(); return; }
