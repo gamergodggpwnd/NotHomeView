@@ -13620,15 +13620,16 @@ const HV_SS_SW_CSS = `
 const hvSsFaces = {
   key() { return `hvSsFaces:${ssDash() || 'lovelace'}`; },
   _cfg() { try { const lv = hvSsLv(), hub = lv && lv.config && hvHubCfgOf(lv.config); return hub || null; } catch (e) { return null; } },
+  _mk(s) { // a new face of style s with its default layout and widgets
+    const f = { style: s, colors: null, font: 'system', layout: s === 'modular' ? 'asymmetric' : (s === 'typo' ? 'editorial' : undefined), complications: {} };
+    if (s === 'modular') f.complications = { tall: { entity: 'builtin.date' }, r1: { entity: 'builtin.clock' }, r2: { entity: 'builtin.event' }, r3: { entity: 'builtin.weather' }, q1: { entity: 'builtin.date' }, q2: { entity: 'builtin.clock' }, q3: { entity: 'builtin.media' }, q4: { entity: 'builtin.weather' } };
+    if (s === 'typo') f.complications = { bl: { entity: 'builtin.date' } };
+    if (s === 'digital') f.complications = { tl: { entity: 'builtin.date' }, bl: { entity: 'builtin.weather' } };
+    return f;
+  },
   _defaults() {
     const cur = hvSs.get();
-    const faces = HV_SSS_V.map(s => {
-      const f = { style: s, colors: null, font: 'system', layout: s === 'modular' ? 'asymmetric' : (s === 'typo' ? 'editorial' : undefined), complications: {} };
-      if (s === 'modular') f.complications = { tall: { entity: 'builtin.date' }, r1: { entity: 'builtin.clock' }, r2: { entity: 'builtin.event' }, r3: { entity: 'builtin.weather' }, q1: { entity: 'builtin.date' }, q2: { entity: 'builtin.clock' }, q3: { entity: 'builtin.media' }, q4: { entity: 'builtin.weather' } };
-      if (s === 'typo') f.complications = { bl: { entity: 'builtin.date' } };
-      if (s === 'digital') f.complications = { tl: { entity: 'builtin.date' }, bl: { entity: 'builtin.weather' } };
-      return f;
-    });
+    const faces = HV_SSS_V.map(s => this._mk(s));
     const i = Math.max(0, HV_SSS_V.indexOf(cur));
     return { faces, i };
   },
@@ -14158,17 +14159,44 @@ const hvSsSwitch = {
     b.addEventListener('click', ev => { ev.stopPropagation(); this._addFace(); });
     sr.appendChild(b);
   },
+  // + opens a chooser first (every face style the switcher knows, and the faces you removed); nothing is added until one is picked, and closing it adds nothing
   _addFace() {
-    const data = this.draft || hvSsFaces.raw();
-    data.stash = Array.isArray(data.stash) ? data.stash : [];
-    if (data.stash.length) {
-      const face = data.stash.pop();
-      data.faces.push(face);
-    } else {
-      data.faces.push({ style: 'typo', colors: null, font: 'system', layout: 'editorial', complications: { bl: { entity: 'builtin.date' } } });
-    }
-    this.draft = data; this.i = data.faces.length - 1; data.i = this.i;
-    this._paintCards(data, this.i, 'switch');
+    const sr = this.host && this.host.shadowRoot; if (!sr || this.mode !== 'switch') return;
+    sr.querySelectorAll('.gal-root').forEach(n => n.remove());
+    const data = this.draft || hvSsFaces.raw(), stash = Array.isArray(data.stash) ? data.stash : [];
+    const root = document.createElement('div'); root.className = 'gal-root'; root.dataset.addface = '1';
+    root.innerHTML = `<style>
+.gal-root{position:absolute;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.38);pointer-events:auto}
+.gal-sheet{position:relative;width:min(560px,calc(100% - 40px));max-height:min(680px,calc(100% - 40px));display:flex;flex-direction:column;border-radius:30px;overflow:hidden;
+ background:rgba(30,30,32,.9);backdrop-filter:blur(34px) saturate(1.4);-webkit-backdrop-filter:blur(34px) saturate(1.4);box-shadow:0 30px 80px rgba(0,0,0,.5),inset 0 0 0 .5px rgba(255,255,255,.14);color:#fff;font-family:system-ui,-apple-system,sans-serif}
+.gal-sheet *{box-sizing:border-box}
+.gal-sheet .hd{flex:none;padding:22px 64px 12px 24px}.gal-sheet .hd h2{margin:0;font-size:28px;font-weight:700;letter-spacing:-.01em}
+.gal-sheet .hd p{margin:4px 0 0;font-size:15px;color:rgba(235,235,245,.6);line-height:1.35}
+.gal-sheet .x{all:unset;position:absolute;top:16px;right:16px;width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.12);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:2}
+.gal-sheet .x svg{width:14px;height:14px}
+.gal-sheet .ls{flex:1;min-height:0;overflow-y:auto;padding:4px 12px 16px;scrollbar-width:none;-webkit-overflow-scrolling:touch;touch-action:pan-y}.gal-sheet .ls::-webkit-scrollbar{display:none}
+.gal-sheet .gh{margin:12px 12px 4px;font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:rgba(235,235,245,.5)}
+.gal-sheet .pr{all:unset;box-sizing:border-box;width:100%;cursor:pointer;display:flex;align-items:center;gap:14px;padding:8px 10px;border-radius:14px;color:#fff;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.gal-sheet .pr:hover{background:rgba(255,255,255,.06)}.gal-sheet .pr:active,.gal-sheet .pr:focus-visible{background:rgba(255,255,255,.14)}
+.gal-sheet .pt{position:relative;flex:none;width:58px;height:58px;border-radius:14px;overflow:hidden;background:#222;box-shadow:0 0 0 2px rgba(255,255,255,.12)}
+.gal-sheet .pt .f{position:absolute;inset:0;pointer-events:none !important}
+.gal-sheet .pn{min-width:0}.gal-sheet .pn b{display:block;font-size:17px;font-weight:600}.gal-sheet .pn span{display:block;margin-top:1px;font-size:13px;line-height:1.3;color:rgba(235,235,245,.6)}
+</style><div class="gal-sheet" role="dialog" aria-label="Add Face" aria-modal="true"><button class="x" type="button" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button><div class="hd"><h2>Add a face</h2><p>Choose the face to add to the screensaver.</p></div><div class="ls"></div></div>`;
+    const ls = root.querySelector('.ls'), close = () => { document.removeEventListener('keydown', onKey, true); root.remove(); };
+    const onKey = ev => { if (ev.key === 'Escape' && root.isConnected) { ev.stopPropagation(); close(); } };
+    const row = (face, name, sub, pick) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'pr'; b.dataset.style = face.style;
+      b.innerHTML = '<span class="pt"></span><span class="pn"><b></b><span></span></span>'; b.querySelector('b').textContent = name; b.querySelector('.pn > span').textContent = sub;
+      try { b.querySelector('.pt').appendChild(this._mkFace(face, true).el); } catch (e) {}
+      b.addEventListener('click', ev => { ev.stopPropagation(); ev.preventDefault(); close(); pick(); }); ls.appendChild(b); };
+    const add = face => { const d = this.draft || hvSsFaces.raw(); d.faces.push(face); this.draft = d; this.i = d.faces.length - 1; d.i = this.i; this._cardSig = ''; this._paintCards(d, this.i, 'switch'); };
+    if (stash.length) { const h = document.createElement('div'); h.className = 'gh'; h.textContent = 'Removed faces'; ls.appendChild(h);
+      stash.map((f, k) => [f, k]).reverse().forEach(([f, k]) => row(f, ((HV_SSS.find(z => z.v === f.style) || {}).l || f.style), 'Put back the face you removed', () => { const d = this.draft || hvSsFaces.raw(); if (Array.isArray(d.stash)) d.stash.splice(k, 1); add(f); }));
+      const h2 = document.createElement('div'); h2.className = 'gh'; h2.textContent = 'New face'; ls.appendChild(h2); }
+    for (const z of HV_SSS) row(hvSsFaces._mk(z.v), z.l, z.s, () => add(hvSsFaces._mk(z.v)));
+    root.addEventListener('click', ev => { ev.stopPropagation(); if (ev.target === root || ev.target.closest('.x')) close(); });
+    for (const t of ['pointerdown', 'pointerup', 'touchstart', 'touchend']) root.addEventListener(t, ev => ev.stopPropagation());
+    document.addEventListener('keydown', onKey, true);
+    sr.appendChild(root); try { root.querySelector('.pr').focus({ preventScroll: true }); } catch (e) {}
   },
   _removeFace(n, ev) {
     if (ev) { try { ev.preventDefault(); ev.stopPropagation(); ev.stopImmediatePropagation(); } catch (e) {} }
