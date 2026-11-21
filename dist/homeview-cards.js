@@ -4680,6 +4680,8 @@ const HW_CSS = `
 .apps.hg > .app{justify-self:center;align-self:start}.apps.hg > .tile,.apps.hg > .phw{width:100%;height:100%;min-width:0;min-height:0}.tile.hv-hs{border-radius:0;overflow:visible;background:transparent;box-shadow:none}
 .apps.hg > .phw,.apps.hg > .tile{gap:var(--lg,9px)}.apps.hg > .phw .pw,.apps.hg > .tile > .tb{width:100%;flex:1 1 auto;min-height:0}
 .apps.hg > .tile > .tb{height:auto}
+/* every card in the grid keeps the same label slot under it (the label's line + gap), whether it shows a label or not: the cards (Sunrise, Calendar) and the tiles with a label (Photos, Thermostat, a camera) all end on the same baseline, and a tile without a label does not grow taller */
+:host(:not([g4])) .apps.hg > .tile.hw > .hwi,:host(:not([g4])) .apps.hg > .tile:not(.hw):not(:has(> .lb)) > .tb,:host(:not([g4])) .apps.hg > .phw:not(:has(> .lb)) > .pw{margin-bottom:calc(var(--lh,22px) + var(--lg,9px))}
 .apps.hg > .hgp{border-radius:calc(var(--I,110px) * .26);background:rgba(255,255,255,.06);box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.14)}.apps.hg > .hgp.hga{background:none;box-shadow:none}
 .apps.hg{isolation:isolate}.apps.hg > .lift{position:absolute !important;z-index:1000;pointer-events:none;transition:none;filter:drop-shadow(0 18px 28px rgba(0,0,0,.35))}
 :host([hv-arr]) .w{padding-bottom:max(var(--pb,20px), calc(80px + env(safe-area-inset-bottom,0px)))}:host([hv-arr]) .apps.hg > .app:not(.lift) .ico{animation:hvjig .5s ease-in-out infinite alternate} @keyframes hvjig{from{transform:rotate(-1.4deg)}to{transform:rotate(1.4deg)}}
