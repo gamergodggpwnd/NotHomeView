@@ -7463,7 +7463,7 @@ const HV_COOK_CSS = `.ck{position:absolute;inset:0;color:#3c3c43;font-family:${F
 .ck.dk{background:#000;color:#f5f5f7}.ck.dk .tl,.ck.dk .ov .meta div,.ck.dk .tmr,.ck.dk .sv .nav .bk,.ck.dk .sv .vh,.ck.dk .sv .cx,.ck.dk .sv .ing span,.ck.dk .ls .rc,.ck.dk .emp pre{background:#1c1c1e;color:#f5f5f7;box-shadow:none}
 .ck.dk h1,.ck.dk .sv .big,.ck.dk .ls h1,.ck.dk .emp h2{color:#f5f5f7}.ck.dk .sub,.ck.dk .ov .meta span,.ck.dk .tmr .l,.ck.dk .ov .ingr p,.ck.dk .ov .ingr b span,.ck.dk .ls .rc span,.ck.dk .sv .vh span,.ck.dk .emp p{color:rgba(235,235,245,.6)}
 .ck.dk .ov .st .n,.ck.dk .tmr .bt button{background:#2c2c2e;color:#f5f5f7}.ck.dk .ov .st+.st::before{background:rgba(84,84,88,.6)}.ck.dk .tmr .rg circle:first-child{stroke:#2c2c2e}
-.ck.dk .tmc,.ck.dk .addl,.ck.dk .tmr.nxt{background:#3a3360;color:#d9d3ff}.ck.dk .tmr.nxt .t,.ck.dk .tmr.nxt .l,.ck.dk .tmr.nxt .ic{color:#d9d3ff}.ck.dk .tmr.nxt .bt button,.ck.dk .sv .nav .nx{background:#7a6cf0;color:#fff}.ck.dk .sv .big em,.ck.dk .sv .lab,.ck.dk .ov .hd .all{color:#a99df2}
+.ck.dk .tmc,.ck.dk .addl,.ck.dk .tmr.nxt{background:#3a3360;color:#d9d3ff}.ck.dk .tmr.nxt .t,.ck.dk .tmr.nxt .l,.ck.dk .tmr.nxt .ic{color:#d9d3ff}.ck.dk .tmr.nxt .bt button{background:#7a6cf0;color:#fff}.ck.dk .ov .start,.ck.dk .sv .nav .nx{background:#6e5fe8;color:#fff}.ck.dk .sv .big em,.ck.dk .sv .lab,.ck.dk .ov .hd .all{color:#a99df2}
 .ck.dk .sv .prog i{background:rgba(235,235,245,.18)}.ck.dk .sv .prog i.d{background:#7a6cf0}.ck.dk .sv .prog i.c{background:linear-gradient(90deg,#7a6cf0 50%,rgba(235,235,245,.18) 50%)}
 @media (prefers-reduced-motion:reduce){.tmr.done{animation:none}}`;
 const hvCookEnc = u => String(u).replace(/[\s'"()\\<>]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'));
