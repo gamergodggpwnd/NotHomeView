@@ -9535,13 +9535,14 @@ class HVHubCard extends HTMLElement {
       let cw = this._w.querySelector('.calw'); if (c.show_calendar !== false && !cw) { cw = document.createElement('div'); cw.className = 'calw'; this._w.appendChild(cw); } else if (c.show_calendar === false && cw) { cw.remove(); cw = null; }
       this._tpill = this._w.querySelector('.tpill'); this._tpillPaint(); this._makeSide();
       if (cw) { this._makeCal(keepCal); if (!this._cal.parentNode) cw.appendChild(this._cal); this._placeCal(); } else { this._cal = null; if (this._calTile) this._calTile.remove(); }
+      this._pis = [...this._w.querySelectorAll('.pw .pi')]; if (this._cur) this._paintPhoto(true); else if (this._hass && !this._loading) this._loadPhotos();
       this._layout(); return; }
     this._w.innerHTML = topH + `
       <div class="mid"><div class="apps">${apps}</div><div class="row"><div class="phw"><button class="pw" data-k="photos" aria-label="${esc(c.photo_label || 'Photos')}"><div class="ph0"><ha-icon icon="mdi:image-multiple-outline"></ha-icon></div><div class="pi"></div><div class="pi"></div></button>${c.photo_label ? `<span class="lb">${esc(c.photo_label)}</span>` : ''}</div></div></div>
       <div class="below" hidden></div>${c.show_calendar !== false ? '<div class="calw"></div>' : ''}`;
     this._tpill = this._w.querySelector('.tpill'); this._tpillPaint();
     this._rowEl = this._w.querySelector('.row'); this._belowEl = this._w.querySelector('.below'); this._makeSide();
-    this._pis = [...this._w.querySelectorAll('.pi')]; this._paintPhoto(true);
+    this._pis = [...this._w.querySelectorAll('.pw .pi')]; this._paintPhoto(true);
     if (c.show_calendar !== false) { const w = this._w.querySelector('.calw'); this._makeCal(keepCal); w.appendChild(this._cal); this._placeCal(); } else { this._cal = null; if (this._calTile) this._calTile.remove(); }
     this._layout();
   }
@@ -9977,12 +9978,13 @@ class HVHubCard extends HTMLElement {
     else ids.push(src.url);
     return ids; }
   async _loadPhotos() {
-    if (!this._hass || this._loading || this._ids) return; this._loading = true;
+    if (!this._hass || this._loading || (this._ids && this._ids.length)) return; this._loading = true;
     try { const src = await this._source(), C = window.__hvPhotoCache || (window.__hvPhotoCache = {}), key = src.url || 'album:' + src.album;
       let ids = C[key] && Date.now() - C[key].t < (C[key].ttl || 36e5) ? C[key].ids : null;
-      if (!ids) { ids = await this._scan(src); C[key] = { t: Date.now(), ids, ttl: src.ttl }; }
+      if (!ids || !ids.length) { ids = await this._scan(src); C[key] = { t: Date.now(), ids, ttl: (ids && ids.length) ? src.ttl : 15e3 }; }
       this._idsExp = src.album ? C[key].t + (C[key].ttl || 36e5) : 0; // album lists (and their links) are reloaded when they expire
       ids = ids.slice(); if (this._config.photo_order !== 'sorted') for (let i = ids.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [ids[i], ids[j]] = [ids[j], ids[i]]; }
+      if (!ids.length) { this._ids = null; this._idsExp = Date.now() + 15e3; clearTimeout(this._idsRetry); this._idsRetry = setTimeout(() => { this._idsRetry = null; this._loadPhotos(); }, 15000); return; }
       this._ids = ids; this._pos = -1; if (ids.length) this._next(); }
     finally { this._loading = false; } }
   _urlPeek(id) { if (!/^media-source:\/\//.test(id)) return null; const x = (window.__hvPhotoUrl || {})[id]; return x && Date.now() - x.t < 30 * 6e4 ? x.u : null; }
@@ -13380,7 +13382,7 @@ const hvSsOv = {
   _sweep(root, d) { if (!root || d > 14 || !root.querySelectorAll) return;
     root.querySelectorAll('#hv-ss-style').forEach(n => { try { n.remove(); } catch (e) {} });
     for (const el of root.querySelectorAll('*')) if (el.shadowRoot) this._sweep(el.shadowRoot, d + 1); },
-  hide() { try { const w = typeof ssWallpanel === 'function' ? ssWallpanel() : null; try { this._parkWpMedia(w, true); } catch (e) {} const running = !!(w && typeof w.screensaverRunning === 'function' && w.screensaverRunning()); if (typeof hvSsSwitch !== 'undefined' && hvSsSwitch && !running) { hvSsSwitch.hide(); try { hvSsMarkGone(); hvSsEatTap(600); } catch (e) {} } } catch (e) {} try { hvSsKeep.off('glass'); hvSsKeep.off('style'); } catch (e) {} const h = this.host; this.host = null; this.face = null; this.card = null; this._g = null; this._bornAt = 0; this.style = null; this.colKey = null; this._up = false; try { this._ssToastClass(false); } catch (e) {}
+  hide() { try { const w = typeof ssWallpanel === 'function' ? ssWallpanel() : null; try { const stNow = (typeof hvSs !== 'undefined' && hvSs.get && hvSs.get()) || this.style; if (stNow && stNow !== 'photo') this._parkWpMedia(w, true); else this._parkWpMedia(w, false); } catch (e) {} const running = !!(w && typeof w.screensaverRunning === 'function' && w.screensaverRunning()); if (typeof hvSsSwitch !== 'undefined' && hvSsSwitch && !running) { hvSsSwitch.hide(); try { hvSsMarkGone(); hvSsEatTap(600); } catch (e) {} } } catch (e) {} try { hvSsKeep.off('glass'); hvSsKeep.off('style'); } catch (e) {} const h = this.host; this.host = null; this.face = null; this.card = null; this._g = null; this._bornAt = 0; this.style = null; this.colKey = null; this._up = false; try { this._ssToastClass(false); } catch (e) {}
     if (h) { try { h.remove(); } catch (e) {} } try { this._sweep(document, 0); } catch (e) {} },
   // Wallpanel can still report "running" after it has faded out (opacity 0 / visibility hidden / pointer-events none).
   // The style layer must not stay up then: it covers the screensaver settings dialog.
@@ -13406,6 +13408,57 @@ const hvSsOv = {
     try { for (const el of [w.imageOne, w.imageTwo, w.imageOneContainer, w.imageTwoContainer, w.imageOneBackground, w.imageTwoBackground]) apply(el); } catch (e) {}
     try { w.querySelectorAll && w.querySelectorAll('img,video,ha-camera-stream,canvas').forEach(el => apply(el)); } catch (e) {}
     if (on) { try { if (w.style) { /* keep the host hit-testable while a styled face is up; hide only its media */ } } catch (e) {} this._watchWpToasts(); } },
+  _hubPhotoUrl() { try { if (typeof HV_HUBS !== 'undefined') { for (const h of HV_HUBS) if (h && h._cur) return h._cur; } } catch (e) {} return null; },
+  _photoMediaReady(w) { if (!w) return false;
+    try { if (w.classList && w.classList.contains('hv-ss-nomedia')) return false; } catch (e) {}
+    if (!this.showing(w)) return false;
+    const ok = el => { if (!el) return false;
+      try { const cs = getComputedStyle(el); if (cs.visibility === 'hidden' || cs.display === 'none' || Number(cs.opacity) < 0.05) return false; } catch (e) {}
+      try { if (el.tagName === 'IMG' && el.naturalWidth > 0) return true; } catch (e) {}
+      try { if (el.tagName === 'IMG' && el.src && el.src !== 'null' && String(el.src).slice(-5) !== '/null') return true; } catch (e) {}
+      try { const bi = (el.style && el.style.backgroundImage) || ''; if (bi && bi !== 'none') return true; } catch (e) {}
+      return false; };
+    try { if (ok(w.imageOne) || ok(w.imageTwo) || ok(w.imageOneContainer) || ok(w.imageTwoContainer)) return true; } catch (e) {}
+    try { if (w.querySelectorAll) { for (const el of w.querySelectorAll('img,video')) if (ok(el)) return true; } } catch (e) {}
+    return false; },
+  _kickWpMedia(w) { if (!w) return;
+    try { w.__hvSsOpenUntil = Date.now() + 2000; } catch (e) {}
+    try { if (typeof w.updateMediaList === 'function') w.updateMediaList(); } catch (e) {}
+    try { const el = (typeof w.getActiveMediaElement === 'function' && w.getActiveMediaElement()) || w.imageOne;
+      if (el && (el.mediaUrl == null || el.mediaUrl === 'null' || el.mediaUrl === '') && w._photoUrl) el.mediaUrl = w._photoUrl;
+      if (el && typeof w.updateMedia === 'function' && el.mediaUrl != null && el.mediaUrl !== 'null' && el.mediaUrl !== '') w.updateMedia(el);
+      else if (typeof w.switchActiveMedia === 'function') w.switchActiveMedia(); } catch (e) {} },
+  _mountPhotoCover(w) {
+    const url = this._hubPhotoUrl();
+    let z = 1001; try { const n = parseInt(getComputedStyle(w).zIndex, 10); if (n > 0) z = n + 1; } catch (e) {}
+    let h = this.host;
+    const isCover = !!(h && h.isConnected && h.getAttribute && h.getAttribute('data-hv-photo-cover') != null && this.style === 'photo');
+    if (!isCover) {
+      const prev = h;
+      h = document.createElement('div'); h.id = 'hv-ss-style'; h.setAttribute('data-hv-photo-cover', ''); h.setAttribute('aria-hidden', 'true');
+      const sr = h.attachShadow({ mode: 'open' });
+      sr.innerHTML = `<style>
+        :host{position:fixed;inset:0;width:100%;height:100%;height:100dvh;z-index:${z};pointer-events:none;opacity:1;background:#111;transition:opacity .4s ease}
+        .pic{position:absolute;inset:0;background:#111 center/cover no-repeat}
+        .wait,.fail{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);color:rgba(255,255,255,.82);font:600 18px/1.4 system-ui,sans-serif;text-align:center;text-shadow:0 1px 8px #000}
+        .spin{width:36px;height:36px;margin:0 auto 12px;border:3px solid rgba(255,255,255,.2);border-top-color:#fff;border-radius:50%;animation:s .8s linear infinite}
+        @keyframes s{to{transform:rotate(360deg)}}
+        .clk{position:absolute;top:max(24px,env(safe-area-inset-top));left:0;right:0;text-align:center;color:rgba(200,200,205,.85);font:500 28px/1 system-ui,sans-serif;letter-spacing:.04em}
+      </style><div class="pic"></div><div class="clk"></div><div class="wait" hidden><div class="spin"></div>Loading photos</div><div class="fail" hidden>Couldn't load photos</div>`;
+      this.host = h; this.face = null; this.card = null; this.style = 'photo'; this.colKey = 'photo'; this._up = true; this._userDismiss = false; this._bornAt = Date.now();
+      try { this._ssToastClass(true); } catch (e) {}
+      const parent = (w && w.parentNode) || document.body;
+      h.style.opacity = '0'; parent.appendChild(h);
+      requestAnimationFrame(() => { try { h.style.opacity = '1'; } catch (e) {} });
+      if (prev && prev !== h) { try { prev.style.transition = prev.style.transition || 'opacity .4s ease'; prev.style.opacity = '0'; } catch (e) {}
+        setTimeout(() => { try { prev.remove(); } catch (e) {} }, 400); }
+    }
+    const sr = this.host && this.host.shadowRoot, pic = sr && sr.querySelector('.pic'), wait = sr && sr.querySelector('.wait'), fail = sr && sr.querySelector('.fail'), clk = sr && sr.querySelector('.clk');
+    if (clk) { try { const d = new Date(); let hh = d.getHours(); const mm = String(d.getMinutes()).padStart(2, '0'); hh = hh % 12 || 12; clk.textContent = hh + ':' + mm; } catch (e) {} }
+    if (url && pic) { pic.style.backgroundImage = 'url("' + String(url).replace(/"/g, '%22') + '")'; this._photoCoverAt = Date.now(); if (wait) wait.hidden = true; if (fail) fail.hidden = true; }
+    else { if (pic) pic.style.backgroundImage = ''; const waited = this._photoCoverAt ? Date.now() - this._photoCoverAt : (this._photoCoverAt = Date.now(), 0);
+      if (waited > 1500) { if (wait) wait.hidden = true; if (fail) fail.hidden = false; } else { if (wait) wait.hidden = false; if (fail) fail.hidden = true; } }
+    if (this.host) this.host.style.pointerEvents = 'none'; },
   _hookMedia(w) { if (!w || w.__hvSsMediaHooked) return; w.__hvSsMediaHooked = true;
     if (!document.getElementById('hv-ss-wp-media')) { const s = document.createElement('style'); s.id = 'hv-ss-wp-media';
       s.textContent = 'wallpanel-view.hv-ss-nomedia img,wallpanel-view.hv-ss-nomedia video,wallpanel-view.hv-ss-nomedia ha-camera-stream,wallpanel-view.hv-ss-nomedia canvas,wallpanel-view.hv-ss-nomedia [style*="background-image"]{opacity:0!important;visibility:hidden!important;background-image:none!important}html.hv-ss-up #wallpanel-message-container,html.hv-ss-up #wallpanel-message-container .wallpanel-message,html.hv-ss-up .wallpanel-message{display:none!important;visibility:hidden!important;opacity:0!important}';
@@ -13424,9 +13477,9 @@ const hvSsOv = {
         try { return origR.apply(this, arguments); } catch (e) { if (/media from null|Failed to load IMG/i.test(String((e && e.message) || e))) return; throw e; } };
       w.releaseMediaElement.__hvWrap = true; }
     if (typeof w.stopScreensaver === 'function' && !w.stopScreensaver.__hvMedia) { const origS = w.stopScreensaver;
-      w.stopScreensaver = function () { if (wantHide() || self._userDismiss) { try { self._parkWpMedia(w, true); if (w.style) { w.style.opacity = '0'; } } catch (e) {} }
+      w.stopScreensaver = function () { if (wantHide()) { try { self._parkWpMedia(w, true); if (w.style) { w.style.opacity = '0'; } } catch (e) {} }
         const r = origS.apply(this, arguments);
-        if (wantHide() || self._userDismiss) { try { self._parkWpMedia(w, true); if (w.style) { w.style.opacity = '0'; w.style.visibility = 'hidden'; } } catch (e) {} }
+        if (wantHide()) { try { self._parkWpMedia(w, true); if (w.style) { w.style.opacity = '0'; w.style.visibility = 'hidden'; } } catch (e) {} }
         try { self._watchWpToasts(); self._eatWpToasts(); } catch (e) {}
         return r; };
       w.stopScreensaver.__hvMedia = true; }
@@ -13438,6 +13491,7 @@ const hvSsOv = {
     const opening = () => {
       try {
         if (!(w.screensaverRunning && w.screensaverRunning())) return false;
+        if (hvSsOv && ((hvSsOv.style === 'photo') || (typeof hvSs !== 'undefined' && hvSs.get && hvSs.get() === 'photo')) && typeof hvSsOv._photoMediaReady === 'function' && !hvSsOv._photoMediaReady(w)) return true;
         // Still on the first-photo load: the host stays visibility:hidden until switchActiveMedia finishes.
         if (w.style && w.style.visibility !== 'visible') {
           const t0 = w.screensaverStartedAt || 0;
@@ -13484,8 +13538,9 @@ const hvSsOv = {
     // Any styled (non-photo) face: Wallpanel's photo-clock often drops to opacity 0 for ~1s on a
     // media switch / session bump. Hiding our overlay then flashes the Home Screen underneath.
     const styledWant = (stWant && stWant !== 'photo') || (this.style && this.style !== 'photo' && !!(this.host || this._up)) || glassWant;
+    const photoWant = (stWant === 'photo') || (this.style === 'photo');
     const ghost = !!(run && cs && vis && cs.pointerEvents !== 'none' && !faded);
-    if (ghost && !styledWant) { this._ghost = this._ghost || Date.now(); if (Date.now() - this._ghost > 1200 && typeof w.stopScreensaver === 'function') { try { w.stopScreensaver(); } catch (e) {} } }
+    if (ghost && !styledWant && !photoWant) { this._ghost = this._ghost || Date.now(); if (Date.now() - this._ghost > 1200 && typeof w.stopScreensaver === 'function') { try { w.stopScreensaver(); } catch (e) {} } }
     else this._ghost = 0;
     // Keep the style up while Wallpanel is starting, fading, or in a photo-clock ghost. Drop it only
     // when the screensaver is truly gone after a user dismiss, or (photo-only) a transparent ghost
@@ -13503,7 +13558,24 @@ const hvSsOv = {
       return; }
     if (this._g) { if (this.card) try { this.card.hass = this.hass(); } catch (e) {} return; }
     const st = hvSs.get(), cols = hvSsColors.get(st), colKey = st + ':' + JSON.stringify(hvSsStrip(st, cols) || {});
-    if (st === 'photo') { this._wpHideMedia = false; try { this._parkWpMedia(w, false); } catch (e) {} try { hvSsKeep.off('style'); } catch (e) {} const keepSw = typeof hvSsSwitch !== 'undefined' && hvSsSwitch && hvSsSwitch.mode; if (!keepSw) this.hide(); hvSsPhotoTint.apply(cols.text); try { if (typeof hvSsSwitch !== 'undefined') hvSsSwitch.arm(true); } catch (e) {} return; }
+    if (st === 'photo') {
+      if (this._userDismiss) { try { this.hide(); } catch (e) {} try { hvSsPhotoTint.clear(); } catch (e) {} return; }
+      this._wpHideMedia = false; try { this._parkWpMedia(w, false); } catch (e) {} try { hvSsKeep.off('style'); } catch (e) {}
+      const keepSw = typeof hvSsSwitch !== 'undefined' && hvSsSwitch && hvSsSwitch.mode;
+      if (!keepSw) {
+        try { this._kickWpMedia(w); } catch (e) {}
+        const ready = this._photoMediaReady(w);
+        if (!ready) { try { this._mountPhotoCover(w); } catch (e) {} hvSsPhotoTint.apply(cols.text); try { if (typeof hvSsSwitch !== 'undefined') hvSsSwitch.arm(true); } catch (e) {} return; }
+        if (this.host && this.host.isConnected) {
+          const h = this.host;
+          if (this.style && this.style !== 'photo') { try { this._mountPhotoCover(w); } catch (e) {} }
+          else if (h.getAttribute('data-hv-photo-cover') != null && !h.__hvPhotoOut) {
+            h.__hvPhotoOut = true; try { h.style.transition = h.style.transition || 'opacity .4s ease'; h.style.opacity = '0'; } catch (e) {}
+            setTimeout(() => { try { if (this.host === h) this.hide(); else h.remove(); } catch (e) {} }, 400);
+          } else if (h.getAttribute('data-hv-photo-cover') == null) { try { this.hide(); } catch (e) {} }
+        }
+      }
+      hvSsPhotoTint.apply(cols.text); try { if (typeof hvSsSwitch !== 'undefined') hvSsSwitch.arm(true); } catch (e) {} return; }
     hvSsPhotoTint.clear();
     let z = parseInt(cs && cs.zIndex, 10); if (!(z > 0)) z = 1000;
     const overlayOp = run ? 1 : (isFinite(op) ? op : 1);
