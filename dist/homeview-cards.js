@@ -5876,7 +5876,7 @@ const HUB_CSS = `:host{display:block;position:relative;font-family:${FONT};color
 /* ---------------- Home Screen 4 × 4 grid (V2): home_style: grid4 ----------------
    The same Home Screen grid (hvHomeOrder / hvGridPack, arrange and drag), on Bill's strict grid: 4 columns of 150 px cells, 24 px gaps, a 2 × 2
    tile exactly 324 × 324 with a 34.32 px radius (scaled down only when the screen is smaller than an 11" iPad). Landscape: the greeting, a big
-   clock, the date and the weather in a column on the left, the compact Now Playing pill at its bottom; portrait: all of it above the grid, and the grid sits just under the clock (leftover space stays below, so it is not bottom-anchored on tall phones). A page
+   clock, the date and the weather in a column on the left, the compact Now Playing pill at its bottom; portrait: the greeting, clock, date and weather are a compact header that scrolls away with the cards; the grid fills the width with even 16 px padding and the scrollport goes to the bottom safe area (no dead band under the header, no leftover blank at the bottom). Landscape keeps the page
    pill at the top centre (this page as a dash, the swipe page and any further grid pages as dots). Default (classic) = the layout as before. */
 /* ---------------- Home Screen status pill + clock corners (V2 grid4) ----------------
    The greeting / clock / date / weather block and the status pill each snap to one of the four
@@ -5983,7 +5983,16 @@ const HV_G4_CSS = `
 :host([hv-arr]) .g4pp{visibility:hidden}
 :host([hv-arr]) .g4l,:host([hv-arr]) .g4n{pointer-events:auto;cursor:grab;outline:2px solid transparent}
 :host([hv-arr]) .g4l.dragging,:host([hv-arr]) .g4n.dragging{cursor:grabbing;transition:none !important;z-index:24;opacity:.94}
-.g4l.snap,.g4n.snap{transition:left .22s cubic-bezier(.2,.8,.2,1),top .22s cubic-bezier(.2,.8,.2,1)}`;
+.g4l.snap,.g4n.snap{transition:left .22s cubic-bezier(.2,.8,.2,1),top .22s cubic-bezier(.2,.8,.2,1)}
+/* Portrait fill: header scrolls with the cards; the scrollport reaches the bottom safe area; the grid uses even 16 px side padding. Landscape is unchanged. */
+:host([g4][g4p]) .top{z-index:4}
+:host([g4][g4p]) .g4scroll{position:absolute;left:0;right:0;top:var(--g4st,0px);bottom:var(--g4sbb,0px);padding:0 var(--g4pad,16px) var(--g4sb,24px);box-sizing:border-box;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-width:none;-webkit-overflow-scrolling:touch;z-index:1}
+:host([g4][g4p]) .g4scroll::-webkit-scrollbar{display:none}
+:host([g4][g4p]) .g4l{position:relative;left:auto;top:auto;right:auto;bottom:auto;width:auto;max-width:100%;margin:0 0 16px;z-index:1}
+:host([g4][g4p]) .apps.hg{position:relative;left:auto;top:auto;width:100%;max-width:100%;margin:0;box-sizing:border-box}
+:host([g4][g4p][g4sc]:not([hv-arr])) .apps.hg{max-height:none;overflow:visible;padding:0;margin:0}
+:host([g4][g4p]) .g4pp{display:none}
+:host([g4][g4p]) .g4t{margin-top:calc(10px * var(--g4s,1))}`;
 
 const HV_G4_SVG = { pause: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="4.5" width="4" height="15" rx="1.2" fill="currentColor"/><rect x="14" y="4.5" width="4" height="15" rx="1.2" fill="currentColor"/></svg>',
   play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 5.2v13.6a1 1 0 0 0 1.5.86l11-6.8a1 1 0 0 0 0-1.72l-11-6.8A1 1 0 0 0 7 5.2z"/></svg>',
@@ -9650,14 +9659,14 @@ class HVHubCard extends HTMLElement {
     this._hwPaint(true); }
   // ---- home_style: grid4 (V2): the strict 4 × 4 grid's geometry, its clock block, status pill (4 corners) and page pill
   _g4Geo(o) { const W = this.getBoundingClientRect().width || o.Wc, H = o.H, port = H > W * 1.05, G0 = 672; let s, gl, gt, lx, ly, lw;
-    if (port) { s = Math.min(1, (W - 48) / G0, (H - 436) / G0); const G = G0 * s; gl = Math.round((W - G) / 2); lx = gl; ly = Math.round(Math.max(o.pt + 40, 96 * s)); lw = Math.round(G);
-      // Portrait: the grid sits just under the clock. The old H - 56s - G bottom-anchor left a dead gap on tall phones and sat the grid on the pill.
-      gt = Math.round(ly + 280 * s + Math.max(16, 24 * s)); }
+    if (port) { const pad = 16; s = Math.max(.5, (W - 2 * pad) / G0); const G = G0 * s; gl = pad; lx = pad; ly = 0; lw = Math.round(W - 2 * pad);
+      // Portrait fill: scale the 4 x 4 cells to the width minus even 16 px padding (s may be > 1 on a tablet). The header is in the flow of the scroller, so gt is 0.
+      gt = 0; }
     else { const m = W >= 1000 ? 48 : 24; s = Math.min(1, (H - 100 - Math.max(48, o.pb)) / G0, (W - 2 * m - 340) / G0); const G = G0 * s; gl = Math.round(W - m - G); gt = Math.round(Math.max(o.pt + 56, (H - G) / 2 + 26)); lx = m; ly = gt; lw = Math.round(Math.min(380, gl - m - 32)); }
-    s = Math.max(.5, s); const r = v => Math.round(v * s); return { s, port, C: r(150), g: r(24), I: r(104), lfs: Math.max(12, r(15)), lg: r(9), gl, gt, lx, ly, lw, G: 4 * r(150) + 3 * r(24), W, H, mL: lx, mR: port ? lx : (W >= 1000 ? 48 : 24), mT: ly, mB: Math.round(Math.max(o.pb || 24, 24)) }; }
+    s = Math.max(.5, s); const r = v => Math.round(v * s); return { s, port, C: r(150), g: r(24), I: r(104), lfs: Math.max(12, r(15)), lg: r(9), gl, gt, lx, ly, lw, G: 4 * r(150) + 3 * r(24), W, H, mL: lx, mR: port ? lx : (W >= 1000 ? 48 : 24), mT: port ? Math.round(Math.max(o.pt || 0, 8)) : ly, mB: Math.round(Math.max(o.pb || 24, 24)) }; }
   _g4Set(g, rows) { const w = this._w; if (!w) return; this.toggleAttribute('g4', !!g); this.toggleAttribute('g4p', !!(g && g.port)); this.toggleAttribute('g4sc', !!(g && rows > 4));
-    let l = w.querySelector(':scope > .g4l'), n = w.querySelector(':scope > .g4n'), pp = w.querySelector(':scope > .g4pp');
-    if (!g) { for (const x of [l, n, pp]) if (x) x.remove(); clearInterval(this._g4iv); this._g4iv = 0; return; }
+    let l = w.querySelector('.g4l'), n = w.querySelector('.g4n'), pp = w.querySelector('.g4pp'), sc = w.querySelector('.g4scroll');
+    if (!g) { for (const x of [l, n, pp, sc]) if (x) x.remove(); clearInterval(this._g4iv); this._g4iv = 0; return; }
     const S = w.style, set = (k, v) => S.setProperty(k, v); set('--g4s', g.s.toFixed(3)); set('--g4gl', g.gl + 'px'); set('--g4gt', g.gt + 'px'); set('--g4lx', g.lx + 'px'); set('--g4ly', g.ly + 'px'); set('--g4lw', g.lw + 'px'); set('--g4G', g.G + 'px');
     if (!l) { l = document.createElement('div'); l.className = 'g4l'; l.innerHTML = '<div class="g4g"><div class="g1"></div><div class="g2"></div></div><div class="g4t"></div><div class="g4d"></div><div class="g4w"></div>'; l.setAttribute('data-g4', 'clock'); w.appendChild(l); this._g4Bind(l, 'clock_corner'); }
     if (!n) { n = document.createElement('div'); n.className = 'g4n'; n.setAttribute('role', 'button'); n.tabIndex = 0; n.hidden = true; n.setAttribute('data-g4', 'pill'); w.appendChild(n);
@@ -9672,16 +9681,26 @@ class HVHubCard extends HTMLElement {
       pp.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; e.stopPropagation(); const ap = w.querySelector('.apps.hg');
         if (b.dataset.pg === 'swipe') { const p = (hvSwipe.pairs().find(x => location.pathname.replace(/\/$/, '') === x.home) || {}).page; if (p) hvSwipe.go(p, -1); return; }
         if (ap) ap.scrollTo({ top: Number(b.dataset.pg) * (g.G + g.g), behavior: 'smooth' }); }); }
-    const ap = w.querySelector('.apps.hg'); if (ap && !ap._g4sc) { ap._g4sc = true; ap.addEventListener('scroll', () => this._g4Pill(), { passive: true }); }
+    const ap = w.querySelector('.apps.hg');
+    if (g.port) {
+      if (!sc) { sc = document.createElement('div'); sc.className = 'g4scroll'; w.appendChild(sc); }
+      if (l && l.parentNode !== sc) sc.appendChild(l);
+      if (ap && ap.parentNode !== sc) sc.appendChild(ap);
+    } else if (sc) {
+      if (l && l.parentNode === sc) w.appendChild(l);
+      if (ap && ap.parentNode === sc) w.appendChild(ap);
+      sc.remove(); sc = null;
+    }
+    if (ap && !ap._g4sc) { ap._g4sc = true; ap.addEventListener('scroll', () => this._g4Pill(), { passive: true }); }
     this._g4G = g; this._g4Rows = rows; this._g4Pill(); this._g4Paint(); this._g4Cal();
     if (!this._g4iv) this._g4iv = setInterval(() => { if (!this.isConnected) { clearInterval(this._g4iv); this._g4iv = 0; return; } this._g4Paint(); }, 1000);
     if (typeof HVCOOK !== 'undefined') HVCOOK._ping = () => { try { if (this.isConnected) this._g4Paint(); } catch (e) {} }; }
-  _g4Pill() { const w = this._w, pp = w && w.querySelector(':scope > .g4pp'), g = this._g4G; if (!pp || !g) return; const ap = w.querySelector('.apps.hg'), gp = Math.max(1, Math.ceil((this._g4Rows || 1) / 4)), cur = ap ? Math.round(ap.scrollTop / (g.G + g.g)) : 0;
+  _g4Pill() { const w = this._w, pp = w && w.querySelector('.g4pp'), g = this._g4G; if (!pp || !g) return; if (g.port) { pp.hidden = true; return; } const ap = w.querySelector('.apps.hg'), gp = Math.max(1, Math.ceil((this._g4Rows || 1) / 4)), cur = ap ? Math.round(ap.scrollTop / (g.G + g.g)) : 0;
     const sw = !!(this._config.swipe_page && hvSwipe.pairs().some(x => location.pathname.replace(/\/$/, '') === x.home)), n = gp + (sw ? 1 : 0); pp.hidden = n < 2;
     const h = Array.from({ length: gp }, (_, i) => `<button data-pg="${i}" role="tab" aria-selected="${i === cur}" aria-label="Page ${i + 1}"${i === cur ? ' class="on"' : ''}></button>`).join('') + (sw ? '<button data-pg="swipe" role="tab" aria-selected="false" aria-label="Next page"></button>' : '');
     if (pp._h !== h) { pp._h = h; pp.innerHTML = h; } }
   _g4First() { const c = this._config, h = this._hass, p = this._person(); return (c.name || (p && p.attributes.friendly_name) || (h && h.user && h.user.name) || '').trim().split(/\s+/)[0] || ''; }
-  _g4Paint() { const w = this._w, h = this._hass, c = this._config; if (!w || !h || !c || !this.hasAttribute('g4')) return; const l = w.querySelector(':scope > .g4l'), n = w.querySelector(':scope > .g4n'); if (!l) return;
+  _g4Paint() { const w = this._w, h = this._hass, c = this._config; if (!w || !h || !c || !this.hasAttribute('g4')) return; const l = w.querySelector('.g4l'), n = w.querySelector('.g4n'); if (!l) return;
     const lang = (h.locale && h.locale.language) || undefined, d = new Date(), S = h.states || {}, set = (el, v) => { if (el && el._v !== v) { el._v = v; el.innerHTML = v; } };
     const greet = String(this._greeting() || '').trim().replace(/,?$/, ',');
     set(l.querySelector('.g1'), esc(greet)); set(l.querySelector('.g2'), esc(this._g4First()));
@@ -9718,7 +9737,7 @@ class HVHubCard extends HTMLElement {
   // Place the clock and the pill on their corners. Same corner: clock above the pill, with a 16 px gap.
   _g4Place() {
     const w = this._w, g = this._g4G, c = this._config; if (!w || !g || this._g4Dragging) return;
-    const l = w.querySelector(':scope > .g4l'), n = w.querySelector(':scope > .g4n'); if (!l) return;
+    const l = w.querySelector('.g4l'), n = w.querySelector('.g4n'); if (!l) return;
     const W = g.W || w.clientWidth, H = g.H || w.clientHeight, wr = Math.round(Math.min(g.lw, Math.max(200, 380 * g.s)));
     const cc = hvG4CornerRead(this, 'clock_corner', 'tl'), pc = hvG4CornerRead(this, 'pill_corner', 'bl');
     l.dataset.corner = cc; if (n) n.dataset.corner = pc;
@@ -9726,32 +9745,45 @@ class HVHubCard extends HTMLElement {
     const leftOf = corner => (corner === 'tl' || corner === 'bl') ? g.mL : Math.max(0, W - g.mR - wr);
     const topOf = (corner, h) => (corner === 'tl' || corner === 'tr') ? g.mT : Math.max(0, H - g.mB - h);
     let cTop = topOf(cc, ch), pTop = n && !n.hidden ? topOf(pc, ph) : 0, cLeft = leftOf(cc), pLeft = leftOf(pc);
-    if (n && !n.hidden && cc === pc) {
+    // Portrait: the clock is a scrolling header, so do not stack a floating pill under a phantom clock position.
+    if (!g.port && n && !n.hidden && cc === pc) {
       if (cc === 'tl' || cc === 'tr') pTop = cTop + ch + gap;
       else cTop = pTop - ch - gap;
       if (cTop < 0) { cTop = 0; pTop = cTop + ch + gap; }
       if (n && pTop + ph > H) { pTop = H - ph; cTop = pTop - ch - gap; }
     }
     const put = (el, x, y) => { if (!el) return; el.style.left = Math.round(x) + 'px'; el.style.top = Math.round(y) + 'px'; el.style.width = wr + 'px'; el.style.right = 'auto'; el.style.bottom = 'auto'; };
+    if (g.port) {
+      // Portrait: the clock is the scrolling header (left/right from the corner). The pill stays a floating 4-corner overlay.
+      l.style.left = l.style.top = l.style.right = l.style.bottom = '';
+      l.style.width = wr + 'px';
+      l.style.marginLeft = (cc === 'tr' || cc === 'br') ? 'auto' : '0';
+      l.style.marginRight = (cc === 'tr' || cc === 'br') ? '0' : 'auto';
+      l.dataset.corner = cc; if (n) put(n, pLeft, pTop);
+      this._g4FlowPort(cTop, ch, n && !n.hidden ? pTop : null, ph, H, cc, pc);
+      return;
+    }
     put(l, cLeft, cTop); if (n) put(n, pLeft, pTop);
-    if (g.port) this._g4FlowPort(cTop, ch, n && !n.hidden ? pTop : null, ph, H, cc, pc);
   }
-  // Portrait only: flow the grid up under a top clock or pill, and leave leftover space below so a bottom clock or pill does not overlap the cards. Landscape is unchanged.
+  // Portrait only: inset the scrollport below the top chrome (and a top-corner pill) and above the bottom safe area. The header lives in that scroller, so it is not sticky. If the packed rows would leave a dead band on the first screen, grow the row height so the last row reaches the safe area; a taller grid keeps square cells and scrolls.
   _g4FlowPort(cTop, ch, pTop, ph, H, cc, pc) {
     const w = this._w, g = this._g4G; if (!w || !g) return;
-    const gap = Math.round(Math.max(16, 24 * g.s));
-    const topEl = w.querySelector('.top');
-    const minTop = (topEl ? topEl.offsetHeight : Math.round(62 * g.s)) + Math.round(8 * g.s);
-    let topNeed = minTop;
-    if (cc === 'tl' || cc === 'tr') topNeed = Math.max(topNeed, cTop + ch + gap);
-    if (pTop != null && (pc === 'tl' || pc === 'tr')) topNeed = Math.max(topNeed, pTop + ph + gap);
-    let botLimit = H - (g.mB || 24);
-    if (cc === 'bl' || cc === 'br') botLimit = Math.min(botLimit, cTop - gap);
-    if (pTop != null && (pc === 'bl' || pc === 'br')) botLimit = Math.min(botLimit, pTop - gap);
-    let gt = Math.round(topNeed);
-    if (gt + g.G > botLimit) gt = Math.round(Math.max(minTop, botLimit - g.G));
-    if (gt < 0) gt = 0;
-    if (gt !== g.gt) { g.gt = gt; w.style.setProperty('--g4gt', gt + 'px'); }
+    const topEl = w.querySelector('.top'), wr = w.getBoundingClientRect();
+    let st = Math.round(Math.max(8, 8 * g.s));
+    if (topEl) st = Math.round(topEl.getBoundingClientRect().bottom - wr.top) + Math.round(Math.max(8, 8 * g.s));
+    const gapP = Math.round(Math.max(8, 12 * g.s));
+    if (pTop != null && (pc === 'tl' || pc === 'tr')) st = Math.max(st, Math.round(pTop + ph + gapP));
+    let sb = g.mB || 24, sbb = 0;
+    if (pTop != null && (pc === 'bl' || pc === 'br')) { sbb = Math.max(0, Math.round(H - pTop + gapP)); sb = 0; }
+    const pad = g.mL || 16;
+    w.style.setProperty('--g4st', st + 'px');
+    w.style.setProperty('--g4sb', Math.round(sb) + 'px');
+    w.style.setProperty('--g4sbb', sbb + 'px');
+    w.style.setProperty('--g4pad', Math.round(pad) + 'px');
+    const rows = this._g4Rows || 0, l = w.querySelector('.g4l'), clockH = l ? l.offsetHeight : Math.round(224 * g.s), gap = 16;
+    const natural = clockH + gap + rows * g.C + Math.max(0, rows - 1) * g.g, avail = Math.max(0, H - st - sb - sbb);
+    let R = g.C; if (rows > 0 && natural < avail) R = Math.max(g.C, Math.round((avail - (clockH + gap + Math.max(0, rows - 1) * g.g)) / rows));
+    w.style.setProperty('--gr', R + 'px');
   }
   _g4Bind(el, key) {
     if (el._g4bd) return; el._g4bd = true;
