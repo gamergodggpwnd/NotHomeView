@@ -11471,7 +11471,9 @@ const MH_V2_CSS = `
 .w.v2 .sec h2 small{color:var(--t2)}
 .w.v2 .cam .eye,.w.v2 .sc .eye{display:none;position:absolute;top:-6px;left:-6px;z-index:4;width:24px;height:24px;border-radius:50%;background:#ff453a;color:#fff;place-items:center}.w.v2.hiding .cam .eye,.w.v2.hiding .sc .eye{display:grid}
 @container (max-width: 860px){.v2m{grid-template-columns:1fr}.v2body{grid-template-columns:1fr;grid-template-rows:auto;grid-template-areas:"cams" "rooms" "scenes"}.v2body.nocams{grid-template-areas:"rooms" "scenes"}.v2body.noscenes{grid-template-areas:"cams" "rooms"}.v2sc{flex-direction:row;overflow-x:auto;scrollbar-width:none}.w.v2 .v2sc .sc{flex:0 0 160px}}
-@container (max-width: 520px){.v2g{grid-template-columns:1fr}.w.v2{padding:16px 16px 32px}}`;
+@container (max-width: 520px){.v2g{grid-template-columns:1fr}.w.v2{padding:16px 16px 32px}}
+/* in a Home Screen sheet the card's own back/close is hidden — the sheet already has X + grab */
+:host([in-sheet]) .v2b button[data-a="back"],:host([in-sheet]) button.back{display:none !important}`;
 const MH_FS_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5"/></svg>';
 class HVMyHomeCard extends HTMLElement {
   constructor() { super(); this.attachShadow({ mode: 'open' }); this._cams = new Map(); }
@@ -11547,8 +11549,8 @@ class HVMyHomeCard extends HTMLElement {
     if (i.d === 'lock') return { t: f(s.state), on: s.state !== 'locked' };
     return { t: f(s.state), on: ['on', 'cleaning', 'mowing'].includes(s.state) }; }
   // ---- render
-  _render() { const h = this._hass, c = this._config; if (!h || !c || !this.isConnected) return; const M = this._model();
-    const sig = JSON.stringify([M.secs.map(s => [s.key, s.cams, s.scenes && s.scenes.map(x => [x.entity, x.name, x.icon]), s.items && s.items.map(i => [i.id, i.name, i.s.state, i.s.attributes.brightness, i.s.attributes.current_temperature, i.s.attributes.temperature, i.s.attributes.hvac_action, i.s.attributes.media_title])]), M.temps, M.lightsOn, M.gar.map(g => g.s.state), M.media.length, [...M.hidE], this._hiding, this._arr, this._draft && JSON.stringify(this._draft), c.title, c.show_back, c.show_pills, c.show_menu, c.layout, c.layout === 'v2' && [new Date().getMinutes(), M.secs.filter(s => s.cams).flatMap(s => s.cams).map(id => (h.states[id] || {}).state)]]);
+  _render() { const h = this._hass, c = this._config; if (!h || !c || !this.isConnected) return; const inSheet = !!(this._hvFrame || hvSheetLayer(this)); this.toggleAttribute('in-sheet', inSheet); const M = this._model();
+    const sig = JSON.stringify([M.secs.map(s => [s.key, s.cams, s.scenes && s.scenes.map(x => [x.entity, x.name, x.icon]), s.items && s.items.map(i => [i.id, i.name, i.s.state, i.s.attributes.brightness, i.s.attributes.current_temperature, i.s.attributes.temperature, i.s.attributes.hvac_action, i.s.attributes.media_title])]), M.temps, M.lightsOn, M.gar.map(g => g.s.state), M.media.length, [...M.hidE], this._hiding, this._arr, this._draft && JSON.stringify(this._draft), c.title, c.show_back, c.show_pills, c.show_menu, c.layout, inSheet, c.layout === 'v2' && [new Date().getMinutes(), M.secs.filter(s => s.cams).flatMap(s => s.cams).map(id => (h.states[id] || {}).state)]]);
     if (sig === this._sig) return; this._sig = sig; this._M = M; this.toggleAttribute('hv-arr', !!this._arr);
     const R = this.shadowRoot; let w = R.querySelector('.w');
     if (!w) { R.innerHTML = `<style>${MH_CSS}${MH_V2_CSS}</style><div class="w"></div>`; w = R.querySelector('.w');
@@ -11574,7 +11576,7 @@ class HVMyHomeCard extends HTMLElement {
         return `<div class="dv g ${i.d}${st.on ? ' on' : ''}${un ? ' un' : ''}${z[0] > 1 ? ' wide' : ''}${z[1] > 1 ? ' r2' : ''}${M.hidE.has(i.id) ? ' hid' : ''}" data-e="${esc(i.id)}" style="grid-column:span ${z[0]};grid-row:span ${z[1]}"><span class="eye"><ha-icon icon="mdi:${M.hidE.has(i.id) ? 'plus' : 'minus'}"></ha-icon></span><span class="i"><ha-icon icon="${esc(mhIcon(i.s, i.name))}"></ha-icon></span><div class="t"><div class="n">${esc(i.name)}</div><div class="s">${esc(st.t)}</div></div>${st.tp != null && !un ? `<span class="tp">${esc(st.tp)}°</span>` : ''}</div>`; }).join('')}</div></div>`; };
     const v2 = c.layout === 'v2'; w.classList.toggle('v2', v2);
     if (v2) w.innerHTML = this._v2Html(M, secHtml, shown, eye) + '<div class="donebar g"><span>Tap tiles to hide or show them</span><button class="btn" data-a="hcancel">Cancel</button><button class="btn p" data-a="hdone">Done</button></div>';
-    else w.innerHTML = `${c.show_back !== false ? `<button class="back" data-a="back"><ha-icon icon="mdi:chevron-left"></ha-icon>${esc(c.back_label || 'Home Screen')}</button>` : ''}
+    else w.innerHTML = `${c.show_back !== false && !inSheet ? `<button class="back" data-a="back"><ha-icon icon="mdi:chevron-left"></ha-icon>${esc(c.back_label || 'Home Screen')}</button>` : ''}
       <div class="top"><h1>${esc(c.title || 'My Home')}</h1><div class="tr">${c.show_clock !== false ? `<span class="tm">${this._time()}</span>` : ''}${c.show_menu !== false ? `<button class="more" data-a="menu" aria-label="More"><ha-icon icon="mdi:dots-horizontal"></ha-icon></button>` : ''}</div></div>
       ${pills}${M.secs.map(secHtml).join('')}
       <div class="donebar g"><span>Tap tiles to hide or show them</span><button class="btn" data-a="hcancel">Cancel</button><button class="btn p" data-a="hdone">Done</button></div>`;
@@ -11607,7 +11609,7 @@ class HVMyHomeCard extends HTMLElement {
     const sc = t.closest && t.closest('.sc'); if (sc) { const id = sc.dataset.scene, dom = id.split('.')[0];
       h.callService(['scene', 'script'].includes(dom) ? dom : 'homeassistant', 'turn_on', { entity_id: id }); sc.classList.add('on'); setTimeout(() => sc.classList.remove('on'), 900); } }
   // layout: v2: header, status tiles, Cameras (16:9 grid) + Scenes column, then the rooms
-  _v2Html(M, secHtml, shown, eye) { const h = this._hass, c = this._config, S = h.states, lang = (h.locale && h.locale.language) || undefined, d = new Date();
+  _v2Html(M, secHtml, shown, eye) { const h = this._hass, c = this._config, S = h.states, lang = (h.locale && h.locale.language) || undefined, d = new Date(), inSheet = !!(this._hvFrame || hvSheetLayer(this));
     const items = M.secs.filter(s => s.items).flatMap(s => s.items), tmin = M.temps.length ? Math.floor(Math.min(...M.temps)) : null, tmax = M.temps.length ? Math.round(Math.max(...M.temps)) : null;
     const we = (c.weather_entity && S[c.weather_entity]) ? c.weather_entity : Object.keys(S).find(k => k.startsWith('weather.')), ws = we && S[we], out = ws && isFinite(Number(ws.attributes.temperature)) ? Math.round(Number(ws.attributes.temperature)) + '° outside' : '';
     let wd = ''; try { wd = d.toLocaleDateString(lang, { weekday: 'long' }); } catch (e) {} let tm = ''; try { tm = d.toLocaleTimeString(lang, { hour: 'numeric', minute: '2-digit' }); } catch (e) {}
@@ -11625,7 +11627,7 @@ ${M.gar.length ? tile('garage', 'mdi:garage-variant', '#e3efff', '#0a84ff', 'Gar
       return `<div class="sc${last && last.x === x ? ' act' : ''}${M.hidE.has(x.entity) ? ' hid' : ''}" data-scene="${esc(x.entity)}" role="button" tabindex="0">${eye(x.entity)}<ha-icon icon="${esc(x.icon || s.attributes.icon || 'mdi:palette')}"></ha-icon><b>${esc(x.name || s.attributes.friendly_name || x.entity)}</b></div>`; }).join('')}</div></div>` : '';
     const rooms = `<div class="v2rooms">${M.secs.filter(s => s.items).map(secHtml).join('')}</div>`;
     return `<div class="v2h"><div><h1>${esc(c.title || 'My Home')}</h1>${c.show_clock !== false ? `<div class="v2s"><span class="tm">${esc([wd, tm].filter(Boolean).join(' '))}</span>${out ? ' · ' + esc(out) : ''}</div>` : ''}</div>
-<div class="v2b">${c.show_menu !== false ? '<button class="more" data-a="menu" aria-label="More"><ha-icon icon="mdi:dots-horizontal"></ha-icon></button>' : ''}${c.show_back !== false ? '<button data-a="back" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button>' : ''}</div></div>
+<div class="v2b">${c.show_menu !== false ? '<button class="more" data-a="menu" aria-label="More"><ha-icon icon="mdi:dots-horizontal"></ha-icon></button>' : ''}${c.show_back !== false && !inSheet ? '<button data-a="back" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button>' : ''}</div></div>
 ${st}<div class="v2body${cv.length ? '' : ' nocams'}${sv.length ? '' : ' noscenes'}">${cams}${scenes}${rooms}</div>`; }
   // a status tile: that device (more-info), or the first such tile on the page when there are several
   _v2Tile(k) { const M = this._M, w = this.shadowRoot.querySelector('.w'); if (!M || !w) return; const items = M.secs.filter(s => s.items).flatMap(s => s.items);
