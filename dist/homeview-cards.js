@@ -3885,6 +3885,7 @@ class HVGridCard extends HTMLElement {
   getCardSize() { return 12; }
   getGridOptions() { return { columns: 'full', rows: 'auto', min_columns: 12 }; }
   connectedCallback() {
+    hvBindDragSlop(this);
     if (!this._bound) { this._bound = () => this._layout(); }
     addEventListener('resize', this._bound); addEventListener('hv-layout', this._bound); addEventListener('orientationchange', this._bound); if (window.visualViewport) visualViewport.addEventListener('resize', this._bound);
     if (window.ResizeObserver && !this._ro) { this._ro = new ResizeObserver(() => this._layout()); this._ro.observe(this); }
@@ -3940,7 +3941,7 @@ class HVGridCard extends HTMLElement {
 .sc{display:flex;box-sizing:border-box;width:calc(100% + var(--bl,0px) + var(--br,0px));margin-left:calc(-1 * var(--bl,0px));overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch;scrollbar-width:none;touch-action:pan-x pan-y;scroll-behavior:auto}
 :host([look-glass]){overscroll-behavior:none}
 :host([look-glass]) .sc{overscroll-behavior:none;touch-action:pan-x}
-:host([in-sheet]) .sc,:host([look-glass][in-sheet]) .sc{touch-action:pan-x pan-y}
+:host([in-sheet]) .sc,:host([look-glass][in-sheet]) .sc{touch-action:pan-x}
 .sc::-webkit-scrollbar{display:none}
 .pg{flex:0 0 100%;width:100%;box-sizing:border-box;padding:0 var(--pr,0px) 0 var(--pl,0px);scroll-snap-align:start;scroll-snap-stop:always;display:grid;justify-content:center;align-content:center;height:var(--ph,auto);
  grid-template-columns:repeat(var(--c),var(--cw));grid-template-rows:repeat(var(--r),var(--ch));gap:var(--g)}
@@ -5594,14 +5595,14 @@ const SHEET_CSS = `:host{position:fixed;inset:0;z-index:9;font-family:${FONT};co
  box-shadow:0 -8px 32px rgba(0,0,0,.35);transform:translate3d(0,100%,0);contain:layout paint}
 .grab{position:absolute;left:0;right:0;top:0;height:34px;z-index:6;touch-action:none;cursor:grab}
 .grab::before{content:'';position:absolute;left:50%;top:7px;width:38px;height:5px;margin-left:-19px;border-radius:3px;background:rgba(255,255,255,.62);box-shadow:0 1px 4px rgba(0,0,30,.3)}
-.x{all:unset;cursor:pointer;position:absolute;top:12px;right:14px;z-index:7;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;
- background:rgba(120,120,128,.38);color:#fff;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
-.x ha-icon{--mdc-icon-size:20px;display:flex}
+.x{all:unset;cursor:pointer;position:absolute;top:6px;right:8px;z-index:8;width:44px;height:44px;display:flex;align-items:center;justify-content:center;background:transparent;color:#fff;overflow:visible;pointer-events:auto;-webkit-tap-highlight-color:transparent}
+.x::after{content:'';position:absolute;width:32px;height:32px;border-radius:50%;background:rgba(120,120,128,.38);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);pointer-events:none}
+.x ha-icon{--mdc-icon-size:20px;display:flex;position:relative;z-index:1}
 .bd{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;box-sizing:border-box;padding:52px var(--spx,16px) 16px}
 .bd > .cw{margin-bottom:8px}
 :host([hv-day]){color:#1c1c1e} :host([hv-day]) .scrim{background:rgba(0,0,0,.22)} :host([hv-day]) .sh{box-shadow:0 -8px 32px rgba(30,30,60,.14)}
-:host([hv-day]) .grab::before{background:rgba(60,60,67,.32);box-shadow:none} :host([hv-day]) .x{background:rgba(120,120,128,.16);color:#3c3c43}
-:host([full]) .bd{top:var(--sft,0px)} :host([full]) .grab{top:var(--sft,0px)} :host([full]) .x{top:calc(12px + var(--sft,0px))}`;
+:host([hv-day]) .grab::before{background:rgba(60,60,67,.32);box-shadow:none} :host([hv-day]) .x{background:transparent;color:#3c3c43} :host([hv-day]) .x::after{background:rgba(120,120,128,.16)}
+:host([full]) .bd{top:var(--sft,0px)} :host([full]) .grab{top:var(--sft,0px)} :host([full]) .x{top:calc(6px + var(--sft,0px))}`;
 // the shadow root of the Home Screen sheet an element sits in (null when it is not in one)
 const hvSheetLayer = el => { let n = el; for (let i = 0; i < 60 && n; i++) { if (n.tagName === 'HOMEVIEW-SHEET') return n.shadowRoot; n = n.parentNode || n.host; } return null; };
 // a popup / dialog of Home Assistant or browser_mod is open (Escape belongs to it, not to a sheet underneath)
@@ -5609,6 +5610,27 @@ const hvDialogOpen = () => { const ha = document.querySelector('home-assistant')
   for (const d of r.querySelectorAll('browser-mod-popup, ha-more-info-dialog, dialog-box')) { const x = d.shadowRoot && d.shadowRoot.querySelector('ha-dialog, ha-md-dialog, ha-adaptive-dialog, wa-dialog, dialog');
     if (d.open === true || d.hasAttribute('open') || (x && (x.open === true || x.hasAttribute('open')))) return true; }
   return false; };
+// After a drag of more than SLOP px, swallow the trailing click/tap so a swipe never fires a tile action.
+function hvBindDragSlop(root, slop) {
+  if (!root || root.__hvSlop) return; root.__hvSlop = true;
+  const lim = slop == null ? 10 : slop;
+  let st = null, until = 0;
+  const pt = e => (e.touches && e.touches[0]) || (e.changedTouches && e.changedTouches[0]) || e;
+  const down = e => { const p = pt(e); if (p && p.clientX != null) st = { x: p.clientX, y: p.clientY, moved: false }; };
+  const move = e => { if (!st) return; const p = pt(e); if (p && Math.hypot(p.clientX - st.x, p.clientY - st.y) > lim) { st.moved = true; until = Date.now() + 500; } };
+  const up = () => { if (st && st.moved) until = Date.now() + 500; st = null; };
+  const eat = e => { if ((st && st.moved) || Date.now() < until) { e.preventDefault(); e.stopPropagation(); if (e.stopImmediatePropagation) e.stopImmediatePropagation(); } };
+  const cap = { capture: true, passive: true };
+  root.addEventListener('pointerdown', down, cap);
+  root.addEventListener('touchstart', down, cap);
+  root.addEventListener('pointermove', move, cap);
+  root.addEventListener('touchmove', move, cap);
+  root.addEventListener('pointerup', up, cap);
+  root.addEventListener('touchend', up, cap);
+  root.addEventListener('pointercancel', up, cap);
+  root.addEventListener('touchcancel', up, cap);
+  for (const ev of ['click', 'auxclick', 'dblclick']) root.addEventListener(ev, eat, { capture: true, passive: false });
+}
 function hvSheet(o) { // o: { parent, launch() -> [els], label, bg, build(bd, frame) -> { hass }, onClose() }
   const host = document.createElement('homeview-sheet'), sr = host.attachShadow({ mode: 'open' });
   sr.innerHTML = `<style>${SHEET_CSS}</style><div class="scrim"></div><div class="sh" role="dialog" aria-modal="true" aria-label="${esc(o.label || '')}"><div class="bd"></div><div class="grab" aria-hidden="true"></div><button class="x" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button></div>`;
@@ -5640,13 +5662,23 @@ function hvSheet(o) { // o: { parent, launch() -> [els], label, bg, build(bd, fr
   const close = () => { if (closed) return; closed = true; removeEventListener('keydown', key); const dur = Math.max(0.2, 0.36 * (1 - dyNow / MAX()));
     apply(MAX(), true, dur); setTimeout(() => { for (const el of L()) { el.style.transition = ''; el.style.transform = ''; el.style.borderRadius = ''; el.style.transformOrigin = ''; }
       host.remove(); fabs.forEach(f => { f.style.visibility = ''; }); if (o.onClose) o.onClose(); }, dur * 1000 + 30); };
-  sr.querySelector('.x').addEventListener('click', close); addEventListener('keydown', key);
-  if (o.edit) hvPen(sr.querySelector('.x'), o.edit); // 1.32.0: edit pencil (admins)
-  // drag to dismiss: from the pill / top strip, or anywhere while the content under the finger is scrolled to the top
-  // left-entering sheets (swipe-open Home): mid-screen swipes are never tracked (device paging). Close by swiping down
-  // on the grab/top, or swiping left from a thin right-edge strip (like going back a page). The strip stays narrow so a
-  // page-next swipe that starts further in is not stolen; once the edge gesture is clearly leftward, claim it immediately
-  // so Safari does not hand it to the page scroller.
+  const xbtn = sr.querySelector('.x');
+  let xDown = false;
+  xbtn.addEventListener('pointerdown', e => { xDown = true; e.stopPropagation(); }, { passive: true });
+  xbtn.addEventListener('touchstart', e => { xDown = true; e.stopPropagation(); }, { passive: true });
+  xbtn.addEventListener('mousedown', e => { xDown = true; e.stopPropagation(); }, { passive: true });
+  xbtn.addEventListener('pointercancel', () => { xDown = false; });
+  xbtn.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); close(); });
+  xbtn.addEventListener('pointerup', e => { if (!xDown) return; xDown = false; if (e.button) return; e.preventDefault(); e.stopPropagation(); close(); });
+  addEventListener('keydown', key);
+  hvBindDragSlop(sh);
+  if (o.edit) hvPen(xbtn, o.edit); // 1.32.0: edit pencil (admins)
+  // drag to dismiss: from the pill / top strip, or anywhere while the content under the finger is scrolled to the top.
+  // left-entering Home (swipeDown): a mid-screen swipe-down closes the sheet the same as portrait / other overlays,
+  // even when the grid is on a later page (scrollLeft > 0). Sideways mid-screen swipes still page the grid. Close also
+  // works from the grab/top, or a left swipe from a thin right-edge strip. The strip stays narrow so a page-next swipe
+  // that starts further in is not stolen; once the edge gesture is clearly leftward, claim it immediately so Safari does
+  // not hand it to the page scroller.
   let g = null;
   const scroller = path => { for (const n of path) { if (n === sh) break; if (!(n instanceof Element)) continue;
     if (n.scrollHeight > n.clientHeight + 1) { const oy = getComputedStyle(n).overflowY; if (oy === 'auto' || oy === 'scroll') return n; }
@@ -5654,7 +5686,7 @@ function hvSheet(o) { // o: { parent, launch() -> [els], label, bg, build(bd, fr
   sh.addEventListener('touchstart', e => { g = null; if (closed || e.touches.length !== 1) return; const t = e.touches[0], path = e.composedPath(), box = sh.getBoundingClientRect();
     const onGrab = path.includes(grab) || t.clientY - box.top < 34, fromRight = sideL && box.right - t.clientX < 36, sc = scroller(path);
     if (sideL && !onGrab && !fromRight && !o.swipeDown) return;
-    if (!onGrab && !fromRight && sc && (sc.scrollTop > 1 || (sideL && sc.scrollLeft > 1))) return;
+    if (!onGrab && !fromRight && sc && sc.scrollTop > 1) return;
     // never steal a drag that starts on a slider / seek bar / text field; a sheet can narrow it further (o.dragOk)
     if (!onGrab && path.some(n => n instanceof Element && (/^(INPUT|TEXTAREA|SELECT|HA-SLIDER|HA-CONTROL-SLIDER|MD-SLIDER|HA-TEXTFIELD)$/.test(n.tagName) || n.getAttribute('role') === 'slider' || n.hasAttribute('data-no-sheet-drag')))) return;
     if (!onGrab && o.dragOk && !o.dragOk(path, t.clientY - box.top, sh.offsetHeight)) return;
