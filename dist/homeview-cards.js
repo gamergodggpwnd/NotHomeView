@@ -6986,8 +6986,11 @@ function hvAssist(hub, o) {
     if (eng === 'conversation.home_assistant' || eng === 'homeassistant') { run(text, tok, true, m); return; }   // the built-in agent can't search the web: the answer is the usual one
     const an = (pi && pi.name) || 'This assistant'; let fin = false, to = 0;
     const finish = r => { if (fin || tok !== runTok) return; fin = true; clearTimeout(to); endRun();
-      if (r.kind === 'ok') { m._rz = r.recipes; const n = r.recipes.length; fill(m, `${n} recipe${n === 1 ? '' : 's'} from ${an} · tap Save to keep ${n === 1 ? 'it' : 'one'} in Cooking`);
-        let z = m.querySelector('.rz'); if (!z) { z = document.createElement('div'); z.className = 'sxc rz'; m.insertBefore(z, m.querySelector('.ax')); } rzPaint(m); m.classList.add('lst', 'rcp'); st('idle'); keep(); if (compact) expand(); return; }
+      if (r.kind === 'ok') { m._rz = (r.recipes || []).map(x => Object.assign({}, x, { image: '' })); const n = m._rz.length; fill(m, `${n} recipe${n === 1 ? '' : 's'} from ${an} · tap Save to keep ${n === 1 ? 'it' : 'one'} in Cooking`);
+        let z = m.querySelector('.rz'); if (!z) { z = document.createElement('div'); z.className = 'sxc rz'; m.insertBefore(z, m.querySelector('.ax')); } rzPaint(m); m.classList.add('lst', 'rcp'); st('idle'); keep(); if (compact) expand();
+        hvCookEnrich(m._rz, hub._hass, upd => { if (tok !== runTok) return; if (upd.allDead) { m._rz = []; const z0 = m.querySelector('.rz'); if (z0) z0.remove(); fill(m, 'Sorry, something went wrong.'); note(m, `“${an}” couldn't answer: its conversation agent reported an error. Check that integration (for example its API key) in Settings → Devices & services, or pick another assistant in the Home Screen settings.`); return; }
+          m._rz = upd.recipes; const n2 = m._rz.length; fill(m, `${n2} recipe${n2 === 1 ? '' : 's'} from ${an} · tap Save to keep ${n2 === 1 ? 'it' : 'one'} in Cooking`);
+          let z2 = m.querySelector('.rz'); if (!z2) { z2 = document.createElement('div'); z2.className = 'sxc rz'; m.insertBefore(z2, m.querySelector('.ax')); } rzPaint(m); }); return; }
       if (r.kind === 'raw') { fill(m, r.full || r.text); st('idle'); return; }
       if (r.kind === 'noweb') { fill(m, r.text || 'Sorry, I can\'t search the web.'); hint(m, an, text); }
       else { fill(m, 'Sorry, something went wrong.'); note(m, r.kind === 'timeout' ? `“${an}” took too long to answer. Try again in a moment.` : r.quota ? `“${an}” couldn't answer: its AI service has hit its usage limit (quota) for now. Try again later, or pick another assistant in the Home Screen settings.`
@@ -7434,8 +7437,8 @@ const hvCookFromAgent = x => { if (!x || typeof x !== 'object') return null; con
   const li = a => (Array.isArray(a) ? a : []).map(i => i && typeof i === 'object' ? String(i.text || i.name || i.item || i.ingredient || '') : String(i == null ? '' : i)).map(s => s.trim()).filter(Boolean);
   const steps = (Array.isArray(x.steps) ? x.steps : Array.isArray(x.instructions) ? x.instructions : Array.isArray(x.directions) ? x.directions : []).map(s => typeof s === 'string' ? { text: s.trim() } : s && typeof s === 'object' ? { text: String(s.text || s.step || s.instruction || '').trim(), timer: hvCookMin(s.minutes != null ? s.minutes : s.timer_minutes) } : null).filter(s => s && s.text);
   const tm = hvCookMin(x.time_minutes != null ? x.time_minutes : x.total_time != null ? x.total_time : x.time);
-  const o = hvCookRecipe({ name: title, time: tm == null ? undefined : tm, servings: isFinite(svn) && svn > 0 ? svn : (sv == null || sv === '' ? undefined : String(sv)), image: img, ingredients: li(x.ingredients), steps, web: true, url,
-    source: sn ? sn.trim() : '', desc: String(x.description || x.summary || '').trim(), key: '' }); o.key = (title.toLowerCase() + '|' + url).slice(0, 300); return o; };
+  const o = hvCookRecipe({ name: title, time: tm == null ? undefined : tm, servings: isFinite(svn) && svn > 0 ? svn : (sv == null || sv === '' ? undefined : String(sv)), image: '', ingredients: li(x.ingredients), steps, web: true, url,
+    source: sn ? sn.trim() : '', desc: String(x.description || x.summary || '').trim(), key: '' }); o.key = (title.toLowerCase() + '|' + url).slice(0, 300); if (img) o.imageHint = img; return o; };
 // recipe cards out of an agent's reply, or null when there is nothing readable
 const hvCookParse = text => { const j = hvCookJson(text); if (j == null || typeof j !== 'object') return null;
   const arr = Array.isArray(j) ? j : Array.isArray(j.recipes) ? j.recipes : Array.isArray(j.results) ? j.results : Array.isArray(j.items) ? j.items : (j.title || j.name) ? [j] : [];
@@ -7450,6 +7453,55 @@ const hvCookClassify = (speech, rtype) => { const sp = String(speech || ''), rec
   if (HV_COOK_NOWEB.test(sp)) return { kind: 'noweb', text: sp.trim().slice(0, 300) };
   if (rtype === 'error') return { kind: 'error', msg: sp.trim().slice(0, 160) };
   return { kind: 'raw', text: sp.trim().slice(0, 600), full: sp.trim() }; };
+// photos: the browser can't read recipe HTML (CORS). Tests may set __hvCookFetch; otherwise a CORS-open page, or rest_command.nhv_fetch_url only if that service already exists in HA. Grok's image is used only when it actually loads.
+const HV_COOK_PHOTO_MS = 6000;
+const hvCookPhotoCache = new Map();
+const hvCookHttpUrl = u => { try { const x = new URL(String(u || '')); return (x.protocol === 'http:' || x.protocol === 'https:') ? x.href : ''; } catch (e) { return ''; } };
+const hvCookAbsHttp = (u, base) => { if (!u) return ''; try { const x = new URL(String(u).trim(), base || undefined); return (x.protocol === 'http:' || x.protocol === 'https:') ? x.href : ''; } catch (e) { return ''; } };
+const hvCookMeta = (html, attr, key) => { const s = String(html || ''), re = /<meta\b[^>]*>/gi; let m;
+  const has = new RegExp('(?:' + attr + ')\\s*=\\s*["\']' + key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '["\']', 'i');
+  while ((m = re.exec(s))) { if (!has.test(m[0])) continue; const c = m[0].match(/content\s*=\s*["']([^"']*)["']/i); if (c) return c[1].replace(/&amp;/g, '&').trim(); } return ''; };
+const hvCookLdImage = html => { const out = [], re = /<script\b[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/ig; let m;
+  const typOf = n => (Array.isArray(n && n['@type']) ? n['@type'] : n && n['@type'] ? [n['@type']] : []).map(t => String(t).split('/').pop().toLowerCase());
+  const take = im => { if (!im) return; if (Array.isArray(im)) { im.forEach(take); return; } const u = typeof im === 'string' ? im : (im && (im.url || im.contentUrl)); if (u) out.push(String(u)); };
+  const walk = n => { if (!n) return; if (Array.isArray(n)) { n.forEach(walk); return; } if (typeof n !== 'object') return; if (typOf(n).includes('recipe') && n.image) take(n.image); if (n['@graph']) walk(n['@graph']); };
+  while ((m = re.exec(String(html || '')))) { try { walk(JSON.parse(m[1].replace(/^\s*<!--|-->\s*$/g, '').trim())); } catch (e) {} }
+  return out; };
+const hvCookParsePageImage = (html, pageUrl) => { const cands = [hvCookMeta(html, 'property', 'og:image'), hvCookMeta(html, 'name', 'twitter:image'), hvCookMeta(html, 'name', 'twitter:image:src'), hvCookMeta(html, 'property', 'twitter:image')].concat(hvCookLdImage(html));
+  for (const c of cands) { const u = hvCookAbsHttp(c, pageUrl); if (u) return u; } return ''; };
+const hvCookImgLoads = (url, ms) => new Promise(res => { const u = hvCookHttpUrl(url); if (!u || typeof Image === 'undefined') { res(false); return; }
+  const im = new Image(); let done = false; const fin = ok => { if (done) return; done = true; clearTimeout(t); im.onload = im.onerror = null; res(!!ok); };
+  const t = setTimeout(() => fin(false), Math.max(400, ms || 2500)); im.onload = () => fin(im.naturalWidth > 0); im.onerror = () => fin(false); try { im.src = u; } catch (e) { fin(false); } });
+const hvCookHasFetchSvc = hass => !!(hass && hass.services && hass.services.rest_command && hass.services.rest_command.nhv_fetch_url);
+const hvCookFetchPage = async (url, hass, ms) => {
+  const u = hvCookHttpUrl(url); if (!u) return { ok: false, status: 0, text: '', noProxy: true };
+  const hook = (typeof globalThis !== 'undefined' && globalThis.__hvCookFetch);
+  if (typeof hook === 'function') { const r = await hook(u, ms); return r && typeof r === 'object' ? { ok: !!r.ok, status: Number(r.status) || (r.ok ? 200 : 0), text: String(r.text || ''), noProxy: !!r.noProxy } : { ok: false, status: 0, text: '', noProxy: true }; }
+  const budget = Math.max(400, ms || HV_COOK_PHOTO_MS);
+  if (typeof fetch === 'function') { try { const ac = typeof AbortController !== 'undefined' ? new AbortController() : null; const t = setTimeout(() => { if (ac) ac.abort(); }, budget);
+      const r = await fetch(u, { method: 'GET', mode: 'cors', credentials: 'omit', redirect: 'follow', signal: ac && ac.signal }); clearTimeout(t); return { ok: r.ok, status: r.status, text: await r.text() }; } catch (e) {} }
+  if (hvCookHasFetchSvc(hass)) { try { let resp;
+      if (hass.connection && typeof hass.connection.sendMessagePromise === 'function') resp = await hass.connection.sendMessagePromise({ type: 'call_service', domain: 'rest_command', service: 'nhv_fetch_url', service_data: { url: u }, return_response: true });
+      else if (typeof hass.callService === 'function') resp = await hass.callService('rest_command', 'nhv_fetch_url', { url: u }, undefined, false, true);
+      const body = resp && (resp.response != null ? resp.response : resp); const status = Number(body && (body.status != null ? body.status : body.status_code)) || 0;
+      let text = ''; if (typeof body === 'string') text = body; else if (body && typeof body.content === 'string') text = body.content; else if (body && typeof body.body === 'string') text = body.body;
+      if (status) return { ok: status >= 200 && status < 400, status, text }; if (text) return { ok: true, status: 200, text }; } catch (e) {} }
+  return { ok: false, status: 0, text: '', noProxy: true }; };
+const hvCookResolveOne = async (recipe, hass, ms) => {
+  const url = hvCookHttpUrl(recipe && recipe.url); const hit = url && hvCookPhotoCache.get(url); if (hit) return { live: hit.live, image: hit.image, noProxy: !!hit.noProxy };
+  let live = url ? null : true, image = '', noProxy = false;
+  if (url) { const r = await hvCookFetchPage(url, hass, ms);
+    if (r.noProxy && !r.status) { live = null; noProxy = true; } else if (r.ok) { live = true; const cand = hvCookParsePageImage(r.text, url); if (cand && await hvCookImgLoads(cand, Math.min(2500, ms))) image = cand; } else live = false; }
+  if (live !== false && !image) { const hint = recipe && (recipe.imageHint || recipe.image); const hu = hvCookHttpUrl(hint); if (hu && await hvCookImgLoads(hu, Math.min(2500, ms))) image = hu; }
+  const out = { live, image, noProxy }; if (url) hvCookPhotoCache.set(url, out); return out; };
+const hvCookEnrich = (recipes, hass, onDone) => {
+  const list = (recipes || []).slice(); if (!list.length) { onDone({ recipes: [], allDead: true, dropped: 0 }); return Promise.resolve(); }
+  let settled = false; const t0 = Date.now(); const flags = list.map(() => ({ done: false, live: null, image: '' }));
+  const finish = () => { if (settled) return; settled = true; const kept = []; let dropped = 0;
+    list.forEach((r, i) => { const f = flags[i]; if (f.done && f.live === false) { dropped++; return; } kept.push(Object.assign({}, r, { image: (f.done && f.image) ? f.image : '' })); });
+    onDone({ recipes: kept, allDead: kept.length === 0, dropped }); };
+  const to = setTimeout(finish, HV_COOK_PHOTO_MS);
+  return Promise.all(list.map((r, i) => Promise.resolve(hvCookResolveOne(r, hass, Math.max(300, HV_COOK_PHOTO_MS - (Date.now() - t0)))).then(v => { if (!settled) flags[i] = { done: true, live: v.live, image: v.image || '' }; }, () => { if (!settled) flags[i] = { done: true, live: null, image: '' }; }))).then(() => { clearTimeout(to); finish(); }); };
 // words that don't help to find a saved recipe ("under 30 minutes", "quick ... for dinner")
 const HV_COOK_STOP = new Set('a an the for with without under over in of and or to on my me some any something what whats is are can i we recipe recipes ideas idea meal meals min mins minute minutes hour hours quick easy fast simple best good'.split(' '));
 const hvCookMatches = (recipes, q) => { const toks = String(q || '').toLowerCase().split(/[^a-z0-9àâçéèêëîïôûùüÿñæœ]+/).filter(t => t && !/^\d+$/.test(t) && !HV_COOK_STOP.has(t)); if (!toks.length) return [];
@@ -7872,9 +7924,12 @@ function hvOpenCooking(hub, app, at, opt) {
     if (ag.builtin) { capSet(ag.id, 'no'); sx.s = { phase: 'noweb', q, agent: ag, text: '' }; sxPaint(); return; }   // the built-in agent only runs home commands: not asked
     sx.s = { phase: 'asking', q, agent: ag, step: 1 }; sxPaint(); if (inp) inp.blur();
     let done = false; const finish = r => { if (done || tok !== sx.tok) return; done = true; endRun(); const s = { q, agent: ag };
-      if (r.kind === 'ok') { capSet(ag.id, 'ok'); Object.assign(s, { phase: 'results', recipes: r.recipes }); } else if (r.kind === 'noweb') { capSet(ag.id, 'no'); Object.assign(s, { phase: 'noweb', text: r.text }); }
+      if (r.kind === 'ok') { capSet(ag.id, 'ok'); const recs = (r.recipes || []).map(x => Object.assign({}, x, { image: '' })); Object.assign(s, { phase: 'results', recipes: recs });
+        sx.s = s; if (st.view === 'list' || st.view === 'search') sxPaint(); else toast('Recipe results are ready in Cooking');
+        hvCookEnrich(recs, H(), upd => { if (tok !== sx.tok || !sx.s || sx.s.q !== q) return; if (upd.allDead) sx.s = { q, agent: ag, phase: 'error', msg: '' }; else sx.s = Object.assign({}, sx.s, { recipes: upd.recipes }); if (st.view === 'list' || st.view === 'search') sxPaint(); }); return; }
+      else if (r.kind === 'noweb') { capSet(ag.id, 'no'); Object.assign(s, { phase: 'noweb', text: r.text }); }
       else if (r.kind === 'raw') Object.assign(s, { phase: 'raw', text: r.text }); else Object.assign(s, { phase: 'error', msg: r.msg, quota: r.quota, timeout: r.kind === 'timeout' });
-      sx.s = s; if (st.view === 'list' || st.view === 'search') sxPaint(); else toast(r.kind === 'ok' ? 'Recipe results are ready in Cooking' : 'The recipe search finished'); };
+      sx.s = s; if (st.view === 'list' || st.view === 'search') sxPaint(); else toast('The recipe search finished'); };
     const msg = { type: 'assist_pipeline/run', start_stage: 'intent', end_stage: 'intent', input: { text: hvCookPrompt(q, 4) }, conversation_id: sx.convId || null }; if (ag.id) msg.pipeline = ag.id;
     sx.to = setTimeout(() => finish({ kind: 'timeout' }), HV_COOK_ASK_MS);
     try { const p = H().connection.subscribeMessage(ev => { if (done || tok !== sx.tok) return; const d = (ev && ev.data) || {};
@@ -7974,7 +8029,7 @@ button.r{cursor:pointer}.r .art{width:44px;height:44px;border-radius:12px;flex:n
 :host([dark]){--card:#1c1c1e;--t2:rgba(235,235,245,.6);--t3:rgba(235,235,245,.3);--sep:rgba(84,84,88,.6);--afg:#7a6cf0;--swo:#39393d;color:#f5f5f7}`;
 function hvCookingUI(ctx) { const el = document.createElement('div');
   const paint = () => { const c = ctx.cfg() || {}, k = hvCookCfg(c), S = (ctx.H() && ctx.H().states) || {}, todos = Object.keys(S).filter(x => x.startsWith('todo.')).sort(), dis = ctx.ro ? ' disabled' : '';
-    el.innerHTML = `<div class="h">Recipes</div><div class="g">${k.recipes.length ? k.recipes.map((r, i) => `<button class="r rc" data-open="${i}"><span class="art" style="--art:${HV_COOK_ART[i % HV_COOK_ART.length]}"></span><span class="tx"><b>${esc(r.name)}</b><small>${esc([hvCookTime(r.time), r.steps.length + ' steps', r.steps.filter(s => s.timer).length + ' timers'].concat(r.tags).join(' · '))}</small></span><span class="ch">›</span></button>`).join('')
+    el.innerHTML = `<div class="h">Recipes</div><div class="g">${k.recipes.length ? k.recipes.map((r, i) => `<button class="r rc" data-open="${i}"><span class="art" style="--art:${hvCookArt(r, i)}"></span><span class="tx"><b>${esc(r.name)}</b><small>${esc([hvCookTime(r.time), r.steps.length + ' steps', r.steps.filter(s => s.timer).length + ' timers'].concat(r.tags).join(' · '))}</small></span><span class="ch">›</span></button>`).join('')
       : '<div class="emp">No recipes yet. Add them in the Home Screen card\'s YAML:<pre>cooking:\n  recipes:\n    - name: Tomato Pasta\n      time: 35\n      servings: 4\n      tags: [Dinner]\n      ingredients: [Pasta, Tomatoes, Basil]\n      steps:\n        - text: Boil the pasta for 9 minutes.\n          timer: { minutes: 9, label: Pasta }\n          items: [Pasta, Salt]</pre></div>'}</div>
 <div class="ft">Recipes are set in YAML (cooking: recipes:). Tap one to open it in Cooking.</div>
 <div class="g"><label class="r"><span>Add to Reminders list</span><select data-k="todo_entity" aria-label="Add to Reminders list"${dis}><option value="">Automatic</option>${todos.map(t => `<option value="${esc(t)}"${k.todo === t ? ' selected' : ''}>${esc((S[t].attributes && S[t].attributes.friendly_name) || t)}</option>`).join('')}</select></label>
