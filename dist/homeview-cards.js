@@ -770,10 +770,15 @@ class HVLightCard extends HVEntityCard {
     this._bindGlassLight(this._card); }
   _bindGlassLight(el) {
     if (el._hvLd) return; el._hvLd = true;
-    el.style.touchAction = 'none';
+    const sheetOwns = () => hvInSwipeSheet(this);
+    const syncTa = () => { el.style.touchAction = sheetOwns() ? 'pan-x' : 'none'; };
+    el._hvLdSyncTa = syncTa; syncTa(); queueMicrotask(syncTa); setTimeout(syncTa, 0); setTimeout(syncTa, 200);
     let p = null;
     const idOf = () => this._config && this._config.entity;
     el.addEventListener('pointerdown', e => { if (!this.hasAttribute('hv-glass') || e.button > 0) return;
+      syncTa();
+      // In a sheet, a vertical drag must close the sheet (or a horizontal drag must page). Never start a brightness drag / light.turn_on.
+      if (sheetOwns()) return;
       const st = this.stateObj, dim = hvLdDim(st) && st.state !== 'unavailable'; if (!dim) return;
       el.classList.remove('dn');
       const r = el.getBoundingClientRect();
@@ -789,10 +794,12 @@ class HVLightCard extends HVEntityCard {
     el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
     el.addEventListener('touchmove', e => { if (p && p.drag) { e.preventDefault(); e.stopPropagation(); } }, { passive: false });
     el.addEventListener('click', e => { if (this._glassBusy || hvLdLocked(this, idOf())) { e.preventDefault(); e.stopPropagation(); } }, true); }
-  set hass(h) { this._hass = h; if (hvLdBusy()) return; const id = this._config && this._config.entity;
+  set hass(h) { if (this._card && this._card._hvLdSyncTa) this._card._hvLdSyncTa();
+    this._hass = h; if (hvLdBusy()) return; const id = this._config && this._config.entity;
     if (hvLdLocked(this, id)) { const st = h && h.states && h.states[id]; if (hvLdKeep(this, st, this._card)) this._render(); return; }
     this._render(); }
   get hass() { return this._hass; }
+  connectedCallback() { if (this._card && this._card._hvLdSyncTa) this._card._hvLdSyncTa(); }
   view() {
     const c = this._config, s = this.stateObj, h = this._hass;
     let sec = '';
@@ -5605,6 +5612,8 @@ const SHEET_CSS = `:host{position:fixed;inset:0;z-index:9;font-family:${FONT};co
 :host([full]) .bd{top:var(--sft,0px)} :host([full]) .grab{top:var(--sft,0px)} :host([full]) .x{top:calc(6px + var(--sft,0px))}`;
 // the shadow root of the Home Screen sheet an element sits in (null when it is not in one)
 const hvSheetLayer = el => { let n = el; for (let i = 0; i < 60 && n; i++) { if (n.tagName === 'HOMEVIEW-SHEET') return n.shadowRoot; n = n.parentNode || n.host; } return null; };
+// true when this node sits in a Home Screen / app sheet (so a mid-screen swipe-down must close, not dim a light)
+const hvInSwipeSheet = el => { let n = el; for (let i = 0; i < 60 && n; i++) { if (n.tagName === 'HOMEVIEW-SHEET') return true; if (n.hasAttribute && n.tagName === 'HOMEVIEW-GRID-CARD' && n.hasAttribute('in-sheet')) return true; n = n.parentNode || n.host; } return false; };
 // a popup / dialog of Home Assistant or browser_mod is open (Escape belongs to it, not to a sheet underneath)
 const hvDialogOpen = () => { const ha = document.querySelector('home-assistant'), r = ha && ha.shadowRoot; if (!r) return false;
   for (const d of r.querySelectorAll('browser-mod-popup, ha-more-info-dialog, dialog-box')) { const x = d.shadowRoot && d.shadowRoot.querySelector('ha-dialog, ha-md-dialog, ha-adaptive-dialog, wa-dialog, dialog');
@@ -5672,6 +5681,13 @@ function hvSheet(o) { // o: { parent, launch() -> [els], label, bg, build(bd, fr
   xbtn.addEventListener('pointerup', e => { if (!xDown) return; xDown = false; if (e.button) return; e.preventDefault(); e.stopPropagation(); close(); });
   addEventListener('keydown', key);
   hvBindDragSlop(sh);
+  // Double-tap or dblclick on the grab bar closes the sheet (trackpad / mouse / touch). A single tap does nothing new.
+  let grabLast = 0, grabX = 0, grabY = 0;
+  const grabDouble = (x, y, src) => { const now = Date.now();
+    if (grabLast && now - grabLast < 420 && Math.hypot(x - grabX, y - grabY) < 28) { grabLast = 0; close(); return true; }
+    grabLast = now; grabX = x; grabY = y; return false; };
+  grab.addEventListener('dblclick', e => { e.preventDefault(); e.stopPropagation(); close(); });
+  grab.addEventListener('pointerup', e => { if (e.button) return; grabDouble(e.clientX, e.clientY, e.pointerType); }, { capture: true });
   if (o.edit) hvPen(xbtn, o.edit); // 1.32.0: edit pencil (admins)
   // drag to dismiss: from the pill / top strip, or anywhere while the content under the finger is scrolled to the top.
   // left-entering Home (swipeDown): a mid-screen swipe-down closes the sheet the same as portrait / other overlays,
@@ -5683,25 +5699,31 @@ function hvSheet(o) { // o: { parent, launch() -> [els], label, bg, build(bd, fr
   const scroller = path => { for (const n of path) { if (n === sh) break; if (!(n instanceof Element)) continue;
     if (n.scrollHeight > n.clientHeight + 1) { const oy = getComputedStyle(n).overflowY; if (oy === 'auto' || oy === 'scroll') return n; }
     if (sideL && n.scrollWidth > n.clientWidth + 1) { const ox = getComputedStyle(n).overflowX; if (ox === 'auto' || ox === 'scroll') return n; } } return null; };
-  sh.addEventListener('touchstart', e => { g = null; if (closed || e.touches.length !== 1) return; const t = e.touches[0], path = e.composedPath(), box = sh.getBoundingClientRect();
-    const onGrab = path.includes(grab) || t.clientY - box.top < 34, fromRight = sideL && box.right - t.clientX < 36, sc = scroller(path);
+  const ptXY = e => { const t = (e.touches && e.touches[0]) || (e.changedTouches && e.changedTouches[0]) || e; return t && t.clientX != null ? t : null; };
+  const swipeStart = (e, xy, path) => { g = null; if (closed) return; const box = sh.getBoundingClientRect();
+    const onGrab = (path && path.includes(grab)) || xy.clientY - box.top < 34, fromRight = sideL && box.right - xy.clientX < 36, sc = scroller(path || []);
     if (sideL && !onGrab && !fromRight && !o.swipeDown) return;
     if (!onGrab && !fromRight && sc && sc.scrollTop > 1) return;
     // never steal a drag that starts on a slider / seek bar / text field; a sheet can narrow it further (o.dragOk)
-    if (!onGrab && path.some(n => n instanceof Element && (/^(INPUT|TEXTAREA|SELECT|HA-SLIDER|HA-CONTROL-SLIDER|MD-SLIDER|HA-TEXTFIELD)$/.test(n.tagName) || n.getAttribute('role') === 'slider' || n.hasAttribute('data-no-sheet-drag')))) return;
-    if (!onGrab && o.dragOk && !o.dragOk(path, t.clientY - box.top, sh.offsetHeight)) return;
-    g = { x: t.clientX, y: t.clientY, t: Date.now(), on: false, dy: 0, grab: onGrab, edge: fromRight }; }, { passive: true });
-  sh.addEventListener('touchmove', e => { if (!g) return; const t = e.touches[0], dx = t.clientX - g.x, dy = t.clientY - g.y;
+    if (!onGrab && (path || []).some(n => n instanceof Element && (/^(INPUT|TEXTAREA|SELECT|HA-SLIDER|HA-CONTROL-SLIDER|MD-SLIDER|HA-TEXTFIELD)$/.test(n.tagName) || n.getAttribute('role') === 'slider' || n.hasAttribute('data-no-sheet-drag')))) return;
+    if (!onGrab && o.dragOk && !o.dragOk(path || [], xy.clientY - box.top, sh.offsetHeight)) return;
+    g = { x: xy.clientX, y: xy.clientY, t: Date.now(), on: false, dy: 0, grab: onGrab, edge: fromRight, id: xy.pointerId }; };
+  sh.addEventListener('touchstart', e => { if (closed || e.touches.length !== 1) return; const xy = e.touches[0]; swipeStart(e, xy, e.composedPath()); }, { capture: true, passive: true });
+  sh.addEventListener('pointerdown', e => { if (closed || e.pointerType === 'touch' || (e.pointerType === 'mouse' && e.button)) return; swipeStart(e, e, e.composedPath()); }, { capture: true, passive: true });
+  const swipeMove = (e, xy) => { if (!g) return; const dx = xy.clientX - g.x, dy = xy.clientY - g.y;
     if (!g.on) { if (Math.abs(dx) < 3 && Math.abs(dy) < 3) return;
-      if (sideL) { if (dy > 0 && (g.grab || o.swipeDown) && dy >= Math.abs(dx) * 1.1) { g.on = true; g.axis = 'y'; g.y0 = t.clientY; g.t = Date.now(); }
-        else if (dx < 0 && (g.grab || g.edge) && -dx >= Math.abs(dy)) { g.on = true; g.axis = 'x'; g.x0 = t.clientX; g.t = Date.now(); }
+      if (sideL) { if (dy > 0 && (g.grab || o.swipeDown) && dy >= Math.abs(dx) * 1.1) { g.on = true; g.axis = 'y'; g.y0 = xy.clientY; g.t = Date.now(); }
+        else if (dx < 0 && (g.grab || g.edge) && -dx >= Math.abs(dy)) { g.on = true; g.axis = 'x'; g.x0 = xy.clientX; g.t = Date.now(); }
         else if (Math.abs(dx) > 10 || Math.abs(dy) > 10) { g = null; return; } else return; }
-      else if (dy > 0 && (g.grab || dy >= Math.abs(dx) * 1.1)) { g.on = true; g.axis = 'y'; g.y0 = t.clientY; g.t = Date.now(); } else { g = null; return; } }
-    if (e.cancelable) e.preventDefault(); g.dy = g.axis === 'x' ? Math.max(0, g.x0 - t.clientX) : Math.max(0, t.clientY - g.y0); apply(g.dy, false); }, { passive: false });
+      else if (dy > 0 && (g.grab || dy >= Math.abs(dx) * 1.1)) { g.on = true; g.axis = 'y'; g.y0 = xy.clientY; g.t = Date.now(); } else { g = null; return; } }
+    if (e.cancelable) e.preventDefault(); g.dy = g.axis === 'x' ? Math.max(0, g.x0 - xy.clientX) : Math.max(0, xy.clientY - g.y0); apply(g.dy, false); };
+  sh.addEventListener('touchmove', e => { if (!g || !e.touches[0]) return; swipeMove(e, e.touches[0]); }, { capture: true, passive: false });
+  sh.addEventListener('pointermove', e => { if (!g || e.pointerType === 'touch') return; swipeMove(e, e); }, { capture: true, passive: false });
   const end = () => { if (!g) return; const s0 = g; g = null; if (!s0.on) return; const v = s0.dy / Math.max(1, Date.now() - s0.t);
     const need = s0.axis === 'x' ? MAX() * 0.2 : MAX() * 0.22, flick = s0.axis === 'x' ? (v > 0.45 && s0.dy > 36) : (v > 0.5 && s0.dy > 40);
     if (s0.dy > need || flick) close(); else apply(0, true, 0.38); };
-  sh.addEventListener('touchend', end); sh.addEventListener('touchcancel', end);
+  sh.addEventListener('touchend', end, true); sh.addEventListener('touchcancel', end, true);
+  sh.addEventListener('pointerup', e => { if (e.pointerType !== 'touch') end(); }, true); sh.addEventListener('pointercancel', e => { if (e.pointerType !== 'touch') end(); }, true);
   return { close, host, set hass(h) { if (api) api.hass = h; }, get dy() { return dyNow; } };
 }
 // fit a card inside a fixed box. Default "contain": centre it; picture-elements (e.g. the house hero) is scaled so the
