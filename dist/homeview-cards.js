@@ -9154,7 +9154,7 @@ const HV_PROF_POP_CSS = `.pfd{position:fixed;inset:0;z-index:40;background:rgba(
 .pfp .pr .tx{flex:1;min-width:0}.pfp .pr b{display:block;font-size:17px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pfp .pr small{display:block;font-size:13px;color:rgba(60,60,67,.6);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pfp .pr.on small{color:#3f3399;opacity:.8}
 .pfp .pr .ck{--mdc-icon-size:22px;color:#3f3399;display:flex}
-.pfa{flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;overflow:hidden}.pfa ha-icon{--mdc-icon-size:60%;display:flex}
+.pfa{flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;overflow:hidden;line-height:0;box-sizing:border-box}.pfa ha-icon{--mdc-icon-size:100%;display:block;width:60%;height:60%;margin:0;line-height:0;flex:none}.pfa ha-icon ha-svg-icon,.pfa ha-icon svg{display:block;width:100%;height:100%}
 .pfp .hr{height:1px;background:rgba(60,60,67,.12);margin:8px 20px}
 .pfp .pl{all:unset;box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;padding:10px 20px;font-size:16px;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .pfp .pl small{display:block;font-size:13px;color:rgba(60,60,67,.6)}.pfp .pl.mg{color:#3f3399;font-weight:500}.pfp .pl.mg ha-icon{--mdc-icon-size:20px;color:rgba(60,60,67,.3);display:flex}
@@ -9198,7 +9198,7 @@ const HV_PROF_SET_CSS = `:host{display:block}.g{background:var(--card,#fff);bord
 .r+.r::before{content:'';position:absolute;top:0;left:16px;right:0;height:1px;background:var(--sep,rgba(60,60,67,.12))}
 .r.pr{min-height:64px;cursor:pointer}.r.pr+.r::before,.r+.r.pr::before{left:72px}.r .tx{flex:1;min-width:0}.r .tx b{display:block;font-weight:600;font-size:17px}.r .tx small{display:block;font-size:13px;color:var(--t2,rgba(60,60,67,.6))}
 .r.on{background:var(--abg,#cdc6ef);color:var(--afg,#3f3399)}.r.on small{color:inherit;opacity:.8}.r.on::before,.r.on+.r::before{display:none}
-.pfa{flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;overflow:hidden}.pfa ha-icon{--mdc-icon-size:60%;display:flex}
+.pfa{flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;overflow:hidden;line-height:0;box-sizing:border-box}.pfa ha-icon{--mdc-icon-size:100%;display:block;width:60%;height:60%;margin:0;line-height:0;flex:none}.pfa ha-icon ha-svg-icon,.pfa ha-icon svg{display:block;width:100%;height:100%}
 .l{flex:none}.r input[type=text]{all:unset;flex:1;min-width:0;text-align:right;color:var(--t2,rgba(60,60,67,.6));font-size:16px;cursor:text}
 .r select{all:unset;flex:1;min-width:0;text-align:right;direction:rtl;color:var(--t2,rgba(60,60,67,.6));cursor:pointer;text-overflow:ellipsis}
 .sw{all:unset;margin-left:auto;flex:none;position:relative;width:51px;height:31px;border-radius:16px;background:var(--swo,#e9e9eb);transition:background .2s;cursor:pointer}
@@ -11468,7 +11468,7 @@ const MH_V2_CSS = `
 .w.v2 .v2sc .sc{height:118px;border-radius:26px;padding:16px;display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;gap:0;background:var(--tb);border:var(--tbd);box-sizing:border-box;color:var(--t1);box-shadow:none;position:relative}
 .w.v2 .v2sc .sc ha-icon{--mdc-icon-size:24px}.w.v2 .v2sc .sc b{font-size:17px;font-weight:700;white-space:normal;line-height:1.2}
 .w.v2 .v2sc .sc.act,.w.v2 .v2sc .sc.on{background:var(--abg) !important;color:var(--afg)}
-.w.v2 .sec h2 small{color:var(--t2)}
+.w.v2 .v2rooms{display:flex;flex-direction:column;gap:20px}.w.v2 .v2rooms .sec h2{margin:0 0 14px}.w.v2 .sec h2 small{color:var(--t2)}
 .w.v2 .cam .eye,.w.v2 .sc .eye{display:none;position:absolute;top:-6px;left:-6px;z-index:4;width:24px;height:24px;border-radius:50%;background:#ff453a;color:#fff;place-items:center}.w.v2.hiding .cam .eye,.w.v2.hiding .sc .eye{display:grid}
 @container (max-width: 860px){.v2m{grid-template-columns:1fr}.v2body{grid-template-columns:1fr;grid-template-rows:auto;grid-template-areas:"cams" "rooms" "scenes"}.v2body.nocams{grid-template-areas:"rooms" "scenes"}.v2body.noscenes{grid-template-areas:"cams" "rooms"}.v2sc{flex-direction:row;overflow-x:auto;scrollbar-width:none}.w.v2 .v2sc .sc{flex:0 0 160px}}
 @container (max-width: 520px){.v2g{grid-template-columns:1fr}.w.v2{padding:16px 16px 32px}}
