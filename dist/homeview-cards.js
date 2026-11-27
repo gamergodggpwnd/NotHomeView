@@ -6993,7 +6993,7 @@ function hvAssist(hub, o) {
       else { fill(m, 'Sorry, something went wrong.'); note(m, r.kind === 'timeout' ? `“${an}” took too long to answer. Try again in a moment.` : r.quota ? `“${an}” couldn't answer: its AI service has hit its usage limit (quota) for now. Try again later, or pick another assistant in the Home Screen settings.`
         : `“${an}” couldn't answer: its conversation agent reported an error. Check that integration (for example its API key) in Settings → Devices & services, or pick another assistant in the Home Screen settings.`); }
       st('idle'); oops(); micOff(); };
-    const msg = { type: 'assist_pipeline/run', start_stage: 'intent', end_stage: 'intent', input: { text: hvCookPrompt(text, 4) }, timeout: Math.round(HV_COOK_ASK_MS / 1000) + 5 }; if (pid) msg.pipeline = pid;
+    const msg = { type: 'assist_pipeline/run', start_stage: 'intent', end_stage: 'intent', input: { text: hvCookPrompt(text, 4) }, conversation_id: convId || null }; if (pid) msg.pipeline = pid;
     to = setTimeout(() => finish({ kind: 'timeout' }), HV_COOK_ASK_MS);
     try { unsub = hub._hass.connection.subscribeMessage(ev => { if (fin || tok !== runTok) return; const d = (ev && ev.data) || {};
         if (ev.type === 'intent-end') { const o = d.intent_output || {}, r = o.response || {}; finish(hvCookClassify((r.speech && r.speech.plain && r.speech.plain.speech) || '', r.response_type)); }
@@ -7404,7 +7404,7 @@ const HV_COOK_ART = ['radial-gradient(circle closest-side at 50% 50%,#e8603c 0 5
    The answer is read tolerantly (code fences, text around the JSON, other key names). No Home Assistant service is called. The built-in
    Home Assistant agent can't search the web, so it isn't asked at all. Saved web recipes are kept in this browser (localStorage), like the timers. */
 const HV_COOK_LS = { saved: 'hv_cook_saved', recent: 'hv_cook_recent', agent: 'hv_cook_agent', caps: 'hv_cook_agent_caps' };
-const HV_COOK_ASK_MS = 75000;
+const HV_COOK_ASK_MS = 45000;
 const hvCookLsGet = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k) || 'null'); return v == null ? d : v; } catch (e) { return d; } };
 const hvCookLsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } };
 const hvCookSavedGet = () => { const a = hvCookLsGet(HV_COOK_LS.saved, []); return Array.isArray(a) ? a.filter(r => r && typeof r === 'object' && r.name) : []; };
@@ -7440,7 +7440,7 @@ const hvCookFromAgent = x => { if (!x || typeof x !== 'object') return null; con
 const hvCookParse = text => { const j = hvCookJson(text); if (j == null || typeof j !== 'object') return null;
   const arr = Array.isArray(j) ? j : Array.isArray(j.recipes) ? j.recipes : Array.isArray(j.results) ? j.results : Array.isArray(j.items) ? j.items : (j.title || j.name) ? [j] : [];
   const out = arr.map(hvCookFromAgent).filter(Boolean).slice(0, 8); return out.length ? out : null; };
-const hvCookPrompt = (q, n) => `Find ${n} recipes on the web for: ${JSON.stringify(String(q))}. Reply with ONLY one JSON object, no markdown and no other text, in exactly this shape: {"recipes":[{"title":"","source_name":"","source_url":"https://","time_minutes":30,"serves":4,"description":"one short sentence","image":"","ingredients":[""],"steps":[{"text":"","minutes":null}]}]}. Use real recipes from pages you found, with each page's real address in source_url. time_minutes and serves are numbers. Each step is one short instruction; minutes is the timer in whole minutes when the step has a waiting or cooking time, otherwise null. image is a direct photo address if the page has one, otherwise "".`;
+const hvCookPrompt = (q, n) => `Find ${n} recipes for ${String(q || '').trim()}. For each recipe include the title, source name, source URL, time in minutes, servings, a short description, ingredients, and steps (with a timer in minutes when a step needs one).`;
 const HV_COOK_ERR = /unexpected error|problem (talking|communicating)|(invalid|incorrect|wrong) api key|unauthori[sz]ed|authenticat(ion|e) (error|failed)|quota|rate.?limit|resource.exhausted|\b429\b|too many requests|service (is )?(down|unavailable)/i;
 const HV_COOK_NOWEB = /\b(can(?:'|’)?t|cannot|can not|unable to|not able to|don(?:'|’)?t have (?:access|the ability)|no (?:way|ability))\b[^.]{0,70}\b(search|browse|web|internet|online|look up)|only (?:help|control|handle|assist|manage)|couldn(?:'|’)?t understand|don(?:'|’)?t understand|not (?:sure )?what you mean/i;
 // what an agent's reply means: recipes, "can't search the web", an error, or text we can't read as recipes
@@ -7735,11 +7735,33 @@ ${hvCookCardCss('.ck.dk')}
 .sx .sx-emp{display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;padding:30px 20px;color:var(--ink2);font-size:16px;line-height:1.4}
 .sx .sx-emp b{font-size:22px;color:var(--ink)}
 @media (max-aspect-ratio: 4/5) {
+ .sx{padding:16px 16px 24px}
+ .sx .sx-hd{height:auto;min-height:44px;align-items:flex-start;padding-right:48px;gap:8px}
+ .sx .sx-hd h1{font-size:28px;line-height:1.15;white-space:nowrap}
+ .sx .sx-back{flex:none;margin-top:4px}
+ .sx .sx-sf{height:auto;min-height:44px;flex-wrap:wrap;gap:8px;padding:6px 8px 6px 12px}
+ .sx .sx-sf input{font-size:16px;height:32px;flex:1 1 80px}
+ .sx .sx-ask{height:32px;font-size:13px;padding:0 10px 0 6px;max-width:100%}
+ .sx .sx-capr{align-items:flex-start;flex-wrap:wrap;gap:6px 12px;min-height:0}
+ .sx .sx-capr .l{white-space:normal}
+ .sx .sx-stat{display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-areas:"orb text" "steps steps";gap:12px 14px;padding:16px;align-items:start}
+ .sx .sx-bigorb{grid-area:orb;width:52px;height:52px}
+ .sx .sx-bigorb .sx-orb{width:52px;height:52px}
+ .sx .sx-bigorb svg{inset:-5px;width:62px;height:62px}
+ .sx .sx-stat>div:nth-child(2){grid-area:text;min-width:0}
+ .sx .sx-stat h2{font-size:20px}
+ .sx .sx-stat p{margin:4px 0 0;font-size:15px;line-height:1.35;white-space:normal;overflow-wrap:break-word;word-break:break-word}
+ .sx .sx-steps{grid-area:steps;margin-left:0;flex-direction:row;flex-wrap:wrap;gap:8px 14px}
+ .sx .sx-steps div{white-space:normal}
  .sx .sx-rg{grid-template-columns:1fr;grid-template-rows:repeat(4,minmax(0,1fr))}.sx .sx-rg.many{grid-template-rows:none;grid-auto-rows:minmax(210px,1fr)}
  .sx .sx-two{flex-direction:column;gap:0}
- .sx .sx-og{grid-template-columns:repeat(3,1fr);grid-auto-rows:minmax(250px,1fr)}
- .sx .sx-og.mini .sx-ot:nth-child(4){display:none}.sx .sx-og.mini{height:250px}
+ .sx .sx-og{grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:minmax(210px,1fr)}
+ .sx .sx-og.mini .sx-ot:nth-child(4){display:none}.sx .sx-og.mini{height:auto}
  .sx .sx-two.nw2>div:last-child{margin-top:0}
+}
+@media (max-aspect-ratio: 4/5) and (max-width: 600px) {
+ .sx .sx-hd h1{font-size:24px}
+ .sx .sx-back{font-size:15px}
 }
 @media (prefers-reduced-motion:reduce){.sx .sx-spin,.sx .sx-bigorb svg{animation:none}}`;
 
@@ -7748,7 +7770,7 @@ function hvOpenCooking(hub, app, at, opt) {
   const getCfg = () => hvCookCfg(hub._config, true);
   const st = { view: 'list', r: 0, step: 0, added: new Set(), ext: null }; let root = null, iv = 0, keep = 0, lock = null, tstT = 0, vis = null, blurT = 0, cfg = getCfg();
   // recipe search: the text, the agent, the answer (sx.s), and which saved recipe was just kept
-  const sx = { q: '', focus: false, picker: false, s: null, tok: 0, pipes: null, agentId: String(hvCookLsGet(HV_COOK_LS.agent, '') || ''), just: '', savedMsg: '', shell: false, unsub: null, to: 0 };
+  const sx = { q: '', focus: false, picker: false, s: null, tok: 0, pipes: null, agentId: String(hvCookLsGet(HV_COOK_LS.agent, '') || ''), just: '', savedMsg: '', shell: false, unsub: null, to: 0, convId: null };
   const R = () => st.r < 0 ? st.ext : cfg.recipes[st.r];
   const rk = () => st.r < 0 ? 'x:' + (st.ext ? st.ext.key : '') : st.r;   // key of the open recipe (an unsaved search result has no list position)
   if (at != null && cfg.recipes[at]) { st.r = at; st.view = 'ov'; }
@@ -7842,7 +7864,7 @@ function hvOpenCooking(hub, app, at, opt) {
     const cp = capHtml(), ce = P('cap'); ce.className = cp[0]; ce.innerHTML = cp[1];
     const b = P('body'), y = b.scrollTop; b.innerHTML = onS ? (sx.picker && sx.s && sx.s.phase !== 'noweb' ? pickerHtml() : searchBody()) : homeBody(); b.scrollTop = y; };
   // ---- ask an Assist agent, read the answer
-  const endRun = () => { clearTimeout(sx.to); sx.to = 0; const u = sx.unsub; sx.unsub = null; if (u) try { u(); } catch (e) {} };
+  const endRun = () => { clearTimeout(sx.to); sx.to = 0; const u = sx.unsub; sx.unsub = null; if (u) Promise.resolve(u).then(f => { if (typeof f === 'function') try { f(); } catch (e) {} }).catch(() => {}); };
   const pushRecent = q => { const a = hvCookLsGet(HV_COOK_LS.recent, []).filter(x => x && x.q && x.q.toLowerCase() !== q.toLowerCase()); a.unshift({ q, t: Date.now() }); hvCookLsSet(HV_COOK_LS.recent, a.slice(0, 8)); };
   const askSx = qq => { const q = String(qq == null ? sx.q : qq).trim(); const inp = root && root.querySelector('.sx-sf input');
     if (!q) { if (inp) inp.focus(); return; }
@@ -7853,14 +7875,15 @@ function hvOpenCooking(hub, app, at, opt) {
       if (r.kind === 'ok') { capSet(ag.id, 'ok'); Object.assign(s, { phase: 'results', recipes: r.recipes }); } else if (r.kind === 'noweb') { capSet(ag.id, 'no'); Object.assign(s, { phase: 'noweb', text: r.text }); }
       else if (r.kind === 'raw') Object.assign(s, { phase: 'raw', text: r.text }); else Object.assign(s, { phase: 'error', msg: r.msg, quota: r.quota, timeout: r.kind === 'timeout' });
       sx.s = s; if (st.view === 'list' || st.view === 'search') sxPaint(); else toast(r.kind === 'ok' ? 'Recipe results are ready in Cooking' : 'The recipe search finished'); };
-    const msg = { type: 'assist_pipeline/run', start_stage: 'intent', end_stage: 'intent', input: { text: hvCookPrompt(q, 4) }, timeout: Math.round(HV_COOK_ASK_MS / 1000) + 5 }; if (ag.id) msg.pipeline = ag.id;
+    const msg = { type: 'assist_pipeline/run', start_stage: 'intent', end_stage: 'intent', input: { text: hvCookPrompt(q, 4) }, conversation_id: sx.convId || null }; if (ag.id) msg.pipeline = ag.id;
     sx.to = setTimeout(() => finish({ kind: 'timeout' }), HV_COOK_ASK_MS);
     try { const p = H().connection.subscribeMessage(ev => { if (done || tok !== sx.tok) return; const d = (ev && ev.data) || {};
         if (ev.type === 'intent-progress') { if (sx.s && sx.s.phase === 'asking' && sx.s.step < 2) { sx.s.step = 2; if (st.view === 'search') sxPaint(); } }
-        else if (ev.type === 'intent-end') { const o = d.intent_output || {}, r = o.response || {}; finish(hvCookClassify((r.speech && r.speech.plain && r.speech.plain.speech) || '', r.response_type)); }
+        else if (ev.type === 'intent-end') { const o = d.intent_output || {}, r = o.response || {}; if (o.conversation_id) sx.convId = o.conversation_id; finish(hvCookClassify((r.speech && r.speech.plain && r.speech.plain.speech) || '', r.response_type)); }
         else if (ev.type === 'error') finish({ kind: 'error', msg: String(d.message || d.code || '').slice(0, 160) });
         else if (ev.type === 'run-end') finish({ kind: 'error', msg: '' }); }, msg);
-      Promise.resolve(p).then(u => { if (typeof u !== 'function') return; if (done || tok !== sx.tok) { try { u(); } catch (e) {} } else sx.unsub = u; }, e => finish({ kind: 'error', msg: String(e && e.message || e || '').slice(0, 160) })); }
+      sx.unsub = p;
+      Promise.resolve(p).then(u => { if (typeof u !== 'function') return; if (done || tok !== sx.tok) { try { u(); } catch (e) {} } else if (sx.unsub === p) sx.unsub = u; }, e => finish({ kind: 'error', msg: String(e && e.message || e || '').slice(0, 160) })); }
     catch (e) { finish({ kind: 'error', msg: String(e && e.message || e || '').slice(0, 160) }); } };
   const saveRes = i => { const s = sx.s, x = s && s.recipes && s.recipes[i]; if (!x || isSaved(x)) return; if (!hvCookSaveRecipe(x)) { toast('Couldn\'t save on this iPad (storage is full)'); return; } sx.just = x.key; sx.savedMsg = x.name; cfg = getCfg(); sxPaint(); };
   const goRes = i => { const s = sx.s, x = s && s.recipes && s.recipes[i]; if (!x) return; if (!x.steps.length) { toast('This recipe has no steps to cook'); return; }
@@ -11473,7 +11496,41 @@ const MH_V2_CSS = `
 @container (max-width: 860px){.v2m{grid-template-columns:1fr}.v2body{grid-template-columns:1fr;grid-template-rows:auto;grid-template-areas:"cams" "rooms" "scenes"}.v2body.nocams{grid-template-areas:"rooms" "scenes"}.v2body.noscenes{grid-template-areas:"cams" "rooms"}.v2sc{flex-direction:row;overflow-x:auto;scrollbar-width:none}.w.v2 .v2sc .sc{flex:0 0 160px}}
 @container (max-width: 520px){.v2g{grid-template-columns:1fr}.w.v2{padding:16px 16px 32px}}
 /* in a Home Screen sheet the card's own back/close is hidden — the sheet already has X + grab */
-:host([in-sheet]) .v2b button[data-a="back"],:host([in-sheet]) button.back{display:none !important}`;
+:host([in-sheet]) .v2b button[data-a="back"],:host([in-sheet]) button.back{display:none !important}
+/* Portrait (phone + tablet): the same viewport 4/5 aspect switch other V2 apps use
+   (Now Playing, Cooking, faces). A container query would see the scrolling card's
+   own tall box, or miss when min-content stretches the card; the viewport media
+   query follows rotation and leaves landscape on the rules above. */
+@media (max-aspect-ratio: 4/5) {
+  :host{max-width:100%;box-sizing:border-box}
+  .w.v2{max-width:100%;box-sizing:border-box;overflow-x:hidden;padding:16px 16px 32px}
+  .v2h h1{font-size:32px}
+  .v2st{gap:8px;margin-top:12px}
+  .v2st button{flex:0 0 auto;min-width:0;height:44px;border-radius:22px;padding:0 12px;gap:8px}
+  .v2st .ic{width:28px;height:28px}.v2st .ic ha-icon{--mdc-icon-size:16px}
+  .v2st b{display:none}.v2st span.v{font-size:15px;font-weight:600;color:var(--t1)}
+  .v2body,.v2body.nocams,.v2body.noscenes,.v2body.nocams.noscenes{grid-template-columns:1fr;grid-template-rows:auto;gap:20px;margin-top:16px}
+  .v2body{grid-template-areas:"cams" "scenes" "rooms"}
+  .v2body.nocams{grid-template-areas:"scenes" "rooms"}
+  .v2body.noscenes{grid-template-areas:"cams" "rooms"}
+  .v2body.nocams.noscenes{grid-template-areas:"rooms"}
+  .v2body h2,.v2m h2{font-size:20px;margin:0 0 10px}
+  .w.v2 .v2rooms{gap:20px}.w.v2 .v2rooms .sec h2{margin:0 0 14px}
+  .v2g{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;overflow:visible}
+  .w.v2 .cam.v16{min-width:0;width:auto;height:auto;aspect-ratio:16/9;border-radius:22px}
+  .v2sc{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));flex-direction:unset;overflow-x:visible;gap:10px}
+  .w.v2 .v2sc .sc{flex:unset;width:auto;min-width:0;height:58px;border-radius:16px;padding:0 14px;flex-direction:row;align-items:center;justify-content:flex-start;gap:10px}
+  .w.v2 .v2sc .sc b{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .w.v2 .devs{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .w.v2 .dv,.w.v2 .devs{min-width:0;max-width:100%}
+}
+@media (max-aspect-ratio: 4/5) and (max-width: 600px) {
+  .v2h h1{font-size:30px}
+  .v2g{display:flex;gap:10px;overflow-x:auto;scrollbar-width:none;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch}
+  .v2g::-webkit-scrollbar{display:none}
+  .w.v2 .cam.v16{flex:0 0 auto;width:78%;max-width:520px;height:auto;aspect-ratio:16/9;scroll-snap-align:start}
+  .w.v2 .cam.v16:first-child{width:82%;max-width:560px}
+}`;
 const MH_FS_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5"/></svg>';
 class HVMyHomeCard extends HTMLElement {
   constructor() { super(); this.attachShadow({ mode: 'open' }); this._cams = new Map(); }
