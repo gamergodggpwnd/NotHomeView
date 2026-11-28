@@ -7423,6 +7423,11 @@ const hvCookMin = v => { if (v == null || v === '' || typeof v === 'boolean') re
   const mi = s.match(/(\d+(?:[.,]\d+)?)\s*(?:m|min|mins|minute|minutes)\b/); if (mi) { m += parseFloat(mi[1].replace(',', '.')); f = true; }
   if (!f) { const n = s.match(/\d+(?:[.,]\d+)?/); if (n) m = parseFloat(n[0].replace(',', '.')); } return m > 0 ? Math.round(m) : null; };
 const hvCookDom = u => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return ''; } };
+const hvCookSiteName = (source, url) => { const dom = hvCookDom(url), slug = (dom.split('.')[0] || '');
+  const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, ''), host = norm(slug), s = norm(source);
+  if (s.length >= 3 && host && (host === s || host.includes(s) || (s.includes(host) && host.length >= s.length - 2))) return source;
+  if (!slug) return source || '';
+  return slug.replace(/[-_]+/g, ' ').replace(/\b[a-z]/g, c => c.toUpperCase()); };
 // the text of one JSON value in an agent's reply: the whole text, a ```json fence, or the first balanced { } / [ ] inside prose
 const hvCookBal = (s, i) => { const o = s[i], c = o === '{' ? '}' : ']'; let d = 0, q = false; for (let j = i; j < s.length; j++) { const ch = s[j];
     if (q) { if (ch === '\\') j++; else if (ch === '"') q = false; continue; } if (ch === '"') q = true; else if (ch === o) d++; else if (ch === c && --d === 0) return j; } return -1; };
@@ -7467,11 +7472,18 @@ const hvCookLdImage = html => { const out = [], re = /<script\b[^>]*type=["']app
   const walk = n => { if (!n) return; if (Array.isArray(n)) { n.forEach(walk); return; } if (typeof n !== 'object') return; if (typOf(n).includes('recipe') && n.image) take(n.image); if (n['@graph']) walk(n['@graph']); };
   while ((m = re.exec(String(html || '')))) { try { walk(JSON.parse(m[1].replace(/^\s*<!--|-->\s*$/g, '').trim())); } catch (e) {} }
   return out; };
-const hvCookParsePageImage = (html, pageUrl) => { const cands = [hvCookMeta(html, 'property', 'og:image'), hvCookMeta(html, 'name', 'twitter:image'), hvCookMeta(html, 'name', 'twitter:image:src'), hvCookMeta(html, 'property', 'twitter:image')].concat(hvCookLdImage(html));
-  for (const c of cands) { const u = hvCookAbsHttp(c, pageUrl); if (u) return u; } return ''; };
+const HV_COOK_IMG_MIN = 300;
+const hvCookImgBadUrl = u => /favicon|apple-touch|mstile|android-chrome|logo|avatar|sprite|tileimage|\/icons?\/|\bicon[-_.]/i.test(String(u || ''));
+const hvCookParsePageImages = (html, pageUrl) => {
+  const raw = hvCookLdImage(html).concat([hvCookMeta(html, 'property', 'og:image'), hvCookMeta(html, 'name', 'twitter:image'), hvCookMeta(html, 'name', 'twitter:image:src'), hvCookMeta(html, 'property', 'twitter:image')]);
+  const out = [], seen = new Set();
+  for (const c of raw) { const u = hvCookAbsHttp(c, pageUrl); if (!u || seen.has(u) || hvCookImgBadUrl(u)) continue; seen.add(u); out.push(u); }
+  return out; };
 const hvCookImgLoads = (url, ms) => new Promise(res => { const u = hvCookHttpUrl(url); if (!u || typeof Image === 'undefined') { res(false); return; }
   const im = new Image(); let done = false; const fin = ok => { if (done) return; done = true; clearTimeout(t); im.onload = im.onerror = null; res(!!ok); };
-  const t = setTimeout(() => fin(false), Math.max(400, ms || 2500)); im.onload = () => fin(im.naturalWidth > 0); im.onerror = () => fin(false); try { im.src = u; } catch (e) { fin(false); } });
+  const t = setTimeout(() => fin(false), Math.max(400, ms || 2500));
+  im.onload = () => fin(im.naturalWidth >= HV_COOK_IMG_MIN && im.naturalHeight >= HV_COOK_IMG_MIN);
+  im.onerror = () => fin(false); try { im.src = u; } catch (e) { fin(false); } });
 const hvCookHasFetchSvc = hass => !!(hass && hass.services && hass.services.rest_command && hass.services.rest_command.nhv_fetch_url);
 const hvCookFetchPage = async (url, hass, ms) => {
   const u = hvCookHttpUrl(url); if (!u) return { ok: false, status: 0, text: '', noProxy: true };
@@ -7491,7 +7503,9 @@ const hvCookResolveOne = async (recipe, hass, ms) => {
   const url = hvCookHttpUrl(recipe && recipe.url); const hit = url && hvCookPhotoCache.get(url); if (hit) return { live: hit.live, image: hit.image, noProxy: !!hit.noProxy };
   let live = url ? null : true, image = '', noProxy = false;
   if (url) { const r = await hvCookFetchPage(url, hass, ms);
-    if (r.noProxy && !r.status) { live = null; noProxy = true; } else if (r.ok) { live = true; const cand = hvCookParsePageImage(r.text, url); if (cand && await hvCookImgLoads(cand, Math.min(2500, ms))) image = cand; } else live = false; }
+    if (r.noProxy && !r.status) { live = null; noProxy = true; }
+    else if (r.ok) { live = true; for (const cand of hvCookParsePageImages(r.text, url)) { if (await hvCookImgLoads(cand, Math.min(2500, ms))) { image = cand; break; } } }
+    else live = false; }
   if (live !== false && !image) { const hint = recipe && (recipe.imageHint || recipe.image); const hu = hvCookHttpUrl(hint); if (hu && await hvCookImgLoads(hu, Math.min(2500, ms))) image = hu; }
   const out = { live, image, noProxy }; if (url) hvCookPhotoCache.set(url, out); return out; };
 const hvCookEnrich = (recipes, hass, onDone) => {
@@ -7560,7 +7574,7 @@ const HV_COOK_SVG = { play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path f
 const HV_COOK_CSS = `.ck{position:absolute;inset:0;color:#3c3c43;font-family:${FONT};background:#f2f2f7;overflow:hidden;-webkit-tap-highlight-color:transparent}
 .ck *{box-sizing:border-box}.ck button{all:unset;box-sizing:border-box;cursor:pointer}.ck button:focus-visible{outline:3px solid #3f3399;outline-offset:2px}
 .ck .tl{background:#fff;border-radius:26px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 8px 24px rgba(30,30,60,.08)}
-.ck .art{position:relative;overflow:hidden;background:var(--art) center/cover no-repeat}
+.ck .art{position:relative;overflow:hidden;background-image:var(--art);background-position:center;background-size:cover;background-repeat:no-repeat}
 .ck .eb{font-size:13px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#ff9500}
 .ck .sub{color:rgba(60,60,67,.6)}
 /* overview */
@@ -7634,7 +7648,7 @@ const HV_COOK_CSS = `.ck{position:absolute;inset:0;color:#3c3c43;font-family:${F
 const hvCookEnc = u => String(u).replace(/[\s'"()\\<>]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'));
 const hvCookArt = (r, i) => { const k = (i < 0 ? 0 : i) % HV_COOK_ART.length; return r && r.image ? `url('${hvCookEnc(r.image)}'), ${HV_COOK_ART[k]}` : HV_COOK_ART[k]; };
 // one recipe card (Cooking search results, the Assist popup): data-sx="save" / "go" with data-i = the position in the answer
-const hvCookCard = (x, i, saved) => { const dom = hvCookDom(x.url), src = [x.source, dom].filter((v, k, a) => v && a.indexOf(v) === k).join(' · ');
+const hvCookCard = (x, i, saved) => { const dom = hvCookDom(x.url), src = hvCookSiteName(x.source, x.url);
   return `<div class="sx-t sx-rc${saved ? ' saved' : ''}${x.steps.length ? '' : ' nosteps'}"><div class="rc-im" style="--art:${hvCookArt(x, i)}"></div><div class="rc-col"><div class="rc-inf"><h3>${esc(x.name)}</h3>${src ? `<div class="rc-src"><i class="rc-fv" style="background:${hvCookFav(dom || x.source)}"></i><span>${esc(src)}</span></div>` : ''}<div class="rc-mt">${x.time ? `<span>${hvCookIc('timer')}${esc(hvCookTime(x.time))}</span>` : ''}${x.servings != null && x.servings !== '' ? `<span>${hvCookIc('users')}Serves ${esc(x.servings)}</span>` : ''}</div></div>${x.desc ? `<div class="rc-ds">${esc(x.desc)}</div>` : '<div class="rc-ds"></div>'}<div class="rc-ac"><button class="sx-bt sv${saved ? ' done' : ''}" data-sx="save" data-i="${i}">${saved ? hvCookIc('check') + 'Saved' : hvCookIc('bookmark') + 'Save to Cooking'}</button><button class="sx-bt go" data-sx="go" data-i="${i}">${hvCookIc('play')}Start cooking</button></div></div></div>`; };
 const hvCookSaveRecipe = x => { if (!x || !x.key) return false; const a = hvCookSavedGet().filter(r => r.key !== x.key); a.unshift(Object.assign({}, x, { at: Date.now() })); return hvCookLsSet(HV_COOK_LS.saved, a.slice(0, 100)); };
 const hvCookIsSaved = x => !!x.key && hvCookSavedGet().some(r => r.key === x.key);
@@ -7664,7 +7678,7 @@ ${dk} .sxc{--acc:#7a6cf0;--actbg:#3a3360;--actfg:#d9d3ff;--tile:#1c1c1e;--ink:#f
 ${dk} .sxc .sx-t{box-shadow:0 0 0 1px rgba(255,255,255,.07)}
 .sxc .sx-rc{padding:18px;display:grid;grid-template-columns:124px minmax(0,1fr);grid-template-rows:124px auto minmax(0,1fr);column-gap:16px;min-height:0}
 .sxc .sx-rc .rc-col{display:contents}
-.sxc .sx-rc .rc-im{background:var(--art) center/cover no-repeat;overflow:hidden;position:relative;grid-column:1;grid-row:1;width:124px;height:124px;border-radius:14px}
+.sxc .sx-rc .rc-im{background-image:var(--art);background-position:center;background-size:cover;background-repeat:no-repeat;overflow:hidden;position:relative;grid-column:1;grid-row:1;width:124px;height:124px;border-radius:14px}
 .sxc .sx-rc .rc-inf{grid-column:2;grid-row:1;min-width:0;display:flex;flex-direction:column}
 .sxc .sx-rc h3{margin:0;font-size:20px;font-weight:700;line-height:1.2;letter-spacing:-.01em;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;color:var(--ink)}
 .sxc .sx-rc .rc-src{display:flex;align-items:center;gap:6px;font-size:14px;color:var(--ink2);margin-top:6px;white-space:nowrap}.sxc .sx-rc .rc-src span{overflow:hidden;text-overflow:ellipsis;min-width:0}
@@ -8021,7 +8035,7 @@ const HV_COOK_SET_CSS = `:host{display:block}.g{background:var(--card,#fff);bord
 .h{font-size:13px;color:var(--t2,rgba(60,60,67,.6));text-transform:uppercase;letter-spacing:.02em;margin:0 16px 7px}.ft{font-size:13px;color:var(--t2,rgba(60,60,67,.6));margin:-14px 16px 22px;line-height:1.35}
 .r{all:unset;box-sizing:border-box;position:relative;display:flex;align-items:center;gap:12px;width:100%;min-height:46px;padding:6px 14px;font-size:16px}
 .r+.r::before{content:'';position:absolute;top:0;left:16px;right:0;height:1px;background:var(--sep,rgba(60,60,67,.12))}.r.rc+.r::before,.r+.r.rc::before{left:72px}
-button.r{cursor:pointer}.r .art{width:44px;height:44px;border-radius:12px;flex:none;background:var(--art) center/cover}.r .tx{flex:1;min-width:0}.r .tx b{display:block;font-weight:600}.r .tx small{display:block;font-size:13px;color:var(--t2,rgba(60,60,67,.6))}
+button.r{cursor:pointer}.r .art{width:44px;height:44px;border-radius:12px;flex:none;background-image:var(--art);background-position:center;background-size:cover;background-repeat:no-repeat}.r .tx{flex:1;min-width:0}.r .tx b{display:block;font-weight:600}.r .tx small{display:block;font-size:13px;color:var(--t2,rgba(60,60,67,.6))}
 .r .ch{color:var(--t3,rgba(60,60,67,.3));font-size:20px}.r select{all:unset;flex:1;min-width:0;text-align:right;direction:rtl;color:var(--t2,rgba(60,60,67,.6));cursor:pointer}
 .sw{all:unset;margin-left:auto;flex:none;position:relative;width:51px;height:31px;border-radius:16px;background:var(--swo,#e9e9eb);transition:background .2s;cursor:pointer}
 .sw::after{content:'';position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.18);transition:left .2s}.sw[aria-checked=true]{background:var(--afg,#3f3399)}.sw[aria-checked=true]::after{left:22px}
